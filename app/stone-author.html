@@ -393,7 +393,10 @@ var TTK=(()=>{var k=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     COL.halo = rgbHex(gr + (255 - gr) * 0.55, gg + (255 - gg) * 0.55, gb + (255 - gb) * 0.55);
     COL.grain = F.grain || '#7b5433'; COL.knot = F.knot || '#5b3a20';
   }
+  const FX_LAYERS = ['major', 'minor', 'web', 'micro', 'styl', 'drusy'];   // layers that can carry a per-layer blend + glow
+  const BLENDS = ['normal', 'multiply', 'screen', 'overlay', 'soft-light', 'color-dodge', 'lighten', 'darken', 'difference', 'hue', 'color', 'luminosity'];
   seedColours('carrara');
+  for (const k of FX_LAYERS) { COL[k + 'Blend'] = 'normal'; COL[k + 'Glow'] = 0; }   // effects persist across family switches (seedColours never touches them)
   const CARRARA_COL = { ...COL };                          // the token defaults (reset target)
   // Settings for the NEXT line. Each mark takes a copy when it is made and keeps it, so a
   // change applies forward and never rewrites what is already down.
@@ -1661,6 +1664,16 @@ var TTK=(()=>{var k=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       ctx.stroke();
     }
   }
+  // Per-layer compositing: set the layer's blend mode + a colour glow (canvas shadow, unscaled by transform)
+  // around its paint, then restore. Skipped in the identity/angle views, which must read cleanly.
+  function fxOn(key, colour, ident) {
+    const saved = { op: g2d.globalCompositeOperation, sc: g2d.shadowColor, sb: g2d.shadowBlur };
+    if (!ident) { const bl = COL[key + 'Blend'], gl = COL[key + 'Glow'] || 0;
+      if (bl && bl !== 'normal') g2d.globalCompositeOperation = bl;
+      if (gl > 0) { g2d.shadowColor = colour; g2d.shadowBlur = gl * 6; } }
+    return saved;
+  }
+  function fxOff(s) { g2d.globalCompositeOperation = s.op; g2d.shadowColor = s.sc; g2d.shadowBlur = s.sb; }
   function paintStoneContent(ident, angleView) {
     const F = FAM[fam];
     if (!ident && layVis('breccia') && G.brecStrength > 0) {    // base-SETTER: opaque angular clasts with a contrasting matrix, over the flat ground
@@ -1686,13 +1699,13 @@ var TTK=(()=>{var k=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       });
       if (layVis('major')) for (const K of geo.knots) drawKnot(K, F, ident, ident ? 1 : layOp('major'));
     }
-    if (layVis('web')) for (const e of geo.web) {
+    if (layVis('web')) { const _fx = fxOn('web', COL.web, ident); for (const e of geo.web) {
       g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
       for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
       g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : COL.web;
       g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp('web')); g2d.lineWidth = e.width; g2d.stroke();
-    }
-    if (layVis('micro')) for (const s of geo.specks) {
+    } fxOff(_fx); }
+    if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident); for (const s of geo.specks) {
       const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
       g2d.globalAlpha = (ident ? 0.9 : s.lum) * (ident ? 1 : layOp('micro'));
       // Identity: a ground speck shows how far it was MOVED - cool where it lay, hot where pushed
@@ -1708,17 +1721,18 @@ var TTK=(()=>{var k=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         if (q) g2d.lineTo(px, py); else g2d.moveTo(px, py);
       }
       g2d.closePath(); g2d.fill();
-    }
+    } fxOff(_fx); }
     if (layVis('drusy') && geo.drusy.length) {            // crystal sparkle: tiny bright points clustered in pockets
-      const bright = G.drusyBright;
+      const bright = G.drusyBright, _fx = fxOn('drusy', COL.drusy, ident);
       for (const s of geo.drusy) {
         g2d.globalAlpha = ident ? 0.9 : Math.min(1, s.lum * bright);
         g2d.fillStyle = ident ? idColour('drusy', s.lum) : COL.drusy;
         g2d.beginPath(); g2d.arc(s.x, s.y, s.r, 0, 6.2832); g2d.fill();
       }
+      fxOff(_fx);
     }
     if (layVis('styl') && geo.styl.length) {              // dark toothy seams, sharp corners (miter), over the ground and under the veins
-      const seam = COL.styl;
+      const seam = COL.styl, _fx = fxOn('styl', COL.styl, ident);
       g2d.lineJoin = 'miter'; g2d.lineCap = 'butt';
       for (const s of geo.styl) {
         g2d.beginPath(); g2d.moveTo(s.pts[0][0], s.pts[0][1]);
@@ -1727,6 +1741,7 @@ var TTK=(()=>{var k=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         g2d.globalAlpha = (ident ? 0.95 : 0.85) * (ident ? 1 : layOp('styl')); g2d.lineWidth = s.width; g2d.stroke();
       }
       g2d.lineJoin = 'round'; g2d.lineCap = 'round';
+      fxOff(_fx);
     }
     const order = geo.lines.filter(L => !L.major).concat(geo.lines.filter(L => L.major));
     const lk = L => L.major ? 'major' : 'minor';
@@ -1736,7 +1751,7 @@ var TTK=(()=>{var k=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     const vcol = L => L.major ? COL.major : COL.minor;
     if (!ident) for (const L of order) if (layVis(lk(L))) runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true);  // shoulder
-    for (const L of order) if (layVis(lk(L))) runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false);
+    for (const L of order) if (layVis(lk(L))) { const _fx = fxOn(lk(L), vcol(L), ident); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false); fxOff(_fx); }
   }
   function ellipse(K, f, jit) {
     ctx.beginPath();
@@ -2039,6 +2054,13 @@ var TTK=(()=>{var k=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!window.TTK) { if (t) { t.disabled = true; t.textContent = 'Colour editor unavailable'; } return; }
     kit = TTK.createThemeKit({ prefix: '--stone-' });
     kit.registerTokenGroup({ id: 'colour', label: 'Colour (per layer)', tokens: COLOUR_TOKENS.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: CARRARA_COL[tk.key] })) });
+    kit.registerTokenGroup({ id: 'effects', label: 'Effects (per layer)', tokens: FX_LAYERS.flatMap(k => {
+      const lbl = (COLOUR_TOKENS.find(t => t.key === k) || {}).label || k;
+      return [
+        { key: k + 'Blend', label: lbl + ' — blend', type: 'select', default: 'normal', options: BLENDS.map(b => ({ value: b, label: b })) },
+        { key: k + 'Glow', label: lbl + ' — glow', type: 'number', default: 0, min: 0, max: 3, step: 0.1 },
+      ];
+    }) });
     kit.setAdapter({ load: async () => ({ ...COL }), save: async v => { Object.assign(COL, v); saveLocal(); redraw(true); } });
     TTK.defineThemeKitEditor();
     mountEditor();
