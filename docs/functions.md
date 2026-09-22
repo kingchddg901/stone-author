@@ -141,12 +141,17 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 
 ## Colour layer
 
-- `COL` / `COLOUR_TOKENS` / `FX_LAYERS` / `BLENDS` — colour+effect values, the colour token list, the
-  layers that carry blend/glow, and the blend-mode options.
-- `seedColours(f)` — seed `COL`'s colours from family `f`'s palette (never touches effects). *(389)*
-- `setupColour()` — create the token-theme-kit kit, register the Colour + Effects groups, bind the
-  adapter to `COL`, mount the editor. *(2052)*
-- `mountEditor()` — (re)create the `<theme-kit-editor>` so its inputs reflect `COL`. *(2068)*
+- `OVR` / `COL` / `perItem` — the overrides the editor edits and we persist / the *resolved* values
+  the renderer paints from / `id → layer bucket` for per-item (per-id) tokens. `COLOUR_TOKENS` /
+  `FX_LAYERS` / `BLENDS` — the colour token list, the layers that carry blend/glow, the blend options.
+- `seedColours(f)` — seed the colour **overrides** (`OVR`) from family `f`'s palette (never effects). *(389)*
+- `recolour()` — resolve `OVR` → `COL` through the kit (fills defaults + `inherit`); the renderer reads `COL`.
+- `setupColour()` — create the kit, register the Colour / Effects / Per-item groups, bind the adapter
+  to `OVR`, resolve, mount the editor. *(2052)*
+- `registerPerItem()` — (re)register the Per-item token group from `perItem`; each id **inherits** its layer.
+- `tuneId(id, bucket)` — the Tune tool's action: give a vein a per-item colour token that follows its
+  layer until changed (reset returns it).
+- `mountEditor()` — (re)create the `<theme-kit-editor>` so its inputs reflect `OVR`. *(2068)*
 
 ## Interaction
 

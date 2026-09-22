@@ -42,7 +42,8 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
 **`stone-author.html`** is the studio (the focus of the recent work). Draw where lines go; the
 **family** (Carrara, Calacatta, Nero Marquina, Granite, Wood) decides what they are.
 
-- **Tools** — Vein, Branch, **Stylolite**, Web, Pour, Gravity, Magnet, Knot, Chip, Move.
+- **Tools** — Vein, Branch, **Stylolite**, Web, Pour, Gravity, Magnet, Knot, Chip, **Tune** (tap a
+  vein to colour just that one), Move.
 - **Slab primitives** (per family, seeded, greyscale) — **clouds/mottling**, **banding**,
   **breccia clasts**, **drusy sparkle**, on top of the ground and the fracture/speck structure.
 - **Vein-structure variants** (per line) — natural, **sinuous**, **dendritic**, **en-echelon**,
@@ -56,7 +57,7 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
 - **Layers** — each render layer has eye / solo / opacity, and (structural layers) blend mode +
   glow. Solo keeps the stone ground under the isolated layer.
 - **Colour** — the token-theme-kit colour layer (see below). Per-layer colour, decoupled from
-  family.
+  family, plus **per-id** overrides (the Tune tool) that inherit their layer until changed.
 - **Save the source** — a slab is a small JSON of marks + family + settings + colour; masks and
   previews **bake** from it at any resolution. Autosaves locally; Save/Load a `stone.json`.
 
@@ -128,12 +129,13 @@ uniforms. Full detail and the canvas colour menu in [`colour-layer.md`](colour-l
 
 **Done:** save-the-source + autosave · first-class layer control · the primitives batch
 (clouds, banding, breccia, drusy, stylolites) · vein-structure variants · the colour layer
-(per-layer colour + blend + glow via the vendored token-theme-kit).
+(per-layer colour + blend + glow via the vendored token-theme-kit) · **per-id colour** (the Tune
+tool; built on the kit's new `inherit` feature).
 
-**Next:** per-id colour (tune any single vein/clast; extends the token-theme-kit repo) · the
-remaining canvas colour menu (gradients, filters) · targeted per-item reroll · the export step
-(VA's 4 grey masks; the dashboard's rich masks; `.ora` + SVG for lines) · a bake step for
-formats/resolutions · a WebGPU render pipeline.
+**Next:** per-id beyond veins (clasts / seams / specks) · the remaining canvas colour menu
+(gradients, filters) · targeted per-item reroll · the export step (VA's 4 grey masks; the
+dashboard's rich masks; `.ora` + SVG for lines) · a bake step for formats/resolutions · a WebGPU
+render pipeline.
 
 ---
 

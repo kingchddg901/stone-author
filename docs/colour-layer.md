@@ -14,13 +14,16 @@ palette on demand (one click); otherwise your colours stay put.
 
 ## Where the values live
 
-`COL` is the live value bag (colours + effects). It is:
+Two objects, split so a *reset* truly clears an override:
 
-- **seeded** from a family's palette (`seedColours`) but decoupled thereafter,
-- **read by the renderer** at paint time (`COL.ground`, `COL.major`, …) instead of the old
-  hardcoded `FAM` palette,
-- **saved in the stone source** (`serialize`) so colour travels with the slab; older saves fall
-  back to the family palette.
+- **`OVR`** — the overrides the editor edits and we persist. Seeded from a family's palette
+  (`seedColours`), decoupled thereafter.
+- **`COL`** — the *resolved* values the renderer paints from (`COL.ground`, `COL.major`, …),
+  computed by `recolour()` running `OVR` through the kit's resolver: an unset token falls back to
+  its default or its inherited layer. The renderer reads `COL`, never the hardcoded `FAM` palette.
+
+`serialize` stores `OVR` (plus `perItem`, below); older saves that stored resolved values as `COL`
+migrate into `OVR` on load. A "Palette from family" button re-seeds `OVR` on demand.
 
 ## The engine: token-theme-kit (vendored)
 
@@ -63,20 +66,24 @@ exposed, cheap to add: **gradients** (linear/radial/conic fills), **filters**
 base-bucket layers. Each maps to a kit control type. The one thing canvas loses from CSS is the
 cascade — replaced by the token **resolver**.
 
-## Next chapter: per-id
+## Per-id colour (done)
 
-Colour resolves **bucket → layer → per-id override**. Per-layer is done; **per-id** is the next
-slice and lands in the token-theme-kit repo (Chris's call — improving his own kit is the
-extendability proof):
+Colour resolves **bucket → layer → per-id override**, and per-id is live for veins:
 
-- a registry **generated from the current artwork** (the ids present), not a static list,
-- a canvas **"tap a surface to tune it"** path, not a flat list of hundreds of controls,
-- the resolver falling back id → layer → bucket, with per-id entries as overrides that reset to
-  inherit the layer.
+- The **Tune** tool taps a vein; `tuneId(id, bucket)` registers a per-item colour token that
+  **inherits** its layer, in a "Per-item" editor group generated from the artwork on demand (not a
+  static list of hundreds).
+- Resolution falls back **id → layer** via a new *generic* token-theme-kit feature: a token can
+  declare `inherit: '<otherKey>'`, and `resolveValues` returns the override, else the inherited
+  token's resolved value, else its own default (chains resolve; cycles terminate). Added and tested
+  in the kit repo (`@65b401a`) — domain-free, so any consumer gets it.
+- An unset per-item control shows the layer colour; **reset** clears the override and it follows the
+  layer again — which is why the `OVR`/`COL` split above was needed.
 
-The kit's large-registry test already locks scale, so the count is not the wall. Chris also
-expects the kit to **expand again for a WebGPU render pipeline** — the value-resolution seam above
-is renderer-agnostic on purpose, so that expansion is additive.
+Reachable next: extend Tune to clasts / seams / specks (hit-testing per surface). The kit's
+large-registry test already locks scale, so the count is not the wall. Chris expects the kit to
+**expand again for a WebGPU render pipeline** — the value-resolution seam is renderer-agnostic on
+purpose, so that is additive.
 
 ## Status
 
