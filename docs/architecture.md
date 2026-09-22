@@ -130,12 +130,14 @@ uniforms. Full detail and the canvas colour menu in [`colour-layer.md`](colour-l
 **Done:** save-the-source + autosave · first-class layer control · the primitives batch
 (clouds, banding, breccia, drusy, stylolites) · vein-structure variants · the colour layer
 (per-layer colour + blend + glow via the vendored token-theme-kit) · **per-id colour** (the Tune
-tool; built on the kit's new `inherit` feature).
+tool; built on the kit's new `inherit` feature) · **speck colour groups + variants** (a primary/
+secondary hierarchy on the granite ground and on drusy pockets) · **warp** (a cloud-driven domain
+warp of the whole structure — the molten flow).
 
-**Next:** per-id beyond veins (clasts / seams / specks) · the remaining canvas colour menu
-(gradients, filters) · targeted per-item reroll · the export step (VA's 4 grey masks; the
-dashboard's rich masks; `.ora` + SVG for lines) · a bake step for formats/resolutions · a WebGPU
-render pipeline.
+**Next:** per-id beyond veins (clasts / seams) · the remaining canvas colour menu (gradients,
+filters) · per-pixel displacement of the base fields under warp · targeted per-item reroll · the
+export step (VA's 4 grey masks; the dashboard's rich masks; `.ora` + SVG for lines) · a bake step
+for formats/resolutions · a WebGPU render pipeline.
 
 ---
 

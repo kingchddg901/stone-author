@@ -94,8 +94,11 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
 ## Build pipeline
 
 - `applyMark(m, out)` — dispatch one mark to its builder. *(1397)*
-- `build()` — incremental (append the last mark to a cloned `geo`) when possible, else `fullBuild`. *(1407)*
+- `build()` — incremental (append the last mark to a cloned `geo`) when possible, else `fullBuild`; then
+  `warpGeo`. The incremental path is skipped while warp is on so nothing is warped twice. *(1407)*
 - `fullBuild()` — rebuild all geometry from `marks` in order (older rock first). *(1421)*
+- `warpGeo()` — cloud-driven domain **warp**: displace every built point (veins/grain/specks/styl/drusy/
+  knots) by `G.warp` along the cloud's fBm field. `fbm2()` / `vnoise()` / `nz()` are that shared noise.
 
 ## Tile engine
 
