@@ -164,6 +164,10 @@
       <button id="undo" type="button">Undo</button>
       <button id="reroll" type="button">Reroll last</button>
       <button id="clear" type="button">Clear</button></div>
+    <div class="grp" role="group" aria-label="File"><span class="lbl">File</span>
+      <button id="save" type="button">Save</button>
+      <button id="load" type="button">Load</button>
+      <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
     <div class="grp" role="group" aria-label="View"><span class="lbl">View</span>
       <button id="v-stone" type="button" data-view="stone">Stone</button>
       <button id="v-identity" type="button" data-view="identity">Identity</button>
@@ -239,6 +243,16 @@
   const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), spike: v => `${(+v).toFixed(1)}:1` };
   let fam = 'carrara', tool = 'vein', view = 'stone';
   let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], knots: [], grain: [] };
+  // CANONICAL LAYERS - the contract every consumer reads (VA: base/major/minor/micro; the dashboard
+  // adds web and the ids/t-maps). Order is paint order, back to front. A rendered element's layer:
+  //   ground fill -> base | web crack -> web | speck -> micro | vein line -> L.major ? major : minor
+  const LAYERS = [
+    { key: 'base', label: 'Base / ground' },
+    { key: 'web', label: 'Fracture web' },
+    { key: 'micro', label: 'Micro / specks' },
+    { key: 'minor', label: 'Minor veins' },
+    { key: 'major', label: 'Major veins' },
+  ];
   const V = { z: 1, cx: 0.5, cy: H / 2 };
   let Wc = 0, Hc = 0, dpr = 1;
 
@@ -1412,7 +1426,7 @@
     if (rebuild) needBuild = true;
     if (queued) return;
     queued = true;
-    requestAnimationFrame(() => { queued = false; if (needBuild) { build(); stoneReady = false; needBuild = false; } draw(); });
+    requestAnimationFrame(() => { queued = false; if (needBuild) { build(); stoneReady = false; needBuild = false; } draw(); saveLocal(); });
   }
   let needBuild = false;
   const statEl = document.getElementById('stat');
@@ -1603,6 +1617,52 @@
     document.getElementById('g-granite').hidden = !F.groundSpecks;
     document.getElementById('g-wood').hidden = !F.grain;
   }
+
+  // ---- THE SOURCE: marks + family + settings. Everything bakes from this; save it, restore it.
+  function serialize() {
+    return { v: 1, fam, tool, view, layTiles, guidesOn,
+             G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
+             marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
+  }
+  function deserialize(o) {
+    if (!o || o.v !== 1 || !Array.isArray(o.marks)) return false;
+    fam = o.fam; tool = o.tool; view = o.view; layTiles = !!o.layTiles; guidesOn = o.guidesOn !== false;
+    Object.assign(G, o.G || {}); Object.assign(T, o.T || {}); Object.assign(NEXT, o.NEXT || {});
+    marks = o.marks.map(m => ({ ...m }));
+    nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
+    stoneReady = false; syncUI(); redraw(true); return true;
+  }
+  const STORE_KEY = 'stone-author:autosave:v1';
+  let saveTimer = 0;
+  function writeLocal() { try { localStorage.setItem(STORE_KEY, JSON.stringify(serialize())); } catch (_) { /* private mode / blocked */ } }
+  function saveLocal() { clearTimeout(saveTimer); saveTimer = setTimeout(writeLocal, 400); }  // debounced during use
+  // and flush immediately when the page is hidden or closed, so nothing is lost even if the
+  // debounce or a paused rAF hasn't fired.
+  document.addEventListener('visibilitychange', () => { if (document.hidden) writeLocal(); });
+  window.addEventListener('pagehide', writeLocal);
+  function tryLoadLocal() {
+    try { const s = localStorage.getItem(STORE_KEY); if (s) return deserialize(JSON.parse(s)); } catch (_) { /* ignore */ }
+    return false;
+  }
+  // Push the whole of the state into the controls - after a load, every control must match.
+  function syncUI() {
+    const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
+    pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
+    pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : 'order'); pv('data-unit', T.units);
+    pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag);
+    const tog = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', !!on); };
+    tog('pen-pressure', NEXT.pressure); tog('pen-tilt', NEXT.tilt); tog('guides', guidesOn);
+    tog('laytiles', layTiles); tog('t-joints', T.joints); tog('m-hover', hoverMag);
+    for (const id of Object.keys(G)) { const el = document.getElementById(id); if (el) { el.value = G[id]; document.getElementById(id + 'V').textContent = GFMT[id] ? GFMT[id](G[id]) : `${(+G[id]).toFixed(2)}×`; } }
+    for (const id of Object.keys(NEXT)) { const el = document.getElementById(id); if (el) { el.value = NEXT[id]; document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; } }
+    for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
+    const showTool = tool === 'move' ? 'vein' : tool;
+    for (const k of ['vein', 'branch', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
+    showGround(); hint();
+  }
+  function download(name, text) {                       // works from a local file; inert in the artifact sandbox
+    try { const b = new Blob([text], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); return true; } catch (_) { return false; }
+  }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
@@ -1672,26 +1732,43 @@
     m.seed = (Math.random() * 2147483647) | 0; redraw(true);
   });
   document.getElementById('clear').addEventListener('click', () => { marks = []; redraw(true); });
+  document.getElementById('save').addEventListener('click', async () => {
+    const text = JSON.stringify(serialize());
+    let dl = null; try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (_) { /* no runtime */ }
+    if (dl) {                                            // published artifact: the granted download flow
+      try { await dl.save({ filename: 'stone.json', data: text }); hint('Saved stone.json.'); }
+      catch (e) { hint(e && e.code === 'declined' ? 'Save cancelled.' : 'Save is unavailable here; this device remembers your work automatically.'); }
+    } else if (download('stone.json', text)) {           // local file: an ordinary download
+      hint('Saved stone.json. This device also remembers your work automatically.');
+    } else {
+      hint('This device remembers your work automatically; a file download is blocked here.');
+    }
+  });
+  document.getElementById('load').addEventListener('click', () => document.getElementById('loadfile').click());
+  document.getElementById('loadfile').addEventListener('change', e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => { try { if (!deserialize(JSON.parse(r.result))) hint('That file is not a stone source.'); else hint('Loaded.'); } catch (_) { hint('Could not read that file.'); } };
+    r.readAsText(f); e.target.value = '';
+  });
   document.getElementById('zin').addEventListener('click', () => zoomAt(Wc / 2, Hc / 2, 1.5));
   document.getElementById('zout').addEventListener('click', () => zoomAt(Wc / 2, Hc / 2, 1 / 1.5));
   document.getElementById('zfit').addEventListener('click', () => { V.z = 1; V.cx = 0.5; V.cy = H / 2; redraw(false); });
 
   // ---- an example to start from: two veins, a web, one minor grown by tap
   function stroke(fn, n = 60) { const out = []; for (let i = 0; i <= n; i++) { const u = i / n, [x, y] = fn(u); out.push([x, y, u * 1.2]); } return out; }
-  marks = [
+  const demo = [
     { id: 1, kind: 'vein', seed: 1101, samples: stroke(u => [-0.04 + 1.08 * u, 0.47 - 0.33 * u + 0.045 * Math.sin(2 * Math.PI * (1.2 * u + 0.1))]) },
     { id: 2, kind: 'vein', seed: 1102, samples: stroke(u => [0.08 + 0.95 * u, 0.64 - 0.25 * u - 0.03 * Math.sin(2 * Math.PI * 0.8 * u)]) },
     { id: 3, kind: 'web', seed: 1103, samples: stroke(u => [0.60 + 0.30 * u, 0.50 - 0.08 * u + 0.01 * Math.sin(6 * u)]) },
     { id: 4, kind: 'branch', seed: 1104, parent: 'L1', at: 0.42, side: 1, zoom: 1 },
   ];
-  nextId = 5;
-  for (const m of marks) { m.p = { ...NEXT }; m.fam = fam; }
-  press('[data-fam]', document.getElementById('f-' + fam));
-  press('[data-tool]', document.getElementById('t-' + tool));
-  press('[data-view]', document.getElementById('v-' + view));
-  showGround();
-  hint();
-  size(); build(); draw();
+  size();
+  if (!tryLoadLocal()) {                                // restore the last session on this device, else the demo
+    marks = demo; nextId = 5;
+    for (const m of marks) { m.p = { ...NEXT }; m.fam = fam; }
+    syncUI(); build(); draw();
+  }
   if (window.ResizeObserver) {
     let w = cv.clientWidth;
     new ResizeObserver(() => { if (cv.clientWidth !== w) { w = cv.clientWidth; size(); draw(); } }).observe(cv);
