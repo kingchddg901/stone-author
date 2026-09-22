@@ -99,8 +99,12 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
 - `fullBuild()` — rebuild all geometry from `marks` in order (older rock first). *(1421)*
 - `warpGeo()` — cloud-driven domain **warp**: displace every built point (veins/grain/specks/styl/drusy/
   knots) by `G.warp` along the cloud's fBm field, offset by `G.cloudX`/`cloudY` (the field is **moveable**,
-  same offset as the cloud mottle). `fbm2()` / `vnoise()` / `nz()` are that shared noise. The **Cloud** tool
-  drags `cloudX`/`cloudY` (a `cloudpan` gesture, mirroring the view pan).
+  same offset as the cloud mottle), and **scaled per layer** by each layer's `warp` weight (so a layer can
+  hold still). `fbm2()` / `vnoise()` / `nz()` are that shared noise. The **Cloud** tool drags `cloudX`/
+  `cloudY` (a `cloudpan` gesture, mirroring the view pan). A final **anchor** pass re-pins each branch's root
+  to its parent's post-warp attach point (`L.at`), blended over the first ~35% of the branch, so a minor
+  warped differently from its parent flows but never snaps off. Control: the "Warp holds major veins" toggle
+  sets the major layer's `warp` to 0.
 
 ## Tile engine
 
