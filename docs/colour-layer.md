@@ -79,6 +79,10 @@ Colour resolves **bucket → layer → per-id override**, and per-id is live for
   in the kit repo (`@65b401a`) — domain-free, so any consumer gets it.
 - An unset per-item control shows the layer colour; **reset** clears the override and it follows the
   layer again — which is why the `OVR`/`COL` split above was needed.
+- **Speck colour groups** apply the same idea to the *micro* layer: a "Speck colours" control (1–5)
+  splits specks into groups (quartz / feldspar / mica …), each a token (`micro:0`…) inheriting the
+  micro layer. A speck's group is a stable hash of its birth position, so it keeps its colour through
+  gravity/magnet moves; changing the count re-buckets without moving specks. Not per-speck — grouped.
 
 Reachable next: extend Tune to clasts / seams / specks (hit-testing per surface). The kit's
 large-registry test already locks scale, so the count is not the wall. Chris expects the kit to

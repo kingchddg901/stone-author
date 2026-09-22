@@ -149,6 +149,8 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 - `setupColour()` — create the kit, register the Colour / Effects / Per-item groups, bind the adapter
   to `OVR`, resolve, mount the editor. *(2052)*
 - `registerPerItem()` — (re)register the Per-item token group from `perItem`; each id **inherits** its layer.
+- `registerSpeckGroups()` — (re)register the "Speck colours" group (`micro:0…`, up to 5, each inheriting
+  `micro`) from `G.speckGroups`; a speck's group is a stable hash of its birth position (`speck().u`).
 - `tuneId(id, bucket)` — the Tune tool's action: give a vein a per-item colour token that follows its
   layer until changed (reset returns it).
 - `mountEditor()` — (re)create the `<theme-kit-editor>` so its inputs reflect `OVR`. *(2068)*
