@@ -102,9 +102,10 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   same offset as the cloud mottle), and **scaled per layer** by each layer's `warp` weight (so a layer can
   hold still). `fbm2()` / `vnoise()` / `nz()` are that shared noise. The **Cloud** tool drags `cloudX`/
   `cloudY` (a `cloudpan` gesture, mirroring the view pan). A final **anchor** pass re-pins each branch's root
-  to its parent's post-warp attach point (`L.at`), blended over the first ~35% of the branch, so a minor
-  warped differently from its parent flows but never snaps off. Control: the "Warp holds major veins" toggle
-  sets the major layer's `warp` to 0.
+  to its parent's post-warp attach point (`L.at`), blended over the first ~35% of the branch — its **firmness
+  scales with the parent's stability** (`1 − parentWarp`): a held parent pins firmly, a warping parent gives a
+  weaker link, so a minor on a held major stays put while a minor-off-warping-minor is free to drift. Control:
+  the "Warp holds major veins" toggle sets the major layer's `warp` to 0.
 
 ## Tile engine
 
