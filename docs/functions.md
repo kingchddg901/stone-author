@@ -98,7 +98,9 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   `warpGeo`. The incremental path is skipped while warp is on so nothing is warped twice. *(1407)*
 - `fullBuild()` — rebuild all geometry from `marks` in order (older rock first). *(1421)*
 - `warpGeo()` — cloud-driven domain **warp**: displace every built point (veins/grain/specks/styl/drusy/
-  knots) by `G.warp` along the cloud's fBm field. `fbm2()` / `vnoise()` / `nz()` are that shared noise.
+  knots) by `G.warp` along the cloud's fBm field, offset by `G.cloudX`/`cloudY` (the field is **moveable**,
+  same offset as the cloud mottle). `fbm2()` / `vnoise()` / `nz()` are that shared noise. The **Cloud** tool
+  drags `cloudX`/`cloudY` (a `cloudpan` gesture, mirroring the view pan).
 
 ## Tile engine
 

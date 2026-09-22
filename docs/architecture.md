@@ -43,7 +43,7 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
 **family** (Carrara, Calacatta, Nero Marquina, Granite, Wood) decides what they are.
 
 - **Tools** — Vein, Branch, **Stylolite**, Web, Pour, Gravity, Magnet, Knot, Chip, **Tune** (tap a
-  vein to colour just that one), Move.
+  vein to colour just that one), **Cloud** (drag to move the cloud/warp field), Move.
 - **Slab primitives** (per family, seeded, greyscale) — **clouds/mottling**, **banding**,
   **breccia clasts**, **drusy sparkle**, on top of the ground and the fracture/speck structure.
 - **Vein-structure variants** (per line) — natural, **sinuous**, **dendritic**, **en-echelon**,
