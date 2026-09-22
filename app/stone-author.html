@@ -182,6 +182,7 @@
       <div class="sl"><label for="warp">Warp <output id="warpV"></output></label><input id="warp" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="cloudX">Cloud X <output id="cloudXV"></output></label><input id="cloudX" type="range" min="-2" max="2" step="0.02"></div>
       <div class="sl"><label for="cloudY">Cloud Y <output id="cloudYV"></output></label><input id="cloudY" type="range" min="-2" max="2" step="0.02"></div>
+      <div class="sl"><span class="lbl">Warp holds</span><div class="grp"><button id="warp-holdmajor" type="button" aria-pressed="false">Major veins stable</button></div></div>
     </div>
     <div class="sliders" id="g-bands">
       <div class="sl"><label for="bandStrength">Banding <output id="bandStrengthV"></output></label><input id="bandStrength" type="range" min="0" max="1" step="0.02"></div>
@@ -460,16 +461,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // flattens into on export; today mostly 1:1, but step 3 adds primitives as new render layers sharing a
   // bucket (clouds -> base). Consumers ALWAYS read by bucket, so visibility/opacity here are preview-only.
   const layers = [
-    { key: 'base',   label: 'Base / ground',    bucket: 'base',  on: true, op: 1 },
-    { key: 'breccia', label: 'Breccia clasts',  bucket: 'base',  on: true, op: 1 },
-    { key: 'clouds', label: 'Clouds / mottling', bucket: 'base', on: true, op: 1 },
-    { key: 'bands',  label: 'Banding',          bucket: 'base',  on: true, op: 1 },
-    { key: 'web',    label: 'Fracture web',     bucket: 'web',   on: true, op: 1 },
-    { key: 'micro',  label: 'Micro / specks',   bucket: 'micro', on: true, op: 1 },
-    { key: 'drusy',  label: 'Drusy sparkle',    bucket: 'micro', on: true, op: 1 },
-    { key: 'styl',   label: 'Stylolites',       bucket: 'minor', on: true, op: 1 },
-    { key: 'minor',  label: 'Minor veins',      bucket: 'minor', on: true, op: 1 },
-    { key: 'major',  label: 'Major veins',      bucket: 'major', on: true, op: 1 },
+    { key: 'base',   label: 'Base / ground',    bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'breccia', label: 'Breccia clasts',  bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'clouds', label: 'Clouds / mottling', bucket: 'base', on: true, op: 1, warp: 1 },
+    { key: 'bands',  label: 'Banding',          bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'web',    label: 'Fracture web',     bucket: 'web',   on: true, op: 1, warp: 1 },
+    { key: 'micro',  label: 'Micro / specks',   bucket: 'micro', on: true, op: 1, warp: 1 },
+    { key: 'drusy',  label: 'Drusy sparkle',    bucket: 'micro', on: true, op: 1, warp: 1 },
+    { key: 'styl',   label: 'Stylolites',       bucket: 'minor', on: true, op: 1, warp: 1 },
+    { key: 'minor',  label: 'Minor veins',      bucket: 'minor', on: true, op: 1, warp: 1 },
+    { key: 'major',  label: 'Major veins',      bucket: 'major', on: true, op: 1, warp: 1 },
   ];
   const layAt = k => layers.find(L => L.key === k);
   let soloLay = null;
@@ -838,7 +839,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const len = (0.12 + 0.23 * r()) * F.branchLen * M.blen;
       const pts = roughen([a, [a[0] + Math.cos(th) * len, a[1] + Math.sin(th) * len]], levelsFor(len), veinSched(F, M), g2);
       const minor = lineGeom(main.id + '.' + k, pts, gauge * 0.5 * (press ? press(t) : 1), F, M, m.seed, 100 + k,
-                        { mark: m.id, parent: main.id, taperStart: false, wmod, lean: leanAt ? (lt => () => lt)(leanAt(t)) : null });
+                        { mark: m.id, parent: main.id, at: t, taperStart: false, wmod, lean: leanAt ? (lt => () => lt)(leanAt(t)) : null });
       add(out, minor); made.push(minor);
       if (variant === 'dendritic') {                    // fern-like: each minor throws one or two of its own
         const [rs] = sub(m.seed, 30, k), sn = 1 + (rs() < 0.6 ? 1 : 0);
@@ -846,7 +847,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           const [r3] = sub(m.seed, 31, k, j), [, g3] = sub(m.seed, 32, k, j);
           const tt = 0.3 + 0.5 * r3(), ss = r3() < 0.5 ? -1 : 1, pa = at(minor, tt), pth = tangent(minor, tt) + ss * (0.3 + 0.4 * r3()), plen = (0.5 + 0.3 * r3()) * len * 0.6;
           const sub2 = lineGeom(minor.id + '.' + j, roughen([pa, [pa[0] + Math.cos(pth) * plen, pa[1] + Math.sin(pth) * plen]], levelsFor(plen), veinSched(F, M), g3),
-                        gauge * 0.3, F, M, m.seed, 200 + k * 4 + j, { mark: m.id, parent: minor.id, taperStart: false });
+                        gauge * 0.3, F, M, m.seed, 200 + k * 4 + j, { mark: m.id, parent: minor.id, at: tt, taperStart: false });
           add(out, sub2); made.push(sub2);
         }
       }
@@ -877,7 +878,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     let wmod = null;
     if (variant === 'boudinage') { const [rb] = sub(m.seed, 45), cyc = 3 + Math.round(3 * rb()), ph = rb() * 6.2832; wmod = s => 0.3 + 0.7 * Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * cyc * s + ph), 1.5); }
     const L = lineGeom('B' + m.id, pts, Math.max(par.gauge * 0.5 * M.gauge2, 0.0008), F, M, m.seed, 0,
-                       { mark: m.id, parent: par.id, taperStart: false, press, lean, wmod, halo: variant === 'halo' });
+                       { mark: m.id, parent: par.id, at: m.at, taperStart: false, press, lean, wmod, halo: variant === 'halo' });
     add(out, L);
     intrude(L, out.specks, M, route);
   }
@@ -1438,14 +1439,26 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const amp = G.warp * 0.12; if (amp <= 0) return;
     const scale = G.cloudScale * 3.5, s0 = mix(strHue(fam), 7), ox = G.cloudX, oy = G.cloudY;
     const dx = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0) - 0.5), dy = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0 + 100) - 0.5);
-    const wp = q => { const a = dx(q[0], q[1]), b = dy(q[0], q[1]); q[0] += a; q[1] += b; };
-    for (const L of geo.lines) for (const q of L.pts) wp(q);
-    for (const e of geo.web) for (const q of e.pts) wp(q);
-    for (const gl of geo.grain) for (const q of gl.pts) wp(q);
-    for (const s of geo.styl) for (const q of s.pts) wp(q);
-    for (const s of geo.specks) { const a = dx(s.x, s.y), b = dy(s.x, s.y); s.x += a; s.y += b; }
-    for (const s of geo.drusy) { const a = dx(s.x, s.y), b = dy(s.x, s.y); s.x += a; s.y += b; }
-    for (const K of geo.knots) { const a = dx(K.x, K.y), b = dy(K.x, K.y); K.x += a; K.y += b; }
+    const W = k => { const L = layAt(k); return L ? L.warp : 1; };        // per-layer warp weight (a layer can hold still)
+    const wp = (q, w) => { const a = dx(q[0], q[1]) * w, b = dy(q[0], q[1]) * w; q[0] += a; q[1] += b; };
+    const wp2 = (s, w) => { const a = dx(s.x, s.y) * w, b = dy(s.x, s.y) * w; s.x += a; s.y += b; };
+    for (const L of geo.lines) { const w = W(L.major ? 'major' : 'minor'); for (const q of L.pts) wp(q, w); }
+    const ww = W('web'); for (const e of geo.web) for (const q of e.pts) wp(q, ww);
+    const wg = W('micro'); for (const gl of geo.grain) for (const q of gl.pts) wp(q, wg);
+    const wsy = W('styl'); for (const s of geo.styl) for (const q of s.pts) wp(q, wsy);
+    const wmi = W('micro'); for (const s of geo.specks) wp2(s, wmi);
+    const wdr = W('drusy'); for (const s of geo.drusy) wp2(s, wdr);
+    const wkn = W('major'); for (const K of geo.knots) wp2(K, wkn);
+    // ANCHOR: re-pin each branch's root to its parent's post-warp attach point, blended along the branch,
+    // so a minor warped differently from its parent (e.g. warp holds majors) flows but never snaps off.
+    for (const L of geo.lines) {
+      if (!L.parent || L.at == null) continue;
+      const P = geo.byId.get(L.parent); if (!P || !P.pts.length) continue;
+      const t = at(P, L.at), ddx = t[0] - L.pts[0][0], ddy = t[1] - L.pts[0][1];
+      if (ddx === 0 && ddy === 0) continue;
+      const n = L.pts.length, span = Math.max(1, Math.floor(n * 0.35));
+      for (let i = 0; i < span && i < n; i++) { const f = 1 - i / span; L.pts[i][0] += ddx * f; L.pts[i][1] += ddy * f; }
+    }
   }
   function build() {
     const sig = fam + '|' + JSON.stringify(G), n = marks.length, nm = marks[n - 1];
@@ -2209,7 +2222,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function serialize() {
     return { v: 1, fam, tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
-             layers: layers.map(L => ({ key: L.key, on: L.on, op: L.op })), soloLay,
+             layers: layers.map(L => ({ key: L.key, on: L.on, op: L.op, warp: L.warp })), soloLay,
              OVR: { ...OVR }, perItem: { ...perItem },
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
   }
@@ -2217,7 +2230,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!o || o.v !== 1 || !Array.isArray(o.marks)) return false;
     fam = o.fam; tool = o.tool; view = o.view; layTiles = !!o.layTiles; guidesOn = o.guidesOn !== false;
     Object.assign(G, o.G || {}); Object.assign(T, o.T || {}); Object.assign(NEXT, o.NEXT || {});
-    if (Array.isArray(o.layers)) for (const s of o.layers) { const L = layAt(s.key); if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; } }
+    if (Array.isArray(o.layers)) for (const s of o.layers) { const L = layAt(s.key); if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; L.warp = typeof s.warp === 'number' ? s.warp : 1; } }
     soloLay = o.soloLay || null;
     for (const k in OVR) delete OVR[k];                        // colour travels with the slab
     if (o.OVR) Object.assign(OVR, o.OVR); else if (o.COL) Object.assign(OVR, o.COL); else seedColours(fam);   // older saves stored resolved values as `COL`
@@ -2248,7 +2261,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant);
     const tog = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', !!on); };
     tog('pen-pressure', NEXT.pressure); tog('pen-tilt', NEXT.tilt); tog('guides', guidesOn);
-    tog('laytiles', layTiles); tog('t-joints', T.joints); tog('m-hover', hoverMag);
+    tog('laytiles', layTiles); tog('t-joints', T.joints); tog('m-hover', hoverMag); tog('warp-holdmajor', layAt('major').warp === 0);
     for (const id of Object.keys(G)) { const el = document.getElementById(id); if (el) { el.value = G[id]; document.getElementById(id + 'V').textContent = GFMT[id] ? GFMT[id](G[id]) : `${(+G[id]).toFixed(2)}×`; } }
     for (const id of Object.keys(NEXT)) { const el = document.getElementById(id); if (el) { el.value = NEXT[id]; document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; } }
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
@@ -2271,6 +2284,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-var]')) b.addEventListener('click', () => { NEXT.variant = b.dataset.var; press('[data-var]', b); });   // variant applies to the NEXT line
   document.getElementById('colour-toggle').addEventListener('click', () => { const p = document.getElementById('colour-panel'), b = document.getElementById('colour-toggle'), show = p.hidden; p.hidden = !show; b.setAttribute('aria-pressed', show); b.textContent = show ? 'Hide colour editor' : 'Show colour editor'; });
   document.getElementById('colour-fromfam').addEventListener('click', () => { seedColours(fam); recolour(); mountEditor(); redraw(true); });   // adopt the current family's palette
+  document.getElementById('warp-holdmajor').addEventListener('click', () => { const L = layAt('major'); L.warp = L.warp === 0 ? 1 : 0; document.getElementById('warp-holdmajor').setAttribute('aria-pressed', L.warp === 0); redraw(true); });
   const mh = document.getElementById('m-hover');
   mh.addEventListener('click', () => {
     hoverMag = !hoverMag; mh.setAttribute('aria-pressed', hoverMag); if (!hoverMag) commitHover();
