@@ -68,6 +68,7 @@
     <button id="t-vein" type="button" data-tool="vein">Vein</button>
     <button id="t-branch" type="button" data-tool="branch">Branch</button>
     <button id="t-web" type="button" data-tool="web">Web</button>
+    <button id="t-styl" type="button" data-tool="styl">Stylolite</button>
     <button id="t-pour" type="button" data-tool="pour">Pour</button>
     <button id="t-gravity" type="button" data-tool="gravity">Gravity</button>
     <button id="t-knot" type="button" data-tool="knot">Knot</button>
@@ -97,6 +98,11 @@
     <div class="sl"><label for="spread">Spread <output id="spreadV"></output></label><input id="spread" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="density">Density <output id="densityV"></output></label><input id="density" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="stretch">Stretch <output id="stretchV"></output></label><input id="stretch" type="range" min="0.4" max="2.5" step="0.05"></div>
+  </div>
+  <div class="sliders" id="s-styl" hidden>
+    <div class="sl"><label for="stylAmp">Tooth height <output id="stylAmpV"></output></label><input id="stylAmp" type="range" min="0.2" max="3" step="0.05"></div>
+    <div class="sl"><label for="stylTooth">Teeth <output id="stylToothV"></output></label><input id="stylTooth" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="stylWidth">Seam width <output id="stylWidthV"></output></label><input id="stylWidth" type="range" min="0.4" max="3" step="0.05"></div>
   </div>
   <div class="sliders" id="s-pour" hidden>
     <div class="sl"><label for="prate">Pour <output id="prateV"></output></label><input id="prate" type="range" min="200" max="4000" step="50"></div>
@@ -158,8 +164,28 @@
     <div class="sl"><label for="mreach">Reach <output id="mreachV"></output></label><input id="mreach" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="mheight">Height <output id="mheightV"></output></label><input id="mheight" type="range" min="0.3" max="3" step="0.05"></div>
   </div>
-  <div id="ground" hidden>
+  <div id="ground">
     <p class="lbl" style="margin:0 0 6px">Ground &middot; the whole slab, changes apply at once</p>
+    <div class="sliders" id="g-clouds">
+      <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="cloudScale">Cloud scale <output id="cloudScaleV"></output></label><input id="cloudScale" type="range" min="0.4" max="3" step="0.05"></div>
+    </div>
+    <div class="sliders" id="g-bands">
+      <div class="sl"><label for="bandStrength">Banding <output id="bandStrengthV"></output></label><input id="bandStrength" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="bandFreq">Bands <output id="bandFreqV"></output></label><input id="bandFreq" type="range" min="2" max="20" step="1"></div>
+      <div class="sl"><label for="bandAngle">Angle <output id="bandAngleV"></output></label><input id="bandAngle" type="range" min="-90" max="90" step="1"></div>
+      <div class="sl"><label for="bandWave">Waviness <output id="bandWaveV"></output></label><input id="bandWave" type="range" min="0" max="1" step="0.02"></div>
+    </div>
+    <div class="sliders" id="g-breccia">
+      <div class="sl"><label for="brecStrength">Breccia <output id="brecStrengthV"></output></label><input id="brecStrength" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="brecClasts">Clasts <output id="brecClastsV"></output></label><input id="brecClasts" type="range" min="6" max="90" step="1"></div>
+      <div class="sl"><label for="brecSeam">Matrix <output id="brecSeamV"></output></label><input id="brecSeam" type="range" min="0.3" max="2.5" step="0.05"></div>
+    </div>
+    <div class="sliders" id="g-drusy">
+      <div class="sl"><label for="drusyDensity">Drusy <output id="drusyDensityV"></output></label><input id="drusyDensity" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="drusySize">Crystal size <output id="drusySizeV"></output></label><input id="drusySize" type="range" min="0.4" max="2.5" step="0.05"></div>
+      <div class="sl"><label for="drusyBright">Sparkle <output id="drusyBrightV"></output></label><input id="drusyBright" type="range" min="0.3" max="1.5" step="0.05"></div>
+    </div>
     <div class="sliders" id="g-granite" hidden>
       <div class="sl"><label for="gspecks">Specks <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
       <div class="sl"><label for="gsize">Speck size <output id="gsizeV"></output></label><input id="gsize" type="range" min="0.4" max="2" step="0.05"></div>
@@ -245,20 +271,27 @@
   // Settings for the NEXT line. Each mark takes a copy when it is made and keeps it, so a
   // change applies forward and never rewrites what is already down.
   const NEXT = { pressure: false, tilt: false, gauge: 1, rough: 1, breaks: 1, branches: 1, blen: 1, gauge2: 1, spread: 1, density: 1, stretch: 1,
-              prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1 };
+              prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
+              stylAmp: 1, stylTooth: 1, stylWidth: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0 };
+  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, cloudScale: 1, cloudStrength: 0.5,
+              bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
+              brecStrength: 0, brecClasts: 24, brecSeam: 1,
+              drusyDensity: 0, drusySize: 1, drusyBright: 1 };
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
-  const GFMT = { gangle: v => `${v}\u00b0` };
+  const GFMT = { gangle: v => `${v}\u00b0`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`,
+                 bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2),
+                 brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
+                 drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2) };
   const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
   const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen };
   let guidesOn = true;
   const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), spike: v => `${(+v).toFixed(1)}:1` };
   let fam = 'carrara', tool = 'vein', view = 'stone';
-  let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], knots: [], grain: [] };
+  let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], knots: [], grain: [], styl: [], drusy: [] };
   // CANONICAL LAYERS - the contract every consumer reads (VA: base/major/minor/micro; the dashboard
   // adds web and the ids/t-maps). Order is paint order, back to front. A rendered element's layer:
   //   ground fill -> base | web crack -> web | speck -> micro | vein line -> L.major ? major : minor
@@ -274,12 +307,131 @@
   // many render layers per bucket, and lets a WebGPU renderer swap in behind the same model. Count is
   // not the ceiling - stored bitmaps cap on memory, procedural layers on frame time; the model plans for
   // hundreds. Consumers ALWAYS read by key, so visibility/opacity here never change an exported mask.
-  const layers = LAYERS.map(L => ({ key: L.key, label: L.label, bucket: L.key, on: true, op: 1 }));
+  // RENDER LAYERS (growing) vs the fixed consumer CONTRACT (LAYERS). Each render layer tags the bucket it
+  // flattens into on export; today mostly 1:1, but step 3 adds primitives as new render layers sharing a
+  // bucket (clouds -> base). Consumers ALWAYS read by bucket, so visibility/opacity here are preview-only.
+  const layers = [
+    { key: 'base',   label: 'Base / ground',    bucket: 'base',  on: true, op: 1 },
+    { key: 'breccia', label: 'Breccia clasts',  bucket: 'base',  on: true, op: 1 },
+    { key: 'clouds', label: 'Clouds / mottling', bucket: 'base', on: true, op: 1 },
+    { key: 'bands',  label: 'Banding',          bucket: 'base',  on: true, op: 1 },
+    { key: 'web',    label: 'Fracture web',     bucket: 'web',   on: true, op: 1 },
+    { key: 'micro',  label: 'Micro / specks',   bucket: 'micro', on: true, op: 1 },
+    { key: 'drusy',  label: 'Drusy sparkle',    bucket: 'micro', on: true, op: 1 },
+    { key: 'styl',   label: 'Stylolites',       bucket: 'minor', on: true, op: 1 },
+    { key: 'minor',  label: 'Minor veins',      bucket: 'minor', on: true, op: 1 },
+    { key: 'major',  label: 'Major veins',      bucket: 'major', on: true, op: 1 },
+  ];
   const layAt = k => layers.find(L => L.key === k);
   let soloLay = null;
-  const layVis = k => soloLay ? k === soloLay : (layAt(k) ? layAt(k).on : true);
+  // Solo keeps the BASE ground under the soloed layer, so an isolated feature shows ON the marble
+  // (a dark seam on a near-black neutral was invisible); everything else drops away.
+  const layVis = k => soloLay ? (k === soloLay || k === 'base') : (layAt(k) ? layAt(k).on : true);
   const layOp = k => { const L = layAt(k); return L ? L.op : 1; };
   const STONE_BG = '#15161b';                             // neutral shown where the base layer is hidden/faded
+
+  // ---- CLOUDS / MOTTLING: a tileable fBm value-noise field that drifts the ground's lightness. It is the
+  // base texture (VA reads it as `base`). Grids are fixed and cloudScale zooms the SAMPLING, so the scale
+  // knob morphs the field continuously instead of re-rolling it; seed is per-family, so each stone has its
+  // own cloud. Built low-res and upscaled soft, cached until fam/scale/strength change.
+  function hexRGB(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  let cloudC = null, cloudSig = '';
+  function buildClouds() {
+    const W = 200, Hh = Math.round(W * H);
+    const c = document.createElement('canvas'); c.width = W; c.height = Hh;
+    const cx = c.getContext('2d'), img = cx.createImageData(W, Hh), d = img.data;
+    const strength = G.cloudStrength, scale = G.cloudScale, seed = mix(strHue(fam), 7);
+    const oct = [[4, 0.6], [8, 0.3], [16, 0.16]];        // [fixed grid N, amplitude] - grids do NOT depend on scale
+    const grids = oct.map(([gn, a], k) => { const gw = gn, gh = Math.max(2, Math.round(gn * H)); const [r] = sub(seed, 90, k); const g = new Float32Array(gw * gh); for (let i = 0; i < g.length; i++) g[i] = r(); return { gw, gh, a, g }; });
+    const ss = t => t * t * (3 - 2 * t);
+    const samp = (o, u, v) => {                            // bilinear, wrapped (tileable), smoothstep-eased
+      const fx = u * o.gw, fy = v * o.gh; let x0 = Math.floor(fx), y0 = Math.floor(fy);
+      const tx = ss(fx - x0), ty = ss(fy - y0); x0 = ((x0 % o.gw) + o.gw) % o.gw; y0 = ((y0 % o.gh) + o.gh) % o.gh;
+      const x1 = (x0 + 1) % o.gw, y1 = (y0 + 1) % o.gh, g = o.g;
+      const a = g[y0 * o.gw + x0], b = g[y0 * o.gw + x1], cc = g[y1 * o.gw + x0], dd = g[y1 * o.gw + x1];
+      return (a * (1 - tx) + b * tx) * (1 - ty) + (cc * (1 - tx) + dd * tx) * ty;
+    };
+    let amp = 0; for (const o of grids) amp += o.a;
+    for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
+      let n = 0; const u = x / W * scale, v = y / Hh * scale; for (const o of grids) n += o.a * samp(o, u, v); n /= amp;
+      const gv = Math.max(0, Math.min(255, 128 + (n - 0.5) * 2 * strength * 120)), i = (y * W + x) * 4;   // grey delta (128 = no change), composited soft-light
+      d[i] = d[i + 1] = d[i + 2] = gv; d[i + 3] = 255;
+    }
+    cx.putImageData(img, 0, 0); return c;
+  }
+  function ensureClouds() { const sig = fam + '|' + G.cloudScale + '|' + G.cloudStrength; if (sig !== cloudSig) { cloudC = buildClouds(); cloudSig = sig; } return cloudC; }
+
+  // ---- BANDING: directional tonal layers (banded onyx / travertine / gneiss). A grey delta map (128 = no
+  // change) composited soft-light, so it MODULATES the clouded ground instead of replacing it. Bands run
+  // perpendicular to bandAngle; their tone is a smoothed 1-D walk sampled along the band-normal, and the
+  // boundaries wave by a second 1-D noise along the band direction. Seeded per family; scale/angle are edits.
+  let bandC = null, bandSig = '';
+  function buildBands() {
+    const W = 200, Hh = Math.round(W * H), c = document.createElement('canvas'); c.width = W; c.height = Hh;
+    const cx = c.getContext('2d'), img = cx.createImageData(W, Hh), d = img.data;
+    const strength = G.bandStrength, freq = G.bandFreq, ang = G.bandAngle * Math.PI / 180, wave = G.bandWave, seed = mix(strHue(fam), 23);
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const [rt] = sub(seed, 1), NT = 256, tone = new Float32Array(NT);
+    let prev = rt(); for (let i = 0; i < NT; i++) { prev = prev * 0.7 + rt() * 0.3; tone[i] = prev; }
+    let lo = 1e9, hi = -1e9; for (const v of tone) { lo = Math.min(lo, v); hi = Math.max(hi, v); } const rng = (hi - lo) || 1; for (let i = 0; i < NT; i++) tone[i] = (tone[i] - lo) / rng;
+    const [rw] = sub(seed, 2), NW = 64, wv = new Float32Array(NW); let p = rw(); for (let i = 0; i < NW; i++) { p = p * 0.6 + rw() * 0.4; wv[i] = p - 0.5; }
+    const samp = (arr, N, t) => { t = ((t % 1) + 1) % 1; const f = t * N, i = Math.floor(f), fr = f - i; return arr[i % N] + (arr[(i + 1) % N] - arr[i % N]) * fr; };
+    for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
+      const u = x / W, v = y / Hh * H, perp = -u * sa + v * ca;
+      let s = u * ca + v * sa; s += wave * 0.15 * samp(wv, NW, perp * 2.5);
+      const n = samp(tone, NT, s * freq * 0.5), gv = Math.max(0, Math.min(255, 128 + (n - 0.5) * 2 * strength * 110)), i = (y * W + x) * 4;
+      d[i] = d[i + 1] = d[i + 2] = gv; d[i + 3] = 255;
+    }
+    cx.putImageData(img, 0, 0); return c;
+  }
+  function ensureBands() { const sig = fam + '|' + G.bandStrength + '|' + G.bandFreq + '|' + G.bandAngle + '|' + G.bandWave; if (sig !== bandSig) { bandC = buildBands(); bandSig = sig; } return bandC; }
+
+  // ---- BRECCIA: angular clasts cemented by a darker matrix. A jittered-grid Voronoi over the slab: each
+  // pixel takes its nearest seed's grey tone, and pixels near a cell boundary (small d2-d1) darken into a
+  // matrix seam. Greyscale delta, composited soft-light over the clouded base; edges kept crisp. Seeded
+  // per family so a stone's clasts are its own.
+  let brecC = null, brecSig = '';
+  function buildBreccia() {
+    const W = 300, Hh = Math.round(W * H), c = document.createElement('canvas'); c.width = W; c.height = Hh;
+    const cx = c.getContext('2d'), img = cx.createImageData(W, Hh), d = img.data;
+    const strength = G.brecStrength, N = Math.round(G.brecClasts), seamP = G.brecSeam, seed = mix(strHue(fam), 41), [r] = sub(seed, 1);
+    const [br, bg, bb] = hexRGB(FAM[fam].ground), lum = 0.299 * br + 0.587 * bg + 0.114 * bb, lightStone = lum > 128;  // seam contrasts: dark on light stone, pale on dark
+    const cols = Math.max(2, Math.round(Math.sqrt(N / H))), rows = Math.max(2, Math.round(N / cols)), seeds = [], tone = [];
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { seeds.push([(i + 0.15 + 0.7 * r()) / cols, (j + 0.15 + 0.7 * r()) / rows * H]); tone.push(r() * 2 - 1); }
+    const M = seeds.length, seamW = 0.006 * seamP, cl = (v => Math.max(0, Math.min(255, v)));
+    for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
+      const u = x / W, v = y / Hh * H; let d1 = 1e9, d2 = 1e9, k1 = 0;
+      for (let k = 0; k < M; k++) { const dx = u - seeds[k][0], dy = v - seeds[k][1], dd = dx * dx + dy * dy; if (dd < d1) { d2 = d1; d1 = dd; k1 = k; } else if (dd < d2) d2 = dd; }
+      const edge = Math.sqrt(d2) - Math.sqrt(d1), i = (y * W + x) * 4;
+      if (edge < seamW) {                                  // matrix seam, strongest at the boundary
+        const t = 1 - edge / seamW;
+        if (lightStone) { const f = 1 - 0.62 * seamP * t; d[i] = cl(br * f); d[i + 1] = cl(bg * f); d[i + 2] = cl(bb * f); }
+        else { const a = 95 * seamP * t; d[i] = cl(br + a); d[i + 1] = cl(bg + a); d[i + 2] = cl(bb + a); }
+      } else {                                             // clast fill: the ground shifted in lightness
+        const l = 1 + tone[k1] * strength * 0.5; d[i] = cl(br * l); d[i + 1] = cl(bg * l); d[i + 2] = cl(bb * l);
+      }
+      d[i + 3] = 255;
+    }
+    cx.putImageData(img, 0, 0); return c;
+  }
+  function ensureBreccia() { const sig = fam + '|' + G.brecStrength + '|' + G.brecClasts + '|' + G.brecSeam; if (sig !== brecSig) { brecC = buildBreccia(); brecSig = sig; } return brecC; }
+
+  // ---- DRUSY: crystal-pocket sparkle. Pockets scattered over the slab, each a cluster of tiny bright
+  // crystals. Built deterministically by index so raising density APPENDS pockets and crystals (an edit,
+  // not a re-roll); size scales radius and spread. Seeded per family.
+  function buildDrusy() {
+    const out = []; if (G.drusyDensity <= 0) return out;
+    const seed = mix(strHue(fam), 61), pockets = 3 + Math.round(G.drusyDensity * 10);
+    for (let p = 0; p < pockets; p++) {
+      const [r] = sub(seed, 2, p), cx = 0.05 + 0.9 * r(), cy = (0.05 + 0.9 * r()) * H, rad = (0.02 + 0.05 * r()) * G.drusySize;
+      const K = 8 + Math.round(30 * G.drusyDensity);
+      for (let k = 0; k < K; k++) {
+        const [rr] = sub(seed, 3, p, k), a = rr() * 6.2832, d = Math.sqrt(rr()) * rad;
+        out.push({ x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d, r: (0.0006 + 0.0011 * rr()) * G.drusySize, lum: 0.55 + 0.45 * rr() });
+      }
+    }
+    return out;
+  }
   const V = { z: 1, cx: 0.5, cy: H / 2 };
   let Wc = 0, Hc = 0, dpr = 1;
 
@@ -567,6 +719,27 @@
   }
   // WEB: a crack along your line and a web of cells that spreads from it and thins out,
   // seeded densest at the line and stretched along its run.
+  // Stylolite: a pressure-dissolution SEAM. Its route is yours; the family gives it interlocking teeth -
+  // alternating rectangular columns of varying height, roughly perpendicular to the seam, with fine grit,
+  // tapered to nothing at each end so the seam starts and stops cleanly.
+  function buildStyl(m, out) {
+    const M = m.p, [r] = sub(m.seed, 33);
+    const dense = resample(handRoute(m.samples), 0.006), n = dense.length;
+    if (n < 2) return;
+    const amp = 0.012 * M.stylAmp, wl = Math.max(2, 8 / M.stylTooth), off = new Float64Array(n);
+    let dir = r() < 0.5 ? 1 : -1, hold = 0, cur = 0;
+    for (let i = 0; i < n; i++) {
+      if (hold <= 0) { cur = dir * amp * (0.35 + 0.65 * r()); dir = -dir; hold = Math.max(1, Math.round(wl * (0.6 + 0.8 * r()))); }
+      off[i] = cur + (r() - 0.5) * amp * 0.3; hold--;    // grit on each plateau
+    }
+    for (let i = 0; i < n; i++) off[i] *= Math.min(1, Math.min(i, n - 1 - i) / Math.max(1, n * 0.12));  // taper the ends
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = dense[Math.max(0, i - 1)], b = dense[Math.min(n - 1, i + 1)], tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1;
+      pts.push([dense[i][0] - ty / L * off[i], dense[i][1] + tx / L * off[i]]);
+    }
+    out.styl.push({ id: 'S' + m.id, mark: m.id, pts, width: 0.0018 * M.stylWidth });
+  }
   function buildWeb(m, F, out) {
     const M = m.p;
     const route = resample(m.samples, 0.005);
@@ -1049,6 +1222,7 @@
     const F = FAM[m.fam];                              // the character it was drawn with
     if (m.kind === 'vein') buildVein(m, F, out);
     else if (m.kind === 'branch') buildBranch(m, F, out);
+    else if (m.kind === 'styl') buildStyl(m, out);
     else if (m.kind === 'web') buildWeb(m, F, out);
     else if (m.kind === 'pour') buildPour(m, out);
     else if (m.kind === 'gravity') applyGravity(m, out);
@@ -1059,7 +1233,7 @@
     if (last && last.sig === sig && n === last.hist.length + 1 && nm.kind !== 'knot'
         && last.hist.every((h, i) => h.m === marks[i] && h.seed === marks[i].seed)) {
       const out = { ...geo, lines: geo.lines.slice(), byId: new Map(geo.byId), web: geo.web.slice(),
-                    specks: geo.specks.map(q => ({ ...q })), guides: geo.guides.slice() };
+                    specks: geo.specks.map(q => ({ ...q })), guides: geo.guides.slice(), styl: geo.styl.slice(), drusy: geo.drusy.slice() };
       applyMark(nm, out);
       geo = out;
       last = { sig, hist: marks.map(m => ({ m, seed: m.seed })) };
@@ -1071,7 +1245,7 @@
   function fullBuild() {
     const Fc = FAM[fam];
     const out = { lines: [], byId: new Map(), web: [], specks: Fc.groundSpecks ? groundCopy() : [], guides: [],
-                  knots: marks.filter(m => m.kind === 'knot').map(knotGeom), grain: [] };
+                  knots: marks.filter(m => m.kind === 'knot').map(knotGeom), grain: [], styl: [], drusy: buildDrusy() };
     // knots are fields in the wood, there while it grew, so they bend all of its grain
     if (Fc.grain) out.grain = woodGrain(Fc, out.knots);
     else for (const K of out.knots) { K.th = G.gangle * Math.PI / 180; K.c = Math.cos(K.th); K.s = Math.sin(K.th); }
@@ -1316,6 +1490,20 @@
   }
   function paintStoneContent(ident, angleView) {
     const F = FAM[fam];
+    if (!ident && layVis('breccia') && G.brecStrength > 0) {    // base-SETTER: opaque angular clasts with a contrasting matrix, over the flat ground
+      g2d.imageSmoothingEnabled = true; g2d.globalAlpha = layOp('breccia');
+      g2d.drawImage(ensureBreccia(), 0, 0, 1, H); g2d.globalAlpha = 1;
+    }
+    if (!ident && layVis('clouds') && G.cloudStrength > 0) {    // MODULATOR: soft-light mottle over whatever base is set
+      const prev = g2d.globalCompositeOperation; g2d.globalCompositeOperation = 'soft-light';
+      g2d.imageSmoothingEnabled = true; g2d.globalAlpha = layOp('clouds');
+      g2d.drawImage(ensureClouds(), 0, 0, 1, H); g2d.globalAlpha = 1; g2d.globalCompositeOperation = prev;
+    }
+    if (!ident && layVis('bands') && G.bandStrength > 0) {      // MODULATOR: directional bands, soft-light, stacking over clouds
+      const prev = g2d.globalCompositeOperation; g2d.globalCompositeOperation = 'soft-light';
+      g2d.imageSmoothingEnabled = true; g2d.globalAlpha = layOp('bands');
+      g2d.drawImage(ensureBands(), 0, 0, 1, H); g2d.globalAlpha = 1; g2d.globalCompositeOperation = prev;
+    }
     if (F.grain) {                                       // wood: grain = fine structure -> micro, knots = major features
       if (layVis('micro')) geo.grain.forEach((gl, k) => {
         g2d.beginPath(); g2d.moveTo(gl.pts[0][0], gl.pts[0][1]);
@@ -1347,6 +1535,25 @@
         if (q) g2d.lineTo(px, py); else g2d.moveTo(px, py);
       }
       g2d.closePath(); g2d.fill();
+    }
+    if (layVis('drusy') && geo.drusy.length) {            // crystal sparkle: tiny bright points clustered in pockets
+      const bright = G.drusyBright;
+      for (const s of geo.drusy) {
+        g2d.globalAlpha = ident ? 0.9 : Math.min(1, s.lum * bright);
+        g2d.fillStyle = ident ? idColour('drusy', s.lum) : '#f7f5f0';
+        g2d.beginPath(); g2d.arc(s.x, s.y, s.r, 0, 6.2832); g2d.fill();
+      }
+    }
+    if (layVis('styl') && geo.styl.length) {              // dark toothy seams, sharp corners (miter), over the ground and under the veins
+      const [gr, gg, gb] = hexRGB(F.ground), seam = 0.299 * gr + 0.587 * gg + 0.114 * gb > 128 ? '#241d16' : '#c9b79a';
+      g2d.lineJoin = 'miter'; g2d.lineCap = 'butt';
+      for (const s of geo.styl) {
+        g2d.beginPath(); g2d.moveTo(s.pts[0][0], s.pts[0][1]);
+        for (let i = 1; i < s.pts.length; i++) g2d.lineTo(s.pts[i][0], s.pts[i][1]);
+        g2d.strokeStyle = ident ? idColour(s.id, 0.5) : seam;
+        g2d.globalAlpha = (ident ? 0.95 : 0.85) * (ident ? 1 : layOp('styl')); g2d.lineWidth = s.width; g2d.stroke();
+      }
+      g2d.lineJoin = 'round'; g2d.lineCap = 'round';
     }
     const order = geo.lines.filter(L => !L.major).concat(geo.lines.filter(L => L.major));
     const lk = L => L.major ? 'major' : 'minor';
@@ -1491,6 +1698,7 @@
     gravity: 'Tap for a point of gravity, or drag to lay a line of it. Pull gathers specks, push clears them; they bunch but never touch.',
     knot: 'Tap to set a knot, or drag out from its centre to size it. The grain flows around it in Wood.',
     magnet: 'Drag to comb the specks like iron filings. The pen\u2019s angle is the magnet: upright fans them out from the tip, laid over combs them along its lean. Slow passes align harder.',
+    styl: 'Draw a line. It becomes a stylolite — a toothy pressure-dissolution seam of interlocking columns, dark on light stone and pale on dark.',
     move: 'Drag to move around. Pinch, or use + and −, to zoom.',
   };
   let flashT = 0;
@@ -1668,7 +1876,7 @@
   function syncLayerUI() {
     for (const row of layEl.querySelectorAll('.lay')) {
       const L = layAt(row.dataset.key); if (!L) continue;
-      const hidden = soloLay ? soloLay !== L.key : !L.on;
+      const hidden = soloLay ? (soloLay !== L.key && L.key !== 'base') : !L.on;
       row.querySelector('[data-act=eye]').setAttribute('aria-pressed', L.on);
       row.querySelector('[data-act=solo]').setAttribute('aria-pressed', soloLay === L.key);
       row.querySelector('[data-act=op]').value = L.op; row.querySelector('output').textContent = Math.round(L.op * 100);
@@ -1677,7 +1885,7 @@
   }
   function showGround() {
     const F = FAM[fam];
-    document.getElementById('ground').hidden = !(F.groundSpecks || F.grain);
+    document.getElementById('ground').hidden = false;    // clouds apply to every family, so the ground panel always shows
     document.getElementById('g-granite').hidden = !F.groundSpecks;
     document.getElementById('g-wood').hidden = !F.grain;
   }
@@ -1724,7 +1932,7 @@
     for (const id of Object.keys(NEXT)) { const el = document.getElementById(id); if (el) { el.value = NEXT[id]; document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; } }
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
-    for (const k of ['vein', 'branch', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
+    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
     showGround(); syncLayerUI(); hint();
   }
   function download(name, text) {                       // works from a local file; inert in the artifact sandbox
@@ -1735,7 +1943,7 @@
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     tool = b.dataset.tool; press('[data-tool]', b); hint();
     const show = tool === 'move' ? 'vein' : tool;
-    for (const k of ['vein', 'branch', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
+    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
   });
   for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
   for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
