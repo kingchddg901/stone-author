@@ -194,11 +194,14 @@
       <div class="sl"><label for="drusyDensity">Drusy <output id="drusyDensityV"></output></label><input id="drusyDensity" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="drusySize">Crystal size <output id="drusySizeV"></output></label><input id="drusySize" type="range" min="0.4" max="2.5" step="0.05"></div>
       <div class="sl"><label for="drusyBright">Sparkle <output id="drusyBrightV"></output></label><input id="drusyBright" type="range" min="0.3" max="1.5" step="0.05"></div>
+      <div class="sl"><label for="drusyGroups">Drusy colours <output id="drusyGroupsV"></output></label><input id="drusyGroups" type="range" min="1" max="5" step="1"></div>
+      <div class="sl"><label for="drusySubs">Drusy variants <output id="drusySubsV"></output></label><input id="drusySubs" type="range" min="1" max="4" step="1"></div>
     </div>
     <div class="sliders" id="g-granite" hidden>
       <div class="sl"><label for="gspecks">Specks <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
       <div class="sl"><label for="gsize">Speck size <output id="gsizeV"></output></label><input id="gsize" type="range" min="0.4" max="2" step="0.05"></div>
       <div class="sl"><label for="speckGroups">Speck colours <output id="speckGroupsV"></output></label><input id="speckGroups" type="range" min="1" max="5" step="1"></div>
+      <div class="sl"><label for="speckSubs">Speck variants <output id="speckSubsV"></output></label><input id="speckSubs" type="range" min="1" max="4" step="1"></div>
     </div>
     <div class="sliders" id="g-wood" hidden>
       <div class="sl"><label for="gspacing">Ring spacing <output id="gspacingV"></output></label><input id="gspacing" type="range" min="0.4" max="3" step="0.05"></div>
@@ -416,18 +419,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
               stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, cloudScale: 1, cloudStrength: 0.5,
+  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
-              drusyDensity: 0, drusySize: 1, drusyBright: 1 };
+              drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1 };
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
-  const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`,
+  const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`,
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2),
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
-                 drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2) };
+                 drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}` };
   const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
   const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen };
   let guidesOn = true;
@@ -566,10 +569,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const seed = mix(strHue(fam), 61), pockets = 3 + Math.round(G.drusyDensity * 10);
     for (let p = 0; p < pockets; p++) {
       const [r] = sub(seed, 2, p), cx = 0.05 + 0.9 * r(), cy = (0.05 + 0.9 * r()) * H, rad = (0.02 + 0.05 * r()) * G.drusySize;
-      const K = 8 + Math.round(30 * G.drusyDensity);
+      const K = 8 + Math.round(30 * G.drusyDensity), dgu = (mix(seed, p, 88) >>> 0) / 4294967296;   // pocket -> primary group (whole pocket shares it)
       for (let k = 0; k < K; k++) {
         const [rr] = sub(seed, 3, p, k), a = rr() * 6.2832, d = Math.sqrt(rr()) * rad;
-        out.push({ x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d, r: (0.0006 + 0.0011 * rr()) * G.drusySize, lum: 0.55 + 0.45 * rr() });
+        out.push({ x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d, r: (0.0006 + 0.0011 * rr()) * G.drusySize, lum: 0.55 + 0.45 * rr(),
+                   dgu, dvu: (mix(seed, p, k, 99) >>> 0) / 4294967296 });   // crystal -> secondary variant
       }
     }
     return out;
@@ -985,7 +989,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                  lum: o.lum != null ? o.lum : Math.min(1, Math.max(0.05, Math.exp(-1.1 + 0.55 * g()))),
                  ang: o.ang != null ? o.ang : r() * Math.PI, el: o.el != null ? o.el : 1 + Math.abs(g()) * 0.85 };
     sp.R0 = sp.rad * Math.max(1, sp.el) * 1.25;        // the outline's reach, jitter included
-    sp.u = (mix((x * 1e5) | 0, (y * 1e5) | 0) >>> 0) / 4294967296;   // a stable 0..1 from birth position -> colour group (survives gravity/magnet)
+    sp.u = (mix((x * 1e5) | 0, (y * 1e5) | 0) >>> 0) / 4294967296;    // stable 0..1 from birth position -> colour GROUP (survives gravity/magnet)
+    sp.u2 = (mix((y * 1e5) | 0, (x * 1e5) | 0, 7) >>> 0) / 4294967296; // a second stable 0..1 -> sub-VARIANT within the group
     return sp;
   }
 
@@ -1718,13 +1723,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : COL.web;
       g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp('web')); g2d.lineWidth = e.width; g2d.stroke();
     } fxOff(_fx); }
-    if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))); for (const s of geo.specks) {
+    if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))), nv = Math.max(1, Math.min(4, Math.round(G.speckSubs))); for (const s of geo.specks) {
       const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
       g2d.globalAlpha = (ident ? 0.9 : s.lum) * (ident ? 1 : layOp('micro'));
-      // Identity: a ground speck shows how far it was MOVED - cool where it lay, hot where pushed
-      // Angle: the way a speck points, as hue (axial, so 2x the angle); round specks point nowhere
-      // Stone: the speck's colour group (micro:g) if tuned, else the micro layer colour
-      g2d.fillStyle = !ident ? (COL['micro:' + Math.floor((s.u || 0) * ng)] ?? COL.micro)
+      // Stone: the speck's colour = its sub-variant (micro:g.v) -> group (micro:g) -> the micro layer.
+      // Angle: points as hue (axial); Identity: how far the speck was moved.
+      const g_ = Math.floor((s.u || 0) * ng), v_ = Math.floor((s.u2 || 0) * nv),
+            mkey = nv > 1 ? 'micro:' + g_ + '.' + v_ : (ng > 1 ? 'micro:' + g_ : null),
+            mcol = mkey && COL[mkey] !== undefined ? COL[mkey] : COL.micro;
+      g2d.fillStyle = !ident ? mcol
         : angleView ? (s.el > 1.3 ? `hsl(${Math.round(((2 * s.ang * 180 / Math.PI) % 360 + 360) % 360)} 78% 58%)` : '#3a3c48')
         : s.ground ? `hsl(${Math.round(210 - 190 * Math.min(1, Math.hypot(s.x - s.x0, s.y - s.y0) / 0.008))} 80% 55%)`
         : idColour('P' + s.mark, s.tn);
@@ -1736,11 +1743,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
       g2d.closePath(); g2d.fill();
     } fxOff(_fx); }
-    if (layVis('drusy') && geo.drusy.length) {            // crystal sparkle: tiny bright points clustered in pockets
-      const bright = G.drusyBright, _fx = fxOn('drusy', COL.drusy, ident);
+    if (layVis('drusy') && geo.drusy.length) {            // crystal sparkle: pockets (primary group) -> crystals (secondary variant)
+      const bright = G.drusyBright, _fx = fxOn('drusy', COL.drusy, ident),
+            dng = Math.max(1, Math.min(5, Math.round(G.drusyGroups))), dnv = Math.max(1, Math.min(4, Math.round(G.drusySubs)));
       for (const s of geo.drusy) {
         g2d.globalAlpha = ident ? 0.9 : Math.min(1, s.lum * bright);
-        g2d.fillStyle = ident ? idColour('drusy', s.lum) : COL.drusy;
+        const dg = Math.floor((s.dgu || 0) * dng), dv = Math.floor((s.dvu || 0) * dnv),
+              dk = dnv > 1 ? 'drusy:' + dg + '.' + dv : (dng > 1 ? 'drusy:' + dg : null),
+              dc = dk && COL[dk] !== undefined ? COL[dk] : COL.drusy;
+        g2d.fillStyle = ident ? idColour('drusy', s.lum) : dc;
         g2d.beginPath(); g2d.arc(s.x, s.y, s.r, 0, 6.2832); g2d.fill();
       }
       fxOff(_fx);
@@ -2095,11 +2106,20 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // Speck colour groups: split the micro layer into up to 5 colour groups (feldspar / quartz / mica …).
   // Each group is a token inheriting `micro`; a speck's group is stable (from its birth-position hash).
+  // Primary/secondary colour groups for a speck field: group A/B/… inherits the layer; sub-variant
+  // A1/A2/… inherits its group. Used for the granite ground (micro) AND drusy pockets→crystals (drusy).
+  function groupTokens(prefix, ngC, nvC, itemLabel, inheritBase) {
+    const ng = Math.max(1, Math.min(5, Math.round(ngC))), nv = Math.max(1, Math.min(4, Math.round(nvC))), LT = 'ABCDE', tokens = [];
+    if (ng > 1 || nv > 1) for (let g = 0; g < ng; g++) {
+      tokens.push({ key: prefix + g, label: itemLabel + ' ' + LT[g], type: 'color', inherit: inheritBase });
+      if (nv > 1) for (let v = 0; v < nv; v++) tokens.push({ key: prefix + g + '.' + v, label: itemLabel + ' ' + LT[g] + (v + 1), type: 'color', inherit: prefix + g });
+    }
+    return tokens;
+  }
   function registerSpeckGroups() {
     if (!kit) return;
-    const n = Math.max(1, Math.min(5, Math.round(G.speckGroups)));
-    const tokens = n > 1 ? Array.from({ length: n }, (_, i) => ({ key: 'micro:' + i, label: 'Speck colour ' + (i + 1), type: 'color', inherit: 'micro' })) : [];
-    kit.registerTokenGroup({ id: 'speckgroups', label: 'Speck colours', tokens });
+    kit.registerTokenGroup({ id: 'speckgroups', label: 'Speck colours', tokens: groupTokens('micro:', G.speckGroups, G.speckSubs, 'Speck', 'micro') });
+    kit.registerTokenGroup({ id: 'drusygroups', label: 'Drusy colours', tokens: groupTokens('drusy:', G.drusyGroups, G.drusySubs, 'Drusy', 'drusy') });
   }
   function tuneId(id, bucket) {
     if (!kit) { hint('Colour editor unavailable.'); return; }
@@ -2230,7 +2250,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     el.value = G[id]; show();
     el.addEventListener('input', () => { G[id] = +el.value; show(); redraw(true); });   // the slab: at once
   }
-  document.getElementById('speckGroups').addEventListener('input', () => { registerSpeckGroups(); recolour(); mountEditor(); });   // add/remove the per-group colour tokens
+  for (const id of ['speckGroups', 'speckSubs', 'drusyGroups', 'drusySubs'])   // add/remove the group + sub-variant colour tokens
+    document.getElementById(id).addEventListener('input', () => { registerSpeckGroups(); recolour(); mountEditor(); });
   for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => { view = b.dataset.view; press('[data-view]', b); redraw(false); });
   for (const id of Object.keys(NEXT)) {
     const el = document.getElementById(id);
