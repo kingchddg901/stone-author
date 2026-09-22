@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# generated output and local data (kept out by provenance rule)
+generated/
+harvest/
+stone-refs/
+*.npy
+
+# node / editor / OS
+node_modules/
+.DS_Store
+Thumbs.db
+
+# scratch
+_check.js
+*-test.html
+*-backup.html

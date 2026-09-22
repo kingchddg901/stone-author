@@ -1,0 +1,1700 @@
+<title>Stone Author</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  /* One look on purpose - a dark workbench around the slab - so no light theme. */
+  :root {
+    --ground: #0d0e12; --line: #262836; --text: #d7d8e3; --dim: #8b8da2;
+    --btn: #171823; --on: #33365a; --on-line: #6b6ea0; --focus: #a3a6e6;
+    color-scheme: dark;
+  }
+  body { background: var(--ground); color: var(--text);
+         font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1232px; margin-inline: auto; padding-inline: 16px; padding-block: 18px 36px;
+          display: grid; gap: 12px; }
+  h1 { font-size: 18px; font-weight: 500; margin: 0; text-wrap: balance; }
+  .sub { margin: 2px 0 0; color: var(--dim); font-size: 13px; }
+  #field { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 10; border-radius: 6px;
+           outline: 1px solid var(--line); background: #1a1b20; touch-action: none; cursor: crosshair; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+  .grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-right: 2px; }
+  button { font: inherit; font-size: 14px; background: var(--btn); color: var(--text);
+           border: 1px solid var(--line); border-radius: 5px; padding: 6px 11px; cursor: pointer; }
+  button[aria-pressed="true"] { background: var(--on); border-color: var(--on-line); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .hint { margin: 0; font-size: 14px; color: var(--text); min-height: 1.5em; }
+  .hint.flash { color: #f0c46a; }
+  .sliders { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 18px; }
+  @media (min-width: 720px) { .sliders { grid-template-columns: repeat(4, 1fr); } }
+  .sl { display: grid; gap: 2px; }
+  .sl label { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; letter-spacing: .08em;
+              text-transform: uppercase; color: var(--dim); }
+  .sl output { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--text);
+               letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: #8a8de0; }
+  .stat { font: 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
+          font-variant-numeric: tabular-nums; }
+  .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 68ch; }
+  .note b { color: var(--text); font-weight: 500; }
+</style>
+<div class="wrap">
+  <div>
+    <h1>Stone author</h1>
+    <p class="sub">You draw where the lines go. The family decides what they are.</p>
+  </div>
+  <div class="grp" role="group" aria-label="Family"><span class="lbl">Family</span>
+    <button id="f-carrara" type="button" data-fam="carrara">Carrara</button>
+    <button id="f-calacatta" type="button" data-fam="calacatta">Calacatta</button>
+    <button id="f-marquina" type="button" data-fam="marquina">Nero Marquina</button>
+    <button id="f-granite" type="button" data-fam="granite">Granite</button>
+    <button id="f-wood" type="button" data-fam="wood">Wood</button>
+  </div>
+  <canvas id="field" aria-label="Stone slab. Draw on it to author veins, cracks and pours; tap a vein with the branch tool to grow a minor vein."></canvas>
+  <div class="grp" role="group" aria-label="Tool"><span class="lbl">Tool</span>
+    <button id="t-vein" type="button" data-tool="vein">Vein</button>
+    <button id="t-branch" type="button" data-tool="branch">Branch</button>
+    <button id="t-web" type="button" data-tool="web">Web</button>
+    <button id="t-pour" type="button" data-tool="pour">Pour</button>
+    <button id="t-gravity" type="button" data-tool="gravity">Gravity</button>
+    <button id="t-knot" type="button" data-tool="knot">Knot</button>
+    <button id="t-magnet" type="button" data-tool="magnet">Magnet</button>
+    <button id="t-chip" type="button" data-tool="chip">Chip</button>
+    <button id="t-move" type="button" data-tool="move">Move</button>
+  </div>
+  <div class="grp" role="group" aria-label="Pen"><span class="lbl">Pen</span>
+    <button id="pen-pressure" type="button" aria-pressed="false">Pressure</button>
+    <button id="pen-tilt" type="button" aria-pressed="false">Tilt</button>
+    <span class="stat" id="penlive">hold the pen over the slab to read it</span>
+  </div>
+  <p class="hint" id="hint" aria-live="polite"></p>
+  <div class="sliders" id="s-vein">
+    <div class="sl"><label for="gauge">Gauge <output id="gaugeV"></output></label><input id="gauge" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="rough">Roughness <output id="roughV"></output></label><input id="rough" type="range" min="0" max="2.5" step="0.05"></div>
+    <div class="sl"><label for="breaks">Breaks <output id="breaksV"></output></label><input id="breaks" type="range" min="0" max="3" step="0.05"></div>
+    <div class="sl"><label for="branches">Minor veins <output id="branchesV"></output></label><input id="branches" type="range" min="0" max="2.5" step="0.05"></div>
+    <div class="sl"><label for="defl">Deflection <output id="deflV"></output></label><input id="defl" type="range" min="0" max="2" step="0.05"></div>
+    <div class="sl"><label for="fold">Fold <output id="foldV"></output></label><input id="fold" type="range" min="0" max="2.5" step="0.05"></div>
+  </div>
+  <div class="sliders" id="s-branch" hidden>
+    <div class="sl"><label for="blen">Minor length <output id="blenV"></output></label><input id="blen" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="gauge2">Gauge <output id="gauge2V"></output></label><input id="gauge2" type="range" min="0.3" max="3" step="0.05"></div>
+  </div>
+  <div class="sliders" id="s-web" hidden>
+    <div class="sl"><label for="spread">Spread <output id="spreadV"></output></label><input id="spread" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="density">Density <output id="densityV"></output></label><input id="density" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="stretch">Stretch <output id="stretchV"></output></label><input id="stretch" type="range" min="0.4" max="2.5" step="0.05"></div>
+  </div>
+  <div class="sliders" id="s-pour" hidden>
+    <div class="sl"><label for="prate">Pour <output id="prateV"></output></label><input id="prate" type="range" min="200" max="4000" step="50"></div>
+    <div class="sl"><label for="pwidth">Width <output id="pwidthV"></output></label><input id="pwidth" type="range" min="0.3" max="4" step="0.1"></div>
+    <div class="sl"><label for="pfling">Fling <output id="pflingV"></output></label><input id="pfling" type="range" min="0" max="3" step="0.1"></div>
+  </div>
+  <div class="sliders" id="s-gravity" hidden>
+    <div class="sl"><span class="lbl">Gravity</span><div class="grp" role="group" aria-label="Gravity sign">
+      <button id="g-pull" type="button" data-sign="1" aria-pressed="true">Pull</button>
+      <button id="g-push" type="button" data-sign="-1" aria-pressed="false">Push</button></div></div>
+    <div class="sl"><label for="strength">Strength <output id="strengthV"></output></label><input id="strength" type="range" min="0.05" max="0.9" step="0.01"></div>
+    <div class="sl"><label for="reach">Reach <output id="reachV"></output></label><input id="reach" type="range" min="0.3" max="3" step="0.05"></div>
+  </div>
+  <div class="sliders" id="s-knot" hidden>
+    <div class="sl"><label for="ksize">Knot size <output id="ksizeV"></output></label><input id="ksize" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="spike">Spike <output id="spikeV"></output></label><input id="spike" type="range" min="1" max="4" step="0.1"></div>
+  </div>
+  <div class="sliders" id="s-chip" hidden>
+    <div class="sl"><label for="chipsize">Chip size <output id="chipsizeV"></output></label><input id="chipsize" type="range" min="0.2" max="2.5" step="0.05"></div>
+  </div>
+  <div class="grp" role="group" aria-label="Tiles"><span class="lbl">Tiles</span>
+    <button id="laytiles" type="button" aria-pressed="false">Lay tiles</button>
+    <button id="p-square" type="button" data-pat="square" aria-pressed="true">Square</button>
+    <button id="p-rect" type="button" data-pat="rect" aria-pressed="false">Rectangle</button>
+    <button id="p-subway" type="button" data-pat="subway" aria-pressed="false">Subway</button>
+    <button id="p-hex" type="button" data-pat="hex" aria-pressed="false">Hexagon</button>
+    <button id="p-cairo" type="button" data-pat="cairo" aria-pressed="false">Cairo</button>
+    <button id="p-diagonal" type="button" data-pat="diagonal" aria-pressed="false">Diagonal</button>
+    <button id="p-herringbone" type="button" data-pat="herringbone" aria-pressed="false">Herringbone</button>
+    <button id="p-basketweave" type="button" data-pat="basketweave" aria-pressed="false">Basketweave</button>
+    <button id="p-triangle" type="button" data-pat="triangle" aria-pressed="false">Triangle</button>
+    <button id="p-rhombus" type="button" data-pat="rhombus" aria-pressed="false">Rhombus</button>
+    <button id="p-octagon" type="button" data-pat="octagon" aria-pressed="false">Octagon</button>
+  </div>
+  <div class="sliders" id="s-tiles">
+    <div class="sl"><label for="tsize">Tile size <output id="tsizeV"></output></label><input id="tsize" type="range" min="2" max="36" step="1"></div>
+    <div class="sl"><label for="tgrout">Grout <output id="tgroutV"></output></label><input id="tgrout" type="range" min="0.03125" max="0.5" step="0.03125"></div>
+    <div class="sl"><label for="tkerf">Kerf <output id="tkerfV"></output></label><input id="tkerf" type="range" min="0" max="0.375" step="0.03125"></div>
+    <div class="sl"><label for="tedge">Edge</label>
+      <div class="grp"><button id="e-square" type="button" data-edge="square" aria-pressed="true">Square</button>
+        <button id="e-bevel" type="button" data-edge="bevel" aria-pressed="false">Bevel</button>
+        <button id="e-pillow" type="button" data-edge="pillow" aria-pressed="false">Pillow</button>
+        <button id="e-tumbled" type="button" data-edge="tumbled" aria-pressed="false">Tumbled</button></div></div>
+  </div>
+  <div class="grp" role="group" aria-label="Tile options"><span class="lbl">Layout</span>
+    <button id="t-inorder" type="button" data-lay="order" aria-pressed="true">In order</button>
+    <button id="t-shuffle" type="button" data-lay="shuffle" aria-pressed="false">Shuffled</button>
+    <span class="lbl" style="margin-left:8px">Units</span>
+    <button id="u-in" type="button" data-unit="in" aria-pressed="true">inches</button>
+    <button id="u-mm" type="button" data-unit="mm" aria-pressed="false">mm</button>
+    <button id="t-joints" type="button" aria-pressed="true">Show hairline joints</button>
+  </div>
+  <div class="sliders" id="s-magnet" hidden>
+    <div class="sl"><span class="lbl">Magnet</span><div class="grp" role="group" aria-label="Magnet mode">
+      <button id="m-align" type="button" data-mag="1" aria-pressed="true">Align</button>
+      <button id="m-scatter" type="button" data-mag="-1" aria-pressed="false">Scatter</button>
+      <button id="m-hover" type="button" aria-pressed="false">Hover traces</button></div></div>
+    <div class="sl"><label for="mstrength">Strength <output id="mstrengthV"></output></label><input id="mstrength" type="range" min="0.1" max="1.5" step="0.05"></div>
+    <div class="sl"><label for="mreach">Reach <output id="mreachV"></output></label><input id="mreach" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="mheight">Height <output id="mheightV"></output></label><input id="mheight" type="range" min="0.3" max="3" step="0.05"></div>
+  </div>
+  <div id="ground" hidden>
+    <p class="lbl" style="margin:0 0 6px">Ground &middot; the whole slab, changes apply at once</p>
+    <div class="sliders" id="g-granite" hidden>
+      <div class="sl"><label for="gspecks">Specks <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
+      <div class="sl"><label for="gsize">Speck size <output id="gsizeV"></output></label><input id="gsize" type="range" min="0.4" max="2" step="0.05"></div>
+    </div>
+    <div class="sliders" id="g-wood" hidden>
+      <div class="sl"><label for="gspacing">Ring spacing <output id="gspacingV"></output></label><input id="gspacing" type="range" min="0.4" max="3" step="0.05"></div>
+      <div class="sl"><label for="gwave">Waviness <output id="gwaveV"></output></label><input id="gwave" type="range" min="0" max="3" step="0.05"></div>
+      <div class="sl"><label for="gangle">Grain angle <output id="gangleV"></output></label><input id="gangle" type="range" min="-90" max="90" step="1"></div>
+    </div>
+  </div>
+  <p class="note" id="fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
+  <div class="row">
+    <div class="grp" role="group" aria-label="Edit"><span class="lbl">Edit</span>
+      <button id="undo" type="button">Undo</button>
+      <button id="reroll" type="button">Reroll last</button>
+      <button id="clear" type="button">Clear</button></div>
+    <div class="grp" role="group" aria-label="View"><span class="lbl">View</span>
+      <button id="v-stone" type="button" data-view="stone">Stone</button>
+      <button id="v-identity" type="button" data-view="identity">Identity</button>
+      <button id="v-angle" type="button" data-view="angle">Angle</button>
+      <button id="guides" type="button" aria-pressed="true">Guides</button></div>
+    <div class="grp" role="group" aria-label="Zoom"><span class="lbl">Zoom</span>
+      <button id="zout" type="button" aria-label="Zoom out">&minus;</button>
+      <button id="zin" type="button" aria-label="Zoom in">+</button>
+      <button id="zfit" type="button">Fit</button></div>
+    <span class="stat" id="stat">&mdash;</span>
+  </div>
+  <p class="note"><b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw
+    it, so changing them shapes the next line only. This generates the base structure; the colours here are
+    only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor
+    vein grown while zoomed in comes out shorter, at the scale you are working.</p>
+  <p class="note"><b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor.
+    Grout is the gap between tiles; kerf is what the saw takes, so the veins drift a little across each joint.
+    In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab.
+    Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.</p>
+  <p class="note"><b>Granite and wood.</b> Granite lays a ground of specks that bunch but never touch. Gravity
+    moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space.
+    A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside
+    of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only
+    specks already down are moved, so what you draw first is older rock. In Wood, the Knot tool sets a knot
+    and the grain flows around it.</p>
+  <p class="note"><b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the
+    magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it
+    combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With
+    Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims
+    the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab.
+    The Angle view colours every speck by the way it points, so alignment shows as a single colour.</p>
+  <p class="note"><b>Identity</b> shows what an animation would read: each line in its own colour, brightening
+    along its length in the direction you drew it; web cracks brighten toward the line that spread them.
+    Nothing had to be traced &mdash; the line was known when it was made.</p>
+  <p class="note">The three families are starting points set by eye, not yet measured from the harvested stones.</p>
+</div>
+<script>
+(() => {
+  const cv = document.getElementById('field'), ctx = cv.getContext('2d');
+  const H = 0.625;                                     // frame height, in frame widths
+  // THE SLAB IS 8 x 5 FT: his 5 ft slab, sized to this 16:10 frame. Metric is one multiply away.
+  const SLAB_FT = 8, FT_MM = 304.8;                    // frame width in feet; feet to mm
+  const FAM = {
+    carrara:   { ground: '#e6e6e4', vein: '#6c727b', web: '#979ca4', speck: '#8a8f97', gauge: 0.0045, rough: 0.26,
+                 onset: 1.5, swing: 0.25, breaks: 0.22, branches: [3, 5], branchLen: 1.0, soft: 1.5, cells: 900, stretch: 2.2, spread: 0.05 },
+    calacatta: { ground: '#f2eee6', vein: '#554d3c', web: '#a1977f', speck: '#8d846f', gauge: 0.011, rough: 0.18,
+                 onset: 2.2, swing: 0.30, breaks: 0.10, branches: [1, 3], branchLen: 1.2, soft: 0.9, cells: 500, stretch: 1.6, spread: 0.04 },
+    marquina:  { ground: '#121316', vein: '#ecebe7', web: '#c7c7c3', speck: '#b5b5b1', gauge: 0.005, rough: 0.24,
+                 onset: 1.7, swing: 0.20, breaks: 0.18, branches: [2, 4], branchLen: 0.9, soft: 1.1, cells: 1100, stretch: 2.0, spread: 0.06 },
+    // a ground of specks; its veins are quartz-white
+    granite:   { ground: '#151517', vein: '#ebe9e4', web: '#9d9c98', speck: '#d8d3c8', gauge: 0.004, rough: 0.24,
+                 onset: 1.7, swing: 0.20, breaks: 0.12, branches: [0, 2], branchLen: 0.7, soft: 1.0, cells: 900, stretch: 2.0, spread: 0.05,
+                 groundSpecks: true },
+    // a ground of grain lines that knots bend
+    wood:      { ground: '#c9a076', vein: '#6e4a2c', web: '#8c6a48', speck: '#5a3d26', gauge: 0.003, rough: 0.12,
+                 onset: 2.4, swing: 0.20, breaks: 0.30, branches: [0, 1], branchLen: 0.6, soft: 0.9, cells: 400, stretch: 3.0, spread: 0.03,
+                 grain: '#7b5433', knot: '#5b3a20', ring: 0.011, grainW: 0.0011 },
+  };
+  // Settings for the NEXT line. Each mark takes a copy when it is made and keeps it, so a
+  // change applies forward and never rewrites what is already down.
+  const NEXT = { pressure: false, tilt: false, gauge: 1, rough: 1, breaks: 1, branches: 1, blen: 1, gauge2: 1, spread: 1, density: 1, stretch: 1,
+              prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1 };
+  // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
+  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0 };
+  // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
+  const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
+              chipIn: 0.6, shuffle: false, units: 'in', joints: true };
+  let layTiles = false;
+  const GFMT = { gangle: v => `${v}\u00b0` };
+  const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
+  const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen };
+  let guidesOn = true;
+  const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), spike: v => `${(+v).toFixed(1)}:1` };
+  let fam = 'carrara', tool = 'vein', view = 'stone';
+  let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], knots: [], grain: [] };
+  const V = { z: 1, cx: 0.5, cy: H / 2 };
+  let Wc = 0, Hc = 0, dpr = 1;
+
+  // ---- randomness: one stream per role, so a knob edits instead of re-rolling
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  const gaussOf = r => () => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
+  function mix(...v) {
+    let h = 2166136261 >>> 0;
+    for (const x of v) { h ^= (x | 0) >>> 0; h = Math.imul(h, 16777619) >>> 0; h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d) >>> 0; }
+    return h | 0;
+  }
+  const sub = (...key) => { const r = mulberry32(mix(...key)); return [r, gaussOf(r)]; };
+  function poisson(lam, r) {                            // exact quantile: never fewer at a higher rate
+    const u = r();
+    if (lam <= 0) return 0;
+    const ll = Math.log(lam);
+    let k = 0, c = 0, lf = 0;
+    for (;;) {
+      c += Math.exp(k * ll - lam - lf);
+      if (c >= u || k > lam + 12 * Math.sqrt(lam) + 20) return k;
+      k++; lf += Math.log(k);
+    }
+  }
+  const strHue = s => { let h = 0; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 2654435761) >>> 0; return h % 360; };
+
+  // ---- paths
+  function smooth1d(n, scale, g) {
+    const out = new Float64Array(Math.max(n, 0));
+    if (n < 2) return out;
+    const k = Math.max(3, Math.floor(scale)), m = n + 2 * k, cs = new Float64Array(m + 1);
+    for (let i = 0; i < m; i++) cs[i + 1] = cs[i] + g();
+    for (let i = 0; i < n; i++) { const a = i + k - (k >> 1), b = a + k; out[i] = (cs[b] - cs[a]) / k; }
+    let mean = 0; for (const x of out) mean += x; mean /= n;
+    let sd = 0; for (const x of out) sd += (x - mean) ** 2; sd = Math.sqrt(sd / n) + 1e-9;
+    for (let i = 0; i < n; i++) out[i] = (out[i] - mean) / sd;
+    return out;
+  }
+  function resample(P, step) {
+    if (P.length < 2) return P.map(p => [p[0], p[1]]);
+    const out = [[P[0][0], P[0][1]]];
+    let carry = 0;
+    for (let i = 1; i < P.length; i++) {
+      let ax = P[i - 1][0], ay = P[i - 1][1];
+      const bx = P[i][0], by = P[i][1];
+      let seg = Math.hypot(bx - ax, by - ay);
+      while (seg > 0 && carry + seg >= step) {
+        const u = (step - carry) / seg;
+        ax += (bx - ax) * u; ay += (by - ay) * u;
+        out.push([ax, ay]); seg = Math.hypot(bx - ax, by - ay); carry = 0;
+      }
+      carry += seg;
+    }
+    const last = P[P.length - 1], end = out[out.length - 1];
+    if (Math.hypot(last[0] - end[0], last[1] - end[1]) > step * 0.3) out.push([last[0], last[1]]);
+    return out;
+  }
+  function smoothPath(P, h) {
+    if (P.length < 3) return P;
+    return P.map((p, i) => {
+      if (i === 0 || i === P.length - 1) return p;
+      let sx = 0, sy = 0, c = 0;
+      for (let j = Math.max(0, i - h); j <= Math.min(P.length - 1, i + h); j++) { sx += P[j][0]; sy += P[j][1]; c++; }
+      return [sx / c, sy / c];
+    });
+  }
+  // PEN PRESSURE rides on each sample as a fourth value, null for anything but a pen. It only
+  // counts as real when it VARIES: hardware without pressure reports a flat 0.5 while pressed.
+  function pressureReal(S) {
+    if (!S || S.length < 3 || S.some(q => q[3] == null)) return false;
+    return new Set(S.map(q => q[3].toFixed(3))).size >= 3;
+  }
+  // Width factor along the hand's own length, smoothed a touch: 0.5 is the normal gauge.
+  function pressFactor(S) {
+    if (!pressureReal(S)) return null;
+    const cum = [0];
+    for (let i = 1; i < S.length; i++) cum.push(cum[i - 1] + Math.hypot(S[i][0] - S[i - 1][0], S[i][1] - S[i - 1][1]));
+    const total = cum[cum.length - 1] || 1e-9;
+    const ps = S.map((_, i) => { let a = 0, c = 0; for (let j = Math.max(0, i - 2); j <= Math.min(S.length - 1, i + 2); j++) { a += S[j][3]; c++; } return a / c; });
+    return u => {
+      const target = Math.min(Math.max(u, 0), 1) * total;
+      let i = 1; while (i < cum.length - 1 && cum[i] < target) i++;
+      const seg = (cum[i] - cum[i - 1]) || 1e-9, f = Math.min(1, Math.max(0, (target - cum[i - 1]) / seg));
+      return 0.15 + 1.7 * (ps[i - 1] + (ps[i] - ps[i - 1]) * f);
+    };
+  }
+  // PEN LEAN rides as a fifth value: 0 upright, 1 laid flat. Real only when it varies, like pressure.
+  function tiltReal(S) {
+    if (!S || S.length < 3 || S.some(q => q[4] == null)) return false;
+    return new Set(S.map(q => q[4].toFixed(3))).size >= 3;
+  }
+  // LEAN IS MEASURED FROM YOUR REST ANGLE, not from upright. Nobody holds a pen upright - his note:
+  // on the S Pen "0 is near impossible" - so measured from vertical every line began soft, and a
+  // hand's wobble swung the edge. Rest = the pen's hover angle just before touch-down (else the
+  // stroke's own start); only leaning FURTHER softens. TUNED FROM HIS S PEN (one dump, 60 Hz, integer
+  // tilt): an ordinary loop swung lean 22.7-52.4 deg, at most 10.4 above rest and 8.3 at p95, and
+  // the steepest he reached was 18.7 past rest. So the dead zone is 9 deg past rest (that loop stays
+  // fully crisp) and full soft is 25 past (a deliberate lay-over reaches it; the old 40 needed the
+  // pen almost flat). Smoothing +-8 samples keeps a wobble from flickering the edge.
+  const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  function leanProfile(S, rest) {
+    if (!tiltReal(S)) return null;
+    const cum = [0];
+    for (let i = 1; i < S.length; i++) cum.push(cum[i - 1] + Math.hypot(S[i][0] - S[i - 1][0], S[i][1] - S[i - 1][1]));
+    const total = cum[cum.length - 1] || 1e-9;
+    if (rest == null) { const head = S.slice(0, Math.min(8, S.length)).map(q => q[4]).sort((a, b) => a - b); rest = head[head.length >> 1]; }
+    const ls = S.map((_, i) => { let a = 0, c = 0; for (let j = Math.max(0, i - 8); j <= Math.min(S.length - 1, i + 8); j++) { a += S[j][4]; c++; } return smoothstep(9 / 90, 25 / 90, a / c - rest); });
+    return u => {
+      const target = Math.min(Math.max(u, 0), 1) * total;
+      let i = 1; while (i < cum.length - 1 && cum[i] < target) i++;
+      const seg = (cum[i] - cum[i - 1]) || 1e-9, f = Math.min(1, Math.max(0, (target - cum[i - 1]) / seg));
+      return ls[i - 1] + (ls[i] - ls[i - 1]) * f;
+    };
+  }
+  const pathLen = P => { let s = 0; for (let i = 1; i < P.length; i++) s += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); return s; };
+  // YOUR HAND IS THE ROUTE. Its large shape is kept; its jitter below ~2% of the frame is
+  // smoothed away, because the family adds its own roughness at those scales and a finger's
+  // tremor on top of it reads as lightning.
+  function handRoute(P) {
+    const kn = resample(smoothPath(resample(P, 0.004), 5), 0.015);
+    if (kn.length < 2) kn.push([P[P.length - 1][0] + 1e-3, P[P.length - 1][1]]);
+    return kn;
+  }
+  // Roughness by ABSOLUTE scale, the generator's pseudofractal schedule: a segment's share of
+  // displacement grows as it gets finer, with `onset` delaying it. Only scales below the route's
+  // 1.5% knots are added - the coarse ones were your hand. Roughening AT the knot scale
+  // re-routed the line at the hand's own scale and every vein came out as a worm.
+  const veinSched = (F, M) => L => {
+    const d = (Math.log2(1.7 / Math.max(L, 1e-6)) + 1) / 8;
+    return F.rough * M.rough * Math.pow(Math.min(Math.max(d, 0), 1), F.onset);
+  };
+  const crackSched = M => () => 0.16 * M.rough;             // fractures: a TRUE fractal, rough at every scale
+  const levelsFor = L => Math.max(1, Math.min(9, Math.ceil(Math.log2(Math.max(L, 1e-4) / 0.0019))));
+  function roughen(knots, levels, sched, g) {
+    let pts = knots.map(p => [p[0], p[1]]);
+    for (let lv = 0; lv < levels; lv++) {
+      const nxt = [pts[0]];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) + 1e-9;
+        const off = g() * L * sched(L);
+        nxt.push([(a[0] + b[0]) / 2 - dy / L * off, (a[1] + b[1]) / 2 + dx / L * off], b);
+      }
+      pts = nxt;
+    }
+    return pts;
+  }
+  const inside = p => p[0] > 0.004 && p[0] < 0.996 && p[1] > 0.004 && p[1] < H - 0.004;
+
+  // A line: points, per-segment width, breaks, arc length. Its id is its identity for good.
+  function lineGeom(id, pts, gauge, F, M, seed, salt, extra) {
+    const n = Math.max(pts.length - 1, 1);
+    const [, gw] = sub(seed, 11, salt), [, gg] = sub(seed, 12, salt);
+    const sw = smooth1d(n, Math.max(6, n / 3), gw);
+    let mx = 1e-9; for (const v of sw) mx = Math.max(mx, Math.abs(v));
+    const gp = smooth1d(n, 14, gg);
+    const frac = Math.min(0.9, F.breaks * M.breaks);
+    let thr = -Infinity;
+    if (frac > 0) { const s = Array.from(gp).sort((a, b) => a - b); thr = s[Math.min(n - 1, Math.floor(frac * n))]; }
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    const total = cum[cum.length - 1] || 1e-9;
+    // a line that ENDS inside the slab pinches out; one that runs off the edge does not
+    const tS = extra.taperStart !== false && inside(pts[0]), tE = inside(pts[pts.length - 1]);
+    const w = new Float64Array(n), keep = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      const s = (cum[i] + (cum[i + 1] ?? cum[i])) / 2 / total;
+      let tp = 1;
+      if (tS) tp = Math.min(tp, s / 0.08);
+      if (tE) tp = Math.min(tp, (1 - s) / 0.08);
+      w[i] = gauge * (1 + F.swing * sw[i] / mx) * Math.max(0.15, Math.min(1, tp));
+      if (extra.press) w[i] *= extra.press(s);
+      keep[i] = gp[i] > thr ? 1 : 0;
+    }
+    const lean = extra.lean ? Float64Array.from({ length: n }, (_, i) => extra.lean((cum[i] + (cum[i + 1] ?? cum[i])) / 2 / total)) : null;
+    return { id, pts, w, keep, cum, total, gauge, ...extra, lean };
+  }
+  function at(L, t) {
+    const target = Math.min(Math.max(t, 0), 1) * L.total;
+    let i = 1;
+    while (i < L.cum.length - 1 && L.cum[i] < target) i++;
+    const a = L.pts[i - 1], b = L.pts[i], seg = (L.cum[i] - L.cum[i - 1]) || 1e-9;
+    const u = Math.min(1, Math.max(0, (target - L.cum[i - 1]) / seg));
+    return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+  }
+  function tangent(L, t) {                              // over a chord, not one rough segment
+    const d = Math.min(0.5, 0.03 / L.total), a = at(L, t - d), b = at(L, t + d);
+    return Math.atan2(b[1] - a[1], b[0] - a[0]);
+  }
+  function add(out, L) { out.lines.push(L); out.byId.set(L.id, L); }
+
+  // ---- the tools, each a generator run on an authored line
+  function buildVein(m, F, out) {
+    const M = m.p;                                      // the settings it was drawn with
+    const [rg] = sub(m.seed, 9), [, g] = sub(m.seed, 10);
+    const gauge = F.gauge * M.gauge * (0.8 + 0.4 * rg());
+    const press = M.pressure ? pressFactor(m.samples) : null;
+    const leanAt = M.tilt ? leanProfile(m.samples, m.rest) : null;
+    let kn = handRoute(m.samples);
+    if (out.specks.length > 50) kn = deflect(kn, out.specks, M.defl);   // the rock it meets, a few degrees
+    const main = lineGeom('L' + m.id, roughen(kn, 3, veinSched(F, M), g), gauge, F, M, m.seed, 0,
+                          { mark: m.id, major: true, press, lean: leanAt });
+    add(out, main);
+    const made = [main];
+    const [rc] = sub(m.seed, 19);
+    const nb = Math.round((F.branches[0] + rc() * (F.branches[1] - F.branches[0])) * M.branches);
+    for (let k = 0; k < nb; k++) {                      // the family's own minor veins
+      const [r] = sub(m.seed, 20, k), [, g2] = sub(m.seed, 21, k);
+      const t = 0.2 + 0.6 * r(), side = r() < 0.5 ? -1 : 1;
+      const a = at(main, t), th = tangent(main, t) + side * (0.25 + 0.45 * r());
+      const len = (0.12 + 0.23 * r()) * F.branchLen * M.blen;
+      const pts = roughen([a, [a[0] + Math.cos(th) * len, a[1] + Math.sin(th) * len]], levelsFor(len), veinSched(F, M), g2);
+      const minor = lineGeom(main.id + '.' + k, pts, gauge * 0.5 * (press ? press(t) : 1), F, M, m.seed, 100 + k,
+                        { mark: m.id, parent: main.id, taperStart: false, lean: leanAt ? (lt => () => lt)(leanAt(t)) : null });
+      add(out, minor); made.push(minor);
+    }
+    made.forEach((L, i) => intrude(L, out.specks, M, i === 0 ? kn : null));
+  }
+  function buildBranch(m, F, out) {
+    const M = m.p;
+    const par = out.byId.get(m.parent);
+    if (!par) return;                                   // its parent was undone
+    const p = at(par, m.at);
+    let pts, press = null, lean = null, route = null;
+    if (m.samples && pathLen(m.samples) > 0.01) {       // routed by hand, from the vein outward
+      const kn = handRoute([p, ...m.samples.slice(1)]);
+      kn[0] = p;
+      press = M.pressure ? pressFactor(m.samples) : null;
+      lean = M.tilt ? leanProfile(m.samples, m.rest) : null;
+      pts = roughen(kn, 3, veinSched(F, M), sub(m.seed, 10)[1]);
+      route = kn;
+    } else {                                            // tapped: the family routes it
+      const [r] = sub(m.seed, 22);
+      const side = m.side || (r() < 0.5 ? -1 : 1);
+      const th = tangent(par, m.at) + side * (0.25 + 0.45 * r());
+      const len = (0.08 + 0.17 * r()) * F.branchLen * M.blen / Math.sqrt(m.zoom || 1);
+      pts = roughen([p, [p[0] + Math.cos(th) * len, p[1] + Math.sin(th) * len]], levelsFor(len), veinSched(F, M), sub(m.seed, 23)[1]);
+    }
+    const L = lineGeom('B' + m.id, pts, Math.max(par.gauge * 0.5 * M.gauge2, 0.0008), F, M, m.seed, 0,
+                       { mark: m.id, parent: par.id, taperStart: false, press, lean });
+    add(out, L);
+    intrude(L, out.specks, M, route);
+  }
+
+  // Delaunay by Bowyer-Watson - a few hundred points, so O(n^2) is fine and there is no library.
+  function delaunay(P) {
+    const n = P.length;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of P) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    const d = Math.max(x1 - x0, y1 - y0, 1e-3) * 30, mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    const pts = P.concat([[mx - d, my - d], [mx + d, my - d], [mx, my + d]]);
+    const tri = (a, b, c) => {
+      const [ax, ay] = pts[a], [bx, by] = pts[b], [cx, cy] = pts[c];
+      const D = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+      if (Math.abs(D) < 1e-14) return { a, b, c, x: 0, y: 0, r2: Infinity };
+      const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, c2 = cx * cx + cy * cy;
+      const x = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / D, y = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / D;
+      return { a, b, c, x, y, r2: (ax - x) ** 2 + (ay - y) ** 2 };
+    };
+    let tris = [tri(n, n + 1, n + 2)];
+    for (let i = 0; i < n; i++) {
+      const [px, py] = pts[i], keep = [], edges = new Map();
+      for (const t of tris) {
+        if ((px - t.x) ** 2 + (py - t.y) ** 2 < t.r2) {
+          for (const [u, v] of [[t.a, t.b], [t.b, t.c], [t.c, t.a]]) {
+            const k = u < v ? u + ',' + v : v + ',' + u;
+            edges.set(k, edges.has(k) ? null : [u, v]);
+          }
+        } else keep.push(t);
+      }
+      tris = keep;
+      for (const e of edges.values()) if (e) tris.push(tri(e[0], e[1], i));
+    }
+    return { tris, n };
+  }
+  function distTo(route, p) {
+    let best = Infinity;
+    for (const q of route) best = Math.min(best, (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2);
+    return Math.sqrt(best);
+  }
+  // WEB: a crack along your line and a web of cells that spreads from it and thins out,
+  // seeded densest at the line and stretched along its run.
+  function buildWeb(m, F, out) {
+    const M = m.p;
+    const route = resample(m.samples, 0.005);
+    const sigma = F.spread * M.spread, len = pathLen(route);
+    let cxm = 0, cym = 0; for (const [x, y] of route) { cxm += x; cym += y; } cxm /= route.length; cym /= route.length;
+    let sxx = 0, syy = 0, sxy = 0;
+    for (const [x, y] of route) { sxx += (x - cxm) ** 2; syy += (y - cym) ** 2; sxy += (x - cxm) * (y - cym); }
+    const th = 0.5 * Math.atan2(2 * sxy, sxx - syy), c = Math.cos(th), s = Math.sin(th);
+    const st = F.stretch * M.stretch;
+    const [r] = sub(m.seed, 30);
+    const N = Math.max(24, Math.min(420, Math.round(F.cells * M.density * len * sigma * 4)));
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of route) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    x0 -= 3 * sigma; y0 -= 3 * sigma; x1 += 3 * sigma; y1 += 3 * sigma;
+    const seeds = [];
+    for (let tries = 0; seeds.length < N && tries < N * 80; tries++) {
+      const p = [x0 + r() * (x1 - x0), y0 + r() * (y1 - y0)], d = distTo(route, p);
+      if (r() < Math.exp(-d * d / (2 * sigma * sigma))) seeds.push(p);
+    }
+    const Q = seeds.map(([x, y]) => [(x * c + y * s) / st, -x * s + y * c]);   // compress along the run
+    const back = ([u, v]) => [u * st * c - v * s, u * st * s + v * c];
+    const { tris, n } = delaunay(Q);
+    const owner = new Map();
+    tris.forEach((t, ti) => {
+      for (const [u, v] of [[t.a, t.b], [t.b, t.c], [t.c, t.a]]) {
+        const k = u < v ? u + ',' + v : v + ',' + u;
+        (owner.get(k) || owner.set(k, []).get(k)).push(ti);
+      }
+    });
+    let e = 0;
+    for (const [k, list] of owner) {
+      if (list.length !== 2) continue;
+      const A = tris[list[0]], B = tris[list[1]];
+      if (A.a >= n || A.b >= n || A.c >= n || B.a >= n || B.b >= n || B.c >= n) continue;
+      const a = back([A.x, A.y]), b = back([B.x, B.y]);
+      const idx = e++;
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 6 * sigma) continue;
+      const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d = distTo(route, mid);
+      if (d > 2.6 * sigma) continue;
+      const [re, ge] = sub(m.seed, 31, idx);
+      if (re() > Math.exp(-d * d / (2 * (2 * sigma) ** 2))) continue;        // thins out as it spreads
+      const width = F.gauge * 0.2 * (0.6 + 0.8 * re()) * (0.35 + 0.65 * Math.exp(-d * d / (2 * (1.6 * sigma) ** 2)));
+      out.web.push({ id: 'W' + m.id + '.' + idx, mark: m.id, pts: roughen([a, b], 4, crackSched(M), ge), width, spread: d / (2.6 * sigma) });
+    }
+    const [, gc] = sub(m.seed, 32);
+    out.web.push({ id: 'W' + m.id, mark: m.id, pts: roughen(handRoute(m.samples), 3, crackSched(M), gc),
+                   width: F.gauge * 0.38, spread: 0 });
+  }
+
+  // POUR: the Pollock pour - paint leaves at a steady rate in time.
+  function speck(r, g, x, y, t, o) {
+    const n = 4 + Math.floor(r() * 3), jit = new Float32Array(n);
+    for (let k = 0; k < n; k++) jit[k] = 1 + (r() - 0.5) * 0.6;
+    const sp = { x, y, t, n, jit, spin: r() * Math.PI * 2, rad: 0.0016 * Math.exp(0.42 * g()) * (o.size || 1),
+                 lum: o.lum != null ? o.lum : Math.min(1, Math.max(0.05, Math.exp(-1.1 + 0.55 * g()))),
+                 ang: o.ang != null ? o.ang : r() * Math.PI, el: o.el != null ? o.el : 1 + Math.abs(g()) * 0.85 };
+    sp.R0 = sp.rad * Math.max(1, sp.el) * 1.25;        // the outline's reach, jitter included
+    return sp;
+  }
+
+  // ---- space: a hashed grid, so every neighbour question is local
+  const hk = (x, y) => (x * 73856093) ^ (y * 19349663);
+  function cellGrid(items, cell) {
+    const g = new Map();
+    for (let i = 0; i < items.length; i++) {
+      const k = hk(Math.floor(items[i].x / cell), Math.floor(items[i].y / cell));
+      let a = g.get(k); if (!a) g.set(k, a = []); a.push(i);
+    }
+    return g;
+  }
+  function forNear(g, cell, x, y, rc, fn) {
+    const cx = Math.floor(x / cell), cy = Math.floor(y / cell);
+    for (let ox = -rc; ox <= rc; ox++) for (let oy = -rc; oy <= rc; oy++) {
+      const a = g.get(hk(cx + ox, cy + oy)); if (a) for (const j of a) fn(j);
+    }
+  }
+  // EVERY SPECK CARRIES ITS OWN SMALL NEGATIVE GRAVITY: anything may bunch them, nothing may make
+  // them touch. Pairs closer than their outlines plus a hair are pushed apart, a few passes, until
+  // settled. It is also a CEILING - a packed patch will not compress further, it spreads instead.
+  // Only the ACTIVE specks - those just moved, and whatever they bump - are checked each pass, and a
+  // pair already at its spacing (to a hair) counts as settled. Checking every speck, with no
+  // tolerance, never stopped early: 400 ms per build at normal density, 1.5 s at double.
+  function relax(sp, iters, hot) {
+    const n = sp.length;
+    if (n < 2) return;
+    let maxR = 0; for (const q of sp) maxR = Math.max(maxR, q.R0);
+    const gap = 0.0003, cell = 2 * maxR + gap, X0 = -0.4, Y0 = -0.4;
+    const nx = Math.ceil(1.8 / cell) + 1, ny = Math.ceil((H + 0.8) / cell) + 1, nc = nx * ny;
+    const X = new Float64Array(n), Y = new Float64Array(n), R = new Float64Array(n);
+    for (let i = 0; i < n; i++) { X[i] = sp[i].x; Y[i] = sp[i].y; R[i] = sp[i].R0; }
+    const start = new Int32Array(nc + 1), fill = new Int32Array(nc), order = new Int32Array(n), cidx = new Int32Array(n);
+    let act = hot || new Uint8Array(n).fill(1);
+    for (let it = 0; it < iters; it++) {
+      // a flat grid by counting sort - rebuilt each pass, but with no allocation per speck
+      start.fill(0);
+      for (let i = 0; i < n; i++) {
+        let cx = Math.floor((X[i] - X0) / cell), cy = Math.floor((Y[i] - Y0) / cell);
+        cx = cx < 0 ? 0 : cx >= nx ? nx - 1 : cx; cy = cy < 0 ? 0 : cy >= ny ? ny - 1 : cy;
+        cidx[i] = cy * nx + cx; start[cidx[i] + 1]++;
+      }
+      for (let c = 0; c < nc; c++) start[c + 1] += start[c];
+      fill.set(start.subarray(0, nc));
+      for (let i = 0; i < n; i++) order[fill[cidx[i]]++] = i;
+      const next = new Uint8Array(n);
+      let moved = 0;
+      for (let i = 0; i < n; i++) {
+        if (!act[i]) continue;
+        const c = cidx[i], cx = c % nx, cy = (c - cx) / nx;
+        for (let oy = -1; oy <= 1; oy++) {
+          const yy = cy + oy; if (yy < 0 || yy >= ny) continue;
+          for (let ox = -1; ox <= 1; ox++) {
+            const xx = cx + ox; if (xx < 0 || xx >= nx) continue;
+            const cc = yy * nx + xx;
+            for (let k = start[cc]; k < start[cc + 1]; k++) {
+              const j = order[k];
+              if (j === i || (act[j] && j < i)) continue;      // each pair once
+              let dx = X[j] - X[i], dy = Y[j] - Y[i];
+              const min = R[i] + R[j] + gap;
+              if (dx > min || dx < -min || dy > min || dy < -min) continue;
+              let d = Math.sqrt(dx * dx + dy * dy);
+              if (d >= min - 1e-9) continue;
+              if (d < 1e-9) { dx = 1e-4; dy = 0; d = 1e-4; }
+              const push = (min - d) * 0.55 / d;               // a touch past half: dense packs settle sooner
+              X[i] -= dx * push; Y[i] -= dy * push; X[j] += dx * push; Y[j] += dy * push;
+              next[i] = next[j] = 1; moved++;
+            }
+          }
+        }
+      }
+      if (!moved) break;
+      act = next;
+    }
+    for (let i = 0; i < n; i++) { sp[i].x = X[i]; sp[i].y = Y[i]; }
+  }
+  // Settle the ROCK after something moved it. Poured specks are paint - paint pools - so the
+  // never-touch rule is the rock's alone.
+  function settle(specks) {
+    const rock = specks.filter(q => q.ground);
+    if (!rock.length) { for (const q of specks) q.hot = 0; return; }
+    const hot = Uint8Array.from(rock, q => q.hot ? 1 : 0);
+    relax(rock, 150, hot);                           // enough passes for a jam to squeeze out sideways
+    for (const q of specks) q.hot = 0;
+  }
+  const mark = (q, x, y) => { if (Math.abs(q.x - x) + Math.abs(q.y - y) > 1e-9) q.hot = 1; };
+  // Nearest point on a polyline, answered from a grid of its segments.
+  function pathIndex(pts, cell) {
+    const g = new Map();
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    for (const [x, y] of pts) { bx0 = Math.min(bx0, x); by0 = Math.min(by0, y); bx1 = Math.max(bx1, x); by1 = Math.max(by1, y); }
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      for (let cx = Math.floor(Math.min(a[0], b[0]) / cell); cx <= Math.floor(Math.max(a[0], b[0]) / cell); cx++)
+        for (let cy = Math.floor(Math.min(a[1], b[1]) / cell); cy <= Math.floor(Math.max(a[1], b[1]) / cell); cy++) {
+          const k = hk(cx, cy); let l = g.get(k); if (!l) g.set(k, l = []); l.push(i);
+        }
+    }
+    return (x, y, maxD) => {
+      if (x < bx0 - maxD || x > bx1 + maxD || y < by0 - maxD || y > by1 + maxD) return null;
+      const rc = Math.ceil(maxD / cell), cx = Math.floor(x / cell), cy = Math.floor(y / cell);
+      let best = null;
+      for (let ox = -rc; ox <= rc; ox++) for (let oy = -rc; oy <= rc; oy++) {
+        const l = g.get(hk(cx + ox, cy + oy)); if (!l) continue;
+        for (const i of l) {
+          const a = pts[i], b = pts[i + 1], ex = b[0] - a[0], ey = b[1] - a[1], L2 = ex * ex + ey * ey || 1e-12;
+          const t = Math.max(0, Math.min(1, ((x - a[0]) * ex + (y - a[1]) * ey) / L2));
+          const px = a[0] + ex * t, py = a[1] + ey * t, d = Math.hypot(x - px, y - py);
+          if (d <= maxD && (!best || d < best.d)) { const L = Math.sqrt(L2); best = { d, px, py, i, tx: ex / L, ty: ey / L }; }
+        }
+      }
+      return best;
+    };
+  }
+  // Move a speck to a new distance from its nearest point, along the line joining them.
+  function moveRadial(q, near, dNew, fx, fy) {
+    let vx = q.x - near.px, vy = q.y - near.py;
+    const d = Math.hypot(vx, vy);
+    if (d < 1e-9) { vx = fx; vy = fy; } else { vx /= d; vy /= d; }
+    q.x = near.px + vx * dNew; q.y = near.py + vy * dNew;
+  }
+  // Curvature of the ROUTE - your line - not of the roughened vein. Measured on the finished vein,
+  // its own fine roughness bends harder than the fold does and flipped inside and outside every
+  // few points: the fold test read the INSIDE thinning. The route's knots carry only the fold.
+  function curvature(pts, chord = 1, smooth = 2) {
+    const n = pts.length, th = new Float64Array(n), k = new Float64Array(n), out = new Float64Array(n);
+    for (let i = 0; i < n; i++) { const a = pts[Math.max(0, i - chord)], b = pts[Math.min(n - 1, i + chord)]; th[i] = Math.atan2(b[1] - a[1], b[0] - a[0]); }
+    for (let i = 1; i < n; i++) {
+      const ds = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      const dt = Math.atan2(Math.sin(th[i] - th[i - 1]), Math.cos(th[i] - th[i - 1]));
+      k[i] = ds > 1e-7 ? dt / ds : 0;
+    }
+    for (let i = 0; i < n; i++) { let a = 0, c = 0; for (let j = Math.max(0, i - smooth); j <= Math.min(n - 1, i + smooth); j++) { a += k[j]; c++; } out[i] = a / c; }
+    return { k: out, th };
+  }
+  // DEFLECTION, his ruling: dense specks may bend a vein A FEW DEGREES toward the sparser side,
+  // never a turn, and it REJOINS the drawn path - the offset is high-passed so it cannot drift,
+  // and its slope is capped so a few degrees held for a while cannot add up to a turn.
+  function deflect(kn, specks, mul) {
+    const n = kn.length;
+    if (n < 5 || mul <= 0) return kn;
+    const cell = 0.03, grid = cellGrid(specks, cell), nrm = [], raw = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = kn[Math.max(0, i - 1)], b = kn[Math.min(n - 1, i + 1)];
+      let tx = b[0] - a[0], ty = b[1] - a[1]; const L = Math.hypot(tx, ty) || 1; tx /= L; ty /= L;
+      const nx = -ty, ny = tx; nrm.push([nx, ny]);
+      let left = 0, right = 0;
+      forNear(grid, cell, kn[i][0], kn[i][1], 1, j => {
+        const dx = specks[j].x - kn[i][0], dy = specks[j].y - kn[i][1];
+        if (dx * dx + dy * dy > cell * cell) return;
+        if (dx * nx + dy * ny > 0) left++; else right++;
+      });
+      raw[i] = -(left - right) / (left + right + 4);   // lean away from the denser side
+    }
+    const win = Math.max(3, Math.round(0.25 / 0.015)), o = new Float64Array(n), A = 0.008 * mul;
+    for (let i = 0; i < n; i++) {
+      let a = 0, c = 0;
+      for (let j = Math.max(0, i - win); j <= Math.min(n - 1, i + win); j++) { a += raw[j]; c++; }
+      o[i] = (raw[i] - a / c) * A;                     // high-passed: it has to come back
+    }
+    const step = Math.tan(4 * mul * Math.PI / 180) * 0.015;
+    for (let i = 1; i < n; i++) o[i] = Math.min(o[i - 1] + step, Math.max(o[i - 1] - step, o[i]));
+    for (let i = n - 2; i >= 0; i--) o[i] = Math.min(o[i + 1] + step, Math.max(o[i + 1] - step, o[i]));
+    return kn.map((q, i) => {
+      const f = o[i] * Math.min(1, i / 3, (n - 1 - i) / 3);
+      return [q[0] + nrm[i][0] * f, q[1] + nrm[i][1] * f];
+    });
+  }
+  // A VEIN THROUGH GRANITE. It takes up room, so whatever sat in its body is pushed aside with an
+  // inverse falloff; and it bends the rock with it - FOLD STRAIN: the inside of a turn crowds, the
+  // outside thins, and long specks swing round to lie along it. Only specks already down move.
+  function intrude(L, specks, M, route) {
+    if (!specks.length) return;
+    const reach = 0.04, near = pathIndex(L.pts, reach), fold = 2.0 * M.fold;   // at Fold 1 a 0.12 bend reads
+    // the route's curvature and heading, read at each vein point by its share of the length
+    const R = route && route.length > 2 ? curvature(route) : null;
+    const kap = new Float64Array(L.pts.length), head = new Float64Array(L.pts.length);
+    for (let i = 0; i < L.pts.length; i++) {
+      if (R) { const j = Math.round(L.cum[i] / L.total * (route.length - 1)); kap[i] = R.k[j]; head[i] = R.th[j]; }
+      else { const a = L.pts[0], b = L.pts[L.pts.length - 1]; head[i] = Math.atan2(b[1] - a[1], b[0] - a[0]); }
+    }
+    for (const q of specks) {
+      const hit = near(q.x, q.y, reach * 2.5);
+      if (!hit) continue;
+      const i = Math.min(hit.i, L.w.length - 1);
+      const w = L.keep[i] ? L.w[i] : 0;                // a break is a gap: nothing there to push
+      const nx = -hit.ty, ny = hit.tx, u = (q.x - hit.px) * nx + (q.y - hit.py) * ny, side = u >= 0 ? 1 : -1;
+      let d = hit.d;
+      const h = w > 0 ? w / 2 + q.R0 + 0.0004 : 0;
+      // AREA-PRESERVING for a line is a SHIFT: everything moves out by h, fading over 5h, so the edge
+      // crowds 1.25x at most. sqrt(d^2 + h^2) - right for a point - piled the whole strip onto the edge.
+      if (h > 0) d += h * Math.exp(-d / (5 * h));
+      const k = kap[hit.i], e = Math.min(0.5, Math.abs(k) * reach * fold) * Math.exp(-((d / (1.3 * reach)) ** 2));
+      d = u * k > 0 ? Math.max(h, d * (1 - e)) : d * (1 + e);
+      const x0 = q.x, y0 = q.y;
+      moveRadial(q, hit, d, nx * side, ny * side);
+      mark(q, x0, y0);
+      const wgt = 0.55 * Math.exp(-((hit.d / reach) ** 2)) * Math.min(1, M.fold);
+      let da = head[hit.i] - q.ang;
+      da = ((da + Math.PI / 2) % Math.PI + Math.PI) % Math.PI - Math.PI / 2;   // axial: a speck has no front
+      q.ang += da * wgt;
+    }
+    // settle, clear the vein's body of anything settling nudged back in, settle again. A fixed six
+    // passes left 240 pairs touching at double density: the fold packs faster than that resolves.
+    const clear = () => {
+      for (const q of specks) {
+        const hit = near(q.x, q.y, 0.02);
+        if (!hit) continue;
+        const i = Math.min(hit.i, L.w.length - 1), h = L.keep[i] ? L.w[i] / 2 + q.R0 * 0.6 : 0;
+        if (hit.d < h) { moveRadial(q, hit, h, -hit.ty, hit.tx); q.hot = 1; }
+      }
+    };
+    settle(specks); clear(); settle(specks);
+  }
+  // GRAVITY: a point (tap) or a line (drag), pull or push, strength and reach. It moves specks and
+  // never lines. Both maps keep order - nothing overtakes its neighbour - and push falls off as an
+  // inverse power, so it clears a space and fades instead of stopping at an edge.
+  function applyGravity(m, out) {
+    const M = m.p, reach = 0.05 * M.reach, st = M.strength, sign = M.sign;
+    let near;
+    if (m.at) {
+      const [cx, cy] = m.at;
+      near = (x, y, maxD) => { const d = Math.hypot(x - cx, y - cy); return d <= maxD ? { d, px: cx, py: cy, tx: 1, ty: 0 } : null; };
+      out.guides.push({ type: 'pt', x: cx, y: cy, reach, sign });
+    } else {
+      const path = resample(m.samples, 0.005);
+      near = pathIndex(path, reach);
+      out.guides.push({ type: 'ln', pts: path, reach, sign });
+    }
+    if (!out.specks.length) return;
+    const a = Math.min(0.9, st), h = st * reach;
+    for (const q of out.specks) {
+      const hit = near(q.x, q.y, reach * 3);
+      if (!hit) continue;
+      const d = hit.d;
+      // push: a point clears a disc (sqrt is area-preserving in 2-D); a line shifts its strip aside
+      const dn = sign > 0 ? d * (1 - a * Math.exp(-((d / (1.6 * reach)) ** 2)))
+               : m.at ? d + (Math.sqrt(d * d + h * h) - d) * Math.exp(-((d / (3 * reach)) ** 2))
+               : d + h * Math.exp(-d / (1.5 * reach));
+      const x0 = q.x, y0 = q.y;
+      moveRadial(q, hit, dn, -hit.ty, hit.tx);
+      mark(q, x0, y0);
+    }
+    settle(out.specks);
+  }
+  // THE MAGNET: the pen as a magnet held a little above the slab, the specks as iron filings.
+  // Upright, the field leaves the pole straight down and fans out: a STARBURST. Laid over, it
+  // COMBS along the way the pen leans. That second half is a DESIGNED CONTROL, not pure physics:
+  // the in-plane field of a point dipole fans out sideways under a laid-over pen (measured: the
+  // specks near the path ended 83 deg off the lean, coherence 0.27), and a DRAGGED magnet leaves the
+  // pattern of its trailing pole, so physics alone cannot comb. Here the lean steers: the target
+  // is a blend of the pole's radial fan and the lean direction, weighted by sin^2 of the lean. A
+  // finger or mouse has no tilt, so the magnet aims along the way it moves. It ROTATES only - a
+  // speck's no-touch circle does not care which way it points - so nothing settles; it stays cheap.
+  function applyMagnet(m, out) {
+    const M = m.p, S = m.samples, R = 0.05 * M.mreach, h = 0.02 * M.mheight, sign = M.mag;
+    out.guides.push({ type: 'mag', pts: S.map(q => [q[0], q[1]]), axis: S.map(q => [q[4], q[5]]), sign, hover: !!m.hover });
+    if (!out.specks.length || !S.length) return;
+    const grid = cellGrid(out.specks, R), realP = M.pressure && pressureReal(S);
+    let hx = 1, hy = 0;
+    for (let i = 0; i < S.length; i++) {
+      const q = S[i], dt = i ? Math.min(Math.max(q[2] - S[i - 1][2], 0), 0.05) : 1 / 60;
+      if (i) {
+        const dx = q[0] - S[i - 1][0], dy = q[1] - S[i - 1][1], d = Math.hypot(dx, dy);
+        if (d > 1e-5) { hx = hx * 0.7 + dx / d * 0.3; hy = hy * 0.7 + dy / d * 0.3; const n = Math.hypot(hx, hy) || 1; hx /= n; hy /= n; }
+      }
+      let lean, ax, ay;                                  // how far over (0 upright .. 1 flat) and which way
+      if (q[4] != null && q[5] != null) { lean = q[4]; ax = Math.cos(q[5]); ay = Math.sin(q[5]); }
+      else if (q[4] != null) { lean = 0; ax = 1; ay = 0; }                         // a pen held upright
+      else { lean = 55 / 90; ax = hx; ay = hy; }                                   // no tilt: along travel
+      const comb = Math.sin(lean * Math.PI / 2) ** 2, c2 = Math.cos(2 * Math.atan2(ay, ax)), s2 = Math.sin(2 * Math.atan2(ay, ax));
+      const pr = realP ? q[3] : 0.5, he = h * (1.4 - 0.8 * pr);                    // press harder = closer
+      const str = M.mstrength * (0.5 + pr) * (m.hover ? 0.35 : 1);
+      const [, g] = sub(m.seed, 60, i);
+      forNear(grid, R, q[0], q[1], 1, j => {
+        const sp = out.specks[j], dx = sp.x - q[0], dy = sp.y - q[1], rho2 = dx * dx + dy * dy;
+        if (rho2 > R * R) return;
+        // the pole's fan and the lean, blended as AXIAL directions (doubled angles), so opposite
+        // ends of a speck are the same thing; closer to the pole (lower Height) the fan is sharper
+        const rho = Math.sqrt(rho2), fan = rho / Math.sqrt(rho2 + he * he), ra = Math.atan2(dy, dx);
+        const vx = (1 - comb) * fan * Math.cos(2 * ra) + comb * c2, vy = (1 - comb) * fan * Math.sin(2 * ra) + comb * s2;
+        if (vx * vx + vy * vy < 1e-12) return;
+        // time over a spot builds the effect, like the pour: a slow pass aligns harder than a flick
+        const w = Math.min(1, str * dt * 30 * Math.exp(-rho2 / (R * R * 0.5)));
+        if (sign > 0) {
+          let da = Math.atan2(vy, vx) / 2 - sp.ang;
+          da = ((da + Math.PI / 2) % Math.PI + Math.PI) % Math.PI - Math.PI / 2;   // axial: a speck has no front
+          sp.ang += da * w;
+        } else sp.ang += g() * 1.4 * w;
+      });
+    }
+  }
+  // THE GRANITE GROUND: scattered, then settled so no two touch. Cached - it is the same slab
+  // until its own settings change - and copied, because every build moves specks.
+  let groundCache = { key: null, specks: [] }, groundCapped = 0;
+  function groundCopy() {
+    const key = G.gspecks + ':' + G.gsize;
+    if (groundCache.key !== key) {
+      // WHAT FITS: past ~1.8x (at normal size) the specks cannot all be placed without touching - at
+      // 2.5x even the empty slab kept one pair touching and took 14 s to try. Bigger specks fit fewer.
+      const want = Math.round(3500 * G.gspecks), fits = Math.floor(3500 * 1.8 / (G.gsize * G.gsize));
+      const [r, g] = sub(7070, 1), n = Math.min(want, fits), sp = [];
+      groundCapped = want > fits ? n : 0;
+      for (let i = 0; i < n; i++) sp.push(speck(r, g, -0.02 + 1.04 * r(), -0.02 + (H + 0.04) * r(), 0, { size: G.gsize }));
+      relax(sp, 150);
+      for (const q of sp) { q.x0 = q.x; q.y0 = q.y; q.ground = true; }
+      groundCache = { key, specks: sp };
+    }
+    return groundCache.specks.map(q => ({ ...q }));
+  }
+  // WOOD: grain as streamlines, and a knot as FLOW AROUND AN OBSTACLE - potential flow round a
+  // circle, stretched to an ellipse for a spike knot. Lines crowd at its flanks and close up behind
+  // it but can never cross, which a plain pull would make them do near the core.
+  function knotGeom(m) {
+    return { id: 'K' + m.id, mark: m.id, x: m.at[0], y: m.at[1], R: m.R || 0.028 * m.p.ksize, ex: m.p.spike, seed: m.seed };
+  }
+  function woodGrain(F, knots) {
+    const [r, g] = sub(9090, 1), th0 = G.gangle * Math.PI / 180, ph = [r() * 6.283, r() * 6.283, r() * 6.283];
+    const base = (x, y) => th0 + 0.3 * G.gwave * (0.55 * Math.sin(2.2 * x + 0.8 * y + ph[0])
+                                                 + 0.3 * Math.sin(3.4 * y - 1.3 * x + ph[1]) + 0.15 * Math.sin(6.1 * x + ph[2]));
+    for (const K of knots) { K.th = base(K.x, K.y); K.c = Math.cos(K.th); K.s = Math.sin(K.th); }
+    const dir = (x, y) => {
+      const a = base(x, y); let vx = Math.cos(a), vy = Math.sin(a);
+      for (const K of knots) {
+        const dx = x - K.x, dy = y - K.y, lx = (dx * K.c + dy * K.s) / K.ex, ly = -dx * K.s + dy * K.c;
+        const r2 = lx * lx + ly * ly; if (r2 < 1e-12) continue;
+        const m4 = r2 * r2, R2 = K.R * K.R, zr = lx * lx - ly * ly, zi = 2 * lx * ly;
+        const pu = -R2 * zr / m4, pv = -R2 * zi / m4 / K.ex;   // w = z + R^2/z, pushed through the stretch
+        vx += pu * K.c - pv * K.s; vy += pu * K.s + pv * K.c;
+      }
+      const L = Math.hypot(vx, vy);
+      return L > 1e-9 ? [vx / L, vy / L] : [Math.cos(a), Math.sin(a)];
+    };
+    const inKnot = (x, y) => knots.some(K => {
+      const dx = x - K.x, dy = y - K.y, lx = (dx * K.c + dy * K.s) / K.ex, ly = -dx * K.s + dy * K.c;
+      return lx * lx + ly * ly < K.R * K.R * 0.98;
+    });
+    const hstep = 0.004;
+    function trace(x, y, sg) {
+      const pts = [[x, y]];
+      for (let i = 0; i < 520; i++) {
+        const [ax, ay] = dir(x, y), [bx, by] = dir(x + ax * hstep * sg / 2, y + ay * hstep * sg / 2);
+        x += bx * hstep * sg; y += by * hstep * sg;
+        if (x < -0.3 || x > 1.3 || y < -0.3 || y > H + 0.3 || inKnot(x, y)) break;
+        pts.push([x, y]);
+      }
+      return pts;
+    }
+    // SEEDED UPSTREAM, outside the slab, where the flow is even. Seeded through the middle, the lines
+    // were evenly spaced exactly at the knot and could not crowd there: flank spacing read 1.0x the far
+    // spacing against the ~0.7x flow round an obstacle gives.
+    const dx = Math.cos(th0), dy = Math.sin(th0), mx = -dy, my = dx;
+    const along = 0.5 * Math.abs(dx) + (H / 2) * Math.abs(dy) + 0.1;
+    const half = 0.5 * Math.abs(mx) + (H / 2) * Math.abs(my) + 0.18;
+    const ox = 0.5 - dx * along, oy = H / 2 - dy * along;
+    const lines = [];
+    for (let o = -half, k = 0; o < half; k++) {
+      const pts = trace(ox + mx * o, oy + my * o, 1);
+      if (pts.length > 3) lines.push({ id: 'G' + k, pts, w: F.grainW * (0.6 + 0.9 * r()), a: 0.3 + 0.5 * r() });
+      o += F.ring * G.gspacing * Math.exp(0.35 * g());
+    }
+    return lines;
+  }
+  function buildPour(m, out) {
+    const M = m.p;
+    const S = m.samples, n = S.length, res = [];
+    const real = M.pressure && pressureReal(S), pr = i => (real ? 0.2 + 1.6 * S[i][3] : 1);   // press harder, more paint
+    if (!n) return;
+    const sp = new Float64Array(n), th = new Float64Array(n), ku = new Float64Array(n), k2 = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      let a = i, b = i;
+      while (a > 0 && S[i][2] - S[a][2] < 0.03) a--;
+      while (b < n - 1 && S[b][2] - S[i][2] < 0.03) b++;
+      const dt = S[b][2] - S[a][2];
+      const vx = dt > 1e-4 ? (S[b][0] - S[a][0]) / dt : 0, vy = dt > 1e-4 ? (S[b][1] - S[a][1]) / dt : 0;
+      sp[i] = Math.hypot(vx, vy);
+      th[i] = sp[i] > 0.02 ? Math.atan2(vy, vx) : (i ? th[i - 1] : 0);
+    }
+    for (let i = 1; i < n; i++) {
+      const ds = sp[i] * Math.max(S[i][2] - S[i - 1][2], 0);
+      let dth = th[i] - th[i - 1]; dth = Math.atan2(Math.sin(dth), Math.cos(dth));
+      ku[i] = ds > 1e-5 ? Math.max(-300, Math.min(300, dth / ds)) : 0;
+    }
+    for (let i = 0; i < n; i++) {
+      let s = 0, c = 0;
+      for (let j = Math.max(0, i - 2); j <= Math.min(n - 1, i + 2); j++) { s += ku[j]; c++; }
+      k2[i] = s / c;
+    }
+    const wid = v => M.pwidth * (0.0035 + 0.02 * Math.exp(-v / 0.35));
+    { const [rc] = sub(m.seed, 40, 0, 1), [r, g] = sub(m.seed, 40, 0, 2), w = wid(0) * 1.4;
+      for (let k = poisson(M.prate * 0.04, rc); k > 0; k--) res.push(speck(r, g, S[0][0] + g() * w, S[0][1] + g() * w, S[0][2], {})); }
+    let dwell = 0;
+    for (let i = 1; i < n; i++) {
+      const A = S[i - 1], B = S[i], dt = Math.min(Math.max(B[2] - A[2], 0), 0.1), v = sp[i];
+      const tx = Math.cos(th[i]), ty = Math.sin(th[i]), nx = -ty, ny = tx;
+      dwell = v < 0.06 ? dwell + dt : dwell * 0.85;
+      const w = wid(v) * Math.sqrt(1 + dwell / 0.4);
+      { const [rc] = sub(m.seed, 40, i, 3), [r, g] = sub(m.seed, 40, i, 4);
+        for (let k = poisson(M.prate * dt * pr(i), rc); k > 0; k--) {
+          const u = r(), x = A[0] + (B[0] - A[0]) * u, y = A[1] + (B[1] - A[1]) * u, al = g() * w * 0.5, ac = g() * w;
+          res.push(speck(r, g, x + tx * al + nx * ac, y + ty * al + ny * ac, A[2] + (B[2] - A[2]) * u, { ang: th[i] + g() * 0.9 }));
+        } }
+      const acc = v * v * Math.abs(k2[i]);
+      if (M.pfling > 0 && acc > 3) {
+        const side = -Math.sign(k2[i]), [rc] = sub(m.seed, 40, i, 5), [r, g] = sub(m.seed, 40, i, 6);
+        for (let q = poisson(Math.min(M.pfling * (acc / 3 - 1) * dt * 60, 8), rc); q > 0; q--) {
+          const d = v * (0.03 + 0.07 * r()), off = d * 0.3 * r() * side;
+          res.push(speck(r, g, B[0] + tx * d + nx * off + g() * 0.002, B[1] + ty * d + ny * off + g() * 0.002, B[2] + 0.04,
+                         { size: 1.4 + r() * 1.2, lum: 0.55 + r() * 0.45, ang: th[i] + g() * 0.15, el: 1.6 + r() * 1.8 }));
+        }
+      }
+    }
+    const t0 = S[0][2], t1 = Math.max(S[n - 1][2], t0 + 1e-3);
+    for (const s of res) { s.mark = m.id; s.tn = Math.min(1, Math.max(0, (s.t - t0) / (t1 - t0))); out.specks.push(s); }
+  }
+
+  // INCREMENTAL: when the only change is one new mark on top of the same history, apply just that
+  // mark to the settled state from last time instead of replaying everything. Anything else - undo,
+  // reroll, family, ground, a knot (it bends all the grain) - rebuilds from the start.
+  let last = null;
+  const applyMark = (m, out) => {
+    const F = FAM[m.fam];                              // the character it was drawn with
+    if (m.kind === 'vein') buildVein(m, F, out);
+    else if (m.kind === 'branch') buildBranch(m, F, out);
+    else if (m.kind === 'web') buildWeb(m, F, out);
+    else if (m.kind === 'pour') buildPour(m, out);
+    else if (m.kind === 'gravity') applyGravity(m, out);
+    else if (m.kind === 'magnet') applyMagnet(m, out);
+  };
+  function build() {
+    const sig = fam + '|' + JSON.stringify(G), n = marks.length, nm = marks[n - 1];
+    if (last && last.sig === sig && n === last.hist.length + 1 && nm.kind !== 'knot'
+        && last.hist.every((h, i) => h.m === marks[i] && h.seed === marks[i].seed)) {
+      const out = { ...geo, lines: geo.lines.slice(), byId: new Map(geo.byId), web: geo.web.slice(),
+                    specks: geo.specks.map(q => ({ ...q })), guides: geo.guides.slice() };
+      applyMark(nm, out);
+      geo = out;
+      last = { sig, hist: marks.map(m => ({ m, seed: m.seed })) };
+      return;
+    }
+    fullBuild();
+    last = { sig, hist: marks.map(m => ({ m, seed: m.seed })) };
+  }
+  function fullBuild() {
+    const Fc = FAM[fam];
+    const out = { lines: [], byId: new Map(), web: [], specks: Fc.groundSpecks ? groundCopy() : [], guides: [],
+                  knots: marks.filter(m => m.kind === 'knot').map(knotGeom), grain: [] };
+    // knots are fields in the wood, there while it grew, so they bend all of its grain
+    if (Fc.grain) out.grain = woodGrain(Fc, out.knots);
+    else for (const K of out.knots) { K.th = G.gangle * Math.PI / 180; K.c = Math.cos(K.th); K.s = Math.sin(K.th); }
+    for (const m of marks) applyMark(m, out);         // in order: what is drawn first is older rock
+    geo = out;
+    if (groundCapped && Fc.groundSpecks) hint(`That many specks this size cannot all fit without touching, so the slab holds ${groundCapped}.`);
+  }
+
+  // ---- TILES ------------------------------------------------------------------
+  const IN = SLAB_FT * 12;                              // inches across the slab (8 ft)
+  const inFr = v => v / IN;                             // inches -> frame units (frame width = 1)
+  // Each pattern is a fundamental cell of polygons plus two lattice vectors, all in inches for a
+  // tile size u. n*ax + m*ay over the integers, times the cell's polygons, tiles the whole plane.
+  const PATTERNS = {
+    square: u => ({ polys: [[[0, 0], [u, 0], [u, u], [0, u]]], ax: [u, 0], ay: [0, u] }),
+    rect:   u => ({ polys: [[[0, 0], [u, 0], [u, u / 2], [0, u / 2]]], ax: [u, 0], ay: [0, u / 2] }),
+    subway: u => ({ polys: [[[0, 0], [u, 0], [u, u / 2], [0, u / 2]]], ax: [u, 0], ay: [u / 2, u / 2] }),
+    hex: u => { const r = u / 2, w = Math.sqrt(3) * r;   // pointy-top, u = point-to-point height
+      const h = []; for (let k = 0; k < 6; k++) { const a = Math.PI / 180 * (60 * k - 90); h.push([Math.cos(a) * r, Math.sin(a) * r]); }
+      return { polys: [h], ax: [w, 0], ay: [w / 2, 1.5 * r] }; },
+    // Cairo pentagonal tiling: the dual of the snub-square tiling. Built as the Voronoi cells of the
+    // snub-square vertices - four pentagons per square cell of side u, in two orientations.
+    cairo: u => cairoCell(u),
+    diagonal: u => { const r = Math.SQRT1_2, R = ([x, y]) => [(x - y) * r, (x + y) * r];
+      return { polys: [[[0, 0], [u, 0], [u, u], [0, u]].map(R)], ax: R([u, 0]), ay: R([0, u]) }; },
+    triangle: u => { const h = u * Math.sqrt(3) / 2;
+      return { polys: [[[0, 0], [u, 0], [u / 2, h]], [[u, 0], [1.5 * u, h], [0.5 * u, h]]], ax: [u, 0], ay: [u / 2, h] }; },
+    rhombus: u => { const R = u / 2, V = k => [R * Math.cos(Math.PI / 3 * k), R * Math.sin(Math.PI / 3 * k)];
+      const rh = k => [[0, 0], V(2 * k), V(2 * k + 1), V(2 * k + 2)];
+      return { polys: [rh(0), rh(1), rh(2)], ax: [1.5 * R, R * Math.sqrt(3) / 2], ay: [0, R * Math.sqrt(3)] }; },
+    herringbone: u => { const w = u / 2;                     // 2:1 bricks; L-domino, lattice found by search
+      const H = [[0, 0], [2 * w, 0], [2 * w, w], [0, w]], V = [[0, w], [w, w], [w, 3 * w], [0, 3 * w]];
+      return { polys: [H, V], ax: [w, w], ay: [-w, 3 * w] }; },
+    basketweave: u => { const L = u, w = u / 2, polys = [];
+      const Hp = (x, y) => { polys.push([[x, y], [x + L, y], [x + L, y + w], [x, y + w]], [[x, y + w], [x + L, y + w], [x + L, y + L], [x, y + L]]); };
+      const Vp = (x, y) => { polys.push([[x, y], [x + w, y], [x + w, y + L], [x, y + L]], [[x + w, y], [x + L, y], [x + L, y + L], [x + w, y + L]]); };
+      Hp(0, 0); Vp(L, 0); Vp(0, L); Hp(L, L); return { polys, ax: [2 * L, 0], ay: [0, 2 * L] }; },
+    octagon: u => { const t = u / (1 + Math.SQRT2), Rc = t / (2 * Math.sin(Math.PI / 8)), oct = [];
+      for (let k = 0; k < 8; k++) { const a = Math.PI / 8 + Math.PI / 4 * k; oct.push([Rc * Math.cos(a), Rc * Math.sin(a)]); }
+      const d = t / Math.SQRT2, sq = [[u / 2 + d, u / 2], [u / 2, u / 2 + d], [u / 2 - d, u / 2], [u / 2, u / 2 - d]];
+      return { polys: [oct, sq], ax: [u, 0], ay: [0, u] }; },
+    // ---- curved shapes, approximated as many-point polygons so the same engine cuts them ----
+    penny: u => { const r = u / 2, c = circlePoly(0, 0, r);   // offset (hex) packing; grout fills the gaps
+      return { polys: [c], ax: [u, 0], ay: [u / 2, u * Math.sqrt(3) / 2] }; },
+    fishscale: u => { const c = circlePoly(0, 0, u * 0.62);   // rows overlap upward; drawn bottom-first
+      return { polys: [c], ax: [u, 0], ay: [u / 2, u * 0.5], overlap: true }; },
+    // a Moroccan-lantern tile: an elongated hexagon with three bulging (convex) edges and three
+    // notched (concave) edges, so a bulge nests into a neighbour's notch. Tiles by the hex lattice.
+    arabesque: u => { const W = u * 0.42, h = u * 0.28, H = u * 0.6, A = 0.14 * u, M = 8;
+      const Vs = [[0, H], [W, h], [W, -h], [0, -H], [-W, -h], [-W, h]], conv = [1, 1, 1, -1, -1, -1], pts = [];
+      for (let e = 0; e < 6; e++) { const a = Vs[e], b = Vs[(e + 1) % 6], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy), nx = dy / L, ny = -dx / L;
+        for (let k = 0; k < M; k++) { const t = k / M, off = conv[e] * A * Math.sin(Math.PI * t); pts.push([a[0] + dx * t + nx * off, a[1] + dy * t + ny * off]); } }
+      return { polys: [pts], ax: [2 * W, 0], ay: [W, H + h] }; },
+    versailles: u => versaillesModule(u),
+  };
+  function circlePoly(cx, cy, r, n = 44) { const p = []; for (let k = 0; k < n; k++) { const a = 2 * Math.PI * k / n; p.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); } return p; }
+  // French / Versailles pattern: the industry 4-size module (8/16/24 on a 24 base), a rectangle
+  // tiled exactly by staggered rectangles. Verified to cover its module with no gaps/overlaps.
+  function versaillesModule(u) {
+    const s = u / 4, N = 8;                             // 8x8 module of small units; tile ~ u/4..3u/4
+    const rects = VERSAILLES.map(([x, y, w, h]) => [[x * s, y * s], [(x + w) * s, y * s], [(x + w) * s, (y + h) * s], [x * s, (y + h) * s]]);
+    return { polys: rects, ax: [N * s, 0], ay: [0, N * s] };
+  }
+  // Authentic French/Versailles pattern: an 8x8 module of four tile sizes (1x1, 1x2, 2x2, 2x3),
+  // laid so NO FOUR TILES MEET AT A POINT - the defining trait. Solved by backtracking, seed 2433.
+  const VERSAILLES = [[0,0,1,1],[1,0,2,3],[3,0,2,1],[5,0,2,2],[7,0,1,2],[0,1,1,2],[3,1,1,2],[4,1,1,2],
+    [5,2,3,2],[0,3,2,3],[2,3,3,2],[5,4,3,2],[2,5,1,1],[3,5,2,2],[0,6,3,2],[5,6,3,2],[3,7,2,1]];
+  // Cairo pentagonal tiling: the Voronoi cells of the snub-square vertices at offset e = 2 - sqrt(3)
+  // - eight congruent pentagons (four equal sides + a longer base) per 2x2 unit cell, which is the
+  // real translational period (the sites checkerboard vertical/horizontal). Verified to tile.
+  const CAIRO8 = [
+    [[0,0],[0.5,-0.18301],[1,0],[0.81699,0.5],[0.18301,0.5]],
+    [[0.18301,0.5],[0.81699,0.5],[1,1],[0.5,1.18301],[0,1]],
+    [[0,1],[0.5,1.18301],[0.5,1.81699],[0,2],[-0.18301,1.5]],
+    [[0.5,1.18301],[1,1],[1.18301,1.5],[1,2],[0.5,1.81699]],
+    [[1,0],[1.5,0.18301],[1.5,0.81699],[1,1],[0.81699,0.5]],
+    [[1.5,0.18301],[2,0],[2.18301,0.5],[2,1],[1.5,0.81699]],
+    [[1,1],[1.5,0.81699],[2,1],[1.81699,1.5],[1.18301,1.5]],
+    [[1.18301,1.5],[1.81699,1.5],[2,2],[1.5,2.18301],[1,2]],
+  ];
+  function cairoCell(u) {
+    const k = u / 2;                                   // a Cairo tile ~ 0.53 * (u/2) across
+    return { polys: CAIRO8.map(P => P.map(q => [q[0] * k, q[1] * k])), ax: [2 * k, 0], ay: [0, 2 * k] };
+  }
+  const polyCentroid = P => { let x = 0, y = 0; for (const q of P) { x += q[0]; y += q[1]; } return [x / P.length, y / P.length]; };
+  // Inset a polygon toward its centroid by d (inches) - the visual grout gap and the edge finish.
+  function insetPoly(P, d) {
+    const [cx, cy] = polyCentroid(P);
+    let ap = 0; for (const q of P) ap += Math.hypot(q[0] - cx, q[1] - cy); ap /= P.length;
+    const f = Math.max(0, 1 - d / Math.max(ap, 1e-6));
+    return P.map(q => [cx + (q[0] - cx) * f, cy + (q[1] - cy) * f]);
+  }
+  // Every visible tile: its polygon in FRAME coords (spread apart for grout) and the shift that
+  // samples its own piece of slab (spread less, by kerf) - so veins drift across the joints.
+  function tileInstances() {
+    const u = T.sizeIn, pat = PATTERNS[T.pattern](u);
+    const noSpread = !!pat.overlap;                                   // scales overlap - never pushed apart
+    const floorS = noSpread ? 1 : (u + T.groutIn) / u, slabS = noSpread ? 1 : (u + T.kerfIn) / u;
+    const cx = 0.5, cy = H / 2;
+    const ax = pat.ax, ay = pat.ay, out = [];
+    const reach = Math.ceil(IN / Math.min(Math.hypot(ax[0], ax[1]), Math.hypot(ay[0], ay[1]))) + 2;
+    for (let n = -reach; n <= reach; n++) for (let m = -reach; m <= reach; m++) {
+      for (let pi = 0; pi < pat.polys.length; pi++) {
+        const base = pat.polys[pi].map(q => [q[0] + n * ax[0] + m * ay[0], q[1] + n * ax[1] + m * ay[1]]);
+        const ctr = polyCentroid(base);                 // inches from the slab origin
+        const fc = [inFr(ctr[0]) * floorS, inFr(ctr[1]) * floorS];    // floor centre (spread by grout)
+        const poly = base.map(q => [cx + fc[0] + (inFr(q[0]) - inFr(ctr[0])), cy + fc[1] + (inFr(q[1]) - inFr(ctr[1]))]);
+        // cull tiles fully off-frame
+        let on = false; for (const q of poly) if (q[0] > -0.05 && q[0] < 1.05 && q[1] > -0.05 && q[1] < H + 0.05) { on = true; break; }
+        if (!on) continue;
+        const sc = [inFr(ctr[0]) * slabS, inFr(ctr[1]) * slabS];      // where this tile was cut
+        const shift = [cx + fc[0] - (cx + sc[0]), cy + fc[1] - (cy + sc[1])];   // floor - slab
+        out.push({ poly, shift, key: T.pattern + ':' + n + ':' + m + ':' + pi, n, m, pi, ctr });
+      }
+    }
+    return out;
+  }
+  // The authored stone, rendered once to an offscreen the size of the slab, reused by every tile.
+  const stoneC = document.createElement('canvas');
+  let stoneReady = false;
+  const SW = 1600, SH = Math.round(SW * H);
+  function renderStoneOffscreen() {
+    stoneC.width = SW; stoneC.height = SH;
+    const c = stoneC.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, SW, SH);
+    c.fillStyle = FAM[fam].ground; c.fillRect(0, 0, SW, SH);   // the slab's own ground, so tiles are stone not grout
+    const prev = g2d; g2d = c; c.setTransform(SW, 0, 0, SW, 0, 0); c.lineCap = 'round'; c.lineJoin = 'round';
+    paintStoneContent(false, false);
+    g2d = prev; stoneReady = true;
+  }
+  const chipMap = () => { const mp = new Map(); for (const mk of marks) if (mk.kind === 'chip') (mp.get(mk.tileKey) || mp.set(mk.tileKey, []).get(mk.tileKey)).push(mk); return mp; };
+  function chipEdge(poly, mk) {                          // replace one edge with a jagged inward bite
+    const i = mk.edge % poly.length, a = poly[i], b = poly[(i + 1) % poly.length];
+    const ex = b[0] - a[0], ey = b[1] - a[1], L = Math.hypot(ex, ey) || 1, nx = ey / L, ny = -ex / L;
+    const cd = Math.min(inFr(T.chipIn), L * 0.45), [r] = sub(mk.seed, 70), steps = 4;
+    const t0 = 0.5 - cd / L / 2 * (0.8 + 0.4 * r()), t1 = 0.5 + cd / L / 2 * (0.8 + 0.4 * r());
+    const res = [];                                     // edge i split by a jagged bite, the rest kept in order
+    for (let k = 0; k < poly.length; k++) {
+      res.push(poly[k]);
+      if (k === i) for (let q = 0; q <= steps; q++) {
+        const t = t0 + (t1 - t0) * q / steps, dep = cd * Math.sin(Math.PI * q / steps) * (0.6 + 0.5 * r());
+        res.push([a[0] + ex * t + nx * dep, a[1] + ey * t + ny * dep]);
+      }
+    }
+    return res;
+  }
+  const GROUT = '#20222a';
+  function drawTiles(F) {
+    if (!stoneReady) renderStoneOffscreen();
+    const px = 1 / (Wc * V.z);
+    ctx.fillStyle = GROUT; ctx.fillRect(V.cx - 0.6 / V.z, V.cy - 0.6 / V.z, 1.2 / V.z, 1.2 / V.z);
+    const pat = PATTERNS[T.pattern](T.sizeIn);
+    const inst = tileInstances(), chips = chipMap();
+    if (pat.overlap) inst.sort((a, b) => b.ctr[1] - a.ctr[1]);       // lower scales first, upper cover their tops
+    const rng = mulberry32(1234567);
+    for (const t of inst) {
+      let poly = insetPoly(t.poly, inFr(T.groutIn) * 0);   // grout already in the spread; keep full poly
+      if (T.edge === 'tumbled') poly = insetPoly(poly, inFr(0.04 * T.sizeIn));
+      const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
+      let shift = t.shift;
+      if (T.shuffle) { const [r] = sub(mix(t.n, t.m, t.pi, 99), 1); shift = [t.shift[0] + (r() - 0.5) * 0.7, t.shift[1] + (r() - 0.5) * 0.7 * H]; }
+      ctx.save();
+      ctx.beginPath(); poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath(); ctx.clip();
+      ctx.imageSmoothingEnabled = true;
+      // WRAP the slab: a tile's sampled patch drifts (kerf, shuffle) and can fall past the slab edge -
+      // draw the slab image repeated across the tile's box so it is always stone, never bare grout.
+      let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+      for (const q of poly) { if (q[0] < bx0) bx0 = q[0]; if (q[0] > bx1) bx1 = q[0]; if (q[1] < by0) by0 = q[1]; if (q[1] > by1) by1 = q[1]; }
+      const i0 = Math.floor(bx0 + shift[0]), i1 = Math.floor(bx1 + shift[0]);
+      const j0 = Math.floor((by0 + shift[1]) / H), j1 = Math.floor((by1 + shift[1]) / H);
+      for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) ctx.drawImage(stoneC, i - shift[0], j * H - shift[1], 1, H);
+      ctx.restore();
+      if (pat.overlap) {                                // scales overlap - outline each in order so the scallop of the one below stays visible
+        ctx.strokeStyle = GROUT; ctx.lineWidth = Math.max(px, inFr(T.groutIn) * 0.7);
+        ctx.beginPath(); poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath(); ctx.stroke();
+      }
+      edgeFinish(poly, px);
+    }
+    if (T.joints && !pat.overlap) { ctx.strokeStyle = GROUT; ctx.lineWidth = Math.max(px, inFr(T.groutIn));
+      for (const t of inst) { let poly = t.poly; const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
+        ctx.beginPath(); poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath(); ctx.stroke(); } }
+    drawScaleBar();
+  }
+  // Edge finish: a lit chamfer. Light from the top-left, so top/left edges catch it, bottom/right fall dark.
+  function edgeFinish(poly, px) {
+    if (T.edge === 'square') return;
+    const w = T.edge === 'bevel' ? inFr(0.09 * T.sizeIn) : inFr(0.13 * T.sizeIn);
+    const inner = insetPoly(poly, w), passes = T.edge === 'pillow' || T.edge === 'tumbled' ? 5 : 2;
+    for (let s = 0; s < passes; s++) {
+      const f = passes === 1 ? 1 : s / (passes - 1), ring = poly.map((q, i) => [q[0] + (inner[i][0] - q[0]) * f, q[1] + (inner[i][1] - q[1]) * f]);
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i], b = ring[(i + 1) % ring.length], nx = (b[1] - a[1]), ny = -(b[0] - a[0]), L = Math.hypot(nx, ny) || 1;
+        const lit = (nx / L * -0.7 + ny / L * -0.7);    // dot with the light from top-left
+        const shade = lit > 0 ? `rgba(255,255,255,${0.10 * lit * (1 - f)})` : `rgba(0,0,0,${0.16 * -lit * (1 - f)})`;
+        ctx.strokeStyle = shade; ctx.lineWidth = Math.max(px, w / passes * 1.4);
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      }
+    }
+  }
+  function whichTile(fx, fy) {
+    for (const t of tileInstances()) { let inside = false, P = t.poly;
+      for (let i = 0, j = P.length - 1; i < P.length; j = i++) if ((P[i][1] > fy) !== (P[j][1] > fy) && fx < (P[j][0] - P[i][0]) * (fy - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) inside = !inside;
+      if (inside) { // nearest edge
+        let be = 0, bd = Infinity; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], ex = b[0] - a[0], ey = b[1] - a[1], tt = Math.max(0, Math.min(1, ((fx - a[0]) * ex + (fy - a[1]) * ey) / (ex * ex + ey * ey || 1))); const d = Math.hypot(fx - (a[0] + ex * tt), fy - (a[1] + ey * tt)); if (d < bd) { bd = d; be = i; } }
+        return { key: t.key, edge: be }; }
+    }
+    return null;
+  }
+
+  // ---- drawing
+  function size() {
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    Wc = cv.clientWidth || 360; Hc = Wc * H;
+    cv.width = Math.round(Wc * dpr); cv.height = Math.round(Hc * dpr);
+  }
+  const idColour = (id, t) => `hsl(${strHue(id)} 72% ${Math.round(28 + 50 * t)}%)`;
+  let live = null, g2d = ctx;
+  function draw() {
+    const F = FAM[fam], ident = view !== 'stone', angleView = view === 'angle';
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+    ctx.fillStyle = ident ? '#0c0d11' : F.ground; ctx.fillRect(0, 0, cv.width, cv.height);
+    const k = Wc * V.z * dpr;
+    ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (layTiles) { drawTiles(F); paintLive(); ctx.globalAlpha = 1; stat(); return; }
+    paintStoneContent(ident, angleView);
+    if (guidesOn) drawGuides();
+    paintLive(); ctx.globalAlpha = 1; stat();
+  }
+  function paintLive() {
+    if (live && live.samples && live.samples.length > 1) {
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = view === 'stone' ? '#5b7cff' : '#ffffff'; ctx.lineWidth = 1.6 / (Wc * V.z);
+      ctx.beginPath(); ctx.moveTo(live.samples[0][0], live.samples[0][1]);
+      for (const p of live.samples) ctx.lineTo(p[0], p[1]);
+      ctx.stroke();
+    }
+  }
+  function paintStoneContent(ident, angleView) {
+    const F = FAM[fam];
+    if (F.grain) {
+      geo.grain.forEach((gl, k) => {
+        g2d.beginPath(); g2d.moveTo(gl.pts[0][0], gl.pts[0][1]);
+        for (let i = 1; i < gl.pts.length; i++) g2d.lineTo(gl.pts[i][0], gl.pts[i][1]);
+        g2d.strokeStyle = ident ? idColour(gl.id, 0.6) : F.grain; g2d.globalAlpha = ident ? 0.8 : gl.a;
+        g2d.lineWidth = gl.w; g2d.stroke();
+      });
+      for (const K of geo.knots) drawKnot(K, F, ident);
+    }
+    for (const e of geo.web) {
+      g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
+      for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
+      g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : F.web;
+      g2d.globalAlpha = ident ? 0.95 : 0.8; g2d.lineWidth = e.width; g2d.stroke();
+    }
+    for (const s of geo.specks) {
+      const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
+      g2d.globalAlpha = ident ? 0.9 : s.lum;
+      // Identity: a ground speck shows how far it was MOVED - cool where it lay, hot where pushed
+      // Angle: the way a speck points, as hue (axial, so 2x the angle); round specks point nowhere
+      g2d.fillStyle = !ident ? F.speck
+        : angleView ? (s.el > 1.3 ? `hsl(${Math.round(((2 * s.ang * 180 / Math.PI) % 360 + 360) % 360)} 78% 58%)` : '#3a3c48')
+        : s.ground ? `hsl(${Math.round(210 - 190 * Math.min(1, Math.hypot(s.x - s.x0, s.y - s.y0) / 0.008))} 80% 55%)`
+        : idColour('P' + s.mark, s.tn);
+      g2d.beginPath();
+      for (let q = 0; q < s.n; q++) {
+        const a = s.spin + q * 2 * Math.PI / s.n, rr = s.rad * s.jit[q], lx = Math.cos(a) * rr * s.el, ly = Math.sin(a) * rr;
+        const px = s.x + lx * ca - ly * sa, py = s.y + lx * sa + ly * ca;
+        if (q) g2d.lineTo(px, py); else g2d.moveTo(px, py);
+      }
+      g2d.closePath(); g2d.fill();
+    }
+    const order = geo.lines.filter(L => !L.major).concat(geo.lines.filter(L => L.major));
+    if (!ident) for (const L of order) runs(L, () => F.vein, L.gauge * 2.4 * F.soft, 0.08, true);  // shoulder
+    for (const L of order) runs(L, t => (ident ? idColour(L.id, t) : F.vein), null, ident ? 1 : 0.94, false);
+  }
+  function ellipse(K, f, jit) {
+    ctx.beginPath();
+    for (let q = 0; q <= 48; q++) {
+      const a = q / 48 * 2 * Math.PI, rr = K.R * f * (1 + (jit ? jit(a) : 0));
+      const lx = Math.cos(a) * rr * K.ex, ly = Math.sin(a) * rr;
+      const x = K.x + lx * K.c - ly * K.s, y = K.y + lx * K.s + ly * K.c;
+      if (q) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+  }
+  // A knot is a branch cut across: its own small rings, darker, a dark rim, the pith at its heart.
+  function drawKnot(K, F, ident) {
+    const [r] = sub(K.seed, 50), p1 = r() * 6.28, p2 = r() * 6.28, nr = 4 + Math.floor(r() * 3);
+    const jit = a => 0.05 * (0.6 * Math.sin(3 * a + p1) + 0.4 * Math.sin(5 * a + p2));
+    ellipse(K, 1, jit); ctx.fillStyle = ident ? idColour(K.id, 0.35) : F.knot; ctx.globalAlpha = 0.88; ctx.fill();
+    ctx.strokeStyle = ident ? idColour(K.id, 0.8) : F.grain; ctx.globalAlpha = 0.85;
+    for (let k = 1; k < nr; k++) { ellipse(K, k / nr, jit); ctx.lineWidth = 0.0008; ctx.stroke(); }
+    ellipse(K, 1, jit); ctx.lineWidth = 0.0016; ctx.strokeStyle = ident ? '#ffffff' : '#3a2412'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(K.x, K.y, K.R * 0.08, 0, 2 * Math.PI); ctx.fillStyle = '#2e1c0e'; ctx.fill();
+  }
+  // Guides are for you, not the stone: a filled dot pulls, an open ring pushes, its size is the
+  // reach; a gravity line carries a band each side as wide as its reach, solid to pull, dashed to push.
+  function drawScaleBar() {
+    const ftPx = Wc * V.z / SLAB_FT, useIn = ftPx > 700, len = useIn ? ftPx / 12 : ftPx;
+    const label = useIn ? '1 in' : '1 ft', dark = view === 'stone' && !layTiles;
+    ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const x0 = 12, y0 = Hc - 14;
+    ctx.strokeStyle = dark ? '#000000' : '#ffffff'; ctx.lineWidth = 3; ctx.globalAlpha = 0.35;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + len, y0); ctx.stroke();
+    ctx.strokeStyle = dark ? '#ffffff' : '#ffd36b'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.95;
+    ctx.beginPath(); ctx.moveTo(x0, y0 - 4); ctx.lineTo(x0, y0); ctx.lineTo(x0 + len, y0); ctx.lineTo(x0 + len, y0 - 4); ctx.stroke();
+    ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace'; ctx.fillStyle = ctx.strokeStyle;
+    ctx.fillText(label, x0 + len + 6, y0 + 3); ctx.restore(); ctx.globalAlpha = 1;
+  }
+  function drawGuides() {
+    const px = 1 / (Wc * V.z);
+    ctx.lineWidth = 1.4 * px;
+    for (const gd of geo.guides) {
+      if (gd.type === 'mag') {                          // the magnet's path, and how the pen was held along it
+        ctx.strokeStyle = gd.sign > 0 ? '#b98cff' : '#ff7ab0'; ctx.globalAlpha = gd.hover ? 0.45 : 0.8;
+        ctx.setLineDash(gd.hover ? [3 * px, 4 * px] : []);
+        ctx.beginPath(); gd.pts.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.stroke();
+        ctx.setLineDash([]);
+        for (let i = 0; i < gd.pts.length; i += 6) {
+          const [lean, az] = gd.axis[i], q = gd.pts[i];
+          if (lean == null || az == null) continue;
+          const L = 0.004 + 0.02 * lean;
+          ctx.beginPath(); ctx.moveTo(q[0], q[1]); ctx.lineTo(q[0] + Math.cos(az) * L, q[1] + Math.sin(az) * L); ctx.stroke();
+        }
+        continue;
+      }
+      const col = gd.sign > 0 ? '#5b7cff' : '#ff8a5b';
+      ctx.strokeStyle = col; ctx.fillStyle = col;
+      if (gd.type === 'pt') {
+        ctx.beginPath(); ctx.arc(gd.x, gd.y, gd.reach, 0, 2 * Math.PI);
+        if (gd.sign > 0) { ctx.globalAlpha = 0.13; ctx.fill(); ctx.beginPath(); ctx.arc(gd.x, gd.y, 5 * px, 0, 2 * Math.PI); ctx.globalAlpha = 0.95; ctx.fill(); }
+        else { ctx.globalAlpha = 0.9; ctx.stroke(); ctx.beginPath(); ctx.arc(gd.x, gd.y, 4 * px, 0, 2 * Math.PI); ctx.stroke(); }
+      } else {
+        const P = gd.pts;
+        ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]); for (const q of P) ctx.lineTo(q[0], q[1]); ctx.stroke();
+        ctx.setLineDash(gd.sign > 0 ? [] : [6 * px, 5 * px]); ctx.globalAlpha = 0.45;
+        for (const side of [1, -1]) {
+          ctx.beginPath();
+          P.forEach((q, i) => {
+            const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+            const x = q[0] - (b[1] - a[1]) / L * gd.reach * side, y = q[1] + (b[0] - a[0]) / L * gd.reach * side;
+            if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+          });
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      }
+    }
+    for (const K of geo.knots) {                       // where the knots are, whatever the stone
+      ctx.strokeStyle = '#ffd36b'; ctx.globalAlpha = 0.75; ctx.setLineDash([4 * px, 4 * px]);
+      ellipse(K, 1); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+    drawScaleBar();
+  }
+  // Draw a line in runs of ~6 segments, skipping its breaks. The shoulder is one width per run;
+  // the core follows the swell and pinch.
+  function runs(L, colour, fixedWidth, alpha, shoulder) {
+    const n = L.w.length, CH = shoulder ? 24 : 6;
+    for (let i = 0; i < n; i += CH) {
+      const j = Math.min(n, i + CH);
+      let wsum = 0, c = 0, open = false;
+      g2d.beginPath();
+      for (let s = i; s < j; s++) {
+        if (!L.keep[s]) { open = false; continue; }
+        if (!open) { g2d.moveTo(L.pts[s][0], L.pts[s][1]); open = true; }
+        g2d.lineTo(L.pts[s + 1][0], L.pts[s + 1][1]); wsum += L.w[s]; c++;
+      }
+      if (!c) continue;
+      let lv = 0;
+      if (L.lean) { for (let q = i; q < j; q++) lv += L.lean[q]; lv /= (j - i); }
+      g2d.lineWidth = fixedWidth != null ? fixedWidth * (1 + 2.5 * lv) : (wsum / c) * (1 - 0.35 * lv);
+      g2d.strokeStyle = colour((L.cum[i] + L.cum[j]) / 2 / L.total);
+      g2d.globalAlpha = Math.min(1, alpha * (shoulder ? 1 + 1.4 * lv : 1 - 0.3 * lv)); g2d.stroke();
+    }
+  }
+  let queued = false;
+  function redraw(rebuild) {
+    if (rebuild) needBuild = true;
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; if (needBuild) { build(); stoneReady = false; needBuild = false; } draw(); });
+  }
+  let needBuild = false;
+  const statEl = document.getElementById('stat');
+  function stat() {
+    statEl.textContent = `${marks.length} marks · ${geo.lines.length} vein lines · ${geo.web.length} cracks · ${geo.specks.length} specks · 8 × 5 ft · ${V.z.toFixed(1)}×`;
+  }
+
+  // ---- view
+  function clampView() {
+    V.z = Math.min(8, Math.max(1, V.z));
+    const hw = 0.5 / V.z, hh = H / 2 / V.z;
+    V.cx = Math.min(1 - hw, Math.max(hw, V.cx)); V.cy = Math.min(H - hh, Math.max(hh, V.cy));
+  }
+  const toFrame = (ex, ey) => [V.cx + (ex - Wc / 2) / (Wc * V.z), V.cy + (ey - Hc / 2) / (Wc * V.z)];
+  function zoomAt(ex, ey, f) {
+    const [fx, fy] = toFrame(ex, ey);
+    V.z *= f; clampView();
+    V.cx = fx - (ex - Wc / 2) / (Wc * V.z); V.cy = fy - (ey - Hc / 2) / (Wc * V.z); clampView();
+    redraw(false);
+  }
+
+  // ---- input
+  const hintEl = document.getElementById('hint');
+  const HINTS = {
+    vein: 'Draw a line. The family roughens it, swells and breaks it, and grows its minor veins.',
+    branch: 'Tap a vein on the side you want a minor vein to grow, or drag out from it to route one. Zoom in for shorter minors.',
+    web: 'Draw a line. A crack runs along it and a web of cells spreads from it and thins out.',
+    pour: 'Draw a line and lift. Specks pour along it: slow pools, fast thins, sharp bends fling drops.',
+    gravity: 'Tap for a point of gravity, or drag to lay a line of it. Pull gathers specks, push clears them; they bunch but never touch.',
+    knot: 'Tap to set a knot, or drag out from its centre to size it. The grain flows around it in Wood.',
+    magnet: 'Drag to comb the specks like iron filings. The pen\u2019s angle is the magnet: upright fans them out from the tip, laid over combs them along its lean. Slow passes align harder.',
+    move: 'Drag to move around. Pinch, or use + and −, to zoom.',
+  };
+  let flashT = 0;
+  function hint(msg) {
+    hintEl.textContent = msg || HINTS[tool];
+    hintEl.classList.toggle('flash', !!msg);
+    clearTimeout(flashT);
+    if (msg) flashT = setTimeout(() => hint(), 2600);
+  }
+  const ptrs = new Map();
+  // YOUR REST ANGLE is your GRIP: the median lean of your recent drawing (last ~15 s of contact).
+  // Hover just before touch-down proved a poor proxy - in his dump it read 49 deg while he drew at
+  // 42, because the pen wanders on the approach. Hover (last 0.5 s) and then the stroke's own start
+  // are only fallbacks until there is history. A grip baseline also lets a stroke laid over on
+  // purpose be soft from its first point, instead of measured against its own start.
+  let hoverLean = [], gripLean = [];
+  const med = a => { const v = a.slice().sort((x, y) => x - y); return v[v.length >> 1]; };
+  function restLean() {
+    if (gripLean.length >= 60) return med(gripLean);
+    const t = performance.now(), v = hoverLean.filter(h => t - h.t < 500).map(h => h.v);
+    return v.length >= 5 ? med(v) : null;
+  }
+  let gesture = null;                                   // { type: 'draw'|'pan'|'pinch'|'branch', ... }
+  const local = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  const now = () => performance.now() / 1000;
+  const pen = e => (e.pointerType === 'pen' ? e.pressure : null);
+  function azOf(e) {
+    if (e.pointerType !== 'pen') return null;
+    const tx = (e.tiltX || 0) * Math.PI / 180, ty = (e.tiltY || 0) * Math.PI / 180;
+    if (!tx && !ty) return e.azimuthAngle != null && e.altitudeAngle != null && e.altitudeAngle < Math.PI / 2 - 1e-3 ? e.azimuthAngle : null;
+    return Math.atan2(Math.tan(ty), Math.tan(tx));
+  }
+  function leanOf(e) {
+    if (e.pointerType !== 'pen') return null;
+    const tx = (e.tiltX || 0) * Math.PI / 180, ty = (e.tiltY || 0) * Math.PI / 180;
+    const alt = (tx || ty) ? Math.atan2(1, Math.hypot(Math.tan(tx), Math.tan(ty)))
+                           : (e.altitudeAngle != null ? e.altitudeAngle : Math.PI / 2);
+    return Math.min(1, Math.max(0, 1 - alt / (Math.PI / 2)));
+  }
+  function nearestLine(fx, fy) {
+    let best = null;
+    for (const L of geo.lines) {
+      for (let i = 0; i < L.pts.length; i++) {
+        const d = Math.hypot(L.pts[i][0] - fx, L.pts[i][1] - fy);
+        if (!best || d < best.d) best = { L, i, d };
+      }
+    }
+    return best;
+  }
+  cv.addEventListener('pointerdown', e => {
+    try { cv.setPointerCapture(e.pointerId); } catch (_) { /* a nicety */ }
+    ptrs.set(e.pointerId, local(e));
+    e.preventDefault();
+    if (ptrs.size === 2) {                              // a second finger turns anything into a pinch
+      const [a, b] = [...ptrs.values()];
+      gesture = { type: 'pinch', d0: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, z0: V.z,
+                  f0: toFrame((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) };
+      live = null; redraw(false); return;
+    }
+    if (ptrs.size > 2) return;
+    const [ex, ey] = local(e), f = toFrame(ex, ey);
+    if (tool === 'move') { gesture = { type: 'pan', e0: [ex, ey], c0: [V.cx, V.cy] }; return; }
+    if (tool === 'branch') {
+      const hit = nearestLine(f[0], f[1]);
+      if (!hit || hit.d * Wc * V.z > 26) { gesture = null; hint('Tap on a vein to grow a minor vein off it.'); return; }
+      gesture = { type: 'branch', hit, e0: [ex, ey], samples: [[hit.L.pts[hit.i][0], hit.L.pts[hit.i][1], now(), pen(e), leanOf(e), azOf(e)]], moved: false,
+                  rest: e.pointerType === 'pen' ? restLean() : null };
+      live = gesture; redraw(false); return;
+    }
+    gesture = { type: 'draw', e0: [ex, ey], samples: [[f[0], f[1], now(), pen(e), leanOf(e), azOf(e)]], rest: e.pointerType === 'pen' ? restLean() : null };
+    live = gesture; redraw(false);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.set(e.pointerId, local(e));
+    if (!gesture) return;
+    if (gesture.type === 'pinch' && ptrs.size >= 2) {
+      const [a, b] = [...ptrs.values()], mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      V.z = gesture.z0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / gesture.d0; clampView();
+      V.cx = gesture.f0[0] - (mid[0] - Wc / 2) / (Wc * V.z); V.cy = gesture.f0[1] - (mid[1] - Hc / 2) / (Wc * V.z);
+      clampView(); redraw(false); return;
+    }
+    const [ex, ey] = local(e);
+    if (gesture.type === 'pan') {
+      V.cx = gesture.c0[0] - (ex - gesture.e0[0]) / (Wc * V.z); V.cy = gesture.c0[1] - (ey - gesture.e0[1]) / (Wc * V.z);
+      clampView(); redraw(false); return;
+    }
+    const f = toFrame(ex, ey);
+    if (gesture.type === 'branch' && Math.hypot(ex - gesture.e0[0], ey - gesture.e0[1]) > 12) gesture.moved = true;
+    gesture.samples.push([f[0], f[1], now(), pen(e), leanOf(e), azOf(e)]);
+    redraw(false);
+  });
+  function commit(m) { marks.push({ ...m, p: { ...NEXT }, fam }); redraw(true); }
+  function end(e) {
+    ptrs.delete(e.pointerId);
+    const g = gesture;
+    if (!g) return;
+    if (g.type === 'pinch') { if (ptrs.size === 0) gesture = null; return; }
+    gesture = null; live = null;
+    const seed = (Math.random() * 2147483647) | 0, id = nextId++;
+    if (g.type === 'draw' && tool === 'gravity') {
+      commit(pathLen(g.samples) < 0.01 ? { id, kind: 'gravity', seed, at: [g.samples[0][0], g.samples[0][1]] }
+                                        : { id, kind: 'gravity', seed, samples: g.samples });
+      if (!FAM[fam].groundSpecks && !marks.some(m => m.kind === 'pour')) hint('Gravity moves specks. Switch to Granite, or pour some first.');
+    } else if (g.type === 'draw' && tool === 'chip') {
+      const f = toFrame(...g.e0 || [0, 0]);
+      const hit = whichTile(f[0], f[1]);
+      if (hit) commit({ id, kind: 'chip', seed, tileKey: hit.key, edge: hit.edge });
+      else hint(layTiles ? 'Tap on a tile to chip its nearest edge.' : 'Turn Lay tiles on first, then tap a tile edge to chip it.');
+    } else if (g.type === 'draw' && tool === 'magnet') {
+      commit({ id, kind: 'magnet', seed, samples: g.samples });
+      if (!geo.specks.length) hint('The magnet turns specks. Switch to Granite, or pour some first.');
+    } else if (g.type === 'draw' && tool === 'knot') {
+      const a = g.samples[0], b = g.samples[g.samples.length - 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      commit({ id, kind: 'knot', seed, at: [a[0], a[1]], R: len < 0.008 ? null : len });
+      if (!FAM[fam].grain) hint('Knot set. Its grain shows in Wood.');
+    } else if (g.type === 'draw') {
+      if (tool !== 'pour' && pathLen(g.samples) < 0.02) { nextId--; redraw(false); return; }
+      commit({ id, kind: tool, seed, samples: g.samples, rest: g.rest });
+      if (NEXT.pressure && tool !== 'web' && !pressureReal(g.samples)) hint('That input sent no pressure, so the line used its normal gauge.');
+      else if (NEXT.tilt && (tool === 'vein') && !tiltReal(g.samples)) hint('That input sent no tilt, so the line kept its normal edge.');
+    } else if (g.type === 'branch') {
+      const L = g.hit.L, t = L.cum[g.hit.i] / L.total;
+      if (g.moved) commit({ id, kind: 'branch', seed, parent: L.id, at: t, samples: g.samples, zoom: V.z, rest: g.rest });
+      else {
+        const [ex, ey] = g.e0, f = toFrame(ex, ey), p = L.pts[g.hit.i], th = tangent(L, t);
+        const vx = f[0] - p[0], vy = f[1] - p[1], cross = Math.cos(th) * vy - Math.sin(th) * vx;
+        const side = Math.hypot(vx, vy) * Wc * V.z > 3 ? Math.sign(cross) : 0;
+        commit({ id, kind: 'branch', seed, parent: L.id, at: t, side, zoom: V.z });
+      }
+    } else redraw(false);
+  }
+  let hoverMag = false, hoverTrace = null, hoverTimer = 0;
+  function commitHover() {
+    clearTimeout(hoverTimer);
+    const tr = hoverTrace; hoverTrace = null;
+    if (tr && tr.length > 2) { live = null; commit({ id: nextId++, kind: 'magnet', seed: (Math.random() * 2147483647) | 0, samples: tr, hover: true }); }
+  }
+  cv.addEventListener('pointermove', e => {
+    if (tool !== 'magnet' || !hoverMag || e.buttons !== 0 || e.pointerType === 'touch' || gesture) return;
+    const [ex, ey] = local(e), f = toFrame(ex, ey);
+    (hoverTrace = hoverTrace || []).push([f[0], f[1], now(), null, leanOf(e), azOf(e)]);
+    clearTimeout(hoverTimer); hoverTimer = setTimeout(commitHover, 500);
+    live = { samples: hoverTrace }; redraw(false);
+  });
+  cv.addEventListener('pointerleave', commitHover);
+  cv.addEventListener('pointerdown', () => { if (hoverTrace) commitHover(); }, true);
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+  cv.addEventListener('wheel', e => { e.preventDefault(); const [ex, ey] = local(e); zoomAt(ex, ey, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+
+  // ---- controls
+  const press = (sel, on) => { for (const o of document.querySelectorAll(sel)) o.setAttribute('aria-pressed', o === on); };
+  function showGround() {
+    const F = FAM[fam];
+    document.getElementById('ground').hidden = !(F.groundSpecks || F.grain);
+    document.getElementById('g-granite').hidden = !F.groundSpecks;
+    document.getElementById('g-wood').hidden = !F.grain;
+  }
+  // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
+  for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
+  for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
+    tool = b.dataset.tool; press('[data-tool]', b); hint();
+    const show = tool === 'move' ? 'vein' : tool;
+    for (const k of ['vein', 'branch', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
+  });
+  for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
+  for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
+  const mh = document.getElementById('m-hover');
+  mh.addEventListener('click', () => {
+    hoverMag = !hoverMag; mh.setAttribute('aria-pressed', hoverMag); if (!hoverMag) commitHover();
+    hint(hoverMag ? 'Hover traces on: move the pen or mouse just above the slab to work lightly; each pause keeps the trace.' : null);
+  });
+  const gb = document.getElementById('guides');
+  gb.addEventListener('click', () => { guidesOn = !guidesOn; gb.setAttribute('aria-pressed', guidesOn); redraw(false); });
+  for (const id of Object.keys(G)) {
+    const el = document.getElementById(id);
+    const show = () => { document.getElementById(id + 'V').textContent = GFMT[id] ? GFMT[id](G[id]) : `${(+G[id]).toFixed(2)}\u00d7`; };
+    el.value = G[id]; show();
+    el.addEventListener('input', () => { G[id] = +el.value; show(); redraw(true); });   // the slab: at once
+  }
+  for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => { view = b.dataset.view; press('[data-view]', b); redraw(false); });
+  for (const id of Object.keys(NEXT)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const show = () => { document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; };
+    el.value = NEXT[id]; show();
+    el.addEventListener('input', () => { NEXT[id] = +el.value; show(); });   // the next line only
+  }
+  const pp = document.getElementById('pen-pressure');
+  pp.addEventListener('click', () => {
+    NEXT.pressure = !NEXT.pressure; pp.setAttribute('aria-pressed', NEXT.pressure);
+    hint(NEXT.pressure ? 'Pressure is on for your next lines: press harder for a heavier vein or more paint, lighter to thin it out.' : null);
+  });
+  const pt = document.getElementById('pen-tilt');
+  pt.addEventListener('click', () => {
+    NEXT.tilt = !NEXT.tilt; pt.setAttribute('aria-pressed', NEXT.tilt);
+    hint(NEXT.tilt ? 'Tilt is on for your next veins: hold the pen as you normally do for a crisp edge, lean it further over to soften and spread it.' : null);
+  });
+  const penlive = document.getElementById('penlive');
+  cv.addEventListener('pointermove', e => {                     // hover included: a live check that tilt is real
+    if (e.pointerType !== 'pen') return;
+    const v = leanOf(e);
+    if (e.buttons === 0) { const t = performance.now(); hoverLean.push({ t, v }); hoverLean = hoverLean.filter(h => t - h.t < 1500); }
+    else { gripLean.push(v); if (gripLean.length > 900) gripLean.splice(0, gripLean.length - 900); }
+    const r = restLean();
+    penlive.textContent = `pressure ${e.pressure.toFixed(2)} · lean ${Math.round(v * 90)}°` + (r != null ? ` · rest ${Math.round(r * 90)}°` : '');
+  });
+  const lt = document.getElementById('laytiles');
+  lt.addEventListener('click', () => { layTiles = !layTiles; lt.setAttribute('aria-pressed', layTiles); redraw(false); });
+  for (const b of document.querySelectorAll('[data-pat]')) b.addEventListener('click', () => { T.pattern = b.dataset.pat; press('[data-pat]', b); if (!layTiles) { layTiles = true; lt.setAttribute('aria-pressed', true); } redraw(false); });
+  for (const b of document.querySelectorAll('[data-edge]')) b.addEventListener('click', () => { T.edge = b.dataset.edge; press('[data-edge]', b); redraw(false); });
+  for (const b of document.querySelectorAll('[data-lay]')) b.addEventListener('click', () => { T.shuffle = b.dataset.lay === 'shuffle'; press('[data-lay]', b); redraw(false); });
+  for (const b of document.querySelectorAll('[data-unit]')) b.addEventListener('click', () => { T.units = b.dataset.unit; press('[data-unit]', b); for (const id of Object.keys(TFMT)) { const el = document.getElementById(id === 'chipsize' ? 'chipsize' : id); if (el) document.getElementById(id + 'V').textContent = TFMT[id](+el.value); } });
+  const jb = document.getElementById('t-joints');
+  jb.addEventListener('click', () => { T.joints = !T.joints; jb.setAttribute('aria-pressed', T.joints); redraw(false); });
+  for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) {
+    const el = document.getElementById(id);
+    const show = () => { document.getElementById(id + 'V').textContent = TFMT[id](+el.value); };
+    el.value = T[key]; show();
+    el.addEventListener('input', () => { T[key] = +el.value; show(); redraw(false); });
+  }
+  document.getElementById('undo').addEventListener('click', () => { marks.pop(); redraw(true); });
+  document.getElementById('reroll').addEventListener('click', () => {
+    const m = marks[marks.length - 1]; if (!m) return;
+    m.seed = (Math.random() * 2147483647) | 0; redraw(true);
+  });
+  document.getElementById('clear').addEventListener('click', () => { marks = []; redraw(true); });
+  document.getElementById('zin').addEventListener('click', () => zoomAt(Wc / 2, Hc / 2, 1.5));
+  document.getElementById('zout').addEventListener('click', () => zoomAt(Wc / 2, Hc / 2, 1 / 1.5));
+  document.getElementById('zfit').addEventListener('click', () => { V.z = 1; V.cx = 0.5; V.cy = H / 2; redraw(false); });
+
+  // ---- an example to start from: two veins, a web, one minor grown by tap
+  function stroke(fn, n = 60) { const out = []; for (let i = 0; i <= n; i++) { const u = i / n, [x, y] = fn(u); out.push([x, y, u * 1.2]); } return out; }
+  marks = [
+    { id: 1, kind: 'vein', seed: 1101, samples: stroke(u => [-0.04 + 1.08 * u, 0.47 - 0.33 * u + 0.045 * Math.sin(2 * Math.PI * (1.2 * u + 0.1))]) },
+    { id: 2, kind: 'vein', seed: 1102, samples: stroke(u => [0.08 + 0.95 * u, 0.64 - 0.25 * u - 0.03 * Math.sin(2 * Math.PI * 0.8 * u)]) },
+    { id: 3, kind: 'web', seed: 1103, samples: stroke(u => [0.60 + 0.30 * u, 0.50 - 0.08 * u + 0.01 * Math.sin(6 * u)]) },
+    { id: 4, kind: 'branch', seed: 1104, parent: 'L1', at: 0.42, side: 1, zoom: 1 },
+  ];
+  nextId = 5;
+  for (const m of marks) { m.p = { ...NEXT }; m.fam = fam; }
+  press('[data-fam]', document.getElementById('f-' + fam));
+  press('[data-tool]', document.getElementById('t-' + tool));
+  press('[data-view]', document.getElementById('v-' + view));
+  showGround();
+  hint();
+  size(); build(); draw();
+  if (window.ResizeObserver) {
+    let w = cv.clientWidth;
+    new ResizeObserver(() => { if (cv.clientWidth !== w) { w = cv.clientWidth; size(); draw(); } }).observe(cv);
+  }
+})();
+</script>

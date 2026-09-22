@@ -1,0 +1,438 @@
+<title>Pollock Pour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  /* One look on purpose - a dark slab - so no light theme; every colour is painted. */
+  :root {
+    --ground: #0a0b10; --line: #252736; --text: #d7d8e3; --dim: #8b8da2;
+    --btn: #161722; --on: #33365a; --on-line: #6b6ea0; --focus: #a3a6e6;
+    color-scheme: dark;
+  }
+  body { background: var(--ground); color: var(--text);
+         font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1232px; margin-inline: auto; padding-inline: 16px; padding-block: 18px 36px;
+          display: grid; gap: 14px; }
+  h1 { font-size: 18px; font-weight: 500; margin: 0; text-wrap: balance; }
+  .sub { margin: 2px 0 0; color: var(--dim); font-size: 13px; }
+  #field { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 10; border-radius: 6px;
+           outline: 1px solid var(--line); background: var(--ground); touch-action: none; cursor: crosshair; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+  .grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-right: 2px; }
+  button { font: inherit; font-size: 14px; background: var(--btn); color: var(--text);
+           border: 1px solid var(--line); border-radius: 5px; padding: 6px 11px; cursor: pointer; }
+  button[aria-pressed="true"] { background: var(--on); border-color: var(--on-line); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .swatch { width: 32px; height: 32px; padding: 0; border-radius: 50%; display: grid; place-items: center; }
+  .swatch span { width: 14px; height: 14px; border-radius: 50%; }
+  .sliders { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 18px; }
+  @media (min-width: 720px) { .sliders { grid-template-columns: repeat(4, 1fr); } }
+  .sl { display: grid; gap: 2px; }
+  .sl label { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; letter-spacing: .08em;
+              text-transform: uppercase; color: var(--dim); }
+  .sl output { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--text);
+               letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: #8a8de0; }
+  .stat { font: 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
+          font-variant-numeric: tabular-nums; }
+  .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 66ch; }
+  .note b { color: var(--text); font-weight: 500; }
+</style>
+<div class="wrap">
+  <div>
+    <h1>Pollock pour</h1>
+    <p class="sub">Draw a line on the stone. Lift, and it pours along the line like paint.</p>
+  </div>
+  <canvas id="field" aria-label="Speck field. Draw on it with a finger or a mouse to pour specks along the line."></canvas>
+  <div class="row">
+    <div class="grp" role="group" aria-label="Start from"><span class="lbl">Start from</span>
+      <button id="pPollock" type="button">Pollock</button>
+      <button id="pMercury" type="button">Mercury bands</button></div>
+    <div class="grp" role="group" aria-label="Edit"><span class="lbl">Edit</span>
+      <button id="undo" type="button">Undo</button>
+      <button id="clear" type="button">Clear</button>
+      <button id="sketch" type="button" aria-pressed="true">Sketch lines</button></div>
+    <span class="stat" id="stat">&mdash;</span>
+  </div>
+  <div class="sliders">
+    <div class="sl"><label for="rate">Pour <output id="rateV"></output></label>
+      <input id="rate" type="range" min="200" max="4000" step="50"></div>
+    <div class="sl"><label for="width">Width <output id="widthV"></output></label>
+      <input id="width" type="range" min="0.3" max="4" step="0.1"></div>
+    <div class="sl"><label for="fling">Fling <output id="flingV"></output></label>
+      <input id="fling" type="range" min="0" max="3" step="0.1"></div>
+    <div class="sl"><label for="bg">Ground specks <output id="bgV"></output></label>
+      <input id="bg" type="range" min="0" max="12000" step="250"></div>
+  </div>
+  <div class="grp" role="group" aria-label="Ink"><span class="lbl">Ink</span>
+    <button class="swatch" id="ink-speck" type="button" data-ink="speck" aria-label="Speck white"><span style="background:#ececf2"></span></button>
+    <button class="swatch" id="ink-aluminium" type="button" data-ink="aluminium" aria-label="Aluminium"><span style="background:#aeb6c4"></span></button>
+    <button class="swatch" id="ink-ochre" type="button" data-ink="ochre" aria-label="Ochre"><span style="background:#d9a441"></span></button>
+    <button class="swatch" id="ink-brick" type="button" data-ink="brick" aria-label="Brick"><span style="background:#c4573c"></span></button>
+    <button class="swatch" id="ink-teal" type="button" data-ink="teal" aria-label="Teal"><span style="background:#4fb3a9"></span></button>
+  </div>
+  <p class="note"><b>How it pours.</b> Paint leaves at a steady rate in time, so where your hand slows it
+    pools and where it hurries it thins; hold still and the puddle keeps spreading. On a fast, tight bend,
+    drops fly off along the tangent and land outside the curve, and lifting while you are still moving
+    flicks a tail. Moving a slider re-pours every line from the same gesture.</p>
+  <p class="note"><b>Mercury bands</b> is the simplest case: slow, straight, wide pours along
+    mercury-light's grain (&minus;72&deg;), with the same specks as the ground, only denser. The real
+    stone's speck density varies 1.7&times; more than random across its grain and not at all along it.</p>
+  <p class="note">The specks are grown like the measured noise granites: sizes spread lognormally, about
+    half are elongated, and the long ones loosely follow the stroke.</p>
+</div>
+<script>
+(() => {
+  const cv = document.getElementById('field'), ctx = cv.getContext('2d');
+  const H_RATIO = 0.625;
+  const INKS = { speck: '#ececf2', aluminium: '#aeb6c4', ochre: '#d9a441', brick: '#c4573c', teal: '#4fb3a9' };
+  const GROUND = '#0a0b10', NOISE_TINT = '#c9cad6', SKETCH = 'rgba(138,146,255,0.55)';
+  const PRESETS = {
+    pollock: { rate: 1500, width: 1.0, fling: 1.0, bg: 2500, ink: 'ochre' },
+    mercury: { rate: 700, width: 2.6, fling: 0, bg: 3500, ink: 'speck' },
+  };
+  const P = { ...PRESETS.pollock };
+  const BG_SEED = 11;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let strokes = [], showSketch = true, bgSpecks = [], scale = 1, dpr = 1, anim = null;
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  const gaussOf = r => () => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
+  // A Poisson count as the exact QUANTILE of one uniform, so a higher rate never draws FEWER
+  // specks from the same stream - two samplers stitched at a threshold are not monotone there.
+  function poisson(lam, r) {
+    const u = r();
+    if (lam <= 0) return 0;
+    const ll = Math.log(lam);
+    let k = 0, c = 0, lf = 0;
+    for (;;) {
+      c += Math.exp(k * ll - lam - lf);
+      if (c >= u || k > lam + 12 * Math.sqrt(lam) + 20) return k;
+      k++; lf += Math.log(k);
+    }
+  }
+  const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+
+  // One speck: an irregular 4-6 sided grain. Sizes are LOGNORMAL, log-sd 0.42 - the measured
+  // spread of the noise granites - and about half come out elongated, as measured.
+  function speck(r, g, x, y, t, o) {
+    const n = 4 + Math.floor(r() * 3), jit = new Float32Array(n);
+    for (let k = 0; k < n; k++) jit[k] = 1 + (r() - 0.5) * 0.6;
+    return {
+      x, y, t, n, jit, spin: r() * Math.PI * 2,
+      rad: 0.0016 * Math.exp(0.42 * g()) * (o.size || 1),
+      lum: o.lum != null ? o.lum : Math.min(1, Math.max(0.05, Math.exp(-1.1 + 0.55 * g()))),
+      ang: o.ang != null ? o.ang : r() * Math.PI,
+      el: o.el != null ? o.el : 1 + Math.abs(g()) * 0.85,
+      kind: o.kind || 'pour',
+    };
+  }
+  function drawSpeck(c, s) {
+    const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
+    c.globalAlpha = s.lum; c.beginPath();
+    for (let k = 0; k < s.n; k++) {
+      const a = s.spin + k * 2 * Math.PI / s.n, rr = s.rad * s.jit[k];
+      const lx = Math.cos(a) * rr * s.el, ly = Math.sin(a) * rr;
+      const px = s.x + lx * ca - ly * sa, py = s.y + lx * sa + ly * ca;
+      if (k) c.lineTo(px, py); else c.moveTo(px, py);
+    }
+    c.closePath(); c.fill();
+  }
+
+  function makeBg() {
+    // same seed every time, so moving the slider adds or removes specks without reshuffling
+    const r = mulberry32(BG_SEED), g = gaussOf(r);
+    bgSpecks = [];
+    for (let i = 0; i < P.bg; i++) bgSpecks.push(speck(r, g, r(), r() * H_RATIO, 0, {}));
+  }
+
+  // THE POUR. Paint leaves at a steady rate in TIME, so specks per unit length go as 1/speed:
+  // slow pools, fast thins. Width narrows with speed and keeps spreading while you dwell.
+  // Where speed^2 x curvature is high, drops leave along the tangent - outside the bend.
+  //
+  // ONE RANDOM STREAM PER ROLE PER SAMPLE, so a slider EDITS the painting instead of re-rolling
+  // it: raising Pour appends specks (the first k of each sample never move), Fling only adds or
+  // removes drops, Width only spreads what is already there.
+  function pour(st) {
+    const S = st.samples, n = S.length, out = [];
+    if (!n) return out;
+    const sub = (i, salt) => {
+      const r = mulberry32((st.seed ^ Math.imul(i + 1, 0x9E3779B1) ^ Math.imul(salt, 0x85EBCA77)) | 0);
+      return [r, gaussOf(r)];
+    };
+    const sp = new Float32Array(n), th = new Float32Array(n), ku = new Float32Array(n), k2 = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let a = i, b = i;
+      while (a > 0 && S[i].t - S[a].t < 0.03) a--;
+      while (b < n - 1 && S[b].t - S[i].t < 0.03) b++;
+      const dt = S[b].t - S[a].t;
+      const vx = dt > 1e-4 ? (S[b].x - S[a].x) / dt : 0, vy = dt > 1e-4 ? (S[b].y - S[a].y) / dt : 0;
+      sp[i] = Math.hypot(vx, vy);
+      th[i] = sp[i] > 0.02 ? Math.atan2(vy, vx) : (i ? th[i - 1] : 0);
+    }
+    for (let i = 1; i < n; i++) {
+      const ds = sp[i] * Math.max(S[i].t - S[i - 1].t, 0);
+      ku[i] = ds > 1e-5 ? Math.max(-300, Math.min(300, wrap(th[i] - th[i - 1]) / ds)) : 0;
+    }
+    for (let i = 0; i < n; i++) {
+      let s = 0, c = 0;
+      for (let j = Math.max(0, i - 2); j <= Math.min(n - 1, i + 2); j++) { s += ku[j]; c++; }
+      k2[i] = s / c;
+    }
+    const wid = v => P.width * (0.0035 + 0.02 * Math.exp(-v / 0.35));
+    const s0 = S[0];
+    {                                                                // the first touch splats
+      const [rc, gc] = sub(0, 1), [r, g] = sub(0, 2), w = wid(0) * 1.4;
+      for (let k = poisson(P.rate * 0.04, rc, gc); k > 0; k--)
+        out.push(speck(r, g, s0.x + g() * w, s0.y + g() * w, s0.t, { kind: 'splat' }));
+    }
+    let dwell = 0;
+    for (let i = 1; i < n; i++) {
+      const A = S[i - 1], B = S[i], dt = Math.min(Math.max(B.t - A.t, 0), 0.1), v = sp[i];
+      const tx = Math.cos(th[i]), ty = Math.sin(th[i]), nx = -ty, ny = tx;
+      dwell = v < 0.06 ? dwell + dt : dwell * 0.85;
+      const w = wid(v) * Math.sqrt(1 + dwell / 0.4);
+      {
+        const [rc, gc] = sub(i, 3), [r, g] = sub(i, 4);
+        for (let k = poisson(P.rate * dt, rc, gc); k > 0; k--) {
+          const u = r(), x = A.x + (B.x - A.x) * u, y = A.y + (B.y - A.y) * u;
+          const al = g() * w * 0.5, ac = g() * w;
+          out.push(speck(r, g, x + tx * al + nx * ac, y + ty * al + ny * ac, A.t + (B.t - A.t) * u,
+                         { ang: th[i] + g() * 0.9 }));              // loosely combed along the stroke
+        }
+      }
+      const acc = v * v * Math.abs(k2[i]);
+      if (P.fling > 0 && acc > 3) {
+        const side = -Math.sign(k2[i]);                              // the outside of the bend
+        const [rc, gc] = sub(i, 5), [r, g] = sub(i, 6);
+        for (let m = poisson(Math.min(P.fling * (acc / 3 - 1) * dt * 60, 8), rc, gc); m > 0; m--) {
+          const d = v * (0.03 + 0.07 * r()), off = d * 0.3 * r() * side;
+          out.push(speck(r, g, B.x + tx * d + nx * off + g() * 0.002, B.y + ty * d + ny * off + g() * 0.002,
+                         B.t + 0.04, { size: 1.4 + r() * 1.2, lum: 0.55 + r() * 0.45,
+                                       ang: th[i] + g() * 0.15, el: 1.6 + r() * 1.8, kind: 'fling' }));
+        }
+      }
+    }
+    const L = S[n - 1], ve = sp[n - 1];
+    if (P.fling > 0 && ve > 0.5) {                                   // lifting while moving flicks a tail
+      const [r, g] = sub(n, 7), tx = Math.cos(th[n - 1]), ty = Math.sin(th[n - 1]);
+      const m = Math.round((3 + ve * 5) * Math.min(P.fling, 2));
+      for (let q = 0; q < m; q++) {
+        const d = ve * (0.015 + 0.012 * q + 0.008 * r());
+        out.push(speck(r, g, L.x + tx * d + g() * 0.002, L.y + ty * d + g() * 0.002, L.t + 0.02 * q,
+                       { size: Math.max(0.6, 1.8 - q * 0.09), lum: 0.5 + r() * 0.5,
+                         ang: th[n - 1] + g() * 0.2, el: 1.4 + r() * 1.5, kind: 'tail' }));
+      }
+    }
+    out.sort((a, b) => a.t - b.t);
+    return out;
+  }
+
+  // ---- layers: ground specks and the pour are separate greyscale layers, each tinted on its own
+  const noiseC = document.createElement('canvas'), pourC = document.createElement('canvas'),
+        tintC = document.createElement('canvas');
+  function size() {
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const w = cv.clientWidth || 360;
+    const W = Math.round(w * dpr), H = Math.round(w * H_RATIO * dpr);
+    for (const c of [cv, noiseC, pourC, tintC]) { c.width = W; c.height = H; }
+    scale = W;
+  }
+  function paint(c, list, from, to) {
+    const x = c.getContext('2d');
+    x.setTransform(scale, 0, 0, scale, 0, 0); x.fillStyle = '#fff';
+    for (let i = from; i < to; i++) drawSpeck(x, list[i]);
+    x.globalAlpha = 1;
+  }
+  function clearC(c) { const x = c.getContext('2d'); x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, c.width, c.height); }
+  function renderNoise() { clearC(noiseC); paint(noiseC, bgSpecks, 0, bgSpecks.length); }
+  function renderPour() {
+    clearC(pourC);
+    for (const s of strokes) if (s.specks) paint(pourC, s.specks, 0, s.shown != null ? s.shown : s.specks.length);
+  }
+  function tinted(src, colour) {
+    const x = tintC.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
+    x.clearRect(0, 0, tintC.width, tintC.height); x.drawImage(src, 0, 0);
+    x.globalCompositeOperation = 'source-in'; x.fillStyle = colour; x.fillRect(0, 0, tintC.width, tintC.height);
+    x.globalCompositeOperation = 'source-over';
+    return tintC;
+  }
+  const statEl = document.getElementById('stat');
+  function composite(live) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+    ctx.fillStyle = GROUND; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(tinted(noiseC, NOISE_TINT), 0, 0);
+    ctx.drawImage(tinted(pourC, INKS[P.ink]), 0, 0);
+    const lines = showSketch ? strokes.slice() : [];
+    if (live) lines.push(live);
+    if (lines.length) {
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      ctx.strokeStyle = SKETCH; ctx.lineWidth = 1.2 * dpr / scale; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      for (const s of lines) {
+        const S = s.samples; if (S.length < 2) continue;
+        ctx.beginPath(); ctx.moveTo(S[0].x, S[0].y);
+        for (let i = 1; i < S.length; i++) ctx.lineTo(S[i].x, S[i].y);
+        ctx.stroke();
+      }
+    }
+    let count = 0; for (const s of strokes) if (s.specks) count += s.specks.length;
+    statEl.textContent = `${strokes.length} line${strokes.length === 1 ? '' : 's'} · ${count.toLocaleString()} specks poured`;
+  }
+
+  function finishAnim() {
+    if (!anim) return;
+    const st = anim.st; anim = null;
+    paint(pourC, st.specks, st.shown, st.specks.length); st.shown = null;
+  }
+  function animate(st) {
+    if (reduce) { paint(pourC, st.specks, 0, st.specks.length); composite(); return; }
+    const t0 = st.samples[0].t, dur = Math.max(st.samples[st.samples.length - 1].t - t0, 0.05) + 0.3;
+    const D = Math.min(dur, 1.4), speed = dur / D, start = performance.now();
+    st.shown = 0; anim = { st };
+    const step = now => {
+      if (!anim || anim.st !== st) return;
+      const tt = t0 + (now - start) / 1000 * speed;
+      let j = st.shown; while (j < st.specks.length && st.specks[j].t <= tt) j++;
+      paint(pourC, st.specks, st.shown, j); st.shown = j; composite();
+      if (j < st.specks.length) requestAnimationFrame(step); else { st.shown = null; anim = null; }
+    };
+    requestAnimationFrame(step);
+  }
+  function repourAll() {
+    anim = null;
+    for (const s of strokes) { s.specks = pour(s); s.shown = null; }
+    renderPour(); composite();
+  }
+
+  // ---- demo gestures, run through the same pour
+  function demoPollock() {
+    const r = mulberry32(20260921), out = [];
+    for (let s = 0; s < 6; s++) {
+      const f = [0.7 + r() * 0.8, 1.6 + r() * 1.4, 3.2 + r() * 2.4], ph = [0, 0, 0, 0, 0, 0].map(() => r() * 6.283);
+      const cx = 0.2 + r() * 0.6, cy = 0.15 + r() * 0.33, ax = 0.2 + r() * 0.22, ay = 0.12 + r() * 0.14;
+      const T = 1.6 + r() * 1.6, fs = 0.5 + r() * 0.7, ps = r() * 6.283, S = [];
+      let u = 0;
+      for (let t = 0; t <= T; t += 1 / 120) {
+        const rate = 0.25 + 3.3 * Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * fs * t + ps), 2);
+        u += rate / 120;
+        S.push({ x: cx + ax * (0.7 * Math.sin(f[0] * u + ph[0]) + 0.25 * Math.sin(f[1] * u + ph[1]) + 0.08 * Math.sin(f[2] * u + ph[2])),
+                 y: cy + ay * (0.7 * Math.cos(f[0] * 0.83 * u + ph[3]) + 0.25 * Math.sin(f[1] * 1.1 * u + ph[4]) + 0.08 * Math.sin(f[2] * u + ph[5])),
+                 t });
+      }
+      out.push({ samples: S, seed: 1000 + s, specks: null, shown: null });
+    }
+    return out;
+  }
+  function demoMercury() {
+    // straight, slow, wide pours ALONG the grain, at the measured stone's own angle
+    const r = mulberry32(72), a = -72 * Math.PI / 180, dx = Math.cos(a), dy = Math.sin(a), mx = -dy, my = dx;
+    return [-0.46, -0.27, -0.14, 0.05, 0.24, 0.41].map((o, s) => {
+      const cx = 0.5 + mx * o, cy = H_RATIO / 2 + my * o, L = 1.4, v = 0.3 + r() * 0.15, T = L / v, wob = r() * 6.283, S = [];
+      for (let t = 0; t <= T; t += 1 / 60) {
+        const d = -L / 2 + v * t, w = 0.012 * Math.sin(2.2 * t + wob);
+        S.push({ x: cx + dx * d + mx * w, y: cy + dy * d + my * w, t });
+      }
+      return { samples: S, seed: 2000 + s, specks: null, shown: null };
+    });
+  }
+
+  // ---- controls
+  const SL = { rate: v => `${v}/s`, width: v => `${(+v).toFixed(1)}×`, fling: v => (+v).toFixed(1), bg: v => `${v}` };
+  function syncControls() {
+    for (const id of Object.keys(SL)) {
+      document.getElementById(id).value = P[id];
+      document.getElementById(id + 'V').textContent = SL[id](P[id]);
+    }
+    for (const b of document.querySelectorAll('[data-ink]')) b.setAttribute('aria-pressed', b.dataset.ink === P.ink);
+  }
+  let pending = null;
+  function schedule(kind) {
+    if (pending) { pending.add(kind); return; }
+    pending = new Set([kind]);
+    requestAnimationFrame(() => {
+      const k = pending; pending = null;
+      if (k.has('bg')) { makeBg(); renderNoise(); }
+      if (k.has('pour')) repourAll(); else composite();
+    });
+  }
+  for (const id of Object.keys(SL)) {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+      P[id] = +el.value; document.getElementById(id + 'V').textContent = SL[id](P[id]);
+      schedule(id === 'bg' ? 'bg' : 'pour');
+    });
+  }
+  for (const b of document.querySelectorAll('[data-ink]')) {
+    b.addEventListener('click', () => { P.ink = b.dataset.ink; syncControls(); composite(); });
+  }
+  function applyPreset(name) {
+    anim = null; Object.assign(P, PRESETS[name]); syncControls();
+    makeBg(); renderNoise();
+    strokes = name === 'pollock' ? demoPollock() : demoMercury();
+    repourAll();
+  }
+  document.getElementById('pPollock').addEventListener('click', () => applyPreset('pollock'));
+  document.getElementById('pMercury').addEventListener('click', () => applyPreset('mercury'));
+  document.getElementById('undo').addEventListener('click', () => { finishAnim(); strokes.pop(); renderPour(); composite(); });
+  document.getElementById('clear').addEventListener('click', () => { anim = null; strokes = []; renderPour(); composite(); });
+  const sk = document.getElementById('sketch');
+  sk.addEventListener('click', () => { showSketch = !showSketch; sk.setAttribute('aria-pressed', showSketch); composite(); });
+
+  // ---- drawing: sample on every move AND every frame, so holding still is recorded as dwell
+  let cur = null, lastPos = null, lastT = 0, raf = 0;
+  const pos = e => { const b = cv.getBoundingClientRect(); return { x: (e.clientX - b.left) / b.width, y: (e.clientY - b.top) / b.width }; };
+  const stamp = e => { const now = performance.now(); return (Math.abs(e.timeStamp - now) < 1000 ? e.timeStamp : now) / 1000; };
+  cv.addEventListener('pointerdown', e => {
+    finishAnim();
+    try { cv.setPointerCapture(e.pointerId); } catch (_) { /* capture is a nicety */ }
+    const p = pos(e);
+    cur = { samples: [{ x: p.x, y: p.y, t: performance.now() / 1000 }], seed: (Math.random() * 2147483647) | 0, specks: null, shown: null };
+    lastPos = p; lastT = performance.now();
+    const tick = () => {
+      if (!cur) return;
+      const now = performance.now();
+      if (now - lastT > 14) { cur.samples.push({ x: lastPos.x, y: lastPos.y, t: now / 1000 }); lastT = now; }
+      composite(cur);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    e.preventDefault();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!cur) return;
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    for (const ev of (evs.length ? evs : [e])) {
+      const p = pos(ev), t = stamp(ev), last = cur.samples[cur.samples.length - 1];
+      cur.samples.push({ x: p.x, y: p.y, t: Math.max(t, last.t) });
+      lastPos = p;
+    }
+    lastT = performance.now();
+  });
+  function end() {
+    if (!cur) return;
+    cancelAnimationFrame(raf);
+    const st = cur; cur = null;
+    st.specks = pour(st); strokes.push(st);
+    animate(st);
+  }
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+
+  function rebuild() { size(); renderNoise(); renderPour(); composite(); }
+  size();
+  applyPreset('pollock');
+  if (window.ResizeObserver) {
+    let w = cv.clientWidth;
+    new ResizeObserver(() => { if (cv.clientWidth !== w) { w = cv.clientWidth; rebuild(); } }).observe(cv);
+  }
+})();
+</script>

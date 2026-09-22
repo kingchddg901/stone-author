@@ -1,0 +1,661 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Stone studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  The generator's control surface. A DEV TOOL, like tools/stone_preview.py -
+  it is not part of the panel and is never deployed.
+
+  It imports the REAL modules from ../panel/. Nothing here reimplements the
+  generator, because a control surface driving a copy is a surface he would be
+  art-directing against something that is not what ships.
+
+  TWO LEVELS, per his ruling: level 1 authors the block, level 2 tunes it, and
+  the theme owns the colours. The split is not cosmetic - level 1's output is a
+  stone definition to paste into STONES, level 2's is a few numbers beside a
+  stone's name, and the theme strip here exists only so the stone can be judged
+  at all. It is marked as the theme's, and it is not part of either output.
+
+  Needs a static server, because ES modules do not load over file://:
+      python -m http.server 8777        then  localhost:8777/tools/stone-studio.html
+-->
+<style>
+  :root {
+    --bg: #14151a; --panel: #1c1e25; --line: #2b2e38; --ink: #d8dae2;
+    --dim: #868b9c; --hot: #d98324; --ok: #5fa97a; --bad: #c4563f;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 13px/1.5 ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-size: 14px; margin: 0; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  h2 { font-size: 11px; margin: 0; letter-spacing: .1em; text-transform: uppercase; color: var(--hot); }
+
+  .wrap { display: grid; grid-template-columns: minmax(0,1fr) 400px; gap: 16px; padding: 16px; align-items: start; }
+  @media (max-width: 1000px) { .wrap { grid-template-columns: 1fr; } }
+
+  .stage { position: sticky; top: 16px; display: grid; gap: 12px; }
+  canvas { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 3px; }
+
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .bar .grow { flex: 1 1 auto; }
+  button, select, input[type=text] {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 3px; padding: 5px 9px; font: inherit; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--hot); }
+  button.on { border-color: var(--hot); color: var(--hot); }
+
+  .readout { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .readout b { color: var(--ink); font-weight: 600; }
+  .readout .warn b, .readout .warn { color: var(--bad); }
+
+  .level { border: 1px solid var(--line); border-radius: 4px; margin-bottom: 14px; background: var(--panel); }
+  .level > header { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .level > header p { margin: 4px 0 0; color: var(--dim); font-size: 11px; }
+
+  details { border-top: 1px solid var(--line); }
+  details:first-of-type { border-top: 0; }
+  summary { padding: 7px 12px; cursor: pointer; font-size: 11px; letter-spacing: .06em;
+            text-transform: uppercase; color: var(--dim); }
+  summary:hover { color: var(--ink); }
+  details[open] summary { color: var(--ink); }
+  .why { margin: 0 12px 6px; color: var(--dim); font-size: 11px; font-style: italic; }
+  .ctl { padding: 5px 12px 8px; }
+  .ctl.unset > label { color: var(--dim); }
+  .ctl > label { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; font-size: 12px; }
+  .ctl .val { font-family: var(--mono); font-size: 11px; color: var(--hot); }
+  .ctl .val.off { color: var(--dim); }
+  .ctl input[type=range] { width: 100%; accent-color: var(--hot); margin: 2px 0 0; }
+  .ctl .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ctl .tiers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 3px; }
+  .ctl .tiers > div { font-size: 10px; color: var(--dim); text-align: center; }
+  .ctl .note { display: none; margin: 3px 0 0; color: var(--dim); font-size: 11px; }
+  body.notes .ctl .note { display: block; }
+
+  pre { margin: 0; padding: 12px; background: #101116; border: 1px solid var(--line); border-radius: 4px;
+        font-family: var(--mono); font-size: 11px; color: var(--ink); overflow: auto; max-height: 340px;
+        white-space: pre; }
+  .theme-strip { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .sw { width: 22px; height: 22px; border-radius: 3px; border: 1px solid var(--line); cursor: pointer; padding: 0; }
+  .sw.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+  .tag { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  #which { min-width: 4.5em; text-align: right; }
+  #which.held { color: var(--hot); }
+  body.held canvas { border-color: var(--hot); }
+</style>
+
+<div class="wrap">
+  <div class="stage">
+    <div class="bar">
+      <h1>Stone studio</h1>
+      <span class="grow"></span>
+      <span id="which" class="tag"></span>
+      <button id="hold" title="Keep this one to compare against">Hold</button>
+      <button id="flip" title="Flip between held and live (space)" disabled>Flip</button>
+      <button id="restore" title="Carry on from the held one" disabled>Restore</button>
+      <button id="notes" title="Show what each control does">Notes</button>
+      <button id="reroll" title="New seed">Reroll</button>
+    </div>
+    <canvas id="view" width="1720" height="840"></canvas>
+    <div class="readout" id="readout"></div>
+    <div class="bar">
+      <span class="tag">Theme</span>
+      <span class="theme-strip" id="themes"></span>
+      <span class="tag" style="opacity:.7">colour is the theme's, not the generator's</span>
+    </div>
+  </div>
+
+  <div>
+    <div class="level">
+      <header>
+        <div class="bar">
+          <h2>1 &middot; the block</h2>
+          <span class="grow"></span>
+          <select id="stone"></select>
+        </div>
+        <p>What this stone <em>is</em>. Its output is a definition for <code>STONES</code>.</p>
+      </header>
+      <div id="block"></div>
+    </div>
+
+    <div class="level">
+      <header>
+        <h2>2 &middot; this surface</h2>
+        <p>What <em>this</em> surface shows of that block. Same stone, seen differently.</p>
+      </header>
+      <div id="surface"></div>
+    </div>
+
+    <div class="bar" style="margin-bottom:8px">
+      <h2>the block, to paste</h2>
+      <span class="grow"></span>
+      <input type="text" id="name" value="my-stone" size="14">
+      <button id="copy">Copy</button>
+    </div>
+    <pre id="out"></pre>
+  </div>
+</div>
+
+<script type="module">
+import { STONES, stoneArt, FLOOR } from "../panel/stone-art.js";
+import { stoneSheets, sheetsOf } from "../panel/stone-raster.js";
+import { BLOCK, SURFACE, TIERS, readAt, writeAt } from "../panel/stone-controls.js";
+
+/* ---------------------------------------------------------------- state */
+
+// Level 2. `rotate` is the awkward one - it is read from the stone definition
+// but decided per surface, so it is held here and merged in at generate time.
+const surface = { seed: 7, footprint: 400, rotate: 0, cut: [0, 1], film: 0.005, sheets: 6 };
+let stone = { ...STONES.carrara };
+let stoneName = "carrara";
+
+// The theme's, not the generator's: ground, ink, and how hard the ink lands.
+// Here only so the stone can be judged; it is in neither level's output.
+const THEMES = [
+  { name: "Carrara",  ground: "#e8e6e2", ink: "#78787c", k: 0.34 },
+  { name: "Calacatta", ground: "#f2f1ee", ink: "#707278", k: 0.42 },
+  { name: "Nero",     ground: "#161515", ink: "#eceef1", k: 0.62 },
+  { name: "Jade",     ground: "#5f7533", ink: "#2f6605", k: 0.44 },
+  { name: "Black One", ground: "#17150f", ink: "#d98324", k: 0.30 },
+];
+let theme = THEMES[0];
+
+/* ------------------------------------------------------------- controls */
+
+const fmt = (c, v) => {
+  if (v === undefined) return "unset";
+  if (c.kind === "turns") return `${(v * 360).toFixed(1)}°`;
+  if (Array.isArray(v)) return v.map((x) => +x.toFixed(3)).join(" – ");
+  if (typeof v === "boolean") return v ? "on" : "off";
+  if (v === "") return "none";
+  if (typeof v !== "number") return String(v);
+  return +v.toFixed(c.step < 0.01 ? 4 : c.step < 1 ? 3 : 0) + (c.unit ? c.unit : "");
+};
+
+/** One control, wired to a get/set pair so both levels use the same builder. */
+function control(c, get, set) {
+  const box = document.createElement("div");
+  box.className = "ctl";
+  const val = get(c.key);
+  if (val === undefined) box.classList.add("unset");
+
+  const label = document.createElement("label");
+  label.innerHTML = `<span>${c.label}</span><span class="val${val === undefined ? " off" : ""}">${fmt(c, val)}</span>`;
+  box.append(label);
+  const show = (v) => {
+    const s = label.lastElementChild;
+    s.textContent = fmt(c, v);
+    s.classList.toggle("off", v === undefined);
+    box.classList.toggle("unset", v === undefined);
+  };
+
+  const slider = (v, onInput) => {
+    const i = document.createElement("input");
+    i.type = "range"; i.min = c.min; i.max = c.max; i.step = c.step;
+    i.value = v ?? c.min;
+    i.addEventListener("input", () => onInput(+i.value));
+    return i;
+  };
+
+  if (c.kind === "number" || c.kind === "turns") {
+    box.append(slider(val, (v) => { set(c.key, v); show(v); redraw(); }));
+  } else if (c.kind === "span" || c.kind === "arc") {
+    const cur = Array.isArray(val) ? [...val] : [c.min, c.max];
+    const pair = document.createElement("div");
+    pair.className = "pair";
+    [0, 1].forEach((i) => pair.append(slider(cur[i], (v) => {
+      cur[i] = v; set(c.key, [...cur]); show(cur); redraw();
+    })));
+    box.append(pair);
+  } else if (c.kind === "tiers") {
+    const cur = { ...(val || {}) };
+    const grid = document.createElement("div");
+    grid.className = "tiers";
+    for (const t of TIERS) {
+      const cell = document.createElement("div");
+      cell.textContent = t.slice(0, 3);
+      cell.append(slider(cur[t], (v) => {
+        cur[t] = v; set(c.key, { ...cur }); show(cur); redraw();
+      }));
+      grid.append(cell);
+    }
+    box.append(grid);
+    show(val === undefined ? undefined : Object.values(val));
+  } else if (c.kind === "choice") {
+    const s = document.createElement("select");
+    for (const o of c.options) {
+      const opt = document.createElement("option");
+      opt.value = o; opt.textContent = (c.labels && c.labels[o]) || o || "none";
+      s.append(opt);
+    }
+    s.value = val ?? "";
+    s.addEventListener("change", () => { set(c.key, s.value); show(s.value); redraw(); });
+    box.append(s);
+  } else if (c.kind === "flag") {
+    const b = document.createElement("button");
+    const cur = val !== false;                   // absent means on, as the generator reads it
+    b.textContent = cur ? "On" : "Off";
+    b.className = cur ? "on" : "";
+    b.addEventListener("click", () => {
+      const next = b.className !== "on";
+      b.className = next ? "on" : ""; b.textContent = next ? "On" : "Off";
+      set(c.key, next); show(next); redraw();
+    });
+    box.append(b);
+  }
+
+  if (c.note) {
+    const n = document.createElement("p");
+    n.className = "note"; n.textContent = c.note;
+    box.append(n);
+  }
+  return box;
+}
+
+function buildGroups(host, groups, get, set, openFirst) {
+  host.textContent = "";
+  groups.forEach((g, i) => {
+    const d = document.createElement("details");
+    if (i < openFirst) d.open = true;
+    const s = document.createElement("summary");
+    s.textContent = g.group;
+    d.append(s);
+    if (g.why) {
+      const w = document.createElement("p");
+      w.className = "why"; w.textContent = g.why;
+      d.append(w);
+    }
+    for (const c of g.controls) d.append(control(c, get, set));
+    host.append(d);
+  });
+}
+
+// nested controls need their prefix; do it by rebuilding the group lists flat
+const prefixed = (groups) => groups.map((g) => ({
+  ...g,
+  controls: g.controls.flatMap((c) => c.kind === "nested"
+    ? c.controls.map((k) => ({ ...k, key: `${c.key}.${k.key}`, label: `${c.label}: ${k.label}` }))
+    : [c]),
+}));
+
+/* -------------------------------------------------------------- render */
+
+const view = document.getElementById("view");
+const ctx = view.getContext("2d");
+const CARD_PX = 430, CARD_H = 210, SS = 4;       // as tools/stone_preview.py
+const W = view.width, H = view.height;
+
+const scratch = document.createElement("canvas");
+
+/**
+ * One film deposit, drifting across the slab from a seeded origin so two cards
+ * of one stone are not the same picture.
+ *
+ * Built on the SCRATCH canvas and drawn over. Cutting the gradient out of the
+ * main canvas instead erases the stone underneath it, not the film - a hole
+ * through everything, which at low alpha looks exactly like a lighting artefact.
+ */
+function paintFilm(alpha, seed) {
+  const a = (seed * 2.399963) % (Math.PI * 2);
+  scratch.width = W; scratch.height = H;
+  const s = scratch.getContext("2d");
+  const g = s.createLinearGradient(
+    W / 2 - Math.cos(a) * W, H / 2 - Math.sin(a) * H,
+    W / 2 + Math.cos(a) * W, H / 2 + Math.sin(a) * H);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,1)");
+  s.fillStyle = theme.ink;
+  s.fillRect(0, 0, W, H);
+  s.globalCompositeOperation = "destination-in";
+  s.fillStyle = g;
+  s.fillRect(0, 0, W, H);
+  ctx.globalAlpha = Math.min(1, alpha);
+  ctx.drawImage(scratch, 0, 0);
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * Paint one sheet through the ink colour. The sheet's alpha already carries the
+ * theme's `ink` weight, so this composites at full strength - dimming again
+ * here would apply it twice.
+ *
+ * Takes the CANVAS, not a data URI. Encoding six sheets to PNG and decoding
+ * them straight back cost 262ms of a 270ms frame, for no result that the canvas
+ * did not already hold.
+ */
+function paintSheet(sheetCanvas) {
+  scratch.width = W; scratch.height = H;
+  const s = scratch.getContext("2d");
+  s.drawImage(sheetCanvas, 0, 0, W, H);
+  s.globalCompositeOperation = "source-in";     // the mask carries alpha, so ink lands through it
+  s.fillStyle = theme.ink;
+  s.fillRect(0, 0, W, H);
+  ctx.drawImage(scratch, 0, 0);
+}
+
+/**
+ * HOLD AND FLIP. The question a control surface is usually asked is not "is this
+ * good" but "is this better than the last one", and the answer arrives in the
+ * moment of the swap. So a flip has to be INSTANT - re-rendering on the swap
+ * turns a blink into a wait, and a wait is where the comparison goes.
+ *
+ * Both sides are therefore kept as finished PIXELS, not as parameters to
+ * re-render. Held keeps its own readout and its own block text too, so the
+ * numbers flip with the picture; a held image beside live numbers is worse than
+ * no comparison at all.
+ */
+const liveFrame = document.createElement("canvas");
+const heldFrame = document.createElement("canvas");
+liveFrame.width = heldFrame.width = W;
+liveFrame.height = heldFrame.height = H;
+let held = null;                                  // {stone, surface, theme, readout, paste}
+let showing = "live";
+
+const capture = (into) => {
+  const c = into.getContext("2d");
+  c.clearRect(0, 0, W, H);
+  c.drawImage(view, 0, 0);
+};
+
+function show(side) {
+  if (side === "held" && !held) return;
+  showing = side;
+  const badge = document.getElementById("which");
+  badge.textContent = held ? (side === "held" ? "held" : "live") : "";
+  badge.classList.toggle("held", side === "held");
+  document.body.classList.toggle("held", side === "held");
+  if (side === "held") {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(heldFrame, 0, 0);
+    document.getElementById("readout").innerHTML = held.readout;
+    document.getElementById("out").textContent = held.paste;
+  } else if (held) {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(liveFrame, 0, 0);
+    document.getElementById("readout").innerHTML = liveReadout;
+    document.getElementById("out").textContent = livePaste;
+  }
+}
+
+/** Any edit is an edit to LIVE, so touching a control comes back from held. */
+const toLive = () => { if (showing === "held") show("live"); };
+
+let liveReadout = "", livePaste = "";
+
+/**
+ * ONE FRAME, SYNCHRONOUS. The loop this has to serve is tweak - look - tweak,
+ * so the frame time IS the tool. Measured on carrara at 6 sheets, 1720x840:
+ *
+ *   generate        7.1ms
+ *   resolve+bucket  0.8ms
+ *   draw + paint      ~8ms
+ *   -------------------------------------------------------------
+ *   PNG encode    214ms  } removed - `as: "canvas"` skips both, and the
+ *   decode         48ms  } encode existed only for CSS masks the studio never uses
+ *
+ * Nothing awaits, so there is no stale-frame race left to guard against. A drag
+ * is coalesced to one render per animation frame: `input` fires far faster than
+ * a frame, and rendering every event queues work the eye never sees.
+ */
+let queued = false;
+let lastMs = 0;
+
+/**
+ * Coalesce to one render per frame - `input` fires far faster than a frame, so
+ * rendering every event queues work the eye never sees.
+ *
+ * `requestAnimationFrame` does NOT fire in a hidden tab, and a studio opened in
+ * a background tab then sits blank until it is both looked at and touched. So
+ * when the document is hidden the same coalescing runs on a timeout instead.
+ */
+const soon = (fn) => (document.hidden ? setTimeout(fn, 0) : requestAnimationFrame(fn));
+
+function redraw() {
+  if (queued) return;
+  queued = true;
+  soon(() => { queued = false; render(); });
+}
+
+function render() {
+  try { draw(); } catch (e) {
+    // A control surface whose failures are silent is the thing this whole tool
+    // exists to avoid. Say it on the readout, where the other failures are.
+    document.getElementById("readout").innerHTML =
+      `<span class="warn"><b>${e.message}</b></span><span>${(e.stack || "").split(/\n/)[1] || ""}</span>`;
+    throw e;
+  }
+}
+
+function draw() {
+  const t0 = performance.now();
+  const S = { ...stone, rotate: surface.rotate || undefined };
+  const art = stoneArt({ seed: surface.seed, stone: S, footprint: surface.footprint });
+
+  // CARD_PX is the surface being described; SS only says how finely it is drawn.
+  // Rasterising at the canvas width instead would make every gauge read four
+  // times too wide for its footprint, and the stones were tuned at 430.
+  const opts = {
+    footprint: surface.footprint, cardPx: CARD_PX, cut: surface.cut,
+    sheets: surface.sheets, w: CARD_PX, h: CARD_H, scale: SS, ink: theme.k,
+    as: "canvas",
+  };
+  const sheets = stoneSheets(art, opts);
+
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = theme.ground;
+  ctx.fillRect(0, 0, W, H);
+
+  // deepest first, and a film is laid ON each sheet so shallower veins cover it
+  let above = 0;
+  for (const sh of sheets) {
+    if (sh.canvas) paintSheet(sh.canvas);
+    above += 1;
+    if (surface.film > 0) paintFilm(surface.film * above, surface.seed);
+  }
+
+  lastMs = performance.now() - t0;
+  report(art, sheets, sheetsOf(art, opts));
+  writeOut();
+  liveReadout = document.getElementById("readout").innerHTML;
+  livePaste = document.getElementById("out").textContent;
+  capture(liveFrame);
+  if (showing === "held") show("held");           // a redraw must not steal the flip
+}
+
+/**
+ * The three things that fail SILENTLY, on the surface where they can be seen.
+ *
+ * FILL is the empty-stone guard, live. An entry arc that disagrees with the
+ * grain sends every vein straight back out of the edge it came in by, 0% of
+ * majors reach the frame, and nothing errors - the stone is just blank, which
+ * reads as a bad palette.
+ *
+ * SHORT is the visibility floor, per tier. A tier where every feature is short
+ * is not a faint tier, it is an ABSENT one: it costs its full generation time
+ * and contributes nothing but haze. Carrara ships that way - its minor and
+ * subminor are 100% short, because their wash is four times their own width -
+ * and with no readout the only symptom is a stone that will not get darker
+ * however hard the counts are pushed.
+ */
+function report(art, sheets, buckets) {
+  const tiers = {};
+  for (const v of art.veins) tiers[v.tier] = (tiers[v.tier] || 0) + 1;
+
+  const majors = art.veins.filter((v) => v.tier === "major");
+  const landed = majors.filter((v) => v.points.some(([x, y]) => x > 0 && x < 1 && y > 0 && y < 1));
+  const fill = majors.length ? landed.length / majors.length : 0;
+
+  const drawn = sheets.reduce((n, s) => n + s.count, 0);
+
+  // short by tier, summed off what each sheet reports
+  const short = {};
+  for (const sh of sheets) for (const [t, n] of Object.entries(sh.shortBy || {})) {
+    short[t] = (short[t] || 0) + n;
+  }
+
+  // HOW FAR under, not just how many. A count says a tier is in trouble; the
+  // ratio says which way to turn the knob and when to stop. x1.0 sits exactly
+  // on the floor, so anything under 1 is being generated and not seen.
+  const ink = {};
+  for (const { vein, draw } of buckets.flatMap((s) => s.items)) (ink[vein.tier] ||= []).push(draw.achieved);
+  const median = (xs) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+
+  const cells = [
+    `<span>features <b>${art.veins.length}</b></span>`,
+    ...TIERS.filter((t) => tiers[t]).map((t) => {
+      const gone = short[t] === tiers[t];
+      const x = ink[t] ? median(ink[t]) / FLOOR : null;
+      return `<span class="${gone ? "warn" : ""}">${t} <b>${tiers[t]}</b>${
+        x === null ? "" : ` <i>&times;${x.toFixed(2)}</i>`}</span>`;
+    }),
+    tiers.crystal ? `<span>crystal <b>${tiers.crystal}</b></span>` : "",
+    `<span class="${fill < 0.3 ? "warn" : ""}">majors in frame <b>${(fill * 100).toFixed(0)}%</b></span>`,
+    `<span class="${drawn === 0 ? "warn" : ""}">this cut <b>${drawn}</b> of ${art.veins.length}</span>`,
+    `<span>sheets <b>${sheets.length}</b></span>`,
+    `<span>frame <b>${lastMs.toFixed(0)}ms</b></span>`,
+  ];
+  if (fill < 0.3) cells.push(`<span class="warn"><b>the entry arc and the grain disagree - this stone is empty</b></span>`);
+  const dead = TIERS.filter((t) => tiers[t] && short[t] === tiers[t]);
+  if (dead.length) cells.push(`<span class="warn"><b>${dead.join(" and ")} never clear the visibility floor &mdash; &times;1.00 is the floor</b></span>`);
+  document.getElementById("readout").innerHTML = cells.join("");
+}
+
+/* ------------------------------------------------------------- the block */
+
+/** Only what this stone actually sets, in the generator's own spelling. */
+function writeOut() {
+  const name = document.getElementById("name").value.trim() || "my-stone";
+  const order = ["band", "nucleate", "arrest", "wash", "origin", "originDist", "originPull",
+    "aim", "aimDrift", "aimNoise", "fallOff", "startLate", "biasFromOrigin",
+    "major", "majorGauge", "minorGauge", "subminorGauge", "microGauge",
+    "wander", "wanderBy", "commit", "commitBy", "branchPer", "branchScale", "branchAngle",
+    "maxGen", "subminor", "micro", "bias", "coherence", "follow", "flow",
+    "grade", "widthRange", "continuity", "speck", "grain", "edge", "dip"];
+  const keys = [...order.filter((k) => stone[k] !== undefined),
+                ...Object.keys(stone).filter((k) => !order.includes(k) && k !== "name" && !k.startsWith("_"))];
+  const lines = keys.map((k) => `    ${k}: ${JSON.stringify(stone[k])},`);
+  document.getElementById("out").textContent =
+    `  "${name}": {\n${lines.join("\n")}\n  },\n\n` +
+    `// this surface\n` +
+    `stoneArt({ seed: ${surface.seed}, stone: "${name}", footprint: ${surface.footprint} })\n` +
+    `stoneSheets(art, { cut: ${JSON.stringify(surface.cut)}, sheets: ${surface.sheets} })  // film ${surface.film}`;
+}
+
+/* ---------------------------------------------------------------- wiring */
+
+const blockHost = document.getElementById("block");
+const surfHost = document.getElementById("surface");
+
+function buildBlock() {
+  buildGroups(blockHost, prefixed(BLOCK),
+    (k) => readAt(stone, k),
+    (k, v) => { toLive(); stone = writeAt(stone, k, v); }, 2);
+}
+function buildSurface() {
+  buildGroups(surfHost, prefixed(SURFACE),
+    (k) => surface[k],
+    (k, v) => { toLive(); surface[k] = v; }, 1);
+}
+buildSurface();
+buildBlock();
+
+const picker = document.getElementById("stone");
+for (const n of Object.keys(STONES)) {
+  const o = document.createElement("option");
+  o.value = n; o.textContent = n;
+  picker.append(o);
+}
+picker.value = "carrara";
+picker.addEventListener("change", () => {
+  stoneName = picker.value;
+  stone = { ...STONES[stoneName] };
+  surface.rotate = stone.rotate || 0;
+  document.getElementById("name").value = stoneName;
+  buildBlock();
+  buildSurface();
+  show("live");
+  redraw();
+});
+document.getElementById("name").value = "carrara";
+document.getElementById("name").addEventListener("input", writeOut);
+
+const strip = document.getElementById("themes");
+THEMES.forEach((t, i) => {
+  const b = document.createElement("button");
+  b.className = "sw" + (i === 0 ? " on" : "");
+  b.title = t.name;
+  b.style.background = `linear-gradient(135deg, ${t.ground} 50%, ${t.ink} 50%)`;
+  b.addEventListener("click", () => {
+    toLive();
+    theme = t;
+    strip.querySelectorAll(".sw").forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    redraw();
+  });
+  strip.append(b);
+});
+
+/* --------------------------------------------------------- hold and flip */
+
+document.getElementById("hold").addEventListener("click", () => {
+  show("live");                                   // hold what is LIVE, never a held frame
+  held = {
+    stone: JSON.parse(JSON.stringify(stone)),
+    surface: JSON.parse(JSON.stringify(surface)),
+    theme,
+    readout: liveReadout,
+    paste: livePaste,
+  };
+  capture(heldFrame);
+  document.getElementById("flip").disabled = false;
+  document.getElementById("restore").disabled = false;
+  document.getElementById("which").textContent = "live";
+});
+
+const flip = () => show(showing === "live" ? "held" : "live");
+document.getElementById("flip").addEventListener("click", flip);
+
+document.getElementById("restore").addEventListener("click", () => {
+  if (!held) return;
+  stone = JSON.parse(JSON.stringify(held.stone));
+  Object.assign(surface, JSON.parse(JSON.stringify(held.surface)));
+  theme = held.theme;
+  strip.querySelectorAll(".sw").forEach((b, i) => b.classList.toggle("on", THEMES[i] === theme));
+  buildBlock();
+  buildSurface();
+  show("live");
+  redraw();
+});
+
+// Space flips, because the answer to "is this better" arrives in the swap and
+// reaching for a button with the eyes is enough to lose it. Not while typing.
+addEventListener("keydown", (e) => {
+  if (e.code !== "Space" || !held) return;
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || "")) return;
+  e.preventDefault();
+  flip();
+});
+
+document.getElementById("notes").addEventListener("click", (e) => {
+  document.body.classList.toggle("notes");
+  e.target.classList.toggle("on");
+});
+document.getElementById("reroll").addEventListener("click", () => {
+  surface.seed = 1 + Math.floor(Math.random() * 9999);
+  buildSurface();
+  show("live");
+  redraw();
+});
+document.getElementById("copy").addEventListener("click", async (e) => {
+  try {
+    await navigator.clipboard.writeText(document.getElementById("out").textContent);
+    e.target.textContent = "Copied";
+    setTimeout(() => { e.target.textContent = "Copy"; }, 1200);
+  } catch { getSelection().selectAllChildren(document.getElementById("out")); }
+});
+
+redraw();
+</script>

@@ -1,0 +1,311 @@
+<title>Stylus Probe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  /* One look on purpose - a dark bench - so no light theme; every colour is painted. */
+  :root {
+    --ground: #0d0e12; --line: #262836; --text: #d7d8e3; --dim: #8b8da2;
+    --btn: #171823; --yes: #7fd3a0; --no: #e98a7a; --maybe: #f0c46a; --focus: #a3a6e6;
+    color-scheme: dark;
+  }
+  body { background: var(--ground); color: var(--text);
+         font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 900px; margin-inline: auto; padding-inline: 16px; padding-block: 18px 36px; display: grid; gap: 12px; }
+  h1 { font-size: 18px; font-weight: 500; margin: 0; }
+  .sub { margin: 2px 0 0; color: var(--dim); font-size: 13px; }
+  #pad { display: block; width: 100%; max-width: 100%; aspect-ratio: 4 / 3; border-radius: 6px;
+         outline: 1px solid var(--line); background: #15161c; touch-action: none; }
+  .verdicts { display: grid; gap: 6px; margin: 0; padding: 0; }
+  .verdicts div { display: grid; grid-template-columns: 7.5em 1fr; gap: 10px; border-top: 1px solid var(--line); padding-top: 6px; }
+  .verdicts dt { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); padding-top: 2px; }
+  .verdicts dd { margin: 0; }
+  .yes { color: var(--yes); } .no { color: var(--no); } .maybe { color: var(--maybe); }
+  .live { font: 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
+          font-variant-numeric: tabular-nums; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+  button { font: inherit; font-size: 14px; background: var(--btn); color: var(--text);
+           border: 1px solid var(--line); border-radius: 5px; padding: 6px 11px; cursor: pointer; justify-self: start; }
+  button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 66ch; }
+  .hist { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .hist h2 { font-size: 16px; font-weight: 500; margin: 0; display: flex; gap: 8px; align-items: baseline; }
+  .tag { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--maybe);
+         border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+  #histc { display: block; width: 100%; max-width: 100%; height: 340px; border-radius: 6px;
+           outline: 1px solid var(--line); background: #111219; }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 14px; margin: 0; }
+  @media (min-width: 640px) { .stats { grid-template-columns: repeat(4, 1fr); } }
+  .stats div { border-top: 1px solid var(--line); padding-top: 4px; }
+  .stats dt { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .stats dd { margin: 2px 0 0; font: 500 13px "IBM Plex Mono", ui-monospace, Consolas, monospace;
+              font-variant-numeric: tabular-nums; }
+  .brow { display: flex; flex-wrap: wrap; gap: 8px; }
+  button[aria-pressed="true"] { background: #33365a; border-color: #6b6ea0; }
+  #dumpOut { width: 100%; min-height: 160px; background: #111219; color: var(--text); border: 1px solid var(--line);
+             border-radius: 6px; font: 11px "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+</style>
+<div class="wrap">
+  <div>
+    <h1>Stylus probe</h1>
+    <p class="sub">Draw on the pad with the S Pen: press light, then hard, tilt it, and hover it just above the glass.
+      Then try a finger to compare. The line gets thicker if pressure is really coming through.</p>
+  </div>
+  <canvas id="pad" aria-label="Drawing pad for testing what the stylus reports"></canvas>
+  <dl class="verdicts">
+    <div><dt>Seen as</dt><dd id="vType">&mdash; draw something</dd></div>
+    <div><dt>Pressure</dt><dd id="vPressure">&mdash;</dd></div>
+    <div><dt>Tilt</dt><dd id="vTilt">&mdash;</dd></div>
+    <div><dt>Hover</dt><dd id="vHover">&mdash;</dd></div>
+    <div><dt>Samples</dt><dd id="vRate">&mdash;</dd></div>
+  </dl>
+  <p class="live" id="live">last event: &mdash;</p>
+  <button id="reset" type="button">Clear and start again</button>
+  <section class="hist" aria-label="Pen history, for debugging">
+    <h2>History <span class="tag">debug</span></h2>
+    <p class="note">Everything the pen sends, hover included, over the last 6 seconds. Move events arrive once per
+      screen frame; raw updates arrive as fast as the pen reports; coalesced points are the in-between samples a
+      move event carries. The interval chart plots the finest of those this browser gives.</p>
+    <canvas id="histc" aria-label="Charts of update interval, pressure, tilt and lean over the last 6 seconds"></canvas>
+    <dl class="stats" id="stats"></dl>
+    <div class="brow">
+      <button id="still" type="button">Hold still 3 s</button>
+      <button id="pause" type="button" aria-pressed="false">Pause</button>
+      <button id="dump" type="button">Copy as text</button>
+    </div>
+    <p class="live" id="stillOut"></p>
+    <textarea id="dumpOut" readonly hidden aria-label="The last 6 seconds of pen events as text"></textarea>
+  </section>
+  <p class="note">Results are for this browser only. The same pen can report differently in the Claude app,
+    Chrome and Samsung Internet, so if pressure comes back missing, open this link in another one and try
+    again. Nothing is sent anywhere; it all stays on this page.</p>
+</div>
+<script>
+(() => {
+  const cv = document.getElementById('pad'), ctx = cv.getContext('2d');
+  let dpr = 1, W = 0, Hh = 0;
+  function size() {
+    dpr = Math.min(window.devicePixelRatio || 1, 3); W = cv.clientWidth || 360; Hh = W * 0.75;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr); clear();
+  }
+  function clear() { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#15161c'; ctx.fillRect(0, 0, cv.width, cv.height); }
+  const stats = {};
+  function S(type) {
+    return stats[type] || (stats[type] = { down: 0, pressures: new Set(), pmin: Infinity, pmax: -Infinity,
+      tilts: new Set(), angles: new Set(), hover: 0, moves: 0, coalesced: 0, t0: 0, t1: 0 });
+  }
+  const $ = id => document.getElementById(id);
+  let last = null;
+  function note(e, pressed) {
+    const s = S(e.pointerType || 'unknown');
+    if (pressed) {
+      const p = +e.pressure.toFixed(3);
+      s.pressures.add(p); s.pmin = Math.min(s.pmin, p); s.pmax = Math.max(s.pmax, p);
+    }
+    if (e.tiltX || e.tiltY) s.tilts.add(`${e.tiltX},${e.tiltY}`);
+    if (e.altitudeAngle != null && e.altitudeAngle !== Math.PI / 2) s.angles.add(e.altitudeAngle.toFixed(2));
+  }
+  cv.addEventListener('pointerdown', e => {
+    try { cv.setPointerCapture(e.pointerId); } catch (_) { /* a nicety */ }
+    e.preventDefault();
+    S(e.pointerType).down++;
+    last = { x: e.offsetX, y: e.offsetY };
+    note(e, true); report(e);
+  });
+  cv.addEventListener('pointermove', e => {
+    const s = S(e.pointerType);
+    const pressed = e.buttons !== 0 || e.pressure > 0 && e.pointerType === 'touch';
+    if (!pressed) { if (e.pointerType === 'pen') s.hover++; report(e); return; }
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+    const list = evs.length ? evs : [e];
+    s.coalesced += list.length; s.moves++;
+    const now = performance.now(); if (!s.t0) s.t0 = now; s.t1 = now;
+    for (const ev of list) {
+      note(ev, true);
+      if (last) {
+        const p = ev.pressure || 0;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.strokeStyle = e.pointerType === 'pen' ? '#9fb4ff' : e.pointerType === 'touch' ? '#f0c46a' : '#cfd0da';
+        ctx.lineCap = 'round'; ctx.lineWidth = 0.5 + p * 14;
+        ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(ev.offsetX, ev.offsetY); ctx.stroke();
+      }
+      last = { x: ev.offsetX, y: ev.offsetY };
+    }
+    report(e);
+  });
+  const up = () => { last = null; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+
+  function verdictPressure(s) {
+    const n = s.pressures.size, range = s.pmax - s.pmin;
+    if (!isFinite(range)) return ['maybe', '—'];
+    if (n === 1 && Math.abs(s.pmin - 0.5) < 1e-6) return ['no', 'Not reported. Stuck at 0.5, the placeholder the standard gives devices without pressure.'];
+    if (n <= 2 && s.pmax <= 1 && [...s.pressures].every(v => v === 0 || v === 1 || v === 0.5)) return ['no', `Only on or off (${[...s.pressures].join(', ')}), no levels.`];
+    if (n >= 8 && range > 0.2) return ['yes', `Yes, real levels: ${n} distinct values from ${s.pmin.toFixed(2)} to ${s.pmax.toFixed(2)}.`];
+    return ['maybe', `Some variation (${n} values, ${s.pmin.toFixed(2)}–${s.pmax.toFixed(2)}). Press lighter and harder to be sure.`];
+  }
+  function report(e) {
+    const types = Object.keys(stats);
+    $('vType').textContent = types.map(t => `${t}${stats[t].down ? ` (${stats[t].down} stroke${stats[t].down === 1 ? '' : 's'})` : ''}`).join(', ') || '—';
+    const pen = stats.pen, main = pen || stats[types[0]];
+    const set = (id, [cls, txt]) => { const el = $(id); el.className = cls; el.textContent = txt; };
+    if (!pen && types.length) {
+      set('vPressure', ['no', `The browser sees ${types.join(' and ')}, not a pen, so no pen data comes through.`]);
+    } else if (main) {
+      set('vPressure', verdictPressure(main));
+    }
+    if (main) {
+      const tilt = main.tilts.size + main.angles.size;
+      set('vTilt', tilt > 3 ? ['yes', `Yes, ${main.tilts.size} tilt readings.`] : ['no', 'Not reported (or not tilted yet).']);
+      set('vHover', pen ? (pen.hover > 5 ? ['yes', `Yes, ${pen.hover} events with the pen above the glass.`] : ['maybe', 'None yet. Hold the pen just above the screen and move it.'])
+                        : ['no', 'Needs a pen.']);
+      const secs = (main.t1 - main.t0) / 1000;
+      set('vRate', secs > 0.3 ? ['yes', `${Math.round(main.coalesced / secs)} points a second (${(main.coalesced / Math.max(main.moves, 1)).toFixed(1)} per event).`] : ['maybe', 'Draw a longer line.']);
+    }
+    $('live').textContent = `last event: ${e.type} · type ${e.pointerType} · pressure ${e.pressure.toFixed(3)} · tilt ${e.tiltX}, ${e.tiltY}`
+      + (e.altitudeAngle != null ? ` · altitude ${e.altitudeAngle.toFixed(2)}` : '') + ` · buttons ${e.buttons}`;
+  }
+  $('reset').addEventListener('click', () => {
+    for (const k of Object.keys(stats)) delete stats[k];
+    clear();
+    for (const id of ['vPressure', 'vTilt', 'vHover', 'vRate']) { $(id).className = ''; $(id).textContent = '—'; }
+    $('vType').textContent = '— draw something'; $('live').textContent = 'last event: —';
+  });
+  size();
+  if (window.ResizeObserver) { let w = cv.clientWidth; new ResizeObserver(() => { if (cv.clientWidth !== w) { w = cv.clientWidth; size(); } }).observe(cv); }
+})();
+</script>
+<script>
+(() => {
+  // TEMPORARY DEBUG: a history of every pen event, so the update rate and the real sensitivity of
+  // tilt can be read off the device rather than guessed.
+  const pad = document.getElementById('pad'), cv = document.getElementById('histc'), ctx = cv.getContext('2d');
+  const WIN = 6000, KEEP = 12000, $ = id => document.getElementById(id);
+  let ev = [], paused = false, still = null;
+  const hasRaw = 'onpointerrawupdate' in window;
+  // lean exactly as Stone Author reads it: degrees from upright, from tiltX / tiltY
+  const leanDeg = e => {
+    const tx = (e.tiltX || 0) * Math.PI / 180, ty = (e.tiltY || 0) * Math.PI / 180;
+    const alt = (tx || ty) ? Math.atan2(1, Math.hypot(Math.tan(tx), Math.tan(ty))) : (e.altitudeAngle != null ? e.altitudeAngle : Math.PI / 2);
+    return 90 - alt * 180 / Math.PI;
+  };
+  function rec(type, e) {
+    if (paused || e.pointerType !== 'pen') return;
+    const now = performance.now(), t = Math.abs(e.timeStamp - now) < 5000 ? e.timeStamp : now;
+    const r = { t, type, hover: e.buttons === 0 && type !== 'down', x: e.clientX, y: e.clientY, p: e.pressure,
+                tx: e.tiltX, ty: e.tiltY, alt: e.altitudeAngle, az: e.azimuthAngle, lean: leanDeg(e) };
+    ev.push(r);
+    if (still) still.push(r);
+    const cut = now - KEEP; while (ev.length && ev[0].t < cut) ev.shift();
+  }
+  pad.addEventListener('pointerdown', e => rec('down', e));
+  pad.addEventListener('pointerup', e => rec('up', e));
+  pad.addEventListener('pointermove', e => {
+    rec('move', e);
+    const co = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+    if (co.length > 1) for (const c of co) rec('co', c);
+  });
+  if (hasRaw) pad.addEventListener('pointerrawupdate', e => rec('raw', e));
+
+  const q = (a, f) => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y); return b[Math.min(b.length - 1, Math.floor(f * (b.length - 1)))]; };
+  const sd = a => { if (a.length < 2) return 0; const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / a.length); };
+  const finest = list => { for (const k of ['raw', 'co', 'move']) { const l = list.filter(r => r.type === k); if (l.length > 3) return [k, l]; } return ['move', list.filter(r => r.type === 'move')]; };
+  const minStep = (list, key) => { let m = Infinity; for (let i = 1; i < list.length; i++) { const d = Math.abs(list[i][key] - list[i - 1][key]); if (d > 1e-9 && d < m) m = d; } return m; };
+
+  function stats() {
+    const now = performance.now(), last2 = ev.filter(r => now - r.t < 2000), win = ev.filter(r => now - r.t < WIN);
+    const rate = k => Math.round(last2.filter(r => r.type === k).length / 2);
+    const [kind, fl] = finest(win);
+    const iv = []; for (let i = 1; i < fl.length; i++) { const d = fl[i].t - fl[i - 1].t; if (d < 200) iv.push(d); }
+    const tstep = Math.min(minStep(fl, 'tx'), minStep(fl, 'ty'));
+    const altd = fl.filter(r => r.alt != null).map(r => ({ a: r.alt * 180 / Math.PI }));
+    const astep = minStep(altd, 'a');
+    const hov = ev.filter(r => r.hover && now - r.t < 1500).map(r => r.lean);
+    const cur = ev[ev.length - 1];
+    const cells = [
+      ['Move events', `${rate('move')}/s`],
+      ['Raw updates', hasRaw ? `${rate('raw')}/s` : 'not offered'],
+      ['Coalesced', `${rate('co')}/s`],
+      [`Interval (${kind})`, iv.length ? `${q(iv, 0.5).toFixed(1)} ms med` : '\u2014'],
+      ['Interval p95 / max', iv.length ? `${q(iv, 0.95).toFixed(1)} / ${Math.max(...iv).toFixed(1)} ms` : '\u2014'],
+      ['Tilt step', isFinite(tstep) ? `${tstep.toFixed(2)}\u00b0 smallest` : '\u2014'],
+      ['Altitude step', altd.length && isFinite(astep) ? `${astep.toFixed(3)}\u00b0 smallest` : (altd.length ? '\u2014' : 'not offered')],
+      ['Lean now / rest', cur ? `${cur.lean.toFixed(1)}\u00b0 / ${hov.length >= 5 ? q(hov, 0.5).toFixed(1) + '\u00b0' : '\u2014'}` : '\u2014'],
+    ];
+    $('stats').innerHTML = cells.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  }
+
+  function size() { const d = Math.min(window.devicePixelRatio || 1, 3); cv.width = Math.round(cv.clientWidth * d); cv.height = Math.round(cv.clientHeight * d); return d; }
+  let dpr = size();
+  if (window.ResizeObserver) new ResizeObserver(() => { dpr = size(); }).observe(cv);
+  const BANDS = [
+    { label: 'interval ms', lo: 0, hi: 50, marks: [8.3, 16.7, 33.3] },
+    { label: 'pressure', lo: 0, hi: 1, marks: [0.5] },
+    { label: 'tilt X / Y \u00b0', lo: -70, hi: 70, marks: [0] },
+    { label: 'lean \u00b0 (rest dashed)', lo: 0, hi: 90, marks: [30, 60] },
+  ];
+  function draw() {
+    const W = cv.width, Hh = cv.height, now = paused && ev.length ? ev[ev.length - 1].t : performance.now();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#111219'; ctx.fillRect(0, 0, W, Hh);
+    const bh = Hh / BANDS.length, xOf = t => W - (now - t) / WIN * W, pad8 = 8 * dpr;
+    ctx.font = `${11 * dpr}px ui-monospace, Consolas, monospace`;
+    const win = ev.filter(r => now - r.t < WIN), [kind, fl] = finest(win);
+    BANDS.forEach((b, k) => {
+      const y0 = k * bh, yOf = v => y0 + bh - pad8 - (v - b.lo) / (b.hi - b.lo) * (bh - 2 * pad8);
+      ctx.strokeStyle = '#262836'; ctx.lineWidth = 1 * dpr; ctx.beginPath(); ctx.moveTo(0, y0 + bh); ctx.lineTo(W, y0 + bh); ctx.stroke();
+      ctx.strokeStyle = '#1f2130'; for (const m of b.marks) { ctx.beginPath(); ctx.moveTo(0, yOf(m)); ctx.lineTo(W, yOf(m)); ctx.stroke(); ctx.fillStyle = '#5a5c70'; ctx.fillText(String(m), 4 * dpr, yOf(m) - 2 * dpr); }
+      ctx.fillStyle = '#8b8da2'; ctx.fillText(b.label, 4 * dpr, y0 + 13 * dpr);
+      const plot = (list, key, col, dots) => {
+        ctx.strokeStyle = col; ctx.fillStyle = col; ctx.beginPath(); let on = false;
+        for (const r of list) { const v = r[key]; if (v == null || !isFinite(v)) { on = false; continue; } const x = xOf(r.t), y = yOf(Math.max(b.lo, Math.min(b.hi, v)));
+          if (dots) { ctx.fillRect(x - 1.5 * dpr, y - 1.5 * dpr, 3 * dpr, 3 * dpr); } else if (on) ctx.lineTo(x, y); else { ctx.moveTo(x, y); on = true; } }
+        if (!dots) ctx.stroke();
+      };
+      ctx.lineWidth = 1.4 * dpr;
+      if (k === 0) { const iv = []; for (let i = 1; i < fl.length; i++) iv.push({ t: fl[i].t, v: fl[i].t - fl[i - 1].t }); plot(iv, 'v', '#f0c46a', true); }
+      if (k === 1) plot(fl.map(r => ({ t: r.t, v: r.hover ? null : r.p })), 'v', '#9fb4ff');
+      if (k === 2) { plot(fl, 'tx', '#7fd3a0'); plot(fl, 'ty', '#e98a7a'); }
+      if (k === 3) {
+        plot(fl, 'lean', '#cfd0da');
+        const hov = ev.filter(r => r.hover && now - r.t < 1500).map(r => r.lean);
+        if (hov.length >= 5) { ctx.setLineDash([5 * dpr, 4 * dpr]); ctx.strokeStyle = '#f0c46a'; const y = yOf(q(hov, 0.5)); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.setLineDash([]); }
+      }
+    });
+    ctx.fillStyle = '#5a5c70'; ctx.fillText(`last 6 s \u00b7 ${kind} stream`, W - 150 * dpr, Hh - 4 * dpr);
+  }
+  (function loop() { if (!paused) { draw(); stats(); } requestAnimationFrame(loop); })();
+
+  $('pause').addEventListener('click', () => { paused = !paused; $('pause').setAttribute('aria-pressed', paused); $('pause').textContent = paused ? 'Resume' : 'Pause'; draw(); stats(); });
+  $('still').addEventListener('click', () => {
+    const out = $('stillOut'); let n = 3; still = null;
+    out.textContent = 'Rest the pen on the pad (or hover it) and hold it as still as you can\u2026 3';
+    const tick = setInterval(() => {
+      n--;
+      if (n > 0) { out.textContent = `Hold still\u2026 ${n}`; return; }
+      if (n === 0) { still = []; out.textContent = 'Measuring for 3 s\u2026 keep still'; return; }
+      if (n === -3) {
+        clearInterval(tick);
+        const s = still.filter(r => r.type !== 'co'); still = null;
+        if (s.length < 5) { out.textContent = 'Too few pen events came in. Try again with the pen on or just above the pad.'; return; }
+        const f = k => s.map(r => r[k]).filter(v => v != null && isFinite(v));
+        const rng = a => a.length ? (Math.max(...a) - Math.min(...a)) : 0;
+        out.textContent = `${s.length} events in 3 s (${Math.round(s.length / 3)}/s)\n`
+          + `position  sd ${sd(f('x')).toFixed(2)} / ${sd(f('y')).toFixed(2)} px\n`
+          + `pressure  sd ${sd(f('p')).toFixed(4)}  range ${rng(f('p')).toFixed(4)}\n`
+          + `tilt X    sd ${sd(f('tx')).toFixed(2)}\u00b0  range ${rng(f('tx')).toFixed(1)}\u00b0  (${new Set(f('tx')).size} values)\n`
+          + `tilt Y    sd ${sd(f('ty')).toFixed(2)}\u00b0  range ${rng(f('ty')).toFixed(1)}\u00b0  (${new Set(f('ty')).size} values)\n`
+          + `lean      sd ${sd(f('lean')).toFixed(2)}\u00b0  range ${rng(f('lean')).toFixed(1)}\u00b0`;
+      }
+    }, 1000);
+  });
+  $('dump').addEventListener('click', async () => {
+    const now = performance.now(), rows = ev.filter(r => now - r.t < WIN).slice(-800), t0 = rows.length ? rows[0].t : 0;
+    const f = (v, d) => v == null || !isFinite(v) ? '' : (+v).toFixed(d);
+    const text = ['t_ms,type,hover,x,y,pressure,tiltX,tiltY,altitude_deg,azimuth_deg,lean_deg']
+      .concat(rows.map(r => [f(r.t - t0, 1), r.type, r.hover ? 1 : 0, f(r.x, 1), f(r.y, 1), f(r.p, 4), r.tx, r.ty,
+                             f(r.alt != null ? r.alt * 180 / Math.PI : null, 3), f(r.az != null ? r.az * 180 / Math.PI : null, 3), f(r.lean, 2)].join(','))).join('\n');
+    const box = $('dumpOut'); box.hidden = false; box.value = text; box.focus(); box.select();
+    try { await navigator.clipboard.writeText(text); $('stillOut').textContent = `Copied ${rows.length} events.`; }
+    catch (_) { $('stillOut').textContent = `${rows.length} events are selected in the box below; copy them from there.`; }
+  });
+})();
+</script>
