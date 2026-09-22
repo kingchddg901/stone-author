@@ -1454,7 +1454,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const L of geo.lines) {
       if (!L.parent || L.at == null) continue;
       const P = geo.byId.get(L.parent); if (!P || !P.pts.length) continue;
-      const t = at(P, L.at), ddx = t[0] - L.pts[0][0], ddy = t[1] - L.pts[0][1];
+      const str = 1 - W(P.major ? 'major' : 'minor');    // link firmness = the PARENT's stability: a held parent
+      if (str <= 0) continue;                            // pins firmly; a warping parent gives a weaker link, so a
+      const t = at(P, L.at), ddx = (t[0] - L.pts[0][0]) * str, ddy = (t[1] - L.pts[0][1]) * str;   // minor-off-minor can drift
       if (ddx === 0 && ddy === 0) continue;
       const n = L.pts.length, span = Math.max(1, Math.floor(n * 0.35));
       for (let i = 0; i < span && i < n; i++) { const f = 1 - i / span; L.pts[i][0] += ddx * f; L.pts[i][1] += ddy * f; }
