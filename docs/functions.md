@@ -99,13 +99,15 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
 - `fullBuild()` — rebuild all geometry from `marks` in order (older rock first). *(1421)*
 - `warpGeo()` — cloud-driven domain **warp**: displace every built point (veins/grain/specks/styl/drusy/
   knots) by `G.warp` along the cloud's fBm field, offset by `G.cloudX`/`cloudY` (the field is **moveable**,
-  same offset as the cloud mottle), and **scaled per layer** by each layer's `warp` weight (so a layer can
-  hold still). `fbm2()` / `vnoise()` / `nz()` are that shared noise. The **Cloud** tool drags `cloudX`/
-  `cloudY` (a `cloudpan` gesture, mirroring the view pan). A final **anchor** pass re-pins each branch's root
-  to its parent's post-warp attach point (`L.at`), blended over the first ~35% of the branch — its **firmness
-  scales with the parent's stability** (`1 − parentWarp`): a held parent pins firmly, a warping parent gives a
-  weaker link, so a minor on a held major stays put while a minor-off-warping-minor is free to drift. Control:
-  the "Warp holds major veins" toggle sets the major layer's `warp` to 0.
+  same offset as the cloud mottle) and **scaled per layer** by each layer's `warp` weight. `fbm2()` /
+  `vnoise()` / `nz()` are that shared noise; the **Cloud** tool drags `cloudX`/`cloudY` (a `cloudpan`
+  gesture). Branch warp is a **generation model** (`depthOf`: major n0, its branch n1, …): vein warp **rises
+  with depth** (`1 + d·G.warpDepth`, the "Deep drift" knob), and a final **anchor** pass re-pins each line's
+  root — the major to its own origin (`L._r0`), a branch to its parent's post-warp attach point (`L.at`) —
+  over a ~4% rigid zone, with **bond strength `1/(1+d)²`** (inverse-square). Net: the trunk stays planted
+  while each deeper generation pushes harder against a weaker bond, so tips wander off; `warpDepth = 0`
+  collapses to coherent uniform warp. (The per-layer `warp` weight + "Warp holds major veins" toggle still
+  gate whether a whole layer warps at all.)
 
 ## Tile engine
 
