@@ -38,6 +38,18 @@
           font-variant-numeric: tabular-nums; }
   .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 68ch; }
   .note b { color: var(--text); font-weight: 500; }
+  .layers { display: grid; gap: 5px; width: 100%; max-width: 460px; }
+  .lay { display: grid; grid-template-columns: 30px minmax(66px, 1fr) 30px minmax(70px, 110px) 3ch;
+         align-items: center; gap: 8px; }
+  .lay .nm { font-size: 13px; color: var(--text); }
+  .lay.off .nm { color: var(--dim); }
+  .lay .eye, .lay .solo { padding: 4px 0; text-align: center; font-size: 13px; line-height: 1; }
+  .lay .eye::before { content: '\25C9'; }                 /* filled disc = visible */
+  .lay .eye[aria-pressed="false"]::before { content: '\25CB'; color: var(--dim); }   /* ring = hidden */
+  .lay .solo[aria-pressed="true"] { color: #f0c46a; border-color: var(--on-line); }
+  .lay output { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
+                text-align: right; font-variant-numeric: tabular-nums; }
+  .lay input[type=range] { width: 100%; accent-color: #8a8de0; }
 </style>
 <div class="wrap">
   <div>
@@ -179,6 +191,10 @@
       <button id="zfit" type="button">Fit</button></div>
     <span class="stat" id="stat">&mdash;</span>
   </div>
+  <div class="row"><div class="grp" role="group" aria-label="Layers" style="align-items:flex-start">
+    <span class="lbl">Layers</span>
+    <div class="layers" id="layers"></div>
+  </div></div>
   <p class="note"><b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw
     it, so changing them shapes the next line only. This generates the base structure; the colours here are
     only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor
@@ -253,6 +269,17 @@
     { key: 'minor', label: 'Minor veins' },
     { key: 'major', label: 'Major veins' },
   ];
+  // LIVE layer controls (preview art-direction over the canonical set). Each render layer flattens into
+  // a consumer BUCKET (what VA/dashboard export by key); today it is 1:1, but this shape lets step 3 add
+  // many render layers per bucket, and lets a WebGPU renderer swap in behind the same model. Count is
+  // not the ceiling - stored bitmaps cap on memory, procedural layers on frame time; the model plans for
+  // hundreds. Consumers ALWAYS read by key, so visibility/opacity here never change an exported mask.
+  const layers = LAYERS.map(L => ({ key: L.key, label: L.label, bucket: L.key, on: true, op: 1 }));
+  const layAt = k => layers.find(L => L.key === k);
+  let soloLay = null;
+  const layVis = k => soloLay ? k === soloLay : (layAt(k) ? layAt(k).on : true);
+  const layOp = k => { const L = layAt(k); return L ? L.op : 1; };
+  const STONE_BG = '#15161b';                             // neutral shown where the base layer is hidden/faded
   const V = { z: 1, cx: 0.5, cy: H / 2 };
   let Wc = 0, Hc = 0, dpr = 1;
 
@@ -1170,7 +1197,8 @@
     stoneC.width = SW; stoneC.height = SH;
     const c = stoneC.getContext('2d');
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, SW, SH);
-    c.fillStyle = FAM[fam].ground; c.fillRect(0, 0, SW, SH);   // the slab's own ground, so tiles are stone not grout
+    c.fillStyle = STONE_BG; c.fillRect(0, 0, SW, SH);
+    if (layVis('base')) { c.globalAlpha = layOp('base'); c.fillStyle = FAM[fam].ground; c.fillRect(0, 0, SW, SH); c.globalAlpha = 1; }  // slab's own ground, so tiles are stone not grout
     const prev = g2d; g2d = c; c.setTransform(SW, 0, 0, SW, 0, 0); c.lineCap = 'round'; c.lineJoin = 'round';
     paintStoneContent(false, false);
     g2d = prev; stoneReady = true;
@@ -1265,7 +1293,11 @@
   function draw() {
     const F = FAM[fam], ident = view !== 'stone', angleView = view === 'angle';
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
-    ctx.fillStyle = ident ? '#0c0d11' : F.ground; ctx.fillRect(0, 0, cv.width, cv.height);
+    if (ident) { ctx.fillStyle = '#0c0d11'; ctx.fillRect(0, 0, cv.width, cv.height); }
+    else {                                               // base layer is the ground: neutral behind it, ground on top at its opacity
+      ctx.fillStyle = STONE_BG; ctx.fillRect(0, 0, cv.width, cv.height);
+      if (layVis('base')) { ctx.globalAlpha = layOp('base'); ctx.fillStyle = F.ground; ctx.fillRect(0, 0, cv.width, cv.height); ctx.globalAlpha = 1; }
+    }
     const k = Wc * V.z * dpr;
     ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -1284,24 +1316,24 @@
   }
   function paintStoneContent(ident, angleView) {
     const F = FAM[fam];
-    if (F.grain) {
-      geo.grain.forEach((gl, k) => {
+    if (F.grain) {                                       // wood: grain = fine structure -> micro, knots = major features
+      if (layVis('micro')) geo.grain.forEach((gl, k) => {
         g2d.beginPath(); g2d.moveTo(gl.pts[0][0], gl.pts[0][1]);
         for (let i = 1; i < gl.pts.length; i++) g2d.lineTo(gl.pts[i][0], gl.pts[i][1]);
-        g2d.strokeStyle = ident ? idColour(gl.id, 0.6) : F.grain; g2d.globalAlpha = ident ? 0.8 : gl.a;
+        g2d.strokeStyle = ident ? idColour(gl.id, 0.6) : F.grain; g2d.globalAlpha = (ident ? 0.8 : gl.a) * (ident ? 1 : layOp('micro'));
         g2d.lineWidth = gl.w; g2d.stroke();
       });
-      for (const K of geo.knots) drawKnot(K, F, ident);
+      if (layVis('major')) for (const K of geo.knots) drawKnot(K, F, ident, ident ? 1 : layOp('major'));
     }
-    for (const e of geo.web) {
+    if (layVis('web')) for (const e of geo.web) {
       g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
       for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
       g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : F.web;
-      g2d.globalAlpha = ident ? 0.95 : 0.8; g2d.lineWidth = e.width; g2d.stroke();
+      g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp('web')); g2d.lineWidth = e.width; g2d.stroke();
     }
-    for (const s of geo.specks) {
+    if (layVis('micro')) for (const s of geo.specks) {
       const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
-      g2d.globalAlpha = ident ? 0.9 : s.lum;
+      g2d.globalAlpha = (ident ? 0.9 : s.lum) * (ident ? 1 : layOp('micro'));
       // Identity: a ground speck shows how far it was MOVED - cool where it lay, hot where pushed
       // Angle: the way a speck points, as hue (axial, so 2x the angle); round specks point nowhere
       g2d.fillStyle = !ident ? F.speck
@@ -1317,8 +1349,9 @@
       g2d.closePath(); g2d.fill();
     }
     const order = geo.lines.filter(L => !L.major).concat(geo.lines.filter(L => L.major));
-    if (!ident) for (const L of order) runs(L, () => F.vein, L.gauge * 2.4 * F.soft, 0.08, true);  // shoulder
-    for (const L of order) runs(L, t => (ident ? idColour(L.id, t) : F.vein), null, ident ? 1 : 0.94, false);
+    const lk = L => L.major ? 'major' : 'minor';
+    if (!ident) for (const L of order) if (layVis(lk(L))) runs(L, () => F.vein, L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true);  // shoulder
+    for (const L of order) if (layVis(lk(L))) runs(L, t => (ident ? idColour(L.id, t) : F.vein), null, (ident ? 1 : 0.94 * layOp(lk(L))), false);
   }
   function ellipse(K, f, jit) {
     ctx.beginPath();
@@ -1331,14 +1364,14 @@
     ctx.closePath();
   }
   // A knot is a branch cut across: its own small rings, darker, a dark rim, the pith at its heart.
-  function drawKnot(K, F, ident) {
+  function drawKnot(K, F, ident, op = 1) {
     const [r] = sub(K.seed, 50), p1 = r() * 6.28, p2 = r() * 6.28, nr = 4 + Math.floor(r() * 3);
     const jit = a => 0.05 * (0.6 * Math.sin(3 * a + p1) + 0.4 * Math.sin(5 * a + p2));
-    ellipse(K, 1, jit); ctx.fillStyle = ident ? idColour(K.id, 0.35) : F.knot; ctx.globalAlpha = 0.88; ctx.fill();
-    ctx.strokeStyle = ident ? idColour(K.id, 0.8) : F.grain; ctx.globalAlpha = 0.85;
+    ellipse(K, 1, jit); ctx.fillStyle = ident ? idColour(K.id, 0.35) : F.knot; ctx.globalAlpha = 0.88 * op; ctx.fill();
+    ctx.strokeStyle = ident ? idColour(K.id, 0.8) : F.grain; ctx.globalAlpha = 0.85 * op;
     for (let k = 1; k < nr; k++) { ellipse(K, k / nr, jit); ctx.lineWidth = 0.0008; ctx.stroke(); }
     ellipse(K, 1, jit); ctx.lineWidth = 0.0016; ctx.strokeStyle = ident ? '#ffffff' : '#3a2412'; ctx.stroke();
-    ctx.beginPath(); ctx.arc(K.x, K.y, K.R * 0.08, 0, 2 * Math.PI); ctx.fillStyle = '#2e1c0e'; ctx.fill();
+    ctx.beginPath(); ctx.arc(K.x, K.y, K.R * 0.08, 0, 2 * Math.PI); ctx.fillStyle = '#2e1c0e'; ctx.globalAlpha = op; ctx.fill();
   }
   // Guides are for you, not the stone: a filled dot pulls, an open ring pushes, its size is the
   // reach; a gravity line carries a band each side as wide as its reach, solid to pull, dashed to push.
@@ -1611,6 +1644,37 @@
 
   // ---- controls
   const press = (sel, on) => { for (const o of document.querySelectorAll(sel)) o.setAttribute('aria-pressed', o === on); };
+
+  // ---- LAYERS PANEL: eye + solo + opacity per canonical layer, shown front-to-back (major on top) so it
+  // reads like a stack. Toggling only repaints; when tiles are laid it also re-bakes the slab offscreen.
+  const layEl = document.getElementById('layers');
+  function relayer() { stoneReady = false; syncLayerUI(); redraw(false); }
+  function buildLayerUI() {
+    layEl.innerHTML = '';
+    for (const L of layers.slice().reverse()) {
+      const row = document.createElement('div'); row.className = 'lay'; row.dataset.key = L.key;
+      row.innerHTML =
+        '<button type="button" class="eye" data-act="eye" aria-pressed="' + L.on + '" title="Show or hide"></button>'
+        + '<span class="nm">' + L.label + '</span>'
+        + '<button type="button" class="solo" data-act="solo" aria-pressed="' + (soloLay === L.key) + '" title="Solo this layer">S</button>'
+        + '<input type="range" min="0" max="1" step="0.01" value="' + L.op + '" data-act="op" aria-label="' + L.label + ' opacity">'
+        + '<output>' + Math.round(L.op * 100) + '</output>';
+      row.querySelector('[data-act=eye]').addEventListener('click', () => { L.on = !L.on; if (soloLay === L.key && !L.on) soloLay = null; relayer(); });
+      row.querySelector('[data-act=solo]').addEventListener('click', () => { soloLay = soloLay === L.key ? null : L.key; relayer(); });
+      row.querySelector('[data-act=op]').addEventListener('input', e => { L.op = +e.target.value; row.querySelector('output').textContent = Math.round(L.op * 100); relayer(); });
+      layEl.appendChild(row);
+    }
+  }
+  function syncLayerUI() {
+    for (const row of layEl.querySelectorAll('.lay')) {
+      const L = layAt(row.dataset.key); if (!L) continue;
+      const hidden = soloLay ? soloLay !== L.key : !L.on;
+      row.querySelector('[data-act=eye]').setAttribute('aria-pressed', L.on);
+      row.querySelector('[data-act=solo]').setAttribute('aria-pressed', soloLay === L.key);
+      row.querySelector('[data-act=op]').value = L.op; row.querySelector('output').textContent = Math.round(L.op * 100);
+      row.classList.toggle('off', hidden);
+    }
+  }
   function showGround() {
     const F = FAM[fam];
     document.getElementById('ground').hidden = !(F.groundSpecks || F.grain);
@@ -1622,12 +1686,15 @@
   function serialize() {
     return { v: 1, fam, tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
+             layers: layers.map(L => ({ key: L.key, on: L.on, op: L.op })), soloLay,
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
   }
   function deserialize(o) {
     if (!o || o.v !== 1 || !Array.isArray(o.marks)) return false;
     fam = o.fam; tool = o.tool; view = o.view; layTiles = !!o.layTiles; guidesOn = o.guidesOn !== false;
     Object.assign(G, o.G || {}); Object.assign(T, o.T || {}); Object.assign(NEXT, o.NEXT || {});
+    if (Array.isArray(o.layers)) for (const s of o.layers) { const L = layAt(s.key); if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; } }
+    soloLay = o.soloLay || null;
     marks = o.marks.map(m => ({ ...m }));
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
     stoneReady = false; syncUI(); redraw(true); return true;
@@ -1658,7 +1725,7 @@
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
     for (const k of ['vein', 'branch', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
-    showGround(); hint();
+    showGround(); syncLayerUI(); hint();
   }
   function download(name, text) {                       // works from a local file; inert in the artifact sandbox
     try { const b = new Blob([text], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); return true; } catch (_) { return false; }
@@ -1764,6 +1831,7 @@
     { id: 4, kind: 'branch', seed: 1104, parent: 'L1', at: 0.42, side: 1, zoom: 1 },
   ];
   size();
+  buildLayerUI();
   if (!tryLoadLocal()) {                                // restore the last session on this device, else the demo
     marks = demo; nextId = 5;
     for (const m of marks) { m.p = { ...NEXT }; m.fam = fam; }
