@@ -224,6 +224,8 @@
     <div class="grp" role="group" aria-label="File"><span class="lbl">File</span>
       <button id="save" type="button">Save</button>
       <button id="load" type="button">Load</button>
+      <button id="export" type="button">Export</button>
+      <select id="expres" aria-label="Export width" title="Export width (px)"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option></select>
       <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
     <div class="grp" role="group" aria-label="View"><span class="lbl">View</span>
       <button id="v-stone" type="button" data-view="stone">Stone</button>
@@ -2289,7 +2291,116 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     showGround(); syncLayerUI(); hint();
   }
   function download(name, text) {                       // works from a local file; inert in the artifact sandbox
-    try { const b = new Blob([text], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); return true; } catch (_) { return false; }
+    try { const b = text instanceof Blob ? text : new Blob([text], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); return true; } catch (_) { return false; }
+  }
+
+  // ---- EXPORT: two levels + the rich set + .ora + SVG + source, all in one zip ------------------
+  // Store-only zip (PNGs are already compressed; .ora needs stored anyway). Verified round-trip.
+  function crc32(u8) { let crc = ~0; for (let i = 0; i < u8.length; i++) { crc ^= u8[i]; for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1)); } return ~crc >>> 0; }
+  function zipStore(files) {
+    const te = new TextEncoder(), parts = [], cen = []; let off = 0;
+    const b2 = n => [n & 255, n >> 8 & 255], b4 = n => [n & 255, n >> 8 & 255, n >> 16 & 255, n >> 24 & 255];
+    for (const f of files) {
+      const nm = te.encode(f.name), d = f.data instanceof Uint8Array ? f.data : new Uint8Array(f.data), crc = crc32(d);
+      const lh = Uint8Array.from([0x50, 0x4b, 3, 4, ...b2(20), 0, 0, 0, 0, 0, 0, 0, 0, ...b4(crc), ...b4(d.length), ...b4(d.length), ...b2(nm.length), 0, 0]);
+      parts.push(lh, nm, d); cen.push({ nm, crc, len: d.length, off }); off += lh.length + nm.length + d.length;
+    }
+    const cparts = []; let cs = 0;
+    for (const c of cen) { const ch = Uint8Array.from([0x50, 0x4b, 1, 2, ...b2(20), ...b2(20), 0, 0, 0, 0, 0, 0, 0, 0, ...b4(c.crc), ...b4(c.len), ...b4(c.len), ...b2(c.nm.length), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ...b4(c.off)]); cparts.push(ch, c.nm); cs += ch.length + c.nm.length; }
+    const eocd = Uint8Array.from([0x50, 0x4b, 5, 6, 0, 0, 0, 0, ...b2(cen.length), ...b2(cen.length), ...b4(cs), ...b4(off), 0, 0]);
+    return new Blob([...parts, ...cparts, eocd], { type: 'application/zip' });
+  }
+  const toU8 = c => new Promise(r => c.toBlob(b => b.arrayBuffer().then(a => r(new Uint8Array(a))), 'image/png'));
+  const expCanvas = W => { const c = document.createElement('canvas'); c.width = W; c.height = Math.round(W * H); return c; };
+  const polyPath = (cx, pts) => { cx.beginPath(); cx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) cx.lineTo(pts[i][0], pts[i][1]); };
+  function expCompleted(W) {                              // the finished slab, everything baked in
+    const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = STONE_BG; cx.fillRect(0, 0, c.width, c.height);
+    if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, c.width, c.height); cx.globalAlpha = 1; }
+    cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; paintStoneContent(false, false); g2d = prev; return c;
+  }
+  function expBaseMask(W) {                               // base value map: the base composite as luminance
+    const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = COL.ground; cx.fillRect(0, 0, c.width, c.height);
+    cx.setTransform(W, 0, 0, W, 0, 0);
+    if (G.brecStrength > 0) cx.drawImage(ensureBreccia(), 0, 0, 1, H);
+    if (G.cloudStrength > 0) { cx.globalCompositeOperation = 'soft-light'; cx.drawImage(ensureClouds(), 0, 0, 1, H); cx.globalCompositeOperation = 'source-over'; }
+    if (G.bandStrength > 0) { cx.globalCompositeOperation = 'soft-light'; cx.drawImage(ensureBands(), 0, 0, 1, H); cx.globalCompositeOperation = 'source-over'; }
+    cx.setTransform(1, 0, 0, 1, 0, 0); const im = cx.getImageData(0, 0, c.width, c.height), d = im.data;
+    for (let i = 0; i < d.length; i += 4) { const l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; d[i] = d[i + 1] = d[i + 2] = l; d[i + 3] = 255; }
+    cx.putImageData(im, 0, 0); g2d = prev; return c;
+  }
+  function expCoverage(kind, W) {                         // white-on-black coverage for a bucket
+    const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = '#000'; cx.fillRect(0, 0, c.width, c.height);
+    cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.strokeStyle = cx.fillStyle = '#fff'; g2d = cx;
+    if (kind === 'major') { for (const L of geo.lines) if (L.major) runs(L, () => '#fff', null, 1, false); }
+    else if (kind === 'minor') { for (const L of geo.lines) if (!L.major) runs(L, () => '#fff', null, 1, false); cx.lineJoin = 'miter'; cx.lineCap = 'butt'; for (const s of geo.styl) { polyPath(cx, s.pts); cx.lineWidth = s.width; cx.stroke(); } cx.lineJoin = 'round'; cx.lineCap = 'round'; }
+    else if (kind === 'micro') { for (const s of geo.specks) { cx.beginPath(); cx.arc(s.x, s.y, s.R0 || s.rad, 0, 6.2832); cx.fill(); } for (const s of geo.drusy) { cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, 6.2832); cx.fill(); } }
+    else if (kind === 'web') { for (const e of geo.web) { polyPath(cx, e.pts); cx.lineWidth = e.width; cx.stroke(); } }
+    g2d = prev; return c;
+  }
+  function expBucket(bucketKey, W) {                      // one consumer bucket, in colour, transparent elsewhere (for .ora layers)
+    const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d, saved = layers.map(L => L.on), sv = soloLay; soloLay = null;
+    for (const L of layers) L.on = (L.bucket === bucketKey);
+    cx.setTransform(1, 0, 0, 1, 0, 0);
+    if (bucketKey === 'base') { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, c.width, c.height); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, c.width, c.height); cx.globalAlpha = 1; } }
+    cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; paintStoneContent(false, false); g2d = prev;
+    layers.forEach((L, i) => L.on = saved[i]); soloLay = sv; return c;
+  }
+  function expIdT(W) {                                    // vein-id map (rgb-encoded index) + along-vein t map (grey) + legend
+    const ci = expCanvas(W), cxi = ci.getContext('2d'), ct = expCanvas(W), cxt = ct.getContext('2d'), prev = g2d;
+    for (const cx of [cxi, cxt]) { cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = '#000'; cx.fillRect(0, 0, ci.width, ci.height); cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; }
+    let idx = 0; const legend = {};
+    for (const L of geo.lines) { idx++; legend[idx] = L.id; const col = 'rgb(' + (idx & 255) + ',' + (idx >> 8 & 255) + ',' + (idx >> 16 & 255) + ')';
+      g2d = cxi; runs(L, () => col, null, 1, false);
+      g2d = cxt; runs(L, t => { const v = Math.round(t * 255); return 'rgb(' + v + ',' + v + ',' + v + ')'; }, null, 1, false); }
+    g2d = prev; return { ids: ci, t: ct, legend };
+  }
+  const pathsJSON = () => JSON.stringify({ slab: [SLAB_FT, +(SLAB_FT * H).toFixed(2)], lines: geo.lines.map(L => ({ id: L.id, major: !!L.major, parent: L.parent || null, at: L.at ?? null, pts: L.pts.map(p => [+p[0].toFixed(5), +p[1].toFixed(5)]), w: Array.from(L.w || []).map(x => +x.toFixed(6)) })) });
+  function linesSVG() {
+    const w = 1000, h = Math.round(1000 * H); let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">`;
+    const path = (pts, col, wd) => { const d = pts.map((p, i) => (i ? 'L' : 'M') + (p[0] * w).toFixed(1) + ' ' + (p[1] * w).toFixed(1)).join(' '); return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${wd.toFixed(2)}" stroke-linecap="round"/>`; };
+    for (const L of geo.lines) s += path(L.pts, '#333', L.gauge * w);
+    for (const st of geo.styl) s += path(st.pts, '#241d16', st.width * w);
+    return s + '</svg>';
+  }
+  async function buildOra(W) {
+    const te = new TextEncoder(), files = [{ name: 'mimetype', data: te.encode('image/openraster') }];
+    const merged = await toU8(expCompleted(W)), order = ['base', 'web', 'micro', 'minor', 'major'];
+    const pngs = []; for (const b of order) pngs.push({ b, bytes: await toU8(expBucket(b, W)) });
+    let stack = `<?xml version="1.0" encoding="UTF-8"?>\n<image version="0.0.3" w="${W}" h="${Math.round(W * H)}"><stack>`;
+    for (let i = order.length - 1; i >= 0; i--) stack += `<layer name="${order[i]}" src="data/${order[i]}.png"/>`;   // .ora: first child = top
+    stack += `</stack></image>`;
+    files.push({ name: 'stack.xml', data: te.encode(stack) });
+    for (const p of pngs) files.push({ name: 'data/' + p.b + '.png', data: p.bytes });
+    files.push({ name: 'mergedimage.png', data: merged });
+    files.push({ name: 'Thumbnails/thumbnail.png', data: merged });
+    return new Uint8Array(await zipStore(files).arrayBuffer());
+  }
+  let exporting = false;
+  async function exportAll(W) {
+    if (exporting) return; exporting = true; hint('Exporting… rendering ' + W + 'px (this can take a few seconds).');
+    try {
+      const te = new TextEncoder(), files = [];
+      files.push({ name: 'render.png', data: await toU8(expCompleted(W)) });
+      files.push({ name: 'masks/base.png', data: await toU8(expBaseMask(W)) });
+      for (const k of ['major', 'minor', 'micro', 'web']) files.push({ name: 'masks/' + k + '.png', data: await toU8(expCoverage(k, W)) });
+      const idt = expIdT(W);
+      files.push({ name: 'rich/vein-ids.png', data: await toU8(idt.ids) });
+      files.push({ name: 'rich/vein-t.png', data: await toU8(idt.t) });
+      files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(idt.legend)) });
+      files.push({ name: 'rich/paths.json', data: te.encode(pathsJSON()) });
+      files.push({ name: 'lines.svg', data: te.encode(linesSVG()) });
+      files.push({ name: 'source.json', data: te.encode(JSON.stringify(serialize())) });
+      files.push({ name: 'slab.ora', data: await buildOra(Math.min(W, 2048)) });
+      const zip = zipStore(files);
+      const dl = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
+      if (dl) await dl.save({ filename: 'stone-export.zip', data: zip });
+      else download('stone-export.zip', zip);
+      hint('Exported ' + files.length + ' files.');
+    } catch (e) { hint('Export failed: ' + (e && e.message || e)); }
+    exporting = false;
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
@@ -2378,6 +2489,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       hint('This device remembers your work automatically; a file download is blocked here.');
     }
   });
+  document.getElementById('export').addEventListener('click', () => exportAll(+document.getElementById('expres').value));
   document.getElementById('load').addEventListener('click', () => document.getElementById('loadfile').click());
   document.getElementById('loadfile').addEventListener('change', e => {
     const f = e.target.files[0]; if (!f) return;

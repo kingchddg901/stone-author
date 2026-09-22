@@ -188,3 +188,33 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 - `showGround()` — show/hide the family-specific ground panel. *(2104)*
 - `download(name, text)` — a Blob download for Save (falls back when the `downloads` capability is
   absent). *(2158)*
+
+## Export — one zip: masks, render, the rich set, `.ora`, SVG, source
+
+`exportAll(W)` renders everything at `W` pixels wide (the slab keeps its 8×5 ratio) and packs it into a
+single store-only zip. It prefers the `downloads` capability and falls back to `download()`.
+
+- `crc32(u8)` — CRC-32 over a byte array (the zip checksum). *(2299)*
+- `zipStore(files)` — a store-only (uncompressed) zip `Blob` from `[{name, data}]`. PNGs are already
+  compressed and `.ora` requires stored entries, so nothing is deflated. Writes local headers, a
+  central directory, and the EOCD by hand. *(2300)*
+- `toU8(canvas)` — a canvas as PNG bytes (`toBlob` → `Uint8Array`). *(2313)*
+- `expCanvas(W)` / `polyPath(cx, pts)` — an off-screen slab-ratio canvas; a polyline subpath. *(2314/2315)*
+- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(2316)*
+- `expBaseMask(W)` — the base composite (ground + breccia + clouds + bands) flattened to luminance:
+  the greyscale value map for the `base` bucket. *(2322)*
+- `expCoverage(kind, W)` — white-on-black coverage for a consumer bucket (`major` / `minor` / `micro`
+  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(2333)*
+- `expBucket(bucketKey, W)` — one bucket in colour, transparent elsewhere, by gating layers to that
+  bucket — the layer PNGs inside the `.ora`. *(2343)*
+- `expIdT(W)` — the rich pair: a vein-**id** map (each line an rgb-encoded index) and an
+  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(2351)*
+- `pathsJSON()` — the vectors as data: slab size in feet, then each line's `id / major / parent / at`,
+  its points, and its per-sample widths. *(2360)*
+- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(2361)*
+- `buildOra(W)` — an OpenRaster `.ora`: a nested zip with `mimetype` stored first, a `stack.xml`
+  (top child = top layer), the five bucket layers under `data/`, and a `mergedimage` + thumbnail.
+  Opens in Krita / GIMP / Photoshop. *(2368)*
+- `exportAll(W)` — assemble `render.png`, `masks/{base,major,minor,micro,web}.png`,
+  `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, and
+  `slab.ora` into one zip and hand it to the viewer. *(2382)*
