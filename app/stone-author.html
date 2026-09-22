@@ -180,6 +180,7 @@
       <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="cloudScale">Cloud scale <output id="cloudScaleV"></output></label><input id="cloudScale" type="range" min="0.4" max="3" step="0.05"></div>
       <div class="sl"><label for="warp">Warp <output id="warpV"></output></label><input id="warp" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="warpDepth">Deep drift <output id="warpDepthV"></output></label><input id="warpDepth" type="range" min="0" max="1.5" step="0.05"></div>
       <div class="sl"><label for="cloudX">Cloud X <output id="cloudXV"></output></label><input id="cloudX" type="range" min="-2" max="2" step="0.02"></div>
       <div class="sl"><label for="cloudY">Cloud Y <output id="cloudYV"></output></label><input id="cloudY" type="range" min="-2" max="2" step="0.02"></div>
       <div class="sl"><span class="lbl">Warp holds</span><div class="grp"><button id="warp-holdmajor" type="button" aria-pressed="false">Major veins stable</button></div></div>
@@ -424,7 +425,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
               stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, cloudX: 0, cloudY: 0,
+  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1 };
@@ -432,7 +433,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
-  const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
+  const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2),
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}` };
@@ -1442,24 +1443,40 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const W = k => { const L = layAt(k); return L ? L.warp : 1; };        // per-layer warp weight (a layer can hold still)
     const wp = (q, w) => { const a = dx(q[0], q[1]) * w, b = dy(q[0], q[1]) * w; q[0] += a; q[1] += b; };
     const wp2 = (s, w) => { const a = dx(s.x, s.y) * w, b = dy(s.x, s.y) * w; s.x += a; s.y += b; };
-    for (const L of geo.lines) { const w = W(L.major ? 'major' : 'minor'); for (const q of L.pts) wp(q, w); }
+    const dg = G.warpDepth, depthCache = new Map();
+    const depthOf = L => {                                // generation depth: major 0, its branch 1, its branch 2 …
+      if (depthCache.has(L.id)) return depthCache.get(L.id);
+      let d = 0, cur = L, seen = new Set();
+      while (cur.parent && !seen.has(cur.parent)) { seen.add(cur.parent); const p = geo.byId.get(cur.parent); if (!p) break; d++; cur = p; }
+      depthCache.set(L.id, d); return d;
+    };
+    for (const L of geo.lines) if (!L.parent && L.pts.length) L._r0 = [L.pts[0][0], L.pts[0][1]];   // remember the trunk's origin before warping
+    // veins warp by their layer weight AND rise with generation depth (n0 base, tips more) — so the weakened
+    // deep bond has something to release: deep branches push harder against a looser anchor and wander off.
+    for (const L of geo.lines) { const w = W(L.major ? 'major' : 'minor') * (1 + depthOf(L) * dg); for (const q of L.pts) wp(q, w); }
     const ww = W('web'); for (const e of geo.web) for (const q of e.pts) wp(q, ww);
     const wg = W('micro'); for (const gl of geo.grain) for (const q of gl.pts) wp(q, wg);
     const wsy = W('styl'); for (const s of geo.styl) for (const q of s.pts) wp(q, wsy);
     const wmi = W('micro'); for (const s of geo.specks) wp2(s, wmi);
     const wdr = W('drusy'); for (const s of geo.drusy) wp2(s, wdr);
     const wkn = W('major'); for (const K of geo.knots) wp2(K, wkn);
-    // ANCHOR: re-pin each branch's root to its parent's post-warp attach point, blended along the branch,
-    // so a minor warped differently from its parent (e.g. warp holds majors) flows but never snaps off.
+    // ANCHOR (generation model): every line's root re-pins to its anchor — the major (n0) to its own origin,
+    // a branch to its parent's post-warp attach point — held rigid over its first ~4% of length, then free to
+    // warp. Bond strength decays INVERSE-SQUARE with generation depth: 1/(1+d)^2 → n0=1 (firm), n1=0.25,
+    // n5≈0.03 (almost none), so the trunk stays planted while deep branches wander loose. (depthOf above.)
     for (const L of geo.lines) {
-      if (!L.parent || L.at == null) continue;
-      const P = geo.byId.get(L.parent); if (!P || !P.pts.length) continue;
-      const str = 1 - W(P.major ? 'major' : 'minor');    // link firmness = the PARENT's stability: a held parent
-      if (str <= 0) continue;                            // pins firmly; a warping parent gives a weaker link, so a
-      const t = at(P, L.at), ddx = (t[0] - L.pts[0][0]) * str, ddy = (t[1] - L.pts[0][1]) * str;   // minor-off-minor can drift
+      let target;
+      if (L.parent) { const P = geo.byId.get(L.parent); if (!P || !P.pts.length || L.at == null) continue; target = at(P, L.at); }
+      else target = L._r0;
+      if (!target || !L.pts.length) continue;
+      const d = depthOf(L), s = 1 / ((1 + d) * (1 + d));
+      const ddx = (target[0] - L.pts[0][0]) * s, ddy = (target[1] - L.pts[0][1]) * s;
       if (ddx === 0 && ddy === 0) continue;
-      const n = L.pts.length, span = Math.max(1, Math.floor(n * 0.35));
-      for (let i = 0; i < span && i < n; i++) { const f = 1 - i / span; L.pts[i][0] += ddx * f; L.pts[i][1] += ddy * f; }
+      const n = L.pts.length, span = Math.max(2, Math.floor(n * 0.04));   // ~4% rigid, ~4% release, then free
+      for (let i = 0; i < n; i++) {
+        let f; if (i < span) f = 1; else if (i < span * 2) f = 1 - (i - span) / span; else break;
+        L.pts[i][0] += ddx * f; L.pts[i][1] += ddy * f;
+      }
     }
   }
   function build() {
