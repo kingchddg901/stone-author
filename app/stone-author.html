@@ -89,6 +89,14 @@
     <div class="sl"><label for="branches">Minor veins <output id="branchesV"></output></label><input id="branches" type="range" min="0" max="2.5" step="0.05"></div>
     <div class="sl"><label for="defl">Deflection <output id="deflV"></output></label><input id="defl" type="range" min="0" max="2" step="0.05"></div>
     <div class="sl"><label for="fold">Fold <output id="foldV"></output></label><input id="fold" type="range" min="0" max="2.5" step="0.05"></div>
+    <div class="sl" style="grid-column:1/-1"><span class="lbl">Variant</span><div class="grp" role="group" aria-label="Vein variant">
+      <button type="button" data-var="natural" aria-pressed="true">Natural</button>
+      <button type="button" data-var="sinuous">Sinuous</button>
+      <button type="button" data-var="dendritic">Dendritic</button>
+      <button type="button" data-var="echelon">En-echelon</button>
+      <button type="button" data-var="boudinage">Boudinage</button>
+      <button type="button" data-var="halo">Halo</button></div></div>
+    <div class="sl"><label for="varAmt">Variant amount <output id="varAmtV"></output></label><input id="varAmt" type="range" min="0.3" max="2" step="0.05"></div>
   </div>
   <div class="sliders" id="s-branch" hidden>
     <div class="sl"><label for="blen">Minor length <output id="blenV"></output></label><input id="blen" type="range" min="0.3" max="3" step="0.05"></div>
@@ -272,7 +280,7 @@
   // change applies forward and never rewrites what is already down.
   const NEXT = { pressure: false, tilt: false, gauge: 1, rough: 1, breaks: 1, branches: 1, blen: 1, gauge2: 1, spread: 1, density: 1, stretch: 1,
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
-              stylAmp: 1, stylTooth: 1, stylWidth: 1 };
+              stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
   const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, cloudScale: 1, cloudStrength: 0.5,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
@@ -609,6 +617,7 @@
       if (tE) tp = Math.min(tp, (1 - s) / 0.08);
       w[i] = gauge * (1 + F.swing * sw[i] / mx) * Math.max(0.15, Math.min(1, tp));
       if (extra.press) w[i] *= extra.press(s);
+      if (extra.wmod) w[i] *= extra.wmod(s);             // boudinage: pinch-and-swell along the line
       keep[i] = gp[i] > thr ? 1 : 0;
     }
     const lean = extra.lean ? Float64Array.from({ length: n }, (_, i) => extra.lean((cum[i] + (cum[i + 1] ?? cum[i])) / 2 / total)) : null;
@@ -629,20 +638,52 @@
   function add(out, L) { out.lines.push(L); out.byId.set(L.id, L); }
 
   // ---- the tools, each a generator run on an authored line
+  // A low-frequency lateral wave added along the route, tapered at both ends (the "sinuous" variant).
+  function sinuate(kn, seed, M) {
+    const pts = resample(kn, 0.01), n = pts.length; if (n < 3) return kn;
+    const [r] = sub(seed, 44), amp = 0.03 * M.varAmt, cyc = 1.5 + 2.5 * r(), ph = r() * 6.2832, out = [];
+    for (let i = 0; i < n; i++) {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)], tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1;
+      const t = i / (n - 1), off = amp * Math.sin(2 * Math.PI * cyc * t + ph) * Math.sin(Math.PI * t);
+      out.push([pts[i][0] - ty / L * off, pts[i][1] + tx / L * off]);
+    }
+    return out;
+  }
+  const offsetSeg = (seg, off) => seg.map((p, i) => {   // shift a polyline sideways by `off` (perp), for en-echelon
+    const a = seg[Math.max(0, i - 1)], b = seg[Math.min(seg.length - 1, i + 1)], tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1;
+    return [p[0] - ty / L * off, p[1] + tx / L * off];
+  });
+
   function buildVein(m, F, out) {
     const M = m.p;                                      // the settings it was drawn with
+    const variant = M.variant || 'natural';
     const [rg] = sub(m.seed, 9), [, g] = sub(m.seed, 10);
     const gauge = F.gauge * M.gauge * (0.8 + 0.4 * rg());
     const press = M.pressure ? pressFactor(m.samples) : null;
     const leanAt = M.tilt ? leanProfile(m.samples, m.rest) : null;
     let kn = handRoute(m.samples);
     if (out.specks.length > 50) kn = deflect(kn, out.specks, M.defl);   // the rock it meets, a few degrees
-    const main = lineGeom('L' + m.id, roughen(kn, 3, veinSched(F, M), g), gauge, F, M, m.seed, 0,
-                          { mark: m.id, major: true, press, lean: leanAt });
+    if (variant === 'sinuous') kn = sinuate(kn, m.seed, M);
+    let wmod = null;                                    // boudinage: rhythmic pinch-and-swell in the width
+    if (variant === 'boudinage') { const [rb] = sub(m.seed, 45), cyc = 3 + Math.round(3 * rb()), ph = rb() * 6.2832; wmod = s => 0.3 + 0.7 * Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * cyc * s + ph), 1.5); }
+    const extra = { mark: m.id, major: true, press, lean: leanAt, wmod, halo: variant === 'halo' };
+
+    if (variant === 'echelon') {                        // one route -> a run of offset, overlapping segments
+      const dense = resample(roughen(kn, 3, veinSched(F, M), g), 0.01), n = dense.length;
+      const [re] = sub(m.seed, 46), segs = 3 + Math.round(3 * re());
+      for (let s = 0; s < segs; s++) {
+        const i0 = Math.floor(s / segs * (n - 1)), i1 = Math.max(i0 + 1, Math.floor((s + 0.72) / segs * (n - 1)));
+        const seg = dense.slice(i0, i1 + 1); if (seg.length < 2) continue;
+        add(out, lineGeom('L' + m.id + 'e' + s, offsetSeg(seg, 0.018 * M.varAmt * (s % 2 ? 1 : -1)), gauge, F, M, m.seed, s, { ...extra }));
+      }
+      return;                                           // en-echelon carries no family minors
+    }
+
+    const main = lineGeom('L' + m.id, roughen(kn, 3, veinSched(F, M), g), gauge, F, M, m.seed, 0, extra);
     add(out, main);
     const made = [main];
     const [rc] = sub(m.seed, 19);
-    const nb = Math.round((F.branches[0] + rc() * (F.branches[1] - F.branches[0])) * M.branches);
+    const nb = Math.round((F.branches[0] + rc() * (F.branches[1] - F.branches[0])) * M.branches * (variant === 'dendritic' ? 2.2 : 1));
     for (let k = 0; k < nb; k++) {                      // the family's own minor veins
       const [r] = sub(m.seed, 20, k), [, g2] = sub(m.seed, 21, k);
       const t = 0.2 + 0.6 * r(), side = r() < 0.5 ? -1 : 1;
@@ -650,20 +691,31 @@
       const len = (0.12 + 0.23 * r()) * F.branchLen * M.blen;
       const pts = roughen([a, [a[0] + Math.cos(th) * len, a[1] + Math.sin(th) * len]], levelsFor(len), veinSched(F, M), g2);
       const minor = lineGeom(main.id + '.' + k, pts, gauge * 0.5 * (press ? press(t) : 1), F, M, m.seed, 100 + k,
-                        { mark: m.id, parent: main.id, taperStart: false, lean: leanAt ? (lt => () => lt)(leanAt(t)) : null });
+                        { mark: m.id, parent: main.id, taperStart: false, wmod, lean: leanAt ? (lt => () => lt)(leanAt(t)) : null });
       add(out, minor); made.push(minor);
+      if (variant === 'dendritic') {                    // fern-like: each minor throws one or two of its own
+        const [rs] = sub(m.seed, 30, k), sn = 1 + (rs() < 0.6 ? 1 : 0);
+        for (let j = 0; j < sn; j++) {
+          const [r3] = sub(m.seed, 31, k, j), [, g3] = sub(m.seed, 32, k, j);
+          const tt = 0.3 + 0.5 * r3(), ss = r3() < 0.5 ? -1 : 1, pa = at(minor, tt), pth = tangent(minor, tt) + ss * (0.3 + 0.4 * r3()), plen = (0.5 + 0.3 * r3()) * len * 0.6;
+          const sub2 = lineGeom(minor.id + '.' + j, roughen([pa, [pa[0] + Math.cos(pth) * plen, pa[1] + Math.sin(pth) * plen]], levelsFor(plen), veinSched(F, M), g3),
+                        gauge * 0.3, F, M, m.seed, 200 + k * 4 + j, { mark: m.id, parent: minor.id, taperStart: false });
+          add(out, sub2); made.push(sub2);
+        }
+      }
     }
     made.forEach((L, i) => intrude(L, out.specks, M, i === 0 ? kn : null));
   }
   function buildBranch(m, F, out) {
-    const M = m.p;
+    const M = m.p, variant = M.variant || 'natural';
     const par = out.byId.get(m.parent);
     if (!par) return;                                   // its parent was undone
     const p = at(par, m.at);
     let pts, press = null, lean = null, route = null;
     if (m.samples && pathLen(m.samples) > 0.01) {       // routed by hand, from the vein outward
-      const kn = handRoute([p, ...m.samples.slice(1)]);
+      let kn = handRoute([p, ...m.samples.slice(1)]);
       kn[0] = p;
+      if (variant === 'sinuous') { kn = sinuate(kn, m.seed, M); kn[0] = p; }
       press = M.pressure ? pressFactor(m.samples) : null;
       lean = M.tilt ? leanProfile(m.samples, m.rest) : null;
       pts = roughen(kn, 3, veinSched(F, M), sub(m.seed, 10)[1]);
@@ -675,8 +727,10 @@
       const len = (0.08 + 0.17 * r()) * F.branchLen * M.blen / Math.sqrt(m.zoom || 1);
       pts = roughen([p, [p[0] + Math.cos(th) * len, p[1] + Math.sin(th) * len]], levelsFor(len), veinSched(F, M), sub(m.seed, 23)[1]);
     }
+    let wmod = null;
+    if (variant === 'boudinage') { const [rb] = sub(m.seed, 45), cyc = 3 + Math.round(3 * rb()), ph = rb() * 6.2832; wmod = s => 0.3 + 0.7 * Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * cyc * s + ph), 1.5); }
     const L = lineGeom('B' + m.id, pts, Math.max(par.gauge * 0.5 * M.gauge2, 0.0008), F, M, m.seed, 0,
-                       { mark: m.id, parent: par.id, taperStart: false, press, lean });
+                       { mark: m.id, parent: par.id, taperStart: false, press, lean, wmod, halo: variant === 'halo' });
     add(out, L);
     intrude(L, out.specks, M, route);
   }
@@ -1557,6 +1611,10 @@
     }
     const order = geo.lines.filter(L => !L.major).concat(geo.lines.filter(L => L.major));
     const lk = L => L.major ? 'major' : 'minor';
+    if (!ident) {                                        // halo: a wide, pale bleached selvage under the vein
+      const [hr, hg, hb] = hexRGB(F.ground), halo = `rgb(${Math.round(hr + (255 - hr) * 0.55)},${Math.round(hg + (255 - hg) * 0.55)},${Math.round(hb + (255 - hb) * 0.55)})`;
+      for (const L of order) if (L.halo && layVis(lk(L))) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
+    }
     if (!ident) for (const L of order) if (layVis(lk(L))) runs(L, () => F.vein, L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true);  // shoulder
     for (const L of order) if (layVis(lk(L))) runs(L, t => (ident ? idColour(L.id, t) : F.vein), null, (ident ? 1 : 0.94 * layOp(lk(L))), false);
   }
@@ -1924,7 +1982,7 @@
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
     pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
     pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : 'order'); pv('data-unit', T.units);
-    pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag);
+    pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant);
     const tog = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', !!on); };
     tog('pen-pressure', NEXT.pressure); tog('pen-tilt', NEXT.tilt); tog('guides', guidesOn);
     tog('laytiles', layTiles); tog('t-joints', T.joints); tog('m-hover', hoverMag);
@@ -1947,6 +2005,7 @@
   });
   for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
   for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
+  for (const b of document.querySelectorAll('[data-var]')) b.addEventListener('click', () => { NEXT.variant = b.dataset.var; press('[data-var]', b); });   // variant applies to the NEXT line
   const mh = document.getElementById('m-hover');
   mh.addEventListener('click', () => {
     hoverMag = !hoverMag; mh.setAttribute('aria-pressed', hoverMag); if (!hoverMag) commitHover();
