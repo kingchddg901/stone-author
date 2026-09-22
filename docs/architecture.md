@@ -43,7 +43,8 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
 **family** (Carrara, Calacatta, Nero Marquina, Granite, Wood) decides what they are.
 
 - **Tools** — Vein, Branch, **Stylolite**, Web, Pour, Gravity, Magnet, Knot, Chip, **Tune** (tap a
-  vein to colour just that one), **Cloud** (drag to move the cloud/warp field), Move.
+  vein to colour just that one), **Cloud** (drag to move the cloud/warp field), **Moon** (drag a local
+  warp brush across the slab), Move.
 - **Slab primitives** (per family, seeded, greyscale) — **clouds/mottling**, **banding**,
   **breccia clasts**, **drusy sparkle**, on top of the ground and the fracture/speck structure.
 - **Vein-structure variants** (per line) — natural, **sinuous**, **dendritic**, **en-echelon**,
@@ -136,7 +137,12 @@ warp of the whole structure — the molten flow) · **moveable clouds** (drag th
 Cloud tool) · the **generation warp model** (a rooted trunk, an inverse-square bond from branch to
 sub-branch, warp amount rising with depth — "Deep drift") · **export** (one zip: VA's four grey
 masks + a base value map, the dashboard's rich id/*t* maps with legend and vector paths, a completed
-render, a layered `.ora`, and an SVG — the whole contract in one file, at a chosen pixel width).
+render, a layered `.ora`, and an SVG — the whole contract in one file, at a chosen pixel width) · the
+**warp guide** (the Cloud tool draws the warp field as a teal vector overlay — the source of the
+distortion made visible, a guide that never bakes into an export) · the **moon** (a *local* warp brush,
+distinct from the gentle global field: drag a "ball" across the slab and it drags the geometry it passes
+into its wake, forward-push, fading at the rim; a stored mark, deterministic, and **reversible by hand** —
+retracing the pass backwards negates it exactly, so overshoot-and-recover is the intended feel).
 
 **Next:** per-id beyond veins (clasts / seams) · the remaining canvas colour menu (gradients,
 filters) · per-pixel displacement of the base fields under warp · targeted per-item reroll · a bake

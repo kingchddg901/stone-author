@@ -107,7 +107,16 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   over a ~4% rigid zone, with **bond strength `1/(1+d)²`** (inverse-square). Net: the trunk stays planted
   while each deeper generation pushes harder against a weaker bond, so tips wander off; `warpDepth = 0`
   collapses to coherent uniform warp. (The per-layer `warp` weight + "Warp holds major veins" toggle still
-  gate whether a whole layer warps at all.)
+  gate whether a whole layer warps at all.) `warpGeo` runs **two warps** before the shared anchor pass: the
+  gentle global field (above, when `G.warp > 0`) and every **moon** mark (below); `build()`'s incremental
+  path is also skipped whenever a moon exists, so a moon always rebuilds. *(1421)*
+- `applyMoon(m, W)` — one **moon**: a dragged local warp brush ("ball" of radius `M.moonReach`, force
+  `M.moonStrength`). A **forward-warp** — each point's displacement is the ball's motion summed along the
+  pass, weighted by a soft falloff (`1 − d²/R²`, 1 at the centre → 0 at the rim), computed from the
+  point's original position and applied once. That single linear sum makes it **order-free and exactly
+  reversible**: retracing the pass negates the field (measured cosine −0.999), which is the intended
+  hand-tool feel, not a fluid stir. Warps only layers whose `warp` weight is on; the anchor pass after
+  still keeps a dragged branch from snapping off. Passes are marks, so they stack. *(1441)*
 
 ## Tile engine
 
@@ -139,6 +148,10 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 - `paintLive()` — the in-progress stroke. *(1659)*
 - `ellipse(K, f, jit)` / `drawKnot(K, F, ident, op)` — knot rings and rim. *(1756/1767)*
 - `drawScaleBar()` / `drawGuides()` — the scale bar and the gravity/magnet guide overlay. *(1778/1790)*
+- `drawWarpGuide()` — the **warp field made visible**: samples the same `fbm2` displacement `warpGeo`
+  uses, on a coarse grid, and draws each node's base displacement as a teal arrow (direction exact,
+  length/opacity the field magnitude normalised to the grid max). Shown with the **Cloud** tool while
+  `G.warp > 0`; rides `cloudX`/`cloudY`, and is a guide — never baked into an export.
 - `idColour(id, t)` — identity-view colour for an id. *(1641)*
 - `redraw(rebuild)` — schedule a frame on rAF (rebuild geometry if asked), then autosave. *(1858)*
 - `stat()` / `clampView()` / `zoomAt(ex, ey, f)` / `hint(msg)` — status line, view clamp, zoom, hint. *(1866/1871/1877/1898)*

@@ -76,6 +76,7 @@
     <button id="t-chip" type="button" data-tool="chip">Chip</button>
     <button id="t-tune" type="button" data-tool="tune">Tune</button>
     <button id="t-cloud" type="button" data-tool="cloud">Cloud</button>
+    <button id="t-moon" type="button" data-tool="moon">Moon</button>
     <button id="t-move" type="button" data-tool="move">Move</button>
   </div>
   <div class="grp" role="group" aria-label="Pen"><span class="lbl">Pen</span>
@@ -125,6 +126,10 @@
       <button id="g-push" type="button" data-sign="-1" aria-pressed="false">Push</button></div></div>
     <div class="sl"><label for="strength">Strength <output id="strengthV"></output></label><input id="strength" type="range" min="0.05" max="0.9" step="0.01"></div>
     <div class="sl"><label for="reach">Reach <output id="reachV"></output></label><input id="reach" type="range" min="0.3" max="3" step="0.05"></div>
+  </div>
+  <div class="sliders" id="s-moon" hidden>
+    <div class="sl"><label for="moonReach">Ball size <output id="moonReachV"></output></label><input id="moonReach" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="moonStrength">Pull <output id="moonStrengthV"></output></label><input id="moonStrength" type="range" min="0.2" max="3" step="0.05"></div>
   </div>
   <div class="sliders" id="s-knot" hidden>
     <div class="sl"><label for="ksize">Knot size <output id="ksizeV"></output></label><input id="ksize" type="range" min="0.3" max="3" step="0.05"></div>
@@ -425,7 +430,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // change applies forward and never rewrites what is already down.
   const NEXT = { pressure: false, tilt: false, gauge: 1, rough: 1, breaks: 1, branches: 1, blen: 1, gauge2: 1, spread: 1, density: 1, stretch: 1,
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
-              stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1 };
+              stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
   const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
@@ -1438,30 +1443,60 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Cloud-driven domain WARP: displace the built vector geometry (veins, grain, specks, seams, drusy,
   // knots) by the cloud's own fBm field, so the whole slab flows along one field. Applied after a full
   // build; the incremental fast-path is skipped while warp is on so nothing is warped twice.
+  // A MOON: a powerful, focused, dragged warp — a "ball" you pull across the slab that drags the geometry
+  // it rolls over into its wake (forward-push, in the direction of travel), fading to nothing at its rim.
+  // Local, where the global field is gentle-everywhere: a moon over a viscous ocean, tracing its own path.
+  // A mark — deterministic, re-editable, and passes stack. Only layers whose warp weight is on get grabbed;
+  // the anchor pass after warpGeo still keeps a dragged branch from snapping off its parent.
+  function applyMoon(m, W) {
+    const M = m.p, R = 0.08 * (M.moonReach || 1), st = 0.5 * (M.moonStrength || 1), R2 = R * R;
+    const path = resample(m.samples, 0.006); if (path.length < 2) return;
+    const disp = (x, y) => {                              // forward-warp: the ball's motion summed along the pass, weighted by proximity
+      let ax = 0, ay = 0;
+      for (let i = 1; i < path.length; i++) {
+        const dx = x - path[i][0], dy = y - path[i][1], d2 = dx * dx + dy * dy; if (d2 > R2) continue;
+        const f = 1 - d2 / R2; ax += (path[i][0] - path[i - 1][0]) * f; ay += (path[i][1] - path[i - 1][1]) * f;   // soft ball: 1 at centre → 0 at rim
+      }
+      return [ax * st, ay * st];
+    };
+    const wp = (q, w) => { const [a, b] = disp(q[0], q[1]); q[0] += a * w; q[1] += b * w; };
+    const wp2 = (s, w) => { const [a, b] = disp(s.x, s.y); s.x += a * w; s.y += b * w; };
+    const wmaj = W('major'), wmin = W('minor'); for (const L of geo.lines) { const w = L.major ? wmaj : wmin; if (w) for (const q of L.pts) wp(q, w); }
+    const ww = W('web'); if (ww) for (const e of geo.web) for (const q of e.pts) wp(q, ww);
+    const wg = W('micro'); if (wg) for (const gl of geo.grain) for (const q of gl.pts) wp(q, wg);
+    const wsy = W('styl'); if (wsy) for (const s of geo.styl) for (const q of s.pts) wp(q, wsy);
+    const wmi = W('micro'); if (wmi) for (const s of geo.specks) wp2(s, wmi);
+    const wdr = W('drusy'); if (wdr) for (const s of geo.drusy) wp2(s, wdr);
+    const wkn = W('major'); if (wkn) for (const K of geo.knots) wp2(K, wkn);
+  }
   function warpGeo() {
-    const amp = G.warp * 0.12; if (amp <= 0) return;
-    const scale = G.cloudScale * 3.5, s0 = mix(strHue(fam), 7), ox = G.cloudX, oy = G.cloudY;
-    const dx = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0) - 0.5), dy = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0 + 100) - 0.5);
+    const moons = marks.filter(m => m.kind === 'moon'), hasGlobal = G.warp > 0;
+    if (!hasGlobal && !moons.length) return;             // two warps: the gentle global current, and the powerful local moons
     const W = k => { const L = layAt(k); return L ? L.warp : 1; };        // per-layer warp weight (a layer can hold still)
-    const wp = (q, w) => { const a = dx(q[0], q[1]) * w, b = dy(q[0], q[1]) * w; q[0] += a; q[1] += b; };
-    const wp2 = (s, w) => { const a = dx(s.x, s.y) * w, b = dy(s.x, s.y) * w; s.x += a; s.y += b; };
-    const dg = G.warpDepth, depthCache = new Map();
+    const depthCache = new Map();
     const depthOf = L => {                                // generation depth: major 0, its branch 1, its branch 2 …
       if (depthCache.has(L.id)) return depthCache.get(L.id);
       let d = 0, cur = L, seen = new Set();
       while (cur.parent && !seen.has(cur.parent)) { seen.add(cur.parent); const p = geo.byId.get(cur.parent); if (!p) break; d++; cur = p; }
       depthCache.set(L.id, d); return d;
     };
-    for (const L of geo.lines) if (!L.parent && L.pts.length) L._r0 = [L.pts[0][0], L.pts[0][1]];   // remember the trunk's origin before warping
-    // veins warp by their layer weight AND rise with generation depth (n0 base, tips more) — so the weakened
-    // deep bond has something to release: deep branches push harder against a looser anchor and wander off.
-    for (const L of geo.lines) { const w = W(L.major ? 'major' : 'minor') * (1 + depthOf(L) * dg); for (const q of L.pts) wp(q, w); }
-    const ww = W('web'); for (const e of geo.web) for (const q of e.pts) wp(q, ww);
-    const wg = W('micro'); for (const gl of geo.grain) for (const q of gl.pts) wp(q, wg);
-    const wsy = W('styl'); for (const s of geo.styl) for (const q of s.pts) wp(q, wsy);
-    const wmi = W('micro'); for (const s of geo.specks) wp2(s, wmi);
-    const wdr = W('drusy'); for (const s of geo.drusy) wp2(s, wdr);
-    const wkn = W('major'); for (const K of geo.knots) wp2(K, wkn);
+    for (const L of geo.lines) if (!L.parent && L.pts.length) L._r0 = [L.pts[0][0], L.pts[0][1]];   // remember the trunk's origin before any warp
+    if (hasGlobal) {                                      // the gentle whole-slab current: the fbm ocean itself
+      const amp = G.warp * 0.12, scale = G.cloudScale * 3.5, s0 = mix(strHue(fam), 7), ox = G.cloudX, oy = G.cloudY, dg = G.warpDepth;
+      const dx = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0) - 0.5), dy = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0 + 100) - 0.5);
+      const wp = (q, w) => { q[0] += dx(q[0], q[1]) * w; q[1] += dy(q[0], q[1]) * w; };
+      const wp2 = (s, w) => { s.x += dx(s.x, s.y) * w; s.y += dy(s.x, s.y) * w; };
+      // veins warp by their layer weight AND rise with generation depth (n0 base, tips more) — so the weakened
+      // deep bond has something to release: deep branches push harder against a looser anchor and wander off.
+      for (const L of geo.lines) { const w = W(L.major ? 'major' : 'minor') * (1 + depthOf(L) * dg); for (const q of L.pts) wp(q, w); }
+      const ww = W('web'); for (const e of geo.web) for (const q of e.pts) wp(q, ww);
+      const wg = W('micro'); for (const gl of geo.grain) for (const q of gl.pts) wp(q, wg);
+      const wsy = W('styl'); for (const s of geo.styl) for (const q of s.pts) wp(q, wsy);
+      const wmi = W('micro'); for (const s of geo.specks) wp2(s, wmi);
+      const wdr = W('drusy'); for (const s of geo.drusy) wp2(s, wdr);
+      const wkn = W('major'); for (const K of geo.knots) wp2(K, wkn);
+    }
+    for (const mn of moons) applyMoon(mn, W);             // the powerful local moons, riding over the current
     // ANCHOR (generation model): every line's root re-pins to its anchor — the major (n0) to its own origin,
     // a branch to its parent's post-warp attach point — held rigid over its first ~4% of length, then free to
     // warp. Bond strength decays INVERSE-SQUARE with generation depth: 1/(1+d)^2 → n0=1 (firm), n1=0.25,
@@ -1483,7 +1518,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   function build() {
     const sig = fam + '|' + JSON.stringify(G), n = marks.length, nm = marks[n - 1];
-    if (G.warp <= 0 && last && last.sig === sig && n === last.hist.length + 1 && nm.kind !== 'knot'
+    if (G.warp <= 0 && !marks.some(m => m.kind === 'moon') && last && last.sig === sig && n === last.hist.length + 1 && nm.kind !== 'knot'
         && last.hist.every((h, i) => h.m === marks[i] && h.seed === marks[i].seed)) {
       const out = { ...geo, lines: geo.lines.slice(), byId: new Map(geo.byId), web: geo.web.slice(),
                     specks: geo.specks.map(q => ({ ...q })), guides: geo.guides.slice(), styl: geo.styl.slice(), drusy: geo.drusy.slice() };
@@ -1732,6 +1767,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (layTiles) { drawTiles(F); paintLive(); ctx.globalAlpha = 1; stat(); return; }
     paintStoneContent(ident, angleView);
     if (guidesOn) drawGuides();
+    if (guidesOn && G.warp > 0 && tool === 'cloud') drawWarpGuide();   // show the source while you drag it
     paintLive(); ctx.globalAlpha = 1; stat();
   }
   function paintLive() {
@@ -1872,6 +1908,36 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace'; ctx.fillStyle = ctx.strokeStyle;
     ctx.fillText(label, x0 + len + 6, y0 + 3); ctx.restore(); ctx.globalAlpha = 1;
   }
+  // The warp field made visible. When you drag the Cloud tool you're moving THIS — the source of the
+  // distortion you watch happen on the veins. Samples the SAME fbm2 field warpGeo displaces geometry by
+  // (identical amp/scale/seed/offset), on a coarse grid, and draws each node's base displacement as a
+  // little arrow: direction is exact, length/opacity are the field magnitude normalised to the grid max
+  // so it reads at any warp amount. A guide — it rides cloudX/cloudY and never bakes into an export.
+  function drawWarpGuide() {
+    const amp = G.warp * 0.12, scale = G.cloudScale * 3.5, s0 = mix(strHue(fam), 7), ox = G.cloudX, oy = G.cloudY;
+    const fx = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0) - 0.5);
+    const fy = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0 + 100) - 0.5);
+    const cols = 26, step = 1 / cols, px = 1 / (Wc * V.z), nodes = []; let maxM = 1e-6;
+    for (let x = step / 2; x < 1; x += step) for (let y = step / 2; y < H; y += step) {
+      const ax = fx(x, y), ay = fy(x, y), m = Math.hypot(ax, ay); if (m > maxM) maxM = m; nodes.push([x, y, ax, ay, m]);
+    }
+    ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const teal = '#2ee6cf';
+    for (const [x, y, ax, ay, m] of nodes) {
+      const r = m / maxM;
+      ctx.globalAlpha = 0.10 + 0.22 * r; ctx.fillStyle = teal;
+      ctx.beginPath(); ctx.arc(x, y, 1.3 * px, 0, 6.2832); ctx.fill();          // the field node
+      const len = step * 0.9 * r; if (m < 1e-6 || len < px) continue;
+      const ux = ax / m, uy = ay / m, ex = x + ux * len, ey = y + uy * len;
+      ctx.globalAlpha = 0.20 + 0.6 * r; ctx.strokeStyle = teal; ctx.lineWidth = 1.4 * px;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey);                    // the vector
+      const hl = Math.min(len * 0.5, 5 * px), aw = 0.5, bx = -ux, by = -uy;     // arrowhead, rotated ±aw off the tail
+      ctx.moveTo(ex, ey); ctx.lineTo(ex + (bx * Math.cos(aw) - by * Math.sin(aw)) * hl, ey + (bx * Math.sin(aw) + by * Math.cos(aw)) * hl);
+      ctx.moveTo(ex, ey); ctx.lineTo(ex + (bx * Math.cos(-aw) - by * Math.sin(-aw)) * hl, ey + (bx * Math.sin(-aw) + by * Math.cos(-aw)) * hl);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   function drawGuides() {
     const px = 1 / (Wc * V.z);
     ctx.lineWidth = 1.4 * px;
@@ -1979,6 +2045,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     styl: 'Draw a line. It becomes a stylolite — a toothy pressure-dissolution seam of interlocking columns, dark on light stone and pale on dark.',
     tune: 'Tap a vein to tune just that one. Its colour follows its layer until you change it in the colour editor; reset it there to follow again.',
     cloud: 'Drag to move the cloud field. The mottle and the warp move together, so you can place where the stone flows. Cloud X / Y set it precisely.',
+    moon: 'Drag a moon across the slab. Like gravity, but it drags what it passes into its wake — a powerful local warp, hardest under the ball, fading at its edge. Ball size and pull set the reach and force; passes stack.',
     move: 'Drag to move around. Pinch, or use + and −, to zoom.',
   };
   let flashT = 0;
@@ -2107,6 +2174,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const a = g.samples[0], b = g.samples[g.samples.length - 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
       commit({ id, kind: 'knot', seed, at: [a[0], a[1]], R: len < 0.008 ? null : len });
       if (!FAM[fam].grain) hint('Knot set. Its grain shows in Wood.');
+    } else if (g.type === 'draw' && tool === 'moon') {
+      if (pathLen(g.samples) < 0.02) { nextId--; hint('Drag the moon across the slab — it drags what it passes into its wake, hard in the middle, fading at the edge.'); }
+      else commit({ id, kind: 'moon', seed, samples: g.samples });
     } else if (g.type === 'draw') {
       if (tool !== 'pour' && pathLen(g.samples) < 0.02) { nextId--; redraw(false); return; }
       commit({ id, kind: tool, seed, samples: g.samples, rest: g.rest });
@@ -2287,7 +2357,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const id of Object.keys(NEXT)) { const el = document.getElementById(id); if (el) { el.value = NEXT[id]; document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; } }
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
-    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
+    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip', 'moon']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
     showGround(); syncLayerUI(); hint();
   }
   function download(name, text) {                       // works from a local file; inert in the artifact sandbox
@@ -2407,7 +2477,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     tool = b.dataset.tool; press('[data-tool]', b); hint();
     const show = tool === 'move' ? 'vein' : tool;
-    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
+    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip', 'moon']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
   });
   for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
   for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
