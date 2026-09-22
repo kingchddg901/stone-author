@@ -75,6 +75,7 @@
     <button id="t-magnet" type="button" data-tool="magnet">Magnet</button>
     <button id="t-chip" type="button" data-tool="chip">Chip</button>
     <button id="t-tune" type="button" data-tool="tune">Tune</button>
+    <button id="t-cloud" type="button" data-tool="cloud">Cloud</button>
     <button id="t-move" type="button" data-tool="move">Move</button>
   </div>
   <div class="grp" role="group" aria-label="Pen"><span class="lbl">Pen</span>
@@ -179,6 +180,8 @@
       <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="cloudScale">Cloud scale <output id="cloudScaleV"></output></label><input id="cloudScale" type="range" min="0.4" max="3" step="0.05"></div>
       <div class="sl"><label for="warp">Warp <output id="warpV"></output></label><input id="warp" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="cloudX">Cloud X <output id="cloudXV"></output></label><input id="cloudX" type="range" min="-2" max="2" step="0.02"></div>
+      <div class="sl"><label for="cloudY">Cloud Y <output id="cloudYV"></output></label><input id="cloudY" type="range" min="-2" max="2" step="0.02"></div>
     </div>
     <div class="sliders" id="g-bands">
       <div class="sl"><label for="bandStrength">Banding <output id="bandStrengthV"></output></label><input id="bandStrength" type="range" min="0" max="1" step="0.02"></div>
@@ -420,7 +423,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
               stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0,
+  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, cloudX: 0, cloudY: 0,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1 };
@@ -428,7 +431,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
-  const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2),
+  const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2),
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}` };
@@ -504,13 +507,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     };
     let amp = 0; for (const o of grids) amp += o.a;
     for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
-      let n = 0; const u = x / W * scale, v = y / Hh * scale; for (const o of grids) n += o.a * samp(o, u, v); n /= amp;
+      let n = 0; const u = (x / W - G.cloudX) * scale, v = (y / Hh - G.cloudY) * scale; for (const o of grids) n += o.a * samp(o, u, v); n /= amp;
       const gv = Math.max(0, Math.min(255, 128 + (n - 0.5) * 2 * strength * 120)), i = (y * W + x) * 4;   // grey delta (128 = no change), composited soft-light
       d[i] = d[i + 1] = d[i + 2] = gv; d[i + 3] = 255;
     }
     cx.putImageData(img, 0, 0); return c;
   }
-  function ensureClouds() { const sig = fam + '|' + G.cloudScale + '|' + G.cloudStrength; if (sig !== cloudSig) { cloudC = buildClouds(); cloudSig = sig; } return cloudC; }
+  function ensureClouds() { const sig = fam + '|' + G.cloudScale + '|' + G.cloudStrength + '|' + G.cloudX + '|' + G.cloudY; if (sig !== cloudSig) { cloudC = buildClouds(); cloudSig = sig; } return cloudC; }
 
   // ---- BANDING: directional tonal layers (banded onyx / travertine / gneiss). A grey delta map (128 = no
   // change) composited soft-light, so it MODULATES the clouded ground instead of replacing it. Bands run
@@ -1433,8 +1436,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // build; the incremental fast-path is skipped while warp is on so nothing is warped twice.
   function warpGeo() {
     const amp = G.warp * 0.12; if (amp <= 0) return;
-    const scale = G.cloudScale * 3.5, s0 = mix(strHue(fam), 7);
-    const dx = (x, y) => amp * (fbm2(x * scale, y * scale, s0) - 0.5), dy = (x, y) => amp * (fbm2(x * scale, y * scale, s0 + 100) - 0.5);
+    const scale = G.cloudScale * 3.5, s0 = mix(strHue(fam), 7), ox = G.cloudX, oy = G.cloudY;
+    const dx = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0) - 0.5), dy = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0 + 100) - 0.5);
     const wp = q => { const a = dx(q[0], q[1]), b = dy(q[0], q[1]); q[0] += a; q[1] += b; };
     for (const L of geo.lines) for (const q of L.pts) wp(q);
     for (const e of geo.web) for (const q of e.pts) wp(q);
@@ -1941,6 +1944,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     magnet: 'Drag to comb the specks like iron filings. The pen\u2019s angle is the magnet: upright fans them out from the tip, laid over combs them along its lean. Slow passes align harder.',
     styl: 'Draw a line. It becomes a stylolite — a toothy pressure-dissolution seam of interlocking columns, dark on light stone and pale on dark.',
     tune: 'Tap a vein to tune just that one. Its colour follows its layer until you change it in the colour editor; reset it there to follow again.',
+    cloud: 'Drag to move the cloud field. The mottle and the warp move together, so you can place where the stone flows. Cloud X / Y set it precisely.',
     move: 'Drag to move around. Pinch, or use + and −, to zoom.',
   };
   let flashT = 0;
@@ -2003,6 +2007,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (ptrs.size > 2) return;
     const [ex, ey] = local(e), f = toFrame(ex, ey);
     if (tool === 'move') { gesture = { type: 'pan', e0: [ex, ey], c0: [V.cx, V.cy] }; return; }
+    if (tool === 'cloud') { gesture = { type: 'cloudpan', e0: [ex, ey], c0: [G.cloudX, G.cloudY] }; hint(); return; }
     if (tool === 'branch') {
       const hit = nearestLine(f[0], f[1]);
       if (!hit || hit.d * Wc * V.z > 26) { gesture = null; hint('Tap on a vein to grow a minor vein off it.'); return; }
@@ -2028,6 +2033,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       V.cx = gesture.c0[0] - (ex - gesture.e0[0]) / (Wc * V.z); V.cy = gesture.c0[1] - (ey - gesture.e0[1]) / (Wc * V.z);
       clampView(); redraw(false); return;
     }
+    if (gesture.type === 'cloudpan') {                   // drag the cloud field (mottle + warp move together)
+      G.cloudX = gesture.c0[0] + (ex - gesture.e0[0]) / (Wc * V.z); G.cloudY = gesture.c0[1] + (ey - gesture.e0[1]) / (Wc * V.z);
+      for (const id of ['cloudX', 'cloudY']) { const el = document.getElementById(id); el.value = G[id]; document.getElementById(id + 'V').textContent = GFMT[id](G[id]); }
+      redraw(true); return;
+    }
     const f = toFrame(ex, ey);
     if (gesture.type === 'branch' && Math.hypot(ex - gesture.e0[0], ey - gesture.e0[1]) > 12) gesture.moved = true;
     gesture.samples.push([f[0], f[1], now(), pen(e), leanOf(e), azOf(e)]);
@@ -2039,6 +2049,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const g = gesture;
     if (!g) return;
     if (g.type === 'pinch') { if (ptrs.size === 0) gesture = null; return; }
+    if (g.type === 'pan' || g.type === 'cloudpan') { gesture = null; return; }   // view/cloud drags make no mark
     gesture = null; live = null;
     const seed = (Math.random() * 2147483647) | 0, id = nextId++;
     if (g.type === 'draw' && tool === 'gravity') {
