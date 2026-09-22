@@ -6,6 +6,13 @@ lay it as tile. Extracted from the HA dashboard builder once the stone work outg
 The dashboard is one *consumer* of what this repo produces. This repo is the *producer*:
 the authoring app, the generator, the rip/harvest pipeline, and the mask format they share.
 
+**How this happened.** It started as *"I want a better background for my Home Assistant card."*
+That seed grew a theming engine (extracted as
+[token-theme-kit](https://github.com/kingchddg901/token-theme-kit)), then a stone generator, then
+an authoring studio — until it outgrew the dashboard and became this repo. Two clean extractions
+proved the layers along the way. The full story and architecture are in
+[`docs/architecture.md`](docs/architecture.md).
+
 ## What's here
 
 ### `app/` — the authoring tools (self-contained HTML, open in any browser)
@@ -15,7 +22,12 @@ the authoring app, the generator, the rip/harvest pipeline, and the mask format 
   cuts the authored slab into a repeating pattern on a floor — 15 patterns (square, rectangle,
   subway, hexagon, Cairo, diagonal, herringbone, basketweave, triangle, rhombus, octagon,
   penny, fish scale, arabesque lantern, French/Versailles), with grout, kerf, edge finish,
-  and per-tile chipping. Sizes are real, on an 8×5 ft slab.
+  and per-tile chipping. Sizes are real, on an 8×5 ft slab. Marble **primitives** (clouds,
+  banding, breccia, drusy, stylolites) and per-line **vein variants** (sinuous, dendritic,
+  en-echelon, boudinage, halo). A **layer** model (eye / solo / opacity, blend, glow) and a
+  **colour layer** — colour decoupled from the family, edited through the vendored token-theme-kit
+  — so the slab is a saveable *source* that bakes to masks at any size. See
+  [`docs/architecture.md`](docs/architecture.md).
 - **`stylus-probe.html`** — reports exactly what a stylus sends the browser (pen vs touch,
   pressure levels, tilt, hover, sample rate) plus a debug history. Used to tune the pen.
 - **`pollock-pour.html`** — the pour brush on its own: paint thrown along a line.
@@ -37,8 +49,12 @@ Each app is one file with everything inline. No build step; no server needed to 
   the panel generator (ES modules need a server: `python tools/serve-studio.py`).
 
 ### `docs/`
-- **`stone-generator.md`** — every rule in the generator, each traced to a measurement or a
-  defect. Read before changing the generator.
+- **`architecture.md`** — what the whole system is, how the parts fit, and how it came to be
+  (the origin story). Start here.
+- **`colour-layer.md`** — the colour engine: character vs colour, the vendored token-theme-kit as
+  editor + resolver, the canvas colour menu, the per-id plan.
+- **`stone-generator.md`** — every rule in the Python/panel generator, each traced to a measurement
+  or a defect. Read before changing that generator.
 
 ## The output contract (what a consumer reads)
 
@@ -64,5 +80,12 @@ be committed. The harvested corpus stays local.
 
 ## Status
 
-Extracted from `ha-dashboard-builder` (2026). License: TBD — not yet chosen, so treat as
-all-rights-reserved until one is added.
+Extracted from `ha-dashboard-builder` (2026). The authoring app has, so far: save-the-source +
+autosave, first-class layer control, the marble primitives batch, per-line vein variants, and a
+colour layer (per-layer colour + blend + glow via the vendored token-theme-kit). Next up is per-id
+colour, the export step, and a WebGPU render pipeline — see the roadmap in
+[`docs/architecture.md`](docs/architecture.md).
+
+**Licence.** `token-theme-kit` is MIT (© 2026 Chris King); its notice ships with the vendored copy.
+`stone-author`'s own licence is **TBD** — not yet chosen, so treat it as all-rights-reserved until
+one is added.
