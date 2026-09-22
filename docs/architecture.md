@@ -141,8 +141,13 @@ render, a layered `.ora`, and an SVG — the whole contract in one file, at a ch
 **warp guide** (the Cloud tool draws the warp field as a teal vector overlay — the source of the
 distortion made visible, a guide that never bakes into an export) · the **moon** (a *local* warp brush,
 distinct from the gentle global field: drag a "ball" across the slab and it drags the geometry it passes
-into its wake, forward-push, fading at the rim; a stored mark, deterministic, and **reversible by hand** —
-retracing the pass backwards negates it exactly, so overshoot-and-recover is the intended feel).
+into its wake, forward-push, fading at the rim; a stored mark, deterministic. Its reverse *field* is the
+exact negative, but that's the field on clean stone, not an undo: passes stack in order onto
+already-warped geometry, and no hand can retrace a pass point-for-point anyway (same start, every sample
+between; the stylus/screen sample rate alone shifts it), so a hand-reverse only ever gets *close* and
+leaves a residue that accumulates with repeated tries. That near-miss is the intended authoring feel —
+overshoot and chase it back; the mark of the hand is the residue. The **Undo button** (it drops the mark)
+is the true undo).
 
 **Next:** per-id beyond veins (clasts / seams) · the remaining canvas colour menu (gradients,
 filters) · per-pixel displacement of the base fields under warp · targeted per-item reroll · a bake

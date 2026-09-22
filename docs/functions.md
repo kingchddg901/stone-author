@@ -113,10 +113,14 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
 - `applyMoon(m, W)` — one **moon**: a dragged local warp brush ("ball" of radius `M.moonReach`, force
   `M.moonStrength`). A **forward-warp** — each point's displacement is the ball's motion summed along the
   pass, weighted by a soft falloff (`1 − d²/R²`, 1 at the centre → 0 at the rim), computed from the
-  point's original position and applied once. That single linear sum makes it **order-free and exactly
-  reversible**: retracing the pass negates the field (measured cosine −0.999), which is the intended
-  hand-tool feel, not a fluid stir. Warps only layers whose `warp` weight is on; the anchor pass after
-  still keeps a dragged branch from snapping off. Passes are marks, so they stack. *(1441)*
+  point's original position and applied once — so within a pass it's **order-free**, and the reverse
+  pass's *field* is the exact negative (cosine −0.999 on a clean base). That is **not** a workflow undo,
+  though: moons apply in sequence onto already-warped geometry, so a stacked reverse leaves a residue,
+  and repeated forward+reverse pairs *accumulate* (rms ≈ 0.026 → 0.042 → 0.055) rather than cancelling.
+  A hand can't retrace a pass point-for-point regardless (sample rate alone shifts it) — the near-miss is
+  the intended feel; the **Undo button** (drops the mark) is the real undo. Warps only layers whose
+  `warp` weight is on; the anchor pass after still keeps a dragged branch from snapping off. Passes are
+  marks, so they stack. *(1441)*
 
 ## Tile engine
 
