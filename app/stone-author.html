@@ -178,6 +178,7 @@
     <div class="sliders" id="g-clouds">
       <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="cloudScale">Cloud scale <output id="cloudScaleV"></output></label><input id="cloudScale" type="range" min="0.4" max="3" step="0.05"></div>
+      <div class="sl"><label for="warp">Warp <output id="warpV"></output></label><input id="warp" type="range" min="0" max="1" step="0.02"></div>
     </div>
     <div class="sliders" id="g-bands">
       <div class="sl"><label for="bandStrength">Banding <output id="bandStrengthV"></output></label><input id="bandStrength" type="range" min="0" max="1" step="0.02"></div>
@@ -419,7 +420,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
               stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5,
+  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1 };
@@ -427,7 +428,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
-  const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`,
+  const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2),
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2),
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}` };
@@ -480,6 +481,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // knob morphs the field continuously instead of re-rolling it; seed is per-family, so each stone has its
   // own cloud. Built low-res and upscaled soft, cached until fam/scale/strength change.
   function hexRGB(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  // fBm value noise = the cloud's own character, reused as a domain-WARP field: the cloud structure
+  // displaces the veins / grain / specks so the whole slab flows along one field ("cloud as a warp").
+  function nz(xi, yi, s) { let h = (Math.imul(xi, 374761393) ^ Math.imul(yi, 668265263) ^ Math.imul(s, 2246822519)) >>> 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+  function vnoise(x, y, s) { const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty), a = nz(xi, yi, s), b = nz(xi + 1, yi, s), c = nz(xi, yi + 1, s), d = nz(xi + 1, yi + 1, s); return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy; }
+  function fbm2(x, y, s) { return vnoise(x, y, s) * 0.6 + vnoise(x * 2.1, y * 2.1, s + 9) * 0.3 + vnoise(x * 4.3, y * 4.3, s + 19) * 0.1; }
   let cloudC = null, cloudSig = '';
   function buildClouds() {
     const W = 200, Hh = Math.round(W * H);
@@ -1422,9 +1428,25 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     else if (m.kind === 'gravity') applyGravity(m, out);
     else if (m.kind === 'magnet') applyMagnet(m, out);
   };
+  // Cloud-driven domain WARP: displace the built vector geometry (veins, grain, specks, seams, drusy,
+  // knots) by the cloud's own fBm field, so the whole slab flows along one field. Applied after a full
+  // build; the incremental fast-path is skipped while warp is on so nothing is warped twice.
+  function warpGeo() {
+    const amp = G.warp * 0.12; if (amp <= 0) return;
+    const scale = G.cloudScale * 3.5, s0 = mix(strHue(fam), 7);
+    const dx = (x, y) => amp * (fbm2(x * scale, y * scale, s0) - 0.5), dy = (x, y) => amp * (fbm2(x * scale, y * scale, s0 + 100) - 0.5);
+    const wp = q => { const a = dx(q[0], q[1]), b = dy(q[0], q[1]); q[0] += a; q[1] += b; };
+    for (const L of geo.lines) for (const q of L.pts) wp(q);
+    for (const e of geo.web) for (const q of e.pts) wp(q);
+    for (const gl of geo.grain) for (const q of gl.pts) wp(q);
+    for (const s of geo.styl) for (const q of s.pts) wp(q);
+    for (const s of geo.specks) { const a = dx(s.x, s.y), b = dy(s.x, s.y); s.x += a; s.y += b; }
+    for (const s of geo.drusy) { const a = dx(s.x, s.y), b = dy(s.x, s.y); s.x += a; s.y += b; }
+    for (const K of geo.knots) { const a = dx(K.x, K.y), b = dy(K.x, K.y); K.x += a; K.y += b; }
+  }
   function build() {
     const sig = fam + '|' + JSON.stringify(G), n = marks.length, nm = marks[n - 1];
-    if (last && last.sig === sig && n === last.hist.length + 1 && nm.kind !== 'knot'
+    if (G.warp <= 0 && last && last.sig === sig && n === last.hist.length + 1 && nm.kind !== 'knot'
         && last.hist.every((h, i) => h.m === marks[i] && h.seed === marks[i].seed)) {
       const out = { ...geo, lines: geo.lines.slice(), byId: new Map(geo.byId), web: geo.web.slice(),
                     specks: geo.specks.map(q => ({ ...q })), guides: geo.guides.slice(), styl: geo.styl.slice(), drusy: geo.drusy.slice() };
@@ -1435,6 +1457,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     fullBuild();
     last = { sig, hist: marks.map(m => ({ m, seed: m.seed })) };
+    warpGeo();
   }
   function fullBuild() {
     const Fc = FAM[fam];
