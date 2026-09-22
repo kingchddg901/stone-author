@@ -198,6 +198,7 @@
     <div class="sliders" id="g-granite" hidden>
       <div class="sl"><label for="gspecks">Specks <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
       <div class="sl"><label for="gsize">Speck size <output id="gsizeV"></output></label><input id="gsize" type="range" min="0.4" max="2" step="0.05"></div>
+      <div class="sl"><label for="speckGroups">Speck colours <output id="speckGroupsV"></output></label><input id="speckGroups" type="range" min="1" max="5" step="1"></div>
     </div>
     <div class="sliders" id="g-wood" hidden>
       <div class="sl"><label for="gspacing">Ring spacing <output id="gspacingV"></output></label><input id="gspacing" type="range" min="0.4" max="3" step="0.05"></div>
@@ -415,7 +416,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
               stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, cloudScale: 1, cloudStrength: 0.5,
+  const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, cloudScale: 1, cloudStrength: 0.5,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1 };
@@ -423,7 +424,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
-  const GFMT = { gangle: v => `${v}\u00b0`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`,
+  const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`,
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2),
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2) };
@@ -984,6 +985,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                  lum: o.lum != null ? o.lum : Math.min(1, Math.max(0.05, Math.exp(-1.1 + 0.55 * g()))),
                  ang: o.ang != null ? o.ang : r() * Math.PI, el: o.el != null ? o.el : 1 + Math.abs(g()) * 0.85 };
     sp.R0 = sp.rad * Math.max(1, sp.el) * 1.25;        // the outline's reach, jitter included
+    sp.u = (mix((x * 1e5) | 0, (y * 1e5) | 0) >>> 0) / 4294967296;   // a stable 0..1 from birth position -> colour group (survives gravity/magnet)
     return sp;
   }
 
@@ -1716,12 +1718,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : COL.web;
       g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp('web')); g2d.lineWidth = e.width; g2d.stroke();
     } fxOff(_fx); }
-    if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident); for (const s of geo.specks) {
+    if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))); for (const s of geo.specks) {
       const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
       g2d.globalAlpha = (ident ? 0.9 : s.lum) * (ident ? 1 : layOp('micro'));
       // Identity: a ground speck shows how far it was MOVED - cool where it lay, hot where pushed
       // Angle: the way a speck points, as hue (axial, so 2x the angle); round specks point nowhere
-      g2d.fillStyle = !ident ? COL.micro
+      // Stone: the speck's colour group (micro:g) if tuned, else the micro layer colour
+      g2d.fillStyle = !ident ? (COL['micro:' + Math.floor((s.u || 0) * ng)] ?? COL.micro)
         : angleView ? (s.el > 1.3 ? `hsl(${Math.round(((2 * s.ang * 180 / Math.PI) % 360 + 360) % 360)} 78% 58%)` : '#3a3c48')
         : s.ground ? `hsl(${Math.round(210 - 190 * Math.min(1, Math.hypot(s.x - s.x0, s.y - s.y0) / 0.008))} 80% 55%)`
         : idColour('P' + s.mark, s.tn);
@@ -2078,6 +2081,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       ];
     }) });
     registerPerItem();
+    registerSpeckGroups();
     kit.setAdapter({ load: async () => ({ ...OVR }), save: async v => { for (const k in OVR) delete OVR[k]; Object.assign(OVR, v); recolour(); saveLocal(); redraw(true); } });
     TTK.defineThemeKitEditor();
     recolour();
@@ -2088,6 +2092,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function registerPerItem() {
     if (!kit) return;
     kit.registerTokenGroup({ id: 'peritem', label: 'Per-item (tap a vein with Tune)', tokens: Object.keys(perItem).map(id => ({ key: 'id:' + id, label: 'Vein ' + id, type: 'color', inherit: perItem[id] })) });
+  }
+  // Speck colour groups: split the micro layer into up to 5 colour groups (feldspar / quartz / mica …).
+  // Each group is a token inheriting `micro`; a speck's group is stable (from its birth-position hash).
+  function registerSpeckGroups() {
+    if (!kit) return;
+    const n = Math.max(1, Math.min(5, Math.round(G.speckGroups)));
+    const tokens = n > 1 ? Array.from({ length: n }, (_, i) => ({ key: 'micro:' + i, label: 'Speck colour ' + (i + 1), type: 'color', inherit: 'micro' })) : [];
+    kit.registerTokenGroup({ id: 'speckgroups', label: 'Speck colours', tokens });
   }
   function tuneId(id, bucket) {
     if (!kit) { hint('Colour editor unavailable.'); return; }
@@ -2156,7 +2168,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const k in OVR) delete OVR[k];                        // colour travels with the slab
     if (o.OVR) Object.assign(OVR, o.OVR); else if (o.COL) Object.assign(OVR, o.COL); else seedColours(fam);   // older saves stored resolved values as `COL`
     for (const k in perItem) delete perItem[k]; if (o.perItem) Object.assign(perItem, o.perItem);
-    registerPerItem(); recolour();
+    registerPerItem(); registerSpeckGroups(); recolour();
     if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor
     marks = o.marks.map(m => ({ ...m }));
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
@@ -2218,6 +2230,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     el.value = G[id]; show();
     el.addEventListener('input', () => { G[id] = +el.value; show(); redraw(true); });   // the slab: at once
   }
+  document.getElementById('speckGroups').addEventListener('input', () => { registerSpeckGroups(); recolour(); mountEditor(); });   // add/remove the per-group colour tokens
   for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => { view = b.dataset.view; press('[data-view]', b); redraw(false); });
   for (const id of Object.keys(NEXT)) {
     const el = document.getElementById(id);
