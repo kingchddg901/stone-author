@@ -229,6 +229,10 @@
     <span class="lbl">Layers</span>
     <div class="layers" id="layers"></div>
   </div></div>
+  <div class="row"><div class="grp" role="group" aria-label="Colour"><span class="lbl">Colour</span>
+    <button id="colour-toggle" type="button" aria-pressed="false">Show colour editor</button>
+    <button id="colour-fromfam" type="button">Palette from family</button></div></div>
+  <div id="colour-panel" hidden></div>
   <p class="note"><b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw
     it, so changing them shapes the next line only. This generates the base structure; the colours here are
     only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor
@@ -254,6 +258,101 @@
     Nothing had to be traced &mdash; the line was known when it was made.</p>
   <p class="note">The three families are starting points set by eye, not yet measured from the harvested stones.</p>
 </div>
+<!-- vendored token-theme-kit (MIT, (c) 2026 Chris King) @881024b -->
+<script id="ttk-vendor">
+/*! token-theme-kit @881024b - (c) 2026 Chris King - MIT - https://github.com/kingchddg901/token-theme-kit */
+var TTK=(()=>{var k=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;var F=Object.getOwnPropertyNames;var G=Object.prototype.hasOwnProperty;var U=(e,t)=>{for(var n in t)k(e,n,{get:t[n],enumerable:!0})},W=(e,t,n,r)=>{if(t&&typeof t=="object"||typeof t=="function")for(let s of F(t))!G.call(e,s)&&s!==n&&k(e,s,{get:()=>t[s],enumerable:!(r=D(t,s))||r.enumerable});return e};var Y=e=>W(k({},"__esModule",{value:!0}),e);var Z={};U(Z,{createThemeKit:()=>V,defineThemeKitEditor:()=>z,formatColor:()=>f,luminance:()=>_,parseColor:()=>p,resolveValues:()=>y});function w(){let e=new Map,t=new Set,n=()=>t.forEach(r=>r());return{register(r){if(!r||!r.id)throw new Error("a token group needs an { id }");return e.set(r.id,H(r)),n(),()=>{e.delete(r.id),n()}},get groups(){return[...e.values()]},get tokens(){let r=new Map;for(let s of e.values())for(let o of s.tokens)r.set(o.key,o);return r},subscribe(r){return t.add(r),()=>t.delete(r)}}}function H(e){let t=(e.tokens||[]).map(n=>{if(!n.key)throw new Error(`token in group "${e.id}" is missing a key`);return{type:"color",...n,group:e.id,label:n.label??x(n.key)}});return{id:e.id,label:e.label??x(e.id),tokens:t}}function x(e){return String(e).replace(/[-_]+/g," ").replace(/\b\w/g,t=>t.toUpperCase())}function p(e){if(e==null)return null;let t=String(e).trim(),n=/^#([0-9a-f]{3,8})$/i.exec(t);if(n){let s=n[1];if((s.length===3||s.length===4)&&(s=s.split("").map(a=>a+a).join("")),s.length!==6&&s.length!==8)return null;let o=parseInt(s.slice(0,6),16),i=s.length===8?parseInt(s.slice(6,8),16)/255:1;return{r:o>>16&255,g:o>>8&255,b:o&255,a:i}}let r=/^rgba?\(([^)]+)\)$/i.exec(t);if(r){let s=r[1].split(/[,\s/]+/).filter(Boolean);if(s.length<3)return null;let[o,i,a]=s.map(u=>h(parseFloat(u))),l=s[3]!=null?L(parseFloat(s[3])):1;return{r:o,g:i,b:a,a:l}}return null}function f(e){if(!e)return"";let{r:t,g:n,b:r,a:s=1}=e;return s>=1?"#"+[t,n,r].map(o=>h(o).toString(16).padStart(2,"0")).join(""):`rgba(${h(t)}, ${h(n)}, ${h(r)}, ${q(L(s),3)})`}function _(e){let t=n=>(n/=255,n<=.03928?n/12.92:((n+.055)/1.055)**2.4);return .2126*t(e.r)+.7152*t(e.g)+.0722*t(e.b)}var h=e=>Math.max(0,Math.min(255,Math.round(e||0))),L=e=>Math.max(0,Math.min(1,isNaN(e)?1:e)),q=(e,t)=>Math.round(e*10**t)/10**t;var $={color:{input:"color",coerce:e=>p(e)?f(p(e)):e,toCss:e=>String(e),defaultValue:"#000000"},alpha:{input:"range",min:0,max:1,step:.01,coerce:e=>Math.max(0,Math.min(1,Number(e))),toCss:e=>String(e),defaultValue:1},number:{input:"number",coerce:e=>Number(e),toCss:(e,t)=>t?.unit?`${e}${t.unit}`:String(e),defaultValue:0},size:{input:"number",coerce:e=>Number(e),toCss:(e,t)=>`${e}${t?.unit??"px"}`,defaultValue:0},select:{input:"select",coerce:e=>e,toCss:e=>String(e),defaultValue:""},toggle:{input:"checkbox",coerce:e=>!!e,toCss:e=>e?"1":"0",defaultValue:!1},raw:{input:"text",coerce:e=>e,toCss:e=>String(e),defaultValue:""}};function C(){let e=new Map(Object.entries($)),t=new Set;return{register(n,r){if(!n||typeof r?.toCss!="function")throw new Error(`control type "${n}" needs at least a toCss(value) function`);return e.set(n,{input:"text",coerce:s=>s,defaultValue:"",...r}),()=>e.delete(n)},get(n){let r=e.get(n);return r||(n!=null&&!t.has(n)&&(t.add(n),console.warn(`[theme-kit] unknown control type "${n}" \u2014 falling back to "raw" (string). Register it via registerControlType() to type it correctly.`)),e.get("raw"))},has:n=>e.has(n),list:()=>[...e.keys()]}}function E(){let e=new Set;return{register(t){if(typeof t!="function")throw new Error("a validator must be a function");return e.add(t),()=>e.delete(t)},run(t,n){let r=[];for(let s of e){let o;try{o=s(t,n)||[]}catch(i){o=[{level:"error",message:`validator threw: ${i.message}`}]}for(let i of o)r.push({level:"warn",...i})}return r},get size(){return e.size}}}function m(e,t,n,r="--"){let s={};for(let[o,i]of e){let a=n.get(i.type),l=J(t?.[o],i.default,a.defaultValue),u=i.cssVar||r+o;s[u]=a.toCss(l,i)}return s}function v(e,t){if(e?.style)for(let[n,r]of Object.entries(t))r===""||r==null?e.style.removeProperty(n):e.style.setProperty(n,r)}function T(e,{tokens:t,controlTypes:n,prefix:r,baseline:s={}}){let o={...s},i=a=>v(e,m(t(),a,n,r));return i(o),{apply(a){i({...o,...a})},commit(a={}){return o={...o,...a},i(o),{...o}},revert(){return i(o),{...o}},get values(){return{...o}}}}var J=(...e)=>e.find(t=>t!==void 0);function N({registry:e,controlTypes:t,validators:n,values:r={}}){let s=y(e.tokens,r,t),o=n?n.run(s,{tokens:e.tokens}):[],i=Q(o,l=>l.key);return{groups:e.groups.map(l=>({id:l.id,label:l.label,controls:l.tokens.map(u=>{let c=t.get(u.type);return{key:u.key,label:u.label,type:u.type,input:u.input||c.input,value:s[u.key],...P(u,["options","min","max","step","help"]),...P(c,["min","max","step"]),verdicts:i.get(u.key)||[]}})})),verdicts:o,values:s}}function y(e,t,n){let r={};for(let[s,o]of e){let i=n.get(o.type),a=t?.[s]!==void 0?t[s]:o.default;r[s]=a!==void 0?i.coerce?i.coerce(a):a:i.defaultValue}return r}function Q(e,t){let n=new Map;for(let r of e){let s=t(r);s!=null&&(n.get(s)||n.set(s,[]).get(s)).push(r)}return n}function P(e,t){let n={};for(let r of t)e?.[r]!==void 0&&(n[r]=e[r]);return n}function V({prefix:e="--",adapter:t=null}={}){let n=w(),r=C(),s=E(),o=t;return{prefix:e,registry:n,controlTypes:r,registerTokenGroup:i=>n.register(i),registerControlType:(i,a)=>r.register(i,a),registerValidator:i=>s.register(i),setAdapter(i){return o=i,this},get tokens(){return n.tokens},get groups(){return n.groups},subscribe:i=>n.subscribe(i),computeVars(i={}){return m(n.tokens,i,r,e)},applyTheme(i,a={}){return v(i,this.computeVars(a)),i},preview(i,a={}){return T(i,{tokens:()=>n.tokens,controlTypes:r,prefix:e,baseline:a})},editorModel(i={}){return N({registry:n,controlTypes:r,validators:s,values:i})},async load(){return o?await o.load()||{}:{}},async save(i){return o&&await o.save(i),i}}}function S(e,t=null){let n=e||{};if(t===null)return{values:{},changed:Object.keys(n).length};let r={...n},s=0;for(let o of t)Object.prototype.hasOwnProperty.call(r,o)&&(delete r[o],s++);return{values:r,changed:s}}function O(e,t){let n=e?.groups?.find(r=>r.id===t);return n?n.controls.map(r=>r.key):[]}function R(e,t){return Object.prototype.hasOwnProperty.call(e||{},t)}function d(e,t,n){let r=e.createElement(t);if(n)for(let[s,o]of Object.entries(n))r[s]=o;return r}var X={color:(e,{onChange:t,document:n})=>{let r=d(n,"input",{type:"color",value:e.value??"#000000"});return r.addEventListener("input",()=>t(r.value)),r},range:(e,{onChange:t,document:n})=>{let r=d(n,"input",{type:"range",value:e.value});return r.min=e.min??0,r.max=e.max??1,r.step=e.step??.01,r.addEventListener("input",()=>t(Number(r.value))),r},number:(e,{onChange:t,document:n})=>{let r=d(n,"input",{type:"number",value:e.value});return e.min!=null&&(r.min=e.min),e.max!=null&&(r.max=e.max),e.step!=null&&(r.step=e.step),r.addEventListener("input",()=>t(Number(r.value))),r},select:(e,{onChange:t,document:n})=>{let r=d(n,"select");for(let s of e.options||[])r.appendChild(d(n,"option",{value:s.value??s,textContent:s.label??s}));return r.value=e.value,r.addEventListener("change",()=>t(r.value)),r},checkbox:(e,{onChange:t,document:n})=>{let r=d(n,"input",{type:"checkbox",checked:!!e.value});return r.addEventListener("change",()=>t(r.checked)),r},text:(e,{onChange:t,document:n})=>{let r=d(n,"input",{type:"text",value:e.value??""});return r.addEventListener("input",()=>t(r.value)),r}};function B(){let e=new Map(Object.entries(X));return{register(t,n){if(!t||typeof n!="function")throw new Error(`widget "${t}" needs a (control, ctx) => element renderer`);return e.set(t,n),()=>e.delete(t)},get:t=>e.get(t)||e.get("text"),has:t=>e.has(t),list:()=>[...e.keys()]}}var A=`
+  :host { display: block; color: var(--tk-fg, inherit); font: inherit; }
+  fieldset { border: 1px solid var(--tk-line, #2a3550); border-radius: 10px;
+             margin: 0 0 12px; padding: 8px 12px 12px; }
+  legend { padding: 0 6px; color: var(--tk-dim, #8b98a5); font-size: 12px;
+           letter-spacing: .04em; text-transform: uppercase; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin: 8px 0; }
+  .verdict { font-size: 12.5px; margin: 1px 0 6px; }
+  .verdict.warn { color: var(--tk-warn, #e3b341); }
+  .verdict.error { color: var(--tk-error, #ff7b72); }
+  input[type=color] { width: 44px; height: 26px; padding: 0; border: 1px solid var(--tk-line, #2a3550);
+                      border-radius: 6px; background: none; cursor: pointer; }
+
+  /* A control row and its per-token reset. The reset sits OUTSIDE .row, which is
+     a <label> -- a <button> inside a label activates the label's control, so a
+     reset placed there would fight the widget it resets. */
+  .ctl { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+  .ctl .verdicts { grid-column: 1 / -1; }
+
+  /* --- BEGIN RESET CONTROLS: NO var() BEYOND THIS POINT -------------------
+     Every reset is a recovery control, so none of them may be styled by the
+     tokens they reset. Every value below is a LITERAL on purpose, and
+     test/reset.test.mjs fails if a var() ever appears between these markers.
+
+     Everything else in this editor IS themed by the tokens the editor edits,
+     which is correct -- live preview is the point. But that makes every other
+     control reachable by a bad value: set text colour equal to surface colour
+     and the UI that would undo it is gone, and the value is already persisted
+     through the adapter, so a reload does not help.
+
+     Black on white is 21:1, the maximum ratio there is, and it depends on
+     nothing, so no combination of user values can touch it. On a light theme
+     these read as out-of-place black controls. That is the intended trade:
+     a recovery control has to be legible, not tasteful.
+
+     Covering the PER-TOKEN resets and not only the total one buys something
+     specific. When the surrounding editor does vanish, the column of black
+     reset buttons is still visible, and it is a map of the rows -- so the
+     recovery is "undo the one token I just broke" rather than "discard
+     everything". Without it, the total reset is the only survivor and the only
+     available answer is the nuclear one.
+
+     The white outline is for the dark case -- #000 on a dark surround stays
+     perfectly readable but loses its edge, so it reads as floating text rather
+     than a button. font-size is pinned for the same reason the colours are:
+     "font: inherit" on :host means a themed font could otherwise shrink it away.
+
+     NOT defended: an ancestor with opacity/filter/mix-blend-mode. Nothing
+     self-contained can survive that, and it would take the whole page with it.
+     --------------------------------------------------------------------- */
+  [part~="reset"] {
+    background: #000000;
+    color: #ffffff;
+    border: 1px solid #ffffff;
+    cursor: pointer;
+    opacity: 1;
+  }
+  /* Per-token: a small square, so 400 of them read as a margin rail rather
+     than 400 slabs. */
+  [part~="reset-token"] {
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.2;
+  }
+  /* Per-group: rides in the <legend>, which is uppercased and letter-spaced. */
+  [part~="reset-group"] {
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1.4;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  /* Total: full width and last, because it is the one you reach for when
+     everything else has gone wrong. */
+  [part~="reset-all"] {
+    display: block;
+    width: 100%;
+    margin: 4px 0 0;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.2;
+    font-weight: 600;
+  }
+  /* Hover inverts rather than tinting: still two literals, still 21:1. */
+  [part~="reset"]:hover { background: #ffffff; color: #000000; }
+  /* --- END RESET CONTROLS ----------------------------------------------- */
+`;var M=class extends HTMLElement{constructor(){super(),this._widgets=B(),this._values={},this._kit=null,this._preview=null,this._previewTarget=null,this._unsub=null,this._verdictNodes=new Map,this._resetNodes=new Map,this._inited=!1,this.attachShadow({mode:"open"})}set kit(t){this._kit=t,this._init()}get kit(){return this._kit}set previewTarget(t){this._previewTarget=t,this._init()}get previewTarget(){return this._previewTarget}get values(){return{...this._values}}set values(t){this._values={...t||{}},this._preview?.apply(this._values),this._patchVerdicts()}registerWidget(t,n){return this._widgets.register(t,n)}connectedCallback(){this._init()}disconnectedCallback(){this._unsub?.(),this._unsub=null,this._preview?.flush?.(),this._inited=!1}async _init(){if(this._inited||!this._kit||!this.isConnected)return;this._inited=!0;let t=await this._kit.load();this._values={...t},this._previewTarget&&(this._preview=this._kit.preview(this._previewTarget,this._values)),this._unsub=this._kit.subscribe(()=>this._renderFull()),this._renderFull()}_onChange(t,n){this._values={...this._values,[t]:n},this._preview?.apply(this._values),this._kit.save(this._values),this._patchVerdicts(),this.dispatchEvent(new CustomEvent("change",{detail:{key:t,values:this.values}}))}_reset(t,n){let{values:r,changed:s}=S(this._values,t);return s?(this._values=r,this._preview?.apply(this._values),this._kit.save(this._values),this._renderFull(),this.dispatchEvent(new CustomEvent("reset",{detail:{scope:n,changed:s,values:this.values}})),s):0}resetToken(t){return this._reset([t],"token")}resetGroup(t){return this._reset(O(this._kit.editorModel(this._values),t),"group")}resetAll(){return this._reset(null,"all")}_tokenResetPart(t){return R(this._values,t)?"reset reset-token is-set":"reset reset-token"}_resetButton({part:t,label:n,title:r,onClick:s}){let o=document.createElement("button");return o.type="button",o.setAttribute("part",t),o.textContent=n,o.title=r,o.addEventListener("click",i=>{i.preventDefault(),i.stopPropagation(),s()}),o}_renderFull(){let t=this.shadowRoot;t.textContent="",this._verdictNodes.clear(),this._resetNodes.clear();let n=document.createElement("style");n.textContent=A,t.appendChild(n);let r=this._kit.editorModel(this._values),s={onChange:null,document};for(let o of r.groups){let i=document.createElement("fieldset");i.setAttribute("part","group");let a=document.createElement("legend");a.setAttribute("part","group-label"),a.textContent=o.label,i.appendChild(a),a.appendChild(this._resetButton({part:"reset reset-group",label:"reset",title:`Reset every token in ${o.label}`,onClick:()=>this.resetGroup(o.id)}));for(let l of o.controls){let u=document.createElement("div");u.className="ctl";let c=document.createElement("label");c.className="row",c.setAttribute("part","row");let b=document.createElement("span");b.setAttribute("part","label"),b.textContent=l.label;let j=this._widgets.get(l.input)(l,{onChange:K=>this._onChange(l.key,K),document});c.append(b,j),u.appendChild(c);let I=this._resetButton({part:this._tokenResetPart(l.key),label:"\u21BA",title:`Reset ${l.label}`,onClick:()=>this.resetToken(l.key)});this._resetNodes.set(l.key,I),u.appendChild(I);let g=document.createElement("div");g.className="verdicts",this._verdictNodes.set(l.key,g),this._fillVerdicts(g,l.verdicts),u.appendChild(g),i.appendChild(u)}t.appendChild(i)}t.appendChild(this._resetButton({part:"reset reset-all",label:"Reset all to defaults",title:"Clear every override and return every token to its declared default",onClick:()=>this.resetAll()}))}_patchVerdicts(){if(!this._kit)return;let t=this._kit.editorModel(this._values);for(let n of t.groups)for(let r of n.controls){let s=this._verdictNodes.get(r.key);s&&this._fillVerdicts(s,r.verdicts),this._resetNodes.get(r.key)?.setAttribute("part",this._tokenResetPart(r.key))}}_fillVerdicts(t,n){t.textContent="";for(let r of n||[]){let s=document.createElement("div");s.className=`verdict ${r.level==="error"?"error":"warn"}`,s.setAttribute("part","verdict"),s.textContent=r.message,t.appendChild(s)}}};function z(e="theme-kit-editor"){return typeof customElements<"u"&&!customElements.get(e)&&customElements.define(e,M),e}return Y(Z);})();
+
+</script>
 <script>
 (() => {
   const cv = document.getElementById('field'), ctx = cv.getContext('2d');
@@ -276,6 +375,26 @@
                  onset: 2.4, swing: 0.20, breaks: 0.30, branches: [0, 1], branchLen: 0.6, soft: 0.9, cells: 400, stretch: 3.0, spread: 0.03,
                  grain: '#7b5433', knot: '#5b3a20', ring: 0.011, grainW: 0.0011 },
   };
+  // COLOUR LAYER (token-theme-kit). The FAM above is CHARACTER only; colour is these per-layer tokens,
+  // resolved to VALUES the canvas paints with (renderer-agnostic - a WebGPU pass would read the same
+  // values). Values live in the stone SOURCE and are seeded from a family's palette, but do NOT follow a
+  // family switch - colour is decoupled, as designed; a "From family" button re-adopts a palette on demand.
+  const rgbHex = (r, g, b) => '#' + [r, g, b].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join('');
+  const COLOUR_TOKENS = [
+    { key: 'ground', label: 'Base / ground' }, { key: 'major', label: 'Major veins' }, { key: 'minor', label: 'Minor veins' },
+    { key: 'web', label: 'Fracture web' }, { key: 'micro', label: 'Micro / specks' }, { key: 'styl', label: 'Stylolite seam' },
+    { key: 'drusy', label: 'Drusy sparkle' }, { key: 'halo', label: 'Vein halo' }, { key: 'grain', label: 'Wood grain' }, { key: 'knot', label: 'Wood knot' },
+  ];
+  const COL = {};
+  function seedColours(f) {
+    const F = FAM[f], [gr, gg, gb] = hexRGB(F.ground), light = 0.299 * gr + 0.587 * gg + 0.114 * gb > 128;
+    COL.ground = F.ground; COL.major = F.vein; COL.minor = F.vein; COL.web = F.web; COL.micro = F.speck;
+    COL.styl = light ? '#241d16' : '#c9b79a'; COL.drusy = '#f7f5f0';
+    COL.halo = rgbHex(gr + (255 - gr) * 0.55, gg + (255 - gg) * 0.55, gb + (255 - gb) * 0.55);
+    COL.grain = F.grain || '#7b5433'; COL.knot = F.knot || '#5b3a20';
+  }
+  seedColours('carrara');
+  const CARRARA_COL = { ...COL };                          // the token defaults (reset target)
   // Settings for the NEXT line. Each mark takes a copy when it is made and keeps it, so a
   // change applies forward and never rewrites what is already down.
   const NEXT = { pressure: false, tilt: false, gauge: 1, rough: 1, breaks: 1, branches: 1, blen: 1, gauge2: 1, spread: 1, density: 1, stretch: 1,
@@ -403,7 +522,7 @@
     const W = 300, Hh = Math.round(W * H), c = document.createElement('canvas'); c.width = W; c.height = Hh;
     const cx = c.getContext('2d'), img = cx.createImageData(W, Hh), d = img.data;
     const strength = G.brecStrength, N = Math.round(G.brecClasts), seamP = G.brecSeam, seed = mix(strHue(fam), 41), [r] = sub(seed, 1);
-    const [br, bg, bb] = hexRGB(FAM[fam].ground), lum = 0.299 * br + 0.587 * bg + 0.114 * bb, lightStone = lum > 128;  // seam contrasts: dark on light stone, pale on dark
+    const [br, bg, bb] = hexRGB(COL.ground), lum = 0.299 * br + 0.587 * bg + 0.114 * bb, lightStone = lum > 128;  // seam contrasts: dark on light stone, pale on dark
     const cols = Math.max(2, Math.round(Math.sqrt(N / H))), rows = Math.max(2, Math.round(N / cols)), seeds = [], tone = [];
     for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { seeds.push([(i + 0.15 + 0.7 * r()) / cols, (j + 0.15 + 0.7 * r()) / rows * H]); tone.push(r() * 2 - 1); }
     const M = seeds.length, seamW = 0.006 * seamP, cl = (v => Math.max(0, Math.min(255, v)));
@@ -1426,7 +1545,7 @@
     const c = stoneC.getContext('2d');
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, SW, SH);
     c.fillStyle = STONE_BG; c.fillRect(0, 0, SW, SH);
-    if (layVis('base')) { c.globalAlpha = layOp('base'); c.fillStyle = FAM[fam].ground; c.fillRect(0, 0, SW, SH); c.globalAlpha = 1; }  // slab's own ground, so tiles are stone not grout
+    if (layVis('base')) { c.globalAlpha = layOp('base'); c.fillStyle = COL.ground; c.fillRect(0, 0, SW, SH); c.globalAlpha = 1; }  // slab's own ground, so tiles are stone not grout
     const prev = g2d; g2d = c; c.setTransform(SW, 0, 0, SW, 0, 0); c.lineCap = 'round'; c.lineJoin = 'round';
     paintStoneContent(false, false);
     g2d = prev; stoneReady = true;
@@ -1524,7 +1643,7 @@
     if (ident) { ctx.fillStyle = '#0c0d11'; ctx.fillRect(0, 0, cv.width, cv.height); }
     else {                                               // base layer is the ground: neutral behind it, ground on top at its opacity
       ctx.fillStyle = STONE_BG; ctx.fillRect(0, 0, cv.width, cv.height);
-      if (layVis('base')) { ctx.globalAlpha = layOp('base'); ctx.fillStyle = F.ground; ctx.fillRect(0, 0, cv.width, cv.height); ctx.globalAlpha = 1; }
+      if (layVis('base')) { ctx.globalAlpha = layOp('base'); ctx.fillStyle = COL.ground; ctx.fillRect(0, 0, cv.width, cv.height); ctx.globalAlpha = 1; }
     }
     const k = Wc * V.z * dpr;
     ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);
@@ -1562,7 +1681,7 @@
       if (layVis('micro')) geo.grain.forEach((gl, k) => {
         g2d.beginPath(); g2d.moveTo(gl.pts[0][0], gl.pts[0][1]);
         for (let i = 1; i < gl.pts.length; i++) g2d.lineTo(gl.pts[i][0], gl.pts[i][1]);
-        g2d.strokeStyle = ident ? idColour(gl.id, 0.6) : F.grain; g2d.globalAlpha = (ident ? 0.8 : gl.a) * (ident ? 1 : layOp('micro'));
+        g2d.strokeStyle = ident ? idColour(gl.id, 0.6) : COL.grain; g2d.globalAlpha = (ident ? 0.8 : gl.a) * (ident ? 1 : layOp('micro'));
         g2d.lineWidth = gl.w; g2d.stroke();
       });
       if (layVis('major')) for (const K of geo.knots) drawKnot(K, F, ident, ident ? 1 : layOp('major'));
@@ -1570,7 +1689,7 @@
     if (layVis('web')) for (const e of geo.web) {
       g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
       for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
-      g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : F.web;
+      g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : COL.web;
       g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp('web')); g2d.lineWidth = e.width; g2d.stroke();
     }
     if (layVis('micro')) for (const s of geo.specks) {
@@ -1578,7 +1697,7 @@
       g2d.globalAlpha = (ident ? 0.9 : s.lum) * (ident ? 1 : layOp('micro'));
       // Identity: a ground speck shows how far it was MOVED - cool where it lay, hot where pushed
       // Angle: the way a speck points, as hue (axial, so 2x the angle); round specks point nowhere
-      g2d.fillStyle = !ident ? F.speck
+      g2d.fillStyle = !ident ? COL.micro
         : angleView ? (s.el > 1.3 ? `hsl(${Math.round(((2 * s.ang * 180 / Math.PI) % 360 + 360) % 360)} 78% 58%)` : '#3a3c48')
         : s.ground ? `hsl(${Math.round(210 - 190 * Math.min(1, Math.hypot(s.x - s.x0, s.y - s.y0) / 0.008))} 80% 55%)`
         : idColour('P' + s.mark, s.tn);
@@ -1594,12 +1713,12 @@
       const bright = G.drusyBright;
       for (const s of geo.drusy) {
         g2d.globalAlpha = ident ? 0.9 : Math.min(1, s.lum * bright);
-        g2d.fillStyle = ident ? idColour('drusy', s.lum) : '#f7f5f0';
+        g2d.fillStyle = ident ? idColour('drusy', s.lum) : COL.drusy;
         g2d.beginPath(); g2d.arc(s.x, s.y, s.r, 0, 6.2832); g2d.fill();
       }
     }
     if (layVis('styl') && geo.styl.length) {              // dark toothy seams, sharp corners (miter), over the ground and under the veins
-      const [gr, gg, gb] = hexRGB(F.ground), seam = 0.299 * gr + 0.587 * gg + 0.114 * gb > 128 ? '#241d16' : '#c9b79a';
+      const seam = COL.styl;
       g2d.lineJoin = 'miter'; g2d.lineCap = 'butt';
       for (const s of geo.styl) {
         g2d.beginPath(); g2d.moveTo(s.pts[0][0], s.pts[0][1]);
@@ -1612,11 +1731,12 @@
     const order = geo.lines.filter(L => !L.major).concat(geo.lines.filter(L => L.major));
     const lk = L => L.major ? 'major' : 'minor';
     if (!ident) {                                        // halo: a wide, pale bleached selvage under the vein
-      const [hr, hg, hb] = hexRGB(F.ground), halo = `rgb(${Math.round(hr + (255 - hr) * 0.55)},${Math.round(hg + (255 - hg) * 0.55)},${Math.round(hb + (255 - hb) * 0.55)})`;
+      const halo = COL.halo;
       for (const L of order) if (L.halo && layVis(lk(L))) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
     }
-    if (!ident) for (const L of order) if (layVis(lk(L))) runs(L, () => F.vein, L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true);  // shoulder
-    for (const L of order) if (layVis(lk(L))) runs(L, t => (ident ? idColour(L.id, t) : F.vein), null, (ident ? 1 : 0.94 * layOp(lk(L))), false);
+    const vcol = L => L.major ? COL.major : COL.minor;
+    if (!ident) for (const L of order) if (layVis(lk(L))) runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true);  // shoulder
+    for (const L of order) if (layVis(lk(L))) runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false);
   }
   function ellipse(K, f, jit) {
     ctx.beginPath();
@@ -1632,8 +1752,8 @@
   function drawKnot(K, F, ident, op = 1) {
     const [r] = sub(K.seed, 50), p1 = r() * 6.28, p2 = r() * 6.28, nr = 4 + Math.floor(r() * 3);
     const jit = a => 0.05 * (0.6 * Math.sin(3 * a + p1) + 0.4 * Math.sin(5 * a + p2));
-    ellipse(K, 1, jit); ctx.fillStyle = ident ? idColour(K.id, 0.35) : F.knot; ctx.globalAlpha = 0.88 * op; ctx.fill();
-    ctx.strokeStyle = ident ? idColour(K.id, 0.8) : F.grain; ctx.globalAlpha = 0.85 * op;
+    ellipse(K, 1, jit); ctx.fillStyle = ident ? idColour(K.id, 0.35) : COL.knot; ctx.globalAlpha = 0.88 * op; ctx.fill();
+    ctx.strokeStyle = ident ? idColour(K.id, 0.8) : COL.grain; ctx.globalAlpha = 0.85 * op;
     for (let k = 1; k < nr; k++) { ellipse(K, k / nr, jit); ctx.lineWidth = 0.0008; ctx.stroke(); }
     ellipse(K, 1, jit); ctx.lineWidth = 0.0016; ctx.strokeStyle = ident ? '#ffffff' : '#3a2412'; ctx.stroke();
     ctx.beginPath(); ctx.arc(K.x, K.y, K.R * 0.08, 0, 2 * Math.PI); ctx.fillStyle = '#2e1c0e'; ctx.globalAlpha = op; ctx.fill();
@@ -1911,6 +2031,24 @@
   // ---- controls
   const press = (sel, on) => { for (const o of document.querySelectorAll(sel)) o.setAttribute('aria-pressed', o === on); };
 
+  // ---- COLOUR EDITOR: token-theme-kit is the editor + resolver; COL holds the live values, the renderer
+  // paints from them, and they persist in the stone source. The kit's change -> adapter.save -> redraw.
+  let kit = null, ed = null;
+  function setupColour() {
+    const t = document.getElementById('colour-toggle');
+    if (!window.TTK) { if (t) { t.disabled = true; t.textContent = 'Colour editor unavailable'; } return; }
+    kit = TTK.createThemeKit({ prefix: '--stone-' });
+    kit.registerTokenGroup({ id: 'colour', label: 'Colour (per layer)', tokens: COLOUR_TOKENS.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: CARRARA_COL[tk.key] })) });
+    kit.setAdapter({ load: async () => ({ ...COL }), save: async v => { Object.assign(COL, v); saveLocal(); redraw(true); } });
+    TTK.defineThemeKitEditor();
+    mountEditor();
+  }
+  function mountEditor() {                                 // (re)create the element so its inputs reflect COL after a load / family palette
+    if (!kit) return;
+    const host = document.getElementById('colour-panel'); if (!host) return;
+    host.textContent = ''; ed = document.createElement('theme-kit-editor'); host.appendChild(ed); ed.kit = kit;
+  }
+
   // ---- LAYERS PANEL: eye + solo + opacity per canonical layer, shown front-to-back (major on top) so it
   // reads like a stack. Toggling only repaints; when tiles are laid it also re-bakes the slab offscreen.
   const layEl = document.getElementById('layers');
@@ -1952,7 +2090,7 @@
   function serialize() {
     return { v: 1, fam, tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
-             layers: layers.map(L => ({ key: L.key, on: L.on, op: L.op })), soloLay,
+             layers: layers.map(L => ({ key: L.key, on: L.on, op: L.op })), soloLay, COL: { ...COL },
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
   }
   function deserialize(o) {
@@ -1961,6 +2099,8 @@
     Object.assign(G, o.G || {}); Object.assign(T, o.T || {}); Object.assign(NEXT, o.NEXT || {});
     if (Array.isArray(o.layers)) for (const s of o.layers) { const L = layAt(s.key); if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; } }
     soloLay = o.soloLay || null;
+    seedColours(fam); if (o.COL) Object.assign(COL, o.COL);   // colour travels with the slab; older saves fall back to the family palette
+    if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor
     marks = o.marks.map(m => ({ ...m }));
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
     stoneReady = false; syncUI(); redraw(true); return true;
@@ -2006,6 +2146,8 @@
   for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
   for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
   for (const b of document.querySelectorAll('[data-var]')) b.addEventListener('click', () => { NEXT.variant = b.dataset.var; press('[data-var]', b); });   // variant applies to the NEXT line
+  document.getElementById('colour-toggle').addEventListener('click', () => { const p = document.getElementById('colour-panel'), b = document.getElementById('colour-toggle'), show = p.hidden; p.hidden = !show; b.setAttribute('aria-pressed', show); b.textContent = show ? 'Hide colour editor' : 'Show colour editor'; });
+  document.getElementById('colour-fromfam').addEventListener('click', () => { seedColours(fam); mountEditor(); redraw(true); });   // adopt the current family's palette
   const mh = document.getElementById('m-hover');
   mh.addEventListener('click', () => {
     hoverMag = !hoverMag; mh.setAttribute('aria-pressed', hoverMag); if (!hoverMag) commitHover();
@@ -2099,8 +2241,9 @@
   ];
   size();
   buildLayerUI();
+  setupColour();
   if (!tryLoadLocal()) {                                // restore the last session on this device, else the demo
-    marks = demo; nextId = 5;
+    marks = demo; nextId = 5; seedColours(fam); mountEditor();
     for (const m of marks) { m.p = { ...NEXT }; m.fam = fam; }
     syncUI(); build(); draw();
   }
