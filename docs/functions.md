@@ -1,0 +1,168 @@
+# Function reference — `app/stone-author.html`
+
+The functions of the authoring studio, grouped by subsystem. One inline `<script>`; line numbers
+are anchors into it and drift as the file changes — the grouping and signatures are the stable part.
+For *why* the pieces fit this way, see [`architecture.md`](architecture.md); for the colour engine,
+[`colour-layer.md`](colour-layer.md).
+
+Conventions: a **mark** `m` is a user action (`{id, kind, seed, samples|at|…, p, fam}`), where `m.p`
+is the frozen `NEXT` settings it was drawn with. `out`/`geo` is the built geometry bag
+(`{lines, byId, web, specks, styl, drusy, knots, grain, guides}`). `F = FAM[fam]` is the family
+(character); `COL` holds colour + effect values. Frame coordinates are `0..1` across, `0..H` down.
+
+---
+
+## Randomness & seeding
+
+A knob edits instead of re-rolls because every role draws from its own stable stream.
+
+- `mulberry32(a)` — the PRNG; returns a `()=>[0,1)` generator. *(569)*
+- `mix(...v)` — hash integers/seeds into one 32-bit seed (FNV-style). *(578)*
+- `sub(...key)` — a seeded stream **pair** `[rand, gauss]` for one role (`mix`es the key). *(583)*
+- `gaussOf(r)` — wrap a uniform stream into a normal-distribution generator. *(577)*
+- `poisson(lam, r)` — a Poisson count by exact quantile of one uniform — **monotone** in `lam`
+  (a higher rate never yields fewer). *(584)*
+- `strHue(s)` — hash a string to a hue `0..359` (identity-view colours). *(595)*
+
+## Paths & line geometry
+
+- `smooth1d(n, scale, g)` — a smoothed 1-D noise track of length `n`. *(598)*
+- `resample(P, step)` — even-arc-length resample of a polyline. *(609)*
+- `smoothPath(P, h)` — smooth a polyline. *(628)*
+- `handRoute(P)` — turn raw pointer samples into a clean route (resample → smooth → resample). *(689)*
+- `roughen(knots, levels, sched, g)` — fractal midpoint displacement; `sched(L)` sets per-scale
+  amplitude (the vein vs crack schedules). *(704)*
+- `lineGeom(id, pts, gauge, F, M, seed, salt, extra)` — build a line: per-segment width, breaks,
+  arc length, taper; applies `extra.press` / `extra.wmod` (boudinage) / `extra.lean`. *(720)*
+- `at(L, t)` — point at fraction `t` along line `L`. *(748)*
+- `tangent(L, t)` — heading at `t`, measured over a chord (not one rough segment). *(756)*
+- `add(out, L)` — push a line into `out` and index it by id. *(760)*
+- `sinuate(kn, seed, M)` — add a tapered low-frequency wave to a route (the *sinuous* variant). *(764)*
+- `curvature(pts, chord, smooth)` — signed curvature along a path (fold strain, deflection). *(1101)*
+
+## Pen input
+
+Baseline is one pointer + time; pressure/tilt are opt-in enhancements read from the rest grip.
+
+- `pressureReal(S)` / `pressFactor(S)` — is pressure present, and its along-stroke width factor. *(639/644)*
+- `tiltReal(S)` / `leanProfile(S, rest)` — is tilt present, and lean from the rest grip along the stroke. *(658/671)*
+- `restLean()` / `azOf(e)` / `leanOf(e)` — running rest-grip baseline; azimuth and lean from a
+  Pointer Event. *(1912/1921/1927)*
+
+## Tools — a mark becomes geometry
+
+Dispatched by `applyMark(m, out)` on `m.kind`. *(1397)*
+
+- `buildVein(m, F, out)` — the vein: route → roughen → `lineGeom`, family branches, and the
+  per-line variant (sinuous / dendritic / echelon / boudinage / halo). *(779)*
+- `buildBranch(m, F, out)` — a minor grown by tap or drag off a parent vein; honours the variant. *(831)*
+- `buildStyl(m, out)` — a stylolite: the route becomes an interlocking toothy seam. *(901)*
+- `buildWeb(m, F, out)` — a crack along the line plus a Delaunay web of cells that thins out. *(919)*
+- `buildPour(m, out)` — the pour brush: specks thrown along the line (slow pools, fast thins, bends fling). *(1340)*
+- `applyGravity(m, out)` — pull/push specks toward a point or line. *(1194)*
+- `applyMagnet(m, out)` — comb specks like iron filings along the pen's lean. *(1231)*
+- `knotGeom(m)` / `woodGrain(F, knots)` / `trace(x, y, sg)` — a wood knot, the grain field flowing
+  around knots, and one traced grain streamline. *(1290/1293/1315)*
+- `delaunay(P)` / `distTo(route, p)` — Bowyer–Watson triangulation and nearest-distance-to-route
+  (web support). *(861/891)*
+
+## Granite specks — a never-touch particle field
+
+- `speck(r, g, x, y, t, o)` — construct one speck (position, size, elongation, jitter). *(969)*
+- `cellGrid(items, cell)` / `forNear(g, cell, x, y, rc, fn)` — spatial hash grid and neighbour
+  iteration. *(981/989)*
+- `relax(sp, iters, hot)` / `settle(specks)` — relaxation so specks bunch but never overlap
+  (active-set over a flat typed grid). *(1001/1055)*
+- `pathIndex(pts, cell)` / `moveRadial(q, near, dNew, fx, fy)` — index a path for proximity; move a
+  speck radially (gravity). *(1064/1092)*
+- `deflect(kn, specks, mul)` — bend a vein route a few degrees around dense rock. *(1115)*
+- `intrude(L, specks, M, route)` — push specks aside along a vein (crowded inside a turn, thinned
+  outside). *(1148)*
+- `groundCopy()` — a fresh copy of the family's ground speck field. *(1272)*
+
+## Slab primitives — seeded fields on the base
+
+Each is cached to an offscreen and rebuilt only when its inputs change.
+
+- `buildClouds()` / `ensureClouds()` — tileable fBm mottle as a grey delta (soft-light modulator). *(469/492)*
+- `buildBands()` / `ensureBands()` — directional tonal bands as a grey delta (soft-light). *(499/517)*
+- `buildBreccia()` / `ensureBreccia()` — a jittered-Voronoi clast mosaic with a contrast matrix
+  (opaque base setter). *(524/547)*
+- `buildDrusy()` — crystal-pocket sparkle points, deterministic by index (density appends). *(552)*
+- `hexRGB(h)` — parse `#rgb`/`#rrggbb` to `[r,g,b]`. *(467)*
+
+## Build pipeline
+
+- `applyMark(m, out)` — dispatch one mark to its builder. *(1397)*
+- `build()` — incremental (append the last mark to a cloned `geo`) when possible, else `fullBuild`. *(1407)*
+- `fullBuild()` — rebuild all geometry from `marks` in order (older rock first). *(1421)*
+
+## Tile engine
+
+Each pattern is a fundamental cell of polygons plus two lattice vectors, in inches for tile size `u`.
+
+- `PATTERNS` — the pattern table (`u => {polys, ax, ay, overlap?}`), 15 patterns. *(1438)*
+- `circlePoly(cx, cy, r, n)` / `versaillesModule(u)` / `cairoCell(u)` — the many-point and
+  composite cells (penny/fish-scale, French, Cairo pentagons). *(1480/1483/1505)*
+- `insetPoly(P, d)` — inset a polygon (grout, tumbled edges). *(1511)*
+- `tileInstances()` — every tile polygon across the slab for the current pattern. *(1519)*
+- `renderStoneOffscreen()` — bake the authored slab once to a reused offscreen. *(1546)*
+- `chipEdge(poly, mk)` — replace one edge with a jagged inward bite (Chip tool). *(1557)*
+- `drawTiles(F)` — lay the tiled floor: clip each tile, wrap the slab image, grout, edges, chips. *(1573)*
+- `edgeFinish(poly, px)` — a lit chamfer (bevel / pillow / tumbled). *(1610)*
+- `whichTile(fx, fy)` — hit-test a point to a tile and its nearest edge. *(1625)*
+- `inFr(v)` — inches → frame units. *(1435)*
+
+## Rendering
+
+- `size()` — size the canvas to the element and device pixel ratio. *(1636)*
+- `draw()` — one frame: ground/base fill, then `paintStoneContent` (or `drawTiles`), guides, live
+  stroke, status. *(1643)*
+- `paintStoneContent(ident, angleView)` — paint every layer in stack order
+  (`base→breccia→clouds→bands→web→micro→drusy→styl→minor→major`), gated by layer visibility. The
+  core of the renderer. *(1677)*
+- `runs(L, colour, fixedWidth, alpha, shoulder)` — stroke a line in chunks (shoulder or core pass). *(1838)*
+- `fxOn(key, colour, ident)` / `fxOff(s)` — set a layer's blend mode + colour glow around its paint,
+  then restore. *(1669/1676)*
+- `paintLive()` — the in-progress stroke. *(1659)*
+- `ellipse(K, f, jit)` / `drawKnot(K, F, ident, op)` — knot rings and rim. *(1756/1767)*
+- `drawScaleBar()` / `drawGuides()` — the scale bar and the gravity/magnet guide overlay. *(1778/1790)*
+- `idColour(id, t)` — identity-view colour for an id. *(1641)*
+- `redraw(rebuild)` — schedule a frame on rAF (rebuild geometry if asked), then autosave. *(1858)*
+- `stat()` / `clampView()` / `zoomAt(ex, ey, f)` / `hint(msg)` — status line, view clamp, zoom, hint. *(1866/1871/1877/1898)*
+
+## Layers
+
+- `layers` / `layAt(k)` — the render-layer list and lookup. *(455)*
+- `layVis(k)` — visibility, honouring solo (solo keeps `base` under the soloed layer). *(459)*
+- `layOp(k)` — a layer's opacity. *(460)*
+- `buildLayerUI()` / `syncLayerUI()` / `relayer()` — build the Layers panel, reflect state, and
+  repaint (invalidating the tile offscreen). *(2078/2094/2077)*
+
+## Colour layer
+
+- `COL` / `COLOUR_TOKENS` / `FX_LAYERS` / `BLENDS` — colour+effect values, the colour token list, the
+  layers that carry blend/glow, and the blend-mode options.
+- `seedColours(f)` — seed `COL`'s colours from family `f`'s palette (never touches effects). *(389)*
+- `setupColour()` — create the token-theme-kit kit, register the Colour + Effects groups, bind the
+  adapter to `COL`, mount the editor. *(2052)*
+- `mountEditor()` — (re)create the `<theme-kit-editor>` so its inputs reflect `COL`. *(2068)*
+
+## Interaction
+
+- `nearestLine(fx, fy)` — the nearest vein (for Branch tap/drag). *(1934)*
+- `commit(m)` — push a mark (freezing `NEXT`/`fam` onto it) and rebuild. *(1987)*
+- `end(e)` — pointer-up: build the right mark for the active tool. *(1988)*
+- `commitHover()` — commit a hover trace (pen/mouse working above the slab). *(2028)*
+
+## The source — save, load, restore
+
+- `serialize()` — the stone source: `{v, fam, tool, view, layTiles, G, T, NEXT, layers, soloLay, COL,
+  marks}`. *(2112)*
+- `deserialize(o)` — restore a source (guards `v`), reseed colour, re-mount the editor, redraw. *(2118)*
+- `writeLocal()` / `saveLocal()` / `tryLoadLocal()` — autosave (debounced + flush on hide), and
+  restore on load. *(2132/2133/2138)*
+- `syncUI()` — push all state into the controls after a load. *(2143)*
+- `showGround()` — show/hide the family-specific ground panel. *(2104)*
+- `download(name, text)` — a Blob download for Save (falls back when the `downloads` capability is
+  absent). *(2158)*

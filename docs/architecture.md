@@ -1,56 +1,13 @@
-# Stone Author — architecture & origins
+# Stone Author — architecture
 
-What this system is, how its parts fit, and — because nobody believes the origin — how it
-came to be. For the deep dives, see [`stone-generator.md`](stone-generator.md) (the Python/panel
-generator, rule by rule) and [`colour-layer.md`](colour-layer.md) (the colour engine).
+What this system is and how its parts fit — the documentation of the code. The origin story is
+deliberately *not* here; it lives in the [README](../README.md). Companion docs:
+[`functions.md`](functions.md) (the function reference), [`colour-layer.md`](colour-layer.md) (the
+colour engine), [`stone-generator.md`](stone-generator.md) (the Python/panel generator, rule by
+rule).
 
----
-
-## Origins
-
-It started as: **"I want a better background for my Home Assistant card."**
-
-That is the whole seed. The rest grew out of taking that sentence seriously.
-
-1. **Theming the cards** came first. A Home Assistant Lovelace card needed its colours to be
-   editable without hand-writing CSS. The machinery for that — declare a token, get an editor,
-   let users re-theme — turned out to have nothing to do with Home Assistant, or with any
-   particular tokens. So it came out as its own thing: **[token-theme-kit](https://github.com/kingchddg901/token-theme-kit)**,
-   a zero-domain theming engine, *extracted from* that card. (First extraction.)
-
-2. **The background itself** wanted to be stone — marble, granite — not a flat fill or a
-   stock JPEG that pixelates when the card resizes. A photo can't scale; a *description* of the
-   stone can. So the texture became a **generator**: emit the stone as structure (veins as
-   polylines, tiers, a direction field), rasterise it to greyscale **value masks** at whatever
-   size the surface needs. Colour never gets baked in — it routes at draw time from the theme.
-   That is the spine everything shares: *colour routes, greyscale stores.*
-
-3. **The generator was good at structure and bad at art.** It could reproduce measured facts
-   about real marble (branch spacing, tier independence, visibility floors — all in
-   `stone-generator.md`) but it couldn't be *directed*. So the model flipped to an **authored
-   generator**: you draw where the line goes, and the *family* decides what it becomes — how it
-   roughens, swells, breaks, branches. Your line is the route; the family is the character.
-
-4. **Then it kept growing.** A pour brush (paint thrown along a line). A tile engine (cut the
-   slab into a repeating floor — 15 patterns, real grout and kerf). Pen pressure and tilt. Gravity
-   and magnet brushes for granite. A layer model. Marble primitives — clouds, banding, breccia,
-   drusy, stylolites. Vein-structure variants. Each addition was small; the sum outgrew the
-   dashboard builder it lived in.
-
-5. **So it became its own repo** — `stone-author`. That extraction *proved* the boundary was
-   real: the stone tools came away clean, and the dashboard kept only the thin renderer that
-   consumes their output. (Second extraction.)
-
-6. **The loop closed** when colour needed a home. The token-theme-kit from step 1 — built to
-   theme a DOM, having never imagined a `<canvas>` — dropped into the authoring app as its colour
-   engine, *unchanged*. Its editor builds itself around the stone's layers; its resolver hands
-   back values the canvas paints with. A card's theming engine now colours a marble slab it will
-   never be rendered on.
-
-So: a card background → a theming engine and a stone generator → an authoring studio → its own
-repo → a pluggable colour layer, with a WebGPU render pipeline next. Two clean extractions along
-the way, each one the proof that the layer under it was real. It is not the path anyone would
-have planned. It is the path that taking one small want seriously actually produced.
+The shared spine, in one line: **colour routes, greyscale stores** — the generator emits
+structure, rasterises it to greyscale value masks, and a theme decides colour at draw time.
 
 ---
 
@@ -180,13 +137,13 @@ formats/resolutions · a WebGPU render pipeline.
 
 ---
 
-## The through-line
+## Design principle
 
-**Extractability proves a layer.** Twice now a piece has come away clean — the theming kit from a
-card, the stone tools from the dashboard — and each time the clean seam was the proof that what
-sat under it was a real layer, not a tangle. The producer/consumer split, the render-layer/bucket
-split, the character/colour split, the value-not-CSS resolver: all the same instinct. It is why a
-card background could become this without a rewrite at any step.
+**Extractability proves a layer.** The seams here are one instinct applied repeatedly —
+producer/consumer, render-layer/bucket, character/colour, value-not-CSS resolver. When a piece
+comes away clean, the boundary under it was real, which is what lets the system grow by *addition*
+rather than by rewrite. New primitive → new render layer tagged with a bucket. New colour control →
+new token. New renderer (WebGPU) → same resolved values behind it.
 
 ---
 

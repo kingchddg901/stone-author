@@ -6,12 +6,50 @@ lay it as tile. Extracted from the HA dashboard builder once the stone work outg
 The dashboard is one *consumer* of what this repo produces. This repo is the *producer*:
 the authoring app, the generator, the rip/harvest pipeline, and the mask format they share.
 
-**How this happened.** It started as *"I want a better background for my Home Assistant card."*
-That seed grew a theming engine (extracted as
-[token-theme-kit](https://github.com/kingchddg901/token-theme-kit)), then a stone generator, then
-an authoring studio — until it outgrew the dashboard and became this repo. Two clean extractions
-proved the layers along the way. The full story and architecture are in
-[`docs/architecture.md`](docs/architecture.md).
+## How it came to be
+
+It started as one sentence: **"I want a better background for my Home Assistant card."**
+
+Nobody believes the rest came from that, so here is the lineage.
+
+1. **Theming the cards came first.** A Lovelace card needed its colours editable without
+   hand-writing CSS. The machinery for that — declare a token, get an editor, let users re-theme —
+   had nothing to do with Home Assistant, or with any particular tokens, so it came out as its own
+   library: **[token-theme-kit](https://github.com/kingchddg901/token-theme-kit)**, extracted from
+   the card. *(First extraction.)*
+
+2. **The background wanted to be stone.** Marble, granite — not a flat fill, and not a stock JPEG
+   that pixelates when the card resizes. A photo can't scale; a *description* of the stone can. So
+   the texture became a **generator**: emit the stone as structure, rasterise it to greyscale
+   **value masks** at whatever size the surface needs. Colour never bakes in — it routes at draw
+   time from the theme.
+
+3. **The generator was good at structure and bad at art.** It could reproduce measured facts about
+   real marble but it couldn't be *directed*. So the model flipped to an **authored generator**:
+   you draw where the line goes, and the family decides what it becomes. Your line is the route;
+   the family is the character.
+
+4. **Then it kept growing.** A pour brush. A tile engine (15 patterns, real grout and kerf). Pen
+   pressure and tilt. Gravity and magnet brushes. A layer model. Marble primitives — clouds,
+   banding, breccia, drusy, stylolites. Vein-structure variants. Each addition was small; the sum
+   outgrew the dashboard builder it lived in.
+
+5. **So it became its own repo.** That extraction *proved* the boundary was real: the stone tools
+   came away clean, and the dashboard kept only the thin renderer that consumes their output.
+   *(Second extraction.)*
+
+6. **The loop closed** when colour needed a home. The token-theme-kit from step 1 — built to theme
+   a DOM, having never imagined a `<canvas>` — dropped into the authoring app as its colour engine,
+   *unchanged*. A card's theming engine now colours a marble slab it will never be rendered on.
+
+A card background → a theming engine and a stone generator → an authoring studio → its own repo → a
+pluggable colour layer, with a WebGPU render pipeline next. Two clean extractions along the way,
+each one the proof that the layer under it was real. Not the path anyone would have planned — the
+path that taking one small want seriously actually produced.
+
+> This README is the story. The **code** is documented separately and without the narrative:
+> [`docs/architecture.md`](docs/architecture.md) (how the parts fit) and
+> [`docs/functions.md`](docs/functions.md) (the function reference).
 
 ## What's here
 
