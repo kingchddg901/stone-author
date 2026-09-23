@@ -205,6 +205,8 @@
       <div class="sl"><label for="lightSpectrum">Light spectrum <output id="lightSpectrumV"></output></label><input id="lightSpectrum" type="range" min="-1" max="1" step="0.02"></div>
       <div class="sl"><span class="lbl">Spotlight</span><div class="grp"><button id="spot-toggle" type="button" aria-pressed="false">Beam</button></div></div>
       <div class="sl"><label for="spotR">Beam size <output id="spotRV"></output></label><input id="spotR" type="range" min="0.05" max="0.6" step="0.01"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">Back light: light from behind. Each bucket occludes by its own transmittance (veins nearly opaque, specks semi, the matrix glows), folded deepest → top. Tint it with Light temperature.</span></div>
+      <div class="sl"><label for="backlight">Back light <output id="backlightV"></output></label><input id="backlight" type="range" min="0" max="2" step="0.02"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">Lens: an ideal glass relief on the very top. Flat and perfect, so head-on it does almost nothing — it refracts what lies beneath as it steepens, and it's built to pair with a back light.</span></div>
       <div class="sl"><label for="lens">Lens <output id="lensV"></output></label><input id="lens" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="lensPitch">Lens grooves <output id="lensPitchV"></output></label><input id="lensPitch" type="range" min="2" max="40" step="1"></div>
@@ -408,6 +410,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const cv = document.getElementById('field'), ctx = cv.getContext('2d');
   const ssC = document.createElement('canvas');            // subsurface scratch: the feature high-pass, warmed, added back as internal glow
   const lensC = document.createElement('canvas');          // lens scratch: a downscaled snapshot the top-coat refracts per-pixel, then upscales back
+  const backC = document.createElement('canvas');          // back-light scratch: the transilluminated fold, built from per-bucket coverage
   const H = 0.625;                                     // frame height, in frame widths
   // THE SLAB IS 8 x 5 FT: his 5 ft slab, sized to this 16:10 frame. Metric is one multiply away.
   const SLAB_FT = 8, FT_MM = 304.8;                    // frame width in feet; feet to mm
@@ -482,7 +485,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1,
-              fogHaze: 0, fogSize: 1, fogDensity: 1,
+              fogHaze: 0, fogSize: 1, fogDensity: 1, backlight: 0,
               lens: 0, lensPitch: 10, lensType: 'fresnel' };
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
@@ -492,7 +495,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2), fogHaze: v => `${Math.round(v * 100)}%`,
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}`,
-                 lens: v => (+v).toFixed(2), lensPitch: v => `${Math.round(v)}` };
+                 lens: v => (+v).toFixed(2), lensPitch: v => `${Math.round(v)}`, backlight: v => (+v).toFixed(2) };
   const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
   const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen };
   let guidesOn = true;
@@ -1819,8 +1822,32 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   const idColour = (id, t) => `hsl(${strHue(id)} 72% ${Math.round(28 + 50 * t)}%)`;
   let live = null, g2d = ctx;
+  // LAYER-AWARE BACK LIGHT: light from behind, folded deepest → top through each bucket's own transmittance.
+  // Reuses the export's per-bucket coverage renders as the occlusion buffers, so it needs no change to the stack.
+  function paintBacklit() {
+    const W = 512, body = expBaseMask(W);                  // the translucent matrix (luminance) — the part that glows; then each occluding bucket's coverage
+    const gw = body.width, gh = body.height;
+    if (backC.width !== gw || backC.height !== gh) { backC.width = gw; backC.height = gh; }
+    const gd = c => c.getContext('2d').getImageData(0, 0, gw, gh).data;
+    const bd = gd(body), cMa = gd(expCoverage('major', W)), cMi = gd(expCoverage('minor', W)), cMc = gd(expCoverage('micro', W)), cWe = gd(expCoverage('web', W));
+    const bc = backC.getContext('2d'), out = bc.createImageData(gw, gh), o = out.data;
+    const [br, bg, bb] = lightRGB(), I = G.backlight;       // backlight colour (from Light temperature) × intensity
+    const tMa = 0.05, tMi = 0.12, tWe = 0.22, tMc = 0.45;   // transmittance where a bucket is covered: veins nearly opaque, seams less, web semi, specks most
+    const lx = G.lightX * gw, ly = G.lightY * gh, rr = Math.hypot(gw, gh);
+    const occ = (c, t) => t + (1 - t) * (1 - c / 255);      // covered (c=255) → t; clear (c=0) → 1
+    for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+      const i = (y * gw + x) << 2;
+      const lum = bd[i] / 255, trans = 0.18 + 0.82 * lum;   // a dense/dark matrix blocks the backlight; a pale one glows
+      const fall = 1 - 0.45 * Math.min(1, Math.hypot(x - lx, y - ly) / (rr * 0.6));   // a soft hot-centre toward the light position
+      const m = I * trans * fall * occ(cMa[i], tMa) * occ(cMi[i], tMi) * occ(cMc[i], tMc) * occ(cWe[i], tWe);
+      o[i] = Math.min(255, br * m); o[i + 1] = Math.min(255, bg * m); o[i + 2] = Math.min(255, bb * m); o[i + 3] = 255;
+    }
+    bc.putImageData(out, 0, 0);
+    g2d.imageSmoothingEnabled = true; g2d.drawImage(backC, 0, 0, gw, gh, 0, 0, 1, H);   // place under the current view transform (respects pan/zoom)
+  }
   function draw() {
     const F = FAM[fam], ident = view !== 'stone', angleView = view === 'angle';
+    const backlit = !ident && !uvMode && !layTiles && G.backlight > 0;   // back light replaces the daylight body + its front-lit coat passes
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
     if (ident) { ctx.fillStyle = '#0c0d11'; ctx.fillRect(0, 0, cv.width, cv.height); }
     else if (uvMode) { ctx.fillStyle = UV_DARK; ctx.fillRect(0, 0, cv.width, cv.height); }   // BLACK LIGHT: the stone body goes dark, only fluorescence glows
@@ -1832,7 +1859,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     if (layTiles) { drawTiles(F); paintLive(); if (tool === 'light') drawLightGuide(); ctx.globalAlpha = 1; stat(); return; }
-    paintStoneContent(ident, angleView);
+    if (backlit) paintBacklit(); else paintStoneContent(ident, angleView);
     if (!ident && uvMode) {                              // EMISSION BLOOM: fluorescence glows; the black ground adds ~nothing, so additive is safe
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'lighter';
@@ -1840,7 +1867,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       ctx.globalAlpha = 0.35; ctx.filter = `blur(${8 * dpr}px)`; ctx.drawImage(cv, 0, 0);
       ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.restore();
     }
-    if (!ident && !uvMode && G.subsurface > 0) {         // SUBSURFACE (v1): features glow through a thin translucent sheet.
+    if (!ident && !uvMode && !backlit && G.subsurface > 0) {         // SUBSURFACE (v1): features glow through a thin translucent sheet.
       const ss = G.subsurface;                           // high-pass (stone - its own blur) so FLAT areas add ~0 (no white-out),
       if (ssC.width !== cv.width || ssC.height !== cv.height) { ssC.width = cv.width; ssC.height = cv.height; }
       const sc = ssC.getContext('2d');                   // features glow warm on any base, light or dark.
@@ -1862,7 +1889,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
       ctx.restore();
     }
-    if (!ident && !uvMode && G.specular > 0) {           // SPECULAR TOP-COAT (v1): a movable glossy sheen — the polish catching one light
+    if (!ident && !uvMode && !backlit && G.specular > 0) {           // SPECULAR TOP-COAT (v1): a movable glossy sheen — the polish catching one light
       const sp = G.specular, ang = G.lightAngle * Math.PI / 180, w = cv.width, h = cv.height;
       const cx = w * 0.5 + Math.cos(ang) * w * 0.4, cy = h * 0.5 - Math.sin(ang) * h * 0.4;   // hotspot sits toward the light
       const rad = Math.hypot(w, h) * 0.45, a = Math.min(1, 0.85 * sp), [lr, lg, lb] = lightRGB();

@@ -191,7 +191,20 @@ visible amplitude, is everywhere; a gather never tears. It runs on a downscaled 
 upscaled back — the glass hides the softening), so real refraction stays cheap **without a GPU**. A soft
 **caustic** brightens (only — glass concentrates light, it never punches dark bands) where the relief focuses,
 so it reads on dark stone and washes out on white, the way a real caustic does. This is the transmission-side
-dual of the spectrum engine's emission, and the same fold will run **back-to-front for a future back light**.
+dual of the spectrum engine's emission, and the same fold runs **back-to-front for the back light** below.
+
+**Back light — the layer-aware fold.** `paintBacklit` (`G.backlight`) models light from *behind* the slab: the
+render is no longer flatten-as-you-go but a per-pixel **fold**, deepest layer to top, where each bucket does its
+own thing to the light. It reuses the machinery we already had — `expBaseMask` (the translucent matrix, the part
+that *glows*) and `expCoverage` per occluding bucket (veins/seams/specks/web, the part that *occludes*) — so the
+stack needs no change. `light = backlightColour · intensity · bodyTransmit · Π (tᵦ + (1−tᵦ)(1−coverageᵦ))`: a
+covered bucket drops the light toward its transmittance `tᵦ` (veins nearly opaque → dark veils; specks semi; the
+pale matrix glows; a dense/dark stone blocks most of it, which is why black Marquina goes nearly dark — correct).
+This is the transmission dual of black-light emission: black light turns the external light down so *emitters*
+dominate; back light drives light through from behind so *occlusion* shapes it. First cut ships occlusion +
+glow; **emission-compose** (self-luminous inclusions glowing through, which is what a dark stone needs) and a
+proper **scatter/bloom** are the next tunes. Per-bucket transmittances are defaults for now — the seam to make
+each *layer* declare its own `{emission, transmittance, scatter}` is exactly this fold with per-layer `tᵦ`.
 
 This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 

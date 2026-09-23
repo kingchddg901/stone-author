@@ -203,6 +203,16 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 - **The one light** (`G.lightAngle`) is shared: `setLight(f)` aims it from the slab centre toward the pointer,
   the **Light tool** drags it (a `lightdrag` gesture; `drawLightGuide()` draws a little sun at the slab edge),
   `edgeFinish` lights tile edges by edge-normal·light, and the specular sheen/glint place their hotspot by it.
+- **Back light** (`paintBacklit`, `G.backlight`) — a stone-view mode (replaces the daylight body + its front-lit
+  coat passes) modelling light from **behind**: the **layer-aware fold**. Reuses the export's per-bucket renders —
+  `expBaseMask` (the translucent matrix, as luminance) and `expCoverage('major'|'minor'|'micro'|'web')` (each
+  occluder's coverage) at a ≤512px `backC` scratch, so no change to `paintStoneContent`. Per pixel, deepest→top:
+  `light = backlightColour · intensity · bodyTransmit(lum) · falloff · Π occ(coverageᵦ, tᵦ)`, where
+  `occ(c,t) = t + (1−t)(1−c)` drops the light toward each bucket's transmittance where it's covered (veins ~0.05
+  nearly opaque, seams 0.12, web 0.22, specks 0.45), a dark matrix passes less (`0.18 + 0.82·lum`), and a soft
+  hot-centre sits toward `G.lightX/lightY`. Colour = `lightRGB()` (Light temperature). Drawn under the view
+  transform (pans/zooms). The **lens** still runs over it (glass-over-backlight). First cut — emission-compose
+  (self-luminous inclusions glowing through) and scatter/bloom are the next tunes. `G.backlight` persists in `G`.
 - **Lens top-coat** (`G.lens`, `G.lensType`, `G.lensPitch`) — the last coat pass in stone view: an ideal glass
   relief on the very top that **refracts** what lies beneath. Real per-pixel refraction (a mesh-blit warp tears
   at any real amplitude; a **gather** cannot), done on a downscaled snapshot in `lensC` (≤640px, upscaled back —
