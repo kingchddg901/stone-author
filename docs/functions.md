@@ -89,6 +89,10 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
 - `buildBreccia()` / `ensureBreccia()` — a jittered-Voronoi clast mosaic with a contrast matrix
   (opaque base setter). *(524/547)*
 - `buildDrusy()` — crystal-pocket sparkle points, deterministic by index (density appends). *(552)*
+- `buildFog()` — a flat, even grayscale **haze / resin core**: a jittered grid of heavily-overlapping soft
+  particles (reads as a uniform sheet, not clumps), rendered deep under the veins at a low fixed grey and
+  `G.fogHaze` alpha, never tinted. Family-independent (a defect, not character); off by default. Particles
+  carry birth positions (`x0`/`y0`) so the magnet can push them into clear windows and pools. *(497)*
 - `hexRGB(h)` — parse `#rgb`/`#rrggbb` to `[r,g,b]`. *(467)*
 
 ## Build pipeline

@@ -208,6 +208,11 @@
       <div class="sl"><label for="drusyGroups">Drusy colours <output id="drusyGroupsV"></output></label><input id="drusyGroups" type="range" min="1" max="5" step="1"></div>
       <div class="sl"><label for="drusySubs">Drusy variants <output id="drusySubsV"></output></label><input id="drusySubs" type="range" min="1" max="4" step="1"></div>
     </div>
+    <div class="sliders" id="g-fog">
+      <div class="sl"><label for="fogHaze">Fog / resin <output id="fogHazeV"></output></label><input id="fogHaze" type="range" min="0" max="0.06" step="0.005"></div>
+      <div class="sl"><label for="fogSize">Fog size <output id="fogSizeV"></output></label><input id="fogSize" type="range" min="0.3" max="2.5" step="0.05"></div>
+      <div class="sl"><label for="fogDensity">Fog density <output id="fogDensityV"></output></label><input id="fogDensity" type="range" min="0.2" max="2.5" step="0.05"></div>
+    </div>
     <div class="sliders" id="g-granite" hidden>
       <div class="sl"><label for="gspecks">Specks <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
       <div class="sl"><label for="gsize">Speck size <output id="gsizeV"></output></label><input id="gsize" type="range" min="0.4" max="2" step="0.05"></div>
@@ -435,13 +440,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const G = { gspecks: 1, gsize: 1, gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
-              drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1 };
+              drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1,
+              fogHaze: 0, fogSize: 1, fogDensity: 1 };
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
   const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
-                 bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2),
+                 bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2), fogHaze: v => `${Math.round(v * 100)}%`,
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}` };
   const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
@@ -449,7 +455,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let guidesOn = true;
   const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), spike: v => `${(+v).toFixed(1)}:1` };
   let fam = 'carrara', tool = 'vein', view = 'stone';
-  let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], knots: [], grain: [], styl: [], drusy: [] };
+  let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], knots: [], grain: [], styl: [], drusy: [], fog: [] };
   // CANONICAL LAYERS - the contract every consumer reads (VA: base/major/minor/micro; the dashboard
   // adds web and the ids/t-maps). Order is paint order, back to front. A rendered element's layer:
   //   ground fill -> base | web crack -> web | speck -> micro | vein line -> L.major ? major : minor
@@ -473,6 +479,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { key: 'breccia', label: 'Breccia clasts',  bucket: 'base',  on: true, op: 1, warp: 1 },
     { key: 'clouds', label: 'Clouds / mottling', bucket: 'base', on: true, op: 1, warp: 1 },
     { key: 'bands',  label: 'Banding',          bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'fog',    label: 'Fog / resin core', bucket: 'base',  on: true, op: 1, warp: 1 },
     { key: 'web',    label: 'Fracture web',     bucket: 'web',   on: true, op: 1, warp: 1 },
     { key: 'micro',  label: 'Micro / specks',   bucket: 'micro', on: true, op: 1, warp: 1 },
     { key: 'drusy',  label: 'Drusy sparkle',    bucket: 'micro', on: true, op: 1, warp: 1 },
@@ -498,6 +505,23 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function nz(xi, yi, s) { let h = (Math.imul(xi, 374761393) ^ Math.imul(yi, 668265263) ^ Math.imul(s, 2246822519)) >>> 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
   function vnoise(x, y, s) { const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty), a = nz(xi, yi, s), b = nz(xi + 1, yi, s), c = nz(xi, yi + 1, s), d = nz(xi + 1, yi + 1, s); return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy; }
   function fbm2(x, y, s) { return vnoise(x, y, s) * 0.6 + vnoise(x * 2.1, y * 2.1, s + 9) * 0.3 + vnoise(x * 4.3, y * 4.3, s + 19) * 0.1; }
+  // FOG: sparse, soft, highly translucent particles — a deep sub-surface haze that reads as depth / a bad
+  // resin core (the milky imperfection a fabricator saws off). Flat and even to start; movable points so the
+  // magnet can push them into clear windows later (polarity, default unaffected — no tool touches them yet).
+  // Family-independent (a defect, not character), so switching family leaves it put. Off by default.
+  function buildFog() {
+    if (G.fogHaze <= 0) return [];
+    // A flat, even SHEET at rest — a jittered grid of heavily-overlapping soft blobs reads as a uniform
+    // grey veil, not random clumps. The magnet does every bit of the variation (clear windows, pools) later.
+    const [r] = sub(770511, 3), out = [];
+    const cols = Math.max(2, Math.round(22 * Math.sqrt(G.fogDensity))), rows = Math.max(1, Math.round(cols * H));
+    const cw = 1 / cols, ch = H / rows, rad = Math.max(cw, ch) * 0.95 * G.fogSize;   // radius ≳ cell so neighbours overlap into a sheet
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      const x = (i + 0.5 + (r() - 0.5) * 0.8) * cw, y = (j + 0.5 + (r() - 0.5) * 0.8) * ch;
+      out.push({ x, y, r: rad * (0.85 + 0.3 * r()), x0: x, y0: y });   // x0/y0 = birth, for the magnet to push from / reset to
+    }
+    return out;
+  }
   let cloudC = null, cloudSig = '';
   function buildClouds() {
     const W = 200, Hh = Math.round(W * H);
@@ -1534,7 +1558,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function fullBuild() {
     const Fc = FAM[fam];
     const out = { lines: [], byId: new Map(), web: [], specks: Fc.groundSpecks ? groundCopy() : [], guides: [],
-                  knots: marks.filter(m => m.kind === 'knot').map(knotGeom), grain: [], styl: [], drusy: buildDrusy() };
+                  knots: marks.filter(m => m.kind === 'knot').map(knotGeom), grain: [], styl: [], drusy: buildDrusy(), fog: buildFog() };
     // knots are fields in the wood, there while it grew, so they bend all of its grain
     if (Fc.grain) out.grain = woodGrain(Fc, out.knots);
     else for (const K of out.knots) { K.th = G.gangle * Math.PI / 180; K.c = Math.cos(K.th); K.s = Math.sin(K.th); }
@@ -1803,6 +1827,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const prev = g2d.globalCompositeOperation; g2d.globalCompositeOperation = 'soft-light';
       g2d.imageSmoothingEnabled = true; g2d.globalAlpha = layOp('bands');
       g2d.drawImage(ensureBands(), 0, 0, 1, H); g2d.globalAlpha = 1; g2d.globalCompositeOperation = prev;
+    }
+    if (!ident && layVis('fog') && G.fogHaze > 0 && geo.fog.length) {   // DEEP translucent haze: sub-surface depth / resin core, under the veins
+      const col = '#c9c9c9', a = G.fogHaze * layOp('fog');   // flat neutral grayscale — never tinted, no colour token; just a haze
+      for (const p of geo.fog) {
+        const grad = g2d.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+        grad.addColorStop(0, col); grad.addColorStop(1, 'transparent');  // soft blob: opaque-ish centre → nothing at the rim
+        g2d.globalAlpha = a; g2d.fillStyle = grad;
+        g2d.beginPath(); g2d.arc(p.x, p.y, p.r, 0, 6.2832); g2d.fill();
+      }
+      g2d.globalAlpha = 1;
     }
     if (F.grain) {                                       // wood: grain = fine structure -> micro, knots = major features
       if (layVis('micro')) geo.grain.forEach((gl, k) => {

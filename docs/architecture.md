@@ -46,7 +46,10 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
   vein to colour just that one), **Cloud** (drag to move the cloud/warp field), **Moon** (drag a local
   warp brush across the slab), Move.
 - **Slab primitives** (per family, seeded, greyscale) — **clouds/mottling**, **banding**,
-  **breccia clasts**, **drusy sparkle**, on top of the ground and the fracture/speck structure.
+  **breccia clasts**, **drusy sparkle**, and a **fog / resin core** (a flat, untinted grayscale haze of
+  sparse soft particles, rendered deep under the veins to read as sub-surface depth — the milky
+  imperfection a fabricator saws off; particles are movable so the magnet can sculpt clear windows and
+  pools), on top of the ground and the fracture/speck structure.
 - **Vein-structure variants** (per line) — natural, **sinuous**, **dendritic**, **en-echelon**,
   **boudinage**, **halo**. Chosen on the vein tool; each line keeps its own.
 - **Tiles** — cut the slab into a repeating floor: 15 patterns (square, rectangle, subway,
@@ -147,7 +150,8 @@ already-warped geometry, and no hand can retrace a pass point-for-point anyway (
 between; the stylus/screen sample rate alone shifts it), so a hand-reverse only ever gets *close* and
 leaves a residue that accumulates with repeated tries. That near-miss is the intended authoring feel —
 overshoot and chase it back; the mark of the hand is the residue. The **Undo button** (it drops the mark)
-is the true undo).
+is the true undo) · the **fog / resin-core** layer (a flat untinted grayscale haze, deep, for sub-surface
+depth; movable particles for the magnet to sculpt).
 
 **Next:** per-id beyond veins (clasts / seams) · the remaining canvas colour menu (gradients,
 filters) · per-pixel displacement of the base fields under warp · targeted per-item reroll · a bake
