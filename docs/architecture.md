@@ -122,9 +122,12 @@ is what makes a cross-bucket "group as an object" selection possible later. Fiel
 (the granite speck ground) are still single-layer for now; per-field layers (each with its own density
 and seed) are the next step.
 
-**Selection scopes effects.** Each row has a select toggle; the selected set is what an effect acts on
-(nothing selected = the effect's global default). Three things scope to it today, all *baking* onto the
-selected layers:
+**Selection scopes effects.** The selection is a set of **token keys** — `lay:<layer>` for a layer (its
+row checkbox) or `id:<vein>` for one **artifact** (tap it with the **Tune/Select** tool; the id is
+resolved from the click and stays internal — a selected vein shows as a dashed accent handle, never a
+number). Layers and artifacts live in one selection, and the *same* adjustment set targets either.
+Nothing selected = the effect's global default. Three things scope to it today, all *baking* onto the
+selected keys:
 - **Force tools** — select the Fog (or, later, a granite) layer and Gravity/Magnet sculpt *that* field
   (push clears a window, pull pools), leaving everything else untouched; select nothing → the specks.
 - **Colour** — per-layer colour is a **generated token**, `lay:<key>`, minted whole from the layer

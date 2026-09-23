@@ -471,7 +471,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Select layers, then a tool/effect acts on them. First use: the force tools (gravity/magnet) sculpt the
   // selected particle field (fog / the granite specks); this replaces the old fog-sculpt toggle.
   const selected = new Set();
-  const sculptTarget = () => selected.has('fog') ? 'fog' : selected.has('micro') ? 'micro' : undefined;   // which particle field the force tools grab
+  // Selection holds TOKEN KEYS — 'lay:<layer>' for a layer (row checkbox) or 'id:<vein>' for one artifact
+  // (a Tune tap). Effects/editor act on the selected keys; the same adjustment set targets either.
+  const sculptTarget = () => selected.has('lay:fog') ? 'fog' : selected.has('lay:micro') ? 'micro' : undefined;   // which particle field the force tools grab
   const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), spike: v => `${(+v).toFixed(1)}:1` };
   let fam = 'carrara', tool = 'vein', view = 'stone';
   let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], knots: [], grain: [], styl: [], drusy: [], fog: [] };
@@ -1839,7 +1841,20 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     paintStoneContent(ident, angleView);
     if (guidesOn) drawGuides();
     if (guidesOn && G.warp > 0 && tool === 'cloud') drawWarpGuide();   // show the source while you drag it
+    highlightSelected();                                                // mark the selected veins (live only, never exported)
     paintLive(); ctx.globalAlpha = 1; stat();
+  }
+  function highlightSelected() {                          // a dashed accent outline on selected veins — the id stays internal, this is the visible handle
+    let any = false; for (const k of selected) if (k.startsWith('id:')) { any = true; break; }
+    if (!any) return;
+    const px = 1 / (Wc * V.z);
+    ctx.save(); ctx.strokeStyle = '#8a8de0'; ctx.lineWidth = 2.4 * px; ctx.globalAlpha = 0.9; ctx.setLineDash([4 * px, 3 * px]); ctx.lineCap = 'round';
+    for (const L of geo.lines) if (selected.has('id:' + L.id) && L.pts.length) {
+      ctx.beginPath(); ctx.moveTo(L.pts[0][0], L.pts[0][1]);
+      for (let i = 1; i < L.pts.length; i++) ctx.lineTo(L.pts[i][0], L.pts[i][1]);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
   function paintLive() {
     if (live && live.samples && live.samples.length > 1) {
@@ -1952,7 +1967,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const halo = COL.halo;
       for (const L of order) if (L.halo && layVis(lk(L))) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
     }
-    const vcol = L => { const o = COL['id:' + L.id]; if (o !== undefined) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };   // per-id → per-layer token (OVR flat store) → the bucket
+    const vcol = L => { const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };   // per-id → per-layer token (flat OVR store) → the bucket
     if (!ident) for (const L of order) if (layVis(lk(L))) runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true);  // shoulder
     for (const L of order) if (layVis(lk(L))) { const _fx = fxOn(lk(L), vcol(L), ident); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false); fxOff(_fx); }
   }
@@ -2249,10 +2264,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (hit) commit({ id, kind: 'chip', seed, tileKey: hit.key, edge: hit.edge });
       else hint(layTiles ? 'Tap on a tile to chip its nearest edge.' : 'Turn Lay tiles on first, then tap a tile edge to chip it.');
     } else if (g.type === 'draw' && tool === 'tune') {
-      nextId--;                                          // Tune makes no mark
+      nextId--;                                          // Tune makes no mark — it SELECTS a vein
       const f = toFrame(...g.e0 || [0, 0]), hit = nearestLine(f[0], f[1]);
-      if (hit && hit.d * Wc * V.z < 26) tuneId(hit.L.id, hit.L.major ? 'major' : 'minor');
-      else hint('Tap a vein to tune just that one — its colour follows its layer until you change it.');
+      if (hit && hit.d * Wc * V.z < 26) {               // toggle this vein in the selection (id stays internal)
+        const sk = 'id:' + hit.L.id; if (selected.has(sk)) selected.delete(sk); else selected.add(sk);
+        registerSelectedColours(); if (ed) ed.values = { ...OVR }; syncLayerUI(); redraw(false);
+        hint(selected.size ? selected.size + ' selected — colour or adjust them in the editor / Selected bar.' : 'Vein deselected.');
+      } else hint('Tap a vein to select it — then colour or adjust just that one.');
     } else if (g.type === 'draw' && tool === 'magnet') {
       commit({ id, kind: 'magnet', seed, samples: g.samples, tgt: sculptTarget() });
       if (!geo.specks.length) hint('The magnet turns specks. Switch to Granite, or pour some first.');
@@ -2315,9 +2333,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         { key: k + 'Glow', label: lbl + ' — glow', type: 'number', default: 0, min: 0, max: 3, step: 0.1 },
       ];
     }) });
-    registerPerItem();
     registerSpeckGroups();
-    registerLayerColours();
+    registerSelectedColours();   // per-id + per-layer colour tokens register on selection ("selected for display")
     kit.setAdapter({ load: async () => ({ ...OVR }), save: async v => { for (const k in OVR) delete OVR[k]; Object.assign(OVR, v); recolour(); saveLocal(); redraw(true); } });
     TTK.defineThemeKitEditor();
     recolour();
@@ -2334,9 +2351,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // is authoring its colour token. Only the SELECTED layers are registered for the editor, so the token list
   // stays parseable no matter how many layers exist (values persist in OVR either way and the render reads them).
   const layToken = L => ({ key: 'lay:' + L.key, label: L.label, type: 'color', inherit: L.bucket });
-  function registerLayerColours() {
+  // Register colour tokens ONLY for the selected keys — layers (lay:) and single artifacts (id:), each
+  // deriving its inherit from where it lives (a layer → its bucket; a vein → its major/minor bucket). This
+  // is "selected for display": the editor shows only what you've selected, however many exist in all.
+  function registerSelectedColours() {
     if (!kit) return;
-    kit.registerTokenGroup({ id: 'layercolours', label: 'Selected layer colours', tokens: layers.filter(L => selected.has(L.key)).map(layToken) });
+    const toks = [];
+    for (const key of selected) {
+      if (key.startsWith('lay:')) { const L = layAt(key.slice(4)); if (L) toks.push(layToken(L)); }
+      else if (key.startsWith('id:')) { const id = key.slice(3), L = geo.byId.get(id); toks.push({ key, label: 'Vein ' + id, type: 'color', inherit: (L && !L.major) ? 'minor' : 'major' }); }
+    }
+    kit.registerTokenGroup({ id: 'selectedcolours', label: 'Selected', tokens: toks });
   }
   // Speck colour groups: split the micro layer into up to 5 colour groups (feldspar / quartz / mica …).
   // Each group is a token inheriting `micro`; a speck's group is stable (from its birth-position hash).
@@ -2375,16 +2400,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function buildLayerUI() {
     layEl.innerHTML = '';
     for (const L of layers.slice().reverse()) {
-      const row = document.createElement('div'); row.className = 'lay' + (activeLayer[L.bucket] === L.key ? ' active' : '') + (selected.has(L.key) ? ' sel-on' : ''); row.dataset.key = L.key;
+      const row = document.createElement('div'); row.className = 'lay' + (activeLayer[L.bucket] === L.key ? ' active' : '') + (selected.has('lay:' + L.key) ? ' sel-on' : ''); row.dataset.key = L.key;
       row.innerHTML =
-        '<button type="button" class="sel" data-act="sel" aria-pressed="' + selected.has(L.key) + '" title="Select — effects and the force tools act on the selected layers"></button>'
+        '<button type="button" class="sel" data-act="sel" aria-pressed="' + selected.has('lay:' + L.key) + '" title="Select — effects and the force tools act on the selected layers"></button>'
         + '<button type="button" class="eye" data-act="eye" aria-pressed="' + L.on + '" title="Show or hide"></button>'
         + '<span class="nm" data-act="active" title="Make this the active layer — new marks land here">' + L.label + '</span>'
         + '<button type="button" class="solo" data-act="solo" aria-pressed="' + (soloLay === L.key) + '" title="Solo this layer">S</button>'
         + '<button type="button" class="warp" data-act="warp" aria-pressed="' + (L.warp > 0) + '" title="W lit = this layer follows warp; dim = held still">W</button>'
         + '<input type="range" min="0" max="1" step="0.01" value="' + L.op + '" data-act="op" aria-label="' + L.label + ' opacity">'
         + '<output>' + Math.round(L.op * 100) + '</output>';
-      row.querySelector('[data-act=sel]').addEventListener('click', e => { if (selected.has(L.key)) selected.delete(L.key); else selected.add(L.key); e.currentTarget.setAttribute('aria-pressed', selected.has(L.key)); row.classList.toggle('sel-on', selected.has(L.key)); registerLayerColours(); if (ed) ed.values = { ...OVR }; hint(selected.size ? selected.size + ' layer' + (selected.size > 1 ? 's' : '') + ' selected — tools + effects act on them; their colours show in the editor.' : null); });
+      row.querySelector('[data-act=sel]').addEventListener('click', e => { const sk = 'lay:' + L.key; if (selected.has(sk)) selected.delete(sk); else selected.add(sk); e.currentTarget.setAttribute('aria-pressed', selected.has(sk)); row.classList.toggle('sel-on', selected.has(sk)); registerSelectedColours(); if (ed) ed.values = { ...OVR }; hint(selected.size ? selected.size + ' selected — tools + effects act on them; their colours show in the editor.' : null); });
       row.querySelector('[data-act=eye]').addEventListener('click', () => { L.on = !L.on; if (soloLay === L.key && !L.on) soloLay = null; relayer(); });
       row.querySelector('[data-act=active]').addEventListener('click', () => setActiveLayer(L.key));
       row.querySelector('[data-act=solo]').addEventListener('click', () => { soloLay = soloLay === L.key ? null : L.key; relayer(); });
@@ -2402,12 +2427,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       + '<button type="button" data-act="uncol" title="Clear colour — back to the bucket">no colour</button>'
       + '<button type="button" data-act="wfollow" title="Selected layers follow warp">warp</button>'
       + '<button type="button" data-act="whold" title="Selected layers hold still">hold</button>';
-    const applySel = (fn, rebuild) => { if (!selected.size) { hint('Select one or more layers first (the ▢ box on each row).'); return; } for (const k of selected) { const L = layAt(k); if (L) fn(L); } redraw(rebuild); };
-    // colour bakes onto the selected layers' flat tokens (OVR['lay:<key>']); the render reads them, the
-    // kit resolves them for the editor, and ed.values re-syncs so an open editor won't clobber the write.
-    const colourSel = fn => { if (!selected.size) { hint('Select one or more layers first (the ▢ box on each row).'); return; } for (const k of selected) fn(k); recolour(); if (ed) ed.values = { ...OVR }; saveLocal(); redraw(false); };
-    sa.querySelector('[data-act=selcol]').addEventListener('input', e => colourSel(k => { OVR['lay:' + k] = e.target.value; }));
-    sa.querySelector('[data-act=uncol]').addEventListener('click', () => colourSel(k => { delete OVR['lay:' + k]; }));
+    const applySel = (fn, rebuild) => { if (!selected.size) { hint('Select something first (the ▢ box on a row, or tap a vein with Tune).'); return; } for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) fn(L); } redraw(rebuild); };   // warp = layers only
+    // colour bakes onto each selected key's flat token (OVR[key], key already 'lay:<layer>' or 'id:<vein>');
+    // render reads them, the kit resolves them for the editor, ed.values re-syncs so an open editor won't clobber.
+    const colourSel = fn => { if (!selected.size) { hint('Select something first (the ▢ box on a row, or tap a vein with Tune).'); return; } for (const k of selected) fn(k); recolour(); if (ed) ed.values = { ...OVR }; saveLocal(); redraw(false); };
+    sa.querySelector('[data-act=selcol]').addEventListener('input', e => colourSel(k => { OVR[k] = e.target.value; }));
+    sa.querySelector('[data-act=uncol]').addEventListener('click', () => colourSel(k => { delete OVR[k]; }));
     sa.querySelector('[data-act=wfollow]').addEventListener('click', () => { applySel(L => L.warp = 1, true); syncLayerUI(); });
     sa.querySelector('[data-act=whold]').addEventListener('click', () => { applySel(L => L.warp = 0, true); syncLayerUI(); });
     layEl.appendChild(sa);
@@ -2419,11 +2444,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       row.querySelector('[data-act=eye]').setAttribute('aria-pressed', L.on);
       row.querySelector('[data-act=solo]').setAttribute('aria-pressed', soloLay === L.key);
       const wb = row.querySelector('[data-act=warp]'); if (wb) wb.setAttribute('aria-pressed', L.warp > 0);
-      const sb = row.querySelector('[data-act=sel]'); if (sb) sb.setAttribute('aria-pressed', selected.has(L.key));
+      const sb = row.querySelector('[data-act=sel]'); if (sb) sb.setAttribute('aria-pressed', selected.has('lay:' + L.key));
       row.querySelector('[data-act=op]').value = L.op; row.querySelector('output').textContent = Math.round(L.op * 100);
       row.classList.toggle('off', hidden);
       row.classList.toggle('active', activeLayer[L.bucket] === L.key);
-      row.classList.toggle('sel-on', selected.has(L.key));
+      row.classList.toggle('sel-on', selected.has('lay:' + L.key));
     }
   }
   function showGround() {
@@ -2462,7 +2487,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const k in OVR) delete OVR[k];                        // colour travels with the slab
     if (o.OVR) Object.assign(OVR, o.OVR); else if (o.COL) Object.assign(OVR, o.COL); else seedColours(fam);   // older saves stored resolved values as `COL`
     for (const k in perItem) delete perItem[k]; if (o.perItem) Object.assign(perItem, o.perItem);
-    registerPerItem(); registerSpeckGroups(); registerLayerColours(); recolour();
+    registerSpeckGroups(); registerSelectedColours(); recolour();
     if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor
     marks = o.marks.map(m => ({ ...m }));
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);

@@ -65,7 +65,10 @@ Dispatched by `applyMark(m, out)` on `m.kind`. *(1397)*
   (zero smear). *(1194)*
 - `applyMagnet(m, out)` — comb specks like iron filings along the pen's lean; retargets to `out.fog` when
   `m.tgt === 'fog'`, but it only rotates orientation, so round haze blobs show nothing (yet). *(1231)*
-- **Selection** (`selected` set) is what an effect scopes to; three effects bake onto the selected layers:
+- **Selection** (`selected` = a set of token keys: `lay:<layer>` from a row checkbox, `id:<vein>` from a
+  Tune/Select tap; `highlightSelected()` draws the dashed accent handle on selected veins, live-only, never
+  exported; `registerSelectedColours()` registers a colour token per selected key, each inheriting its
+  bucket — "selected for display") is what an effect scopes to; three effects bake onto the selected keys:
   (1) the **force tools** — `sculptTarget()` → a gravity/magnet mark's `m.tgt`, so they sculpt the selected
   particle field (Fog / specks), else the specks default (replaced the `fogSculpt` toggle; old `fogTarget`
   still reads); (2) **colour** — a generated `lay:<key>` token (`layToken(L)` derives key/label/type/
