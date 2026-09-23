@@ -39,8 +39,12 @@
   .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 68ch; }
   .note b { color: var(--text); font-weight: 500; }
   .layers { display: grid; gap: 5px; width: 100%; max-width: 460px; }
-  .lay { display: grid; grid-template-columns: 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch;
+  .lay { display: grid; grid-template-columns: 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch 18px;
          align-items: center; gap: 6px; padding: 0 4px; }
+  .lay .del { padding: 4px 0; text-align: center; font-size: 15px; line-height: 1; color: var(--dim); cursor: pointer; }
+  .lay .del:hover { color: #e06a6a; }
+  .lay .del.arm { color: #e06a6a; font-weight: 700; }        /* armed: one more tap deletes the layer and its marks */
+  .lay .del-sp { }                                           /* the five bucket defaults are permanent — no delete control */
   .lay.sel-on { background: rgba(138, 141, 224, 0.12); border-radius: 6px; }   /* row in the current selection */
   .lay .nm { font-size: 13px; color: var(--text); cursor: pointer; }
   .lay .tag { font: 500 10px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim); background: var(--btn);
@@ -567,6 +571,58 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     layers.splice(idx + 1, 0, L); activeLayer[bucket] = key;
     if (typeof buildLayerUI === 'function') buildLayerUI();
     return key;
+  }
+  function clearUserLayers() {                                 // drop this slab's user (#) layers, reset the active layer to each bucket's default
+    for (let i = layers.length - 1; i >= 0; i--) if (layers[i].key.includes('#')) layers.splice(i, 1);
+    activeLayer.major = 'major'; activeLayer.minor = 'minor'; activeLayer.web = 'web'; activeLayer.micro = 'micro';
+  }
+  function purgeLayerTokens(key) {                             // every override / selection / folder-membership keyed to a layer that is going away
+    const pfx = 'lay:' + key;
+    for (const k in OVR) if (k === pfx || k.startsWith(pfx + ':')) delete OVR[k];   // its colour + adjustment tokens
+    delete OVR_uv[pfx];                                        // its UV emission list
+    selected.delete(pfx);
+    for (const F of folders) { const i = F.members.indexOf(key); if (i >= 0) F.members.splice(i, 1); }
+  }
+  function gcOrphans() {                                       // after a rebuild, drop per-id overrides whose artifact no longer exists (also sweeps any pre-existing orphans)
+    const live = new Set();
+    for (const L of geo.lines) live.add(L.id);
+    for (const e of geo.web) live.add(e.id);
+    for (const s of geo.styl) live.add(s.id);
+    const dead = k => !live.has(k.slice(3).split(':')[0]);     // 'id:<id>' colour, or 'id:<id>:<adj>' adjustment
+    for (const k of [...selected]) if (k.startsWith('id:') && dead(k)) selected.delete(k);
+    for (const k in OVR) if (k.startsWith('id:') && dead(k)) delete OVR[k];
+    for (const k in OVR_uv) if (k.startsWith('id:') && dead(k)) delete OVR_uv[k];
+    for (const id in perItem) if (!live.has(id)) delete perItem[id];
+  }
+  function deleteLayer(key) {                                  // remove a user layer AND everything drawn into it (Photoshop-style); returns the mark count removed
+    const L = layAt(key); if (!L || !key.includes('#')) return 0;   // the five bucket defaults are permanent, never deletable
+    const ids = new Set(marks.filter(m => m.layer === key).map(m => m.id));
+    marks = marks.filter(m => !ids.has(m.id));
+    for (const id of ids) hidden.delete(id);
+    const i = layers.indexOf(L); if (i >= 0) layers.splice(i, 1);
+    if (activeLayer[L.bucket] === key) activeLayer[L.bucket] = L.bucket;   // active fell on it → back to the bucket default
+    if (soloLay === key) soloLay = null;
+    purgeLayerTokens(key);
+    build(); gcOrphans();                                       // rebuild geo SYNCHRONOUSLY (redraw defers build to rAF) so gcOrphans sees the survivors, then sweep the now-dead ids
+    stoneReady = false; redraw(false);
+    registerSpeckGroups(); registerSelectedColours(); recolour(); if (typeof ed !== 'undefined' && ed) ed.values = { ...OVR };
+    buildLayerUI(); saveLocal();
+    return ids.size;
+  }
+  function freshSlab() {                                       // the Clear button: a genuinely blank slab — marks AND user layers AND their tokens — keeping the studio (family / tile / coat / lens)
+    marks = []; nextId = 1;
+    clearUserLayers();
+    soloLay = null; selected.clear(); hidden.clear(); folders = [];
+    const g = layAt('micro'); if (g) { g.density = 1; g.size = 1; g.seed = 7070; }   // reset the default granite field
+    for (const L of layers) { L.on = true; L.op = 1; L.warp = 1; Object.assign(L, blDefault(L)); }   // reset the surviving default layers' visual + optical state
+    for (const k in OVR) delete OVR[k];
+    for (const k in OVR_uv) delete OVR_uv[k];
+    for (const k in perItem) delete perItem[k];
+    seedColours(fam);                                          // a clean daylight palette for the current family
+    stoneReady = false; registerSpeckGroups(); registerSelectedColours(); recolour();
+    buildLayerUI(); syncUI(); redraw(true);
+    if (typeof mountEditor === 'function') mountEditor();
+    saveLocal();
   }
   function setActiveLayer(key) { const L = layAt(key); if (L) { activeLayer[L.bucket] = key; if (typeof syncLayerUI === 'function') syncLayerUI(); if (L.bucket === 'micro' && typeof syncGranite === 'function') syncGranite(); } }
   function syncGranite() {                                // reflect the ACTIVE granite layer's density/size in the ground sliders
@@ -2778,7 +2834,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         + '<button type="button" class="solo" data-act="solo" aria-pressed="' + (soloLay === L.key) + '" title="Solo this layer">S</button>'
         + '<button type="button" class="warp" data-act="warp" aria-pressed="' + (L.warp > 0) + '" title="W lit = this layer follows warp; dim = held still">W</button>'
         + '<input type="range" min="0" max="1" step="0.01" value="' + L.op + '" data-act="op" aria-label="' + L.label + ' opacity">'
-        + '<output>' + Math.round(L.op * 100) + '</output>';
+        + '<output>' + Math.round(L.op * 100) + '</output>'
+        + (L.key.includes('#')
+            ? '<button type="button" class="del" data-act="del" title="Delete this layer — and everything drawn into it">×</button>'
+            : '<span class="del-sp"></span>');                // the five bucket defaults are permanent
       row.querySelector('[data-act=sel]').addEventListener('click', e => { const sk = 'lay:' + L.key; if (selected.has(sk)) selected.delete(sk); else selected.add(sk); e.currentTarget.setAttribute('aria-pressed', selected.has(sk)); row.classList.toggle('sel-on', selected.has(sk)); registerSelectedColours(); if (ed) ed.values = { ...OVR }; hint(selected.size ? selected.size + ' selected — tools + effects act on them; their colours show in the editor.' : null); });
       row.querySelector('[data-act=eye]').addEventListener('click', () => { L.on = !L.on; if (soloLay === L.key && !L.on) soloLay = null; relayer(); });
       row.querySelector('[data-act=active]').addEventListener('click', () => setActiveLayer(L.key));
@@ -2793,6 +2852,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       row.querySelector('[data-act=solo]').addEventListener('click', () => { soloLay = soloLay === L.key ? null : L.key; relayer(); });
       row.querySelector('[data-act=warp]').addEventListener('click', e => { L.warp = L.warp > 0 ? 0 : 1; e.currentTarget.setAttribute('aria-pressed', L.warp > 0); redraw(true); });
       row.querySelector('[data-act=op]').addEventListener('input', e => { L.op = +e.target.value; row.querySelector('output').textContent = Math.round(L.op * 100); relayer(); });
+      const db = row.querySelector('[data-act=del]');
+      if (db) db.addEventListener('click', () => {             // empty layer deletes at once; a non-empty one arms, and the second tap deletes (no bulk undo)
+        const n = marks.filter(m => m.layer === L.key).length;
+        if (!n) { deleteLayer(L.key); hint('Deleted ' + L.label + '.'); return; }
+        if (db.dataset.armed) { clearTimeout(+db.dataset.t); const r = deleteLayer(L.key); hint('Deleted ' + L.label + ' and ' + r + ' mark' + (r > 1 ? 's' : '') + '.'); return; }
+        db.dataset.armed = '1'; db.classList.add('arm'); db.title = 'Tap × again to delete — no undo';
+        hint('Delete "' + L.label + '" and its ' + n + ' mark' + (n > 1 ? 's' : '') + '? Tap × again — this can\'t be undone.');
+        db.dataset.t = setTimeout(() => { db.dataset.armed = ''; db.classList.remove('arm'); db.title = 'Delete this layer — and everything drawn into it'; }, 3500);
+      });
       layEl.appendChild(row);
     }
     const add = document.createElement('div'); add.className = 'addlay';
@@ -2920,8 +2988,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const so = document.getElementById('spot-toggle'); if (so) so.setAttribute('aria-pressed', 'false');
       const sp = document.getElementById('lightSpectrum'); if (sp) { sp.value = 0; document.getElementById('lightSpectrumV').textContent = 'daylight'; } }
     Object.assign(G, o.G || {}); Object.assign(T, o.T || {}); Object.assign(NEXT, o.NEXT || {});
-    for (let i = layers.length - 1; i >= 0; i--) if (layers[i].key.includes('#')) layers.splice(i, 1);   // drop the previous slab's user layers
-    activeLayer.major = 'major'; activeLayer.minor = 'minor'; activeLayer.web = 'web'; activeLayer.micro = 'micro';
+    clearUserLayers();                                                                                   // drop the previous slab's user layers, reset the active layer to the bucket defaults
     layAt('micro').density = 1; layAt('micro').size = 1; layAt('micro').seed = 7070;                     // reset the default granite field
     if (Array.isArray(o.layers)) for (const s of o.layers) {
       let L = layAt(s.key);
@@ -3212,7 +3279,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const m = marks[marks.length - 1]; if (!m) return;
     m.seed = (Math.random() * 2147483647) | 0; redraw(true);
   });
-  document.getElementById('clear').addEventListener('click', () => { marks = []; redraw(true); });
+  document.getElementById('clear').addEventListener('click', () => { freshSlab(); });   // a real blank slab: marks AND user layers AND their tokens (keeps the studio settings)
   document.getElementById('save').addEventListener('click', async () => {
     const text = JSON.stringify(serialize());
     let dl = null; try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (_) { /* no runtime */ }

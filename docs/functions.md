@@ -256,6 +256,24 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   `activeLayer[its bucket]` at commit. `addLayer(bucket)` appends a layer (grouped after its bucket's
   last) and makes it active — a new **micro** layer gets `field:'specks'` and its own density/size/seed;
   `setActiveLayer(key)` picks the active one. *(≈475/519)*
+- `deleteLayer(key)` — remove a **user** layer (`#`-keyed only; the bucket defaults are permanent) **and
+  everything drawn into it** (Photoshop-style): drops marks with `m.layer===key`, then sweeps every
+  reference — its colour + adjustment tokens (`lay:<key>`, `lay:<key>:<adj>`), UV emission
+  (`OVR_uv['lay:'+key]`), the `selected` entry, `folders[].members`, hidden mark-ids, and the active/solo
+  pointers (active falls back to the bucket default). Rebuilds geo **synchronously** (`build()`, since
+  `redraw` defers to rAF) *then* runs `gcOrphans()`. The Layers panel shows a `×` on each user row: an
+  empty layer deletes on the first tap, a non-empty one **arms** and needs a second tap (there's no bulk
+  undo). *(≈572)*
+- `gcOrphans()` — after a rebuild, drop per-id overrides (`OVR`/`OVR_uv` `id:*`, `perItem`, `selected`
+  `id:*`) whose artifact is no longer in `geo` (also sweeps any pre-existing orphans). *(≈585)*
+- `purgeLayerTokens(key)` / `clearUserLayers()` — the shared cleanup idioms: the first removes a layer's
+  `lay:*` tokens + folder membership + selection; the second drops all `#` layers and resets `activeLayer`
+  to the bucket defaults (used by both `deserialize` and `freshSlab`). *(≈577)*
+- `freshSlab()` — the **Clear** button: a genuinely blank slab — clears marks **and** user layers **and**
+  their tokens (`OVR`/`OVR_uv`/`perItem`, selection, hidden, folders), resets the default layers and the
+  default granite field, and reseeds a clean daylight palette from the current family — while **keeping the
+  studio** (family, tile, warp, coat, lens). Previously Clear only emptied `marks`, so user layers and
+  their overrides leaked into the "fresh" slab. *(≈590)*
 - `syncGranite()` — reflect the **active granite layer's** density/size into the ground sliders. The
   Specks/Speck-size sliders and **Reseed** all act on `activeLayer.micro` only, so each field is tuned
   independently. *(532)*

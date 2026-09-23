@@ -113,7 +113,17 @@ own **eye / opacity / warp** (and, later, colour / effects / lock). So you can p
 layer and warp them while another major layer holds dead still — two layers, one bucket, affected
 independently. `addLayer(bucket)` creates one (key `bucket#n`, the plain `bucket` key is the default
 layer); the Layers panel gives each row eye · name (tap = make active, ▸) · solo · **W** (warp
-follow/hold) · opacity, plus **+ Major / + Minor / + Web layer**.
+follow/hold) · opacity · **×** (delete), plus **+ Major / + Minor / + Web layer**.
+
+**Deleting a layer** (`deleteLayer`, the row's `×`) removes a *user* layer and **everything drawn into
+it** — the five bucket defaults have no `×` and are permanent. It's the destructive counterpart to
+`addLayer`, and the counterpart to add's asymmetry is that a delete has to *unwind every reference* a
+layer key accumulates: its colour/adjustment tokens, UV emission, selection, folder membership, hidden
+mark-ids and the active/solo pointers, plus (via `gcOrphans`) any per-id override left orphaned when its
+vein went with the layer. An empty layer deletes on one tap; a non-empty one arms and takes a second
+(there is no bulk undo). **Clearing the whole slab** (`freshSlab`, the **Clear** button) is the same
+unwind writ large: it drops marks *and* user layers *and* their tokens for a genuinely blank slab, but
+keeps the **studio** — family, tile, warp, coat and lens — so "clear" resets the drawing, not the setup.
 
 A **layer is an authoring group, orthogonal to the bucket**: `stampLayers` tags every line/edge with
 its mark's layer (`L.layer` / `e.layer`), and render + warp read *that*, while export still buckets
