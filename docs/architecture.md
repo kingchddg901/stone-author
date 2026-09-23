@@ -166,14 +166,19 @@ selected keys:
   whole light warm ↔ cool (sheen, glint and edge highlights together; neutral = the old warm-white). The
   **fluted slab finish** was dropped.
 
-**Lighting conditions (spectra).** A second override store, the **UV palette** (`OVR_uv`), plus a **Black
-light** toggle (`uvMode`): the render drops the body to near-black and paints *only* artifacts that have an
-emission colour in the UV palette, at full alpha (so a daylight-`op:0` feature reveals) with an additive
-bloom (safe on black). The Selected swatch authors the active palette — `OVR` in daylight, `OVR_uv` under
-black light — and the UV palette saves with the slab. This is deliberately **condition-agnostic**: the
-render doesn't care that the alternate set is called "UV" — infrared, X-ray, moonlight or any theoretical
-spectrum is the *same* mechanism (a named token set + a switch), so this is the first instance of a general
-**spectrum** system, to be generalised from one hard-coded `uvMode`/`OVR_uv` into a named-spectra registry.
+**Lighting conditions (spectra) — an index-match engine.** The light sits at a **scalar spectrum value**
+(`lightSpectrum`; 0 = daylight, e.g. −1 = UV, +1 = IR). Each artifact's `OVR_uv` entry is `{v, c}` — an
+**activation value** and an **emission colour** — and it lights up with `c` only when the light's value is
+within `SPX_TOL` of `v` (a scalar compare — no physics, no per-pixel). Sweep the dial and *different* sets of
+artifacts light up in sequence; non-matching ones fall to near-black with an additive bloom (safe on black),
+so a daylight-`op:0` feature can hide in daylight and reveal under its light. The **Black light** button is
+just a preset to −1; the Selected swatch authors `{v: lightSpectrum, c}` (the artifact activates wherever the
+dial is when you colour it). This is deliberately **condition-agnostic** — UV, infrared, X-ray, a photo
+negative, any theoretical spectrum is the same mechanism (a value + a palette), so it's *one* engine, not a
+per-condition feature. **Reactive spotlight** (`spotOn`, `G.lightX/lightY/spotR`): the light becomes a beam;
+an artifact also has to fall inside it — per-point for specks (`emit(id,layer,x,y)`), whole-artifact-if-any-
+point-touches for lines (`beamPts`) — so dragging the Light tool sweeps a UV torch over the slab. All O(1)-ish,
+no GPU; a uniform grid would only be an optimisation for a shaped cone or extreme counts.
 
 This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 

@@ -191,12 +191,15 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   (`lightAngle`) is shared — tile-edge relief will read the same angle. `Specular` / `Light angle` ground
   sliders, plus a **feature glint**: the feature high-pass in `ssC`, masked by the same hotspot radial
   gradient (so features glint only where the light sweeps) and `screen`-composited — veins catch the light.
-- **Black light** (`uvMode`, `OVR_uv`, `emit(id, layer)`) — a stone-view mode: the base fills near-black
-  (`UV_DARK`), the daylight body layers (breccia/clouds/bands/fog) and the coat passes are skipped, and every
-  element resolves its colour from the **UV palette** `OVR_uv` (emission or `UV_DARK`) at a bright emission
-  alpha, then an additive **emission bloom** glows it (safe because the ground is black). The Selected swatch
-  writes `OVR_uv` while `uvMode` is on; `OVR_uv` serialises with the slab. Condition-agnostic — the first
-  instance of a general **spectrum** system (rename `uvMode`→active-spectrum, `OVR_uv`→a spectra map to add IR etc.).
+- **Spectrum engine** (`lightSpectrum`, `OVR_uv` `{v,c}`, `emit(id,layer,x,y)`, `beamPts`, `SPX_TOL`) — a
+  stone-view mode when the light is off daylight (`uvMode = lightSpectrum !== 0`). The base fills near-black
+  (`UV_DARK`), daylight body layers + coat passes are skipped, and `emit` returns an artifact's emission `c`
+  **only when `|lightSpectrum − v| ≤ SPX_TOL`** (index match) **and** (if `spotOn`) it's inside the beam —
+  per-point for specks, `beamPts(pts)` for lines; else it falls to `UV_DARK`. An additive **emission bloom**
+  glows the result (safe on the black ground). The Selected swatch writes `{v: lightSpectrum, c}`. `setSpectrum`
+  moves the dial (Black light = −1); `setLight` sets the beam position `G.lightX/lightY`; `drawLightGuide`
+  shows the beam ring under `spotOn`. `OVR_uv` serialises with the slab; a load opens in daylight; v54 saves
+  (plain-colour `OVR_uv`) migrate to `{v:−1, c}`.
 - **The one light** (`G.lightAngle`) is shared: `setLight(f)` aims it from the slab centre toward the pointer,
   the **Light tool** drags it (a `lightdrag` gesture; `drawLightGuide()` draws a little sun at the slab edge),
   `edgeFinish` lights tile edges by edge-normal·light, and the specular sheen/glint place their hotspot by it.

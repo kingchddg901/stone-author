@@ -194,6 +194,10 @@
       <div class="sl"><label for="specular">Specular / polish <output id="specularV"></output></label><input id="specular" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="lightAngle">Light angle <output id="lightAngleV"></output></label><input id="lightAngle" type="range" min="-180" max="180" step="1"></div>
       <div class="sl"><label for="lightTemp">Light temperature <output id="lightTempV"></output></label><input id="lightTemp" type="range" min="-1" max="1" step="0.02"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">Spectrum: 0 = daylight; sweep to light up only the artifacts whose emission you authored near that value (Black light = −1). Spotlight makes the light a beam — drag it with the Light tool.</span></div>
+      <div class="sl"><label for="lightSpectrum">Light spectrum <output id="lightSpectrumV"></output></label><input id="lightSpectrum" type="range" min="-1" max="1" step="0.02"></div>
+      <div class="sl"><span class="lbl">Spotlight</span><div class="grp"><button id="spot-toggle" type="button" aria-pressed="false">Beam</button></div></div>
+      <div class="sl"><label for="spotR">Beam size <output id="spotRV"></output></label><input id="spotR" type="range" min="0.05" max="0.6" step="0.01"></div>
     </div>
     <div class="sliders" id="g-clouds">
       <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
@@ -425,8 +429,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const COL = {}, OVR = {}, perItem = {};
   // BLACK LIGHT: a parallel override store (the UV palette). uvMode flips the render + editor to it; non-fluorescent
   // stuff falls to UV_DARK (invisible on the black ground), UV-coloured artifacts glow (bloom). The palette saves with the slab.
-  let uvMode = false; const OVR_uv = {}; const UV_DARK = '#0a0a0e';
-  const emit = (id, layer) => (id != null && OVR_uv['id:' + id]) || OVR_uv['lay:' + layer];   // this artifact's emission colour, or undefined
+  let uvMode = false, lightSpectrum = 0, spotOn = false; const OVR_uv = {}, UV_DARK = '#0a0a0e', SPX_TOL = 0.12;
+  // SPECTRUM: the light sits at a scalar value (lightSpectrum; 0 = daylight, e.g. −1 = UV). Each OVR_uv entry is
+  // {v, c} — the artifact lights with colour c only when the light's value is within SPX_TOL of its activation value
+  // v. With the SPOTLIGHT on it must also fall inside the beam (spotR around G.lightX,lightY). uvMode = a light is on.
+  const emit = (id, layer, x, y) => {
+    const e = (id != null && OVR_uv['id:' + id]) || OVR_uv['lay:' + layer];
+    if (!e || Math.abs(lightSpectrum - e.v) > SPX_TOL) return null;                                  // spectral: value match
+    if (spotOn && x != null && Math.hypot(x - G.lightX, y - G.lightY) > G.spotR) return null;        // spatial: inside the beam
+    return e.c;
+  };
+  const beamPts = pts => !spotOn || pts.some(p => Math.hypot(p[0] - G.lightX, p[1] - G.lightY) <= G.spotR);   // does a line/edge touch the beam?
   function seedColours(f) {                                // seed the colour OVERRIDES from a family's palette
     const F = FAM[f], [gr, gg, gb] = hexRGB(F.ground), light = 0.299 * gr + 0.587 * gg + 0.114 * gb > 128;
     OVR.ground = F.ground; OVR.major = F.vein; OVR.minor = F.vein; OVR.web = F.web; OVR.micro = F.speck;
@@ -449,7 +462,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
               stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { subsurface: 0, specular: 0, lightAngle: 135, lightTemp: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
+  const G = { subsurface: 0, specular: 0, lightAngle: 135, lightTemp: 0, lightX: 0.5, lightY: 0.3125, spotR: 0.25, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1,
@@ -458,7 +471,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
-  const GFMT = { subsurface: v => (+v).toFixed(2), specular: v => (+v).toFixed(2), lightAngle: v => `${Math.round(v)}°`, lightTemp: v => (+v == 0 ? 'neutral' : (v < 0 ? 'warm ' : 'cool ') + Math.abs(v).toFixed(2)), speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
+  const GFMT = { subsurface: v => (+v).toFixed(2), specular: v => (+v).toFixed(2), lightAngle: v => `${Math.round(v)}°`, lightTemp: v => (+v == 0 ? 'neutral' : (v < 0 ? 'warm ' : 'cool ') + Math.abs(v).toFixed(2)), spotR: v => (+v).toFixed(2), speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2), fogHaze: v => `${Math.round(v * 100)}%`,
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}` };
@@ -1936,7 +1949,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const wid = 'W' + e.mark;                                                       // the web SPREAD = one artifact
       g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
       for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
-      const wlc = uv ? (emit(wid, wl) || UV_DARK) : (OVR['id:' + wid] || OVR['lay:' + wl]);   // UV: emission colour, else dark
+      const wlc = uv ? ((beamPts(e.pts) && emit(wid, wl)) || UV_DARK) : (OVR['id:' + wid] || OVR['lay:' + wl]);   // UV: emission (in beam) else dark
       g2d.strokeStyle = ident ? idColour(wid, 1 - e.spread) : (wlc || COL.web);
       if (!ident && !uv) g2d.filter = filterOf(wid, wl, 'web');                      // per-spread → per-layer adjustments
       g2d.globalAlpha = ident ? 0.95 : (uv ? 0.9 : 0.8 * layOp(wl)); g2d.lineWidth = e.width * (uv ? 1 : weightOf(wid, wl, 'web')); g2d.stroke(); g2d.filter = 'none';
@@ -1950,7 +1963,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // Angle: points as hue (axial); Identity: how far the speck was moved.
       const g_ = Math.floor((s.u || 0) * ng), v_ = Math.floor((s.u2 || 0) * nv),
             mkey = nv > 1 ? 'micro:' + g_ + '.' + v_ : (ng > 1 ? 'micro:' + g_ : null),
-            mcol = uv ? (emit(null, s.layer || 'micro') || UV_DARK) : (OVR['lay:' + (s.layer || 'micro')] || (mkey && COL[mkey] !== undefined ? COL[mkey] : COL.micro));   // per-layer speck colour (UV: emission or dark)
+            mcol = uv ? (emit(null, s.layer || 'micro', s.x, s.y) || UV_DARK) : (OVR['lay:' + (s.layer || 'micro')] || (mkey && COL[mkey] !== undefined ? COL[mkey] : COL.micro));   // per-speck emission (in beam) or dark
       g2d.fillStyle = !ident ? mcol
         : angleView ? (s.el > 1.3 ? `hsl(${Math.round(((2 * s.ang * 180 / Math.PI) % 360 + 360) % 360)} 78% 58%)` : '#3a3c48')
         : s.ground ? `hsl(${Math.round(210 - 190 * Math.min(1, Math.hypot(s.x - s.x0, s.y - s.y0) / 0.008))} 80% 55%)`
@@ -1971,7 +1984,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         g2d.globalAlpha = ident ? 0.9 : (uv ? Math.min(1, 0.6 + 0.4 * s.lum) : Math.min(1, s.lum * bright));
         const dg = Math.floor((s.dgu || 0) * dng), dv = Math.floor((s.dvu || 0) * dnv),
               dk = dnv > 1 ? 'drusy:' + dg + '.' + dv : (dng > 1 ? 'drusy:' + dg : null),
-              dc = uv ? (emit(null, s.layer || 'drusy') || UV_DARK) : (OVR['lay:' + (s.layer || 'drusy')] || (dk && COL[dk] !== undefined ? COL[dk] : COL.drusy));
+              dc = uv ? (emit(null, s.layer || 'drusy', s.x, s.y) || UV_DARK) : (OVR['lay:' + (s.layer || 'drusy')] || (dk && COL[dk] !== undefined ? COL[dk] : COL.drusy));
         g2d.fillStyle = ident ? idColour('drusy', s.lum) : dc;
         g2d.beginPath(); g2d.arc(s.x, s.y, s.r, 0, 6.2832); g2d.fill();
       }
@@ -1983,7 +1996,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (const s of geo.styl) {
         g2d.beginPath(); g2d.moveTo(s.pts[0][0], s.pts[0][1]);
         for (let i = 1; i < s.pts.length; i++) g2d.lineTo(s.pts[i][0], s.pts[i][1]);
-        const sc = uv ? (emit(s.id, 'styl') || UV_DARK) : (OVR['id:' + s.id] || OVR['lay:styl']);   // UV: emission or dark
+        const sc = uv ? ((beamPts(s.pts) && emit(s.id, 'styl')) || UV_DARK) : (OVR['id:' + s.id] || OVR['lay:styl']);   // UV: emission (in beam) or dark
         g2d.strokeStyle = ident ? idColour(s.id, 0.5) : (sc || COL.styl);
         if (!ident && !uv) g2d.filter = filterOf(s.id, 'styl', 'styl');           // per-seam → per-layer adjustments
         g2d.globalAlpha = ident ? 0.95 : (uv ? 0.9 : 0.85 * layOp('styl')); g2d.lineWidth = s.width * (uv ? 1 : weightOf(s.id, 'styl', 'styl')); g2d.stroke(); g2d.filter = 'none';
@@ -1997,7 +2010,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const halo = COL.halo;
       for (const L of order) if (L.halo && layVis(lk(L))) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
     }
-    const vcol = L => { if (uv) return emit(L.id, L.layer) || UV_DARK; const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };   // UV: emission or dark; else per-id → per-layer → bucket
+    const vcol = L => { if (uv) return (beamPts(L.pts) && emit(L.id, L.layer)) || UV_DARK; const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };   // UV: emission (in beam) or dark
     if (!ident && !uv) for (const L of order) if (layVis(lk(L))) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }  // shoulder (daylight only)
     for (const L of order) if (layVis(lk(L))) { const bk = L.major ? 'major' : 'minor'; const _fx = uv ? null : fxOn(lk(L), vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(lk(L)))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }  // per-item adjustments (ctx.filter + weight)
   }
@@ -2053,13 +2066,21 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // The ONE light both the specular sheen and the tile edges read. Dragging the Light tool aims it toward the pointer.
   function setLight(f) {
+    G.lightX = f[0]; G.lightY = f[1];                     // the light's position (drives the spotlight beam)
     const dx = f[0] - 0.5, dy = f[1] - H / 2;
-    G.lightAngle = Math.round(Math.atan2(-dy, dx) * 180 / Math.PI);
+    G.lightAngle = Math.round(Math.atan2(-dy, dx) * 180 / Math.PI);   // and its direction (drives the specular sheen + tile edges)
     const el = document.getElementById('lightAngle');
     if (el) { el.value = G.lightAngle; document.getElementById('lightAngleV').textContent = GFMT.lightAngle(G.lightAngle); }
   }
   function drawLightGuide() {                             // a little sun at the slab edge in the light's direction
-    const ang = G.lightAngle * Math.PI / 180, px = 1 / (Wc * V.z);
+    const px = 1 / (Wc * V.z);
+    if (spotOn) {                                          // the spotlight beam: a ring at the light's position
+      ctx.save(); ctx.strokeStyle = 'rgba(240,196,106,0.8)'; ctx.lineWidth = 1.6 * px; ctx.setLineDash([6 * px, 5 * px]);
+      ctx.beginPath(); ctx.arc(G.lightX, G.lightY, G.spotR, 0, 6.2832); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = '#f0c46a'; ctx.beginPath(); ctx.arc(G.lightX, G.lightY, 4 * px, 0, 6.2832); ctx.fill();
+      ctx.restore(); return;
+    }
+    const ang = G.lightAngle * Math.PI / 180;
     const cx = 0.5, cy = H / 2, tx = cx + Math.cos(ang) * 0.46, ty = cy - Math.sin(ang) * 0.46;
     ctx.save();
     ctx.strokeStyle = 'rgba(240,196,106,0.7)'; ctx.lineWidth = 1.5 * px; ctx.setLineDash([5 * px, 4 * px]);
@@ -2522,7 +2543,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // colour bakes onto each selected key's flat token (OVR[key], key already 'lay:<layer>' or 'id:<vein>');
     // render reads them, the kit resolves them for the editor, ed.values re-syncs so an open editor won't clobber.
     const colourSel = fn => { if (!selected.size) { hint('Select something first (the ▢ box on a row, or tap a vein with Tune).'); return; } for (const k of selected) fn(k); if (!uvMode) { recolour(); if (ed) ed.values = { ...OVR }; } saveLocal(); redraw(false); };   // in black light the swatch authors the UV palette
-    sa.querySelector('[data-act=selcol]').addEventListener('input', e => colourSel(k => { (uvMode ? OVR_uv : OVR)[k] = e.target.value; }));
+    sa.querySelector('[data-act=selcol]').addEventListener('input', e => colourSel(k => { if (uvMode) OVR_uv[k] = { v: lightSpectrum, c: e.target.value }; else OVR[k] = e.target.value; }));   // emission activates at the current light value
     sa.querySelector('[data-act=uncol]').addEventListener('click', () => colourSel(k => { delete (uvMode ? OVR_uv : OVR)[k]; }));
     sa.querySelector('[data-act=wfollow]').addEventListener('click', () => { applySel(L => L.warp = 1, true); syncLayerUI(); });
     sa.querySelector('[data-act=whold]').addEventListener('click', () => { applySel(L => L.warp = 0, true); syncLayerUI(); });
@@ -2561,7 +2582,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     fam = FAM[o.fam] ? o.fam : 'carrara';                 // a retired family (e.g. wood) falls back to Carrara
     tool = document.querySelector('[data-tool="' + o.tool + '"]') ? o.tool : 'vein';   // a retired tool (e.g. knot) falls back to Vein
     view = o.view; layTiles = !!o.layTiles; guidesOn = o.guidesOn !== false;
-    uvMode = false; { const ub = document.getElementById('uv-toggle'); if (ub) ub.setAttribute('aria-pressed', 'false'); }   // a loaded slab opens in daylight, not black light
+    uvMode = false; lightSpectrum = 0; spotOn = false;                       // a loaded slab opens in daylight, light off
+    { const ub = document.getElementById('uv-toggle'); if (ub) ub.setAttribute('aria-pressed', 'false');
+      const so = document.getElementById('spot-toggle'); if (so) so.setAttribute('aria-pressed', 'false');
+      const sp = document.getElementById('lightSpectrum'); if (sp) { sp.value = 0; document.getElementById('lightSpectrumV').textContent = 'daylight'; } }
     Object.assign(G, o.G || {}); Object.assign(T, o.T || {}); Object.assign(NEXT, o.NEXT || {});
     for (let i = layers.length - 1; i >= 0; i--) if (layers[i].key.includes('#')) layers.splice(i, 1);   // drop the previous slab's user layers
     activeLayer.major = 'major'; activeLayer.minor = 'minor'; activeLayer.web = 'web'; activeLayer.micro = 'micro';
@@ -2584,7 +2608,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     soloLay = o.soloLay || null;
     for (const k in OVR) delete OVR[k];                        // colour travels with the slab
     if (o.OVR) Object.assign(OVR, o.OVR); else if (o.COL) Object.assign(OVR, o.COL); else seedColours(fam);   // older saves stored resolved values as `COL`
-    for (const k in OVR_uv) delete OVR_uv[k]; if (o.OVR_uv) Object.assign(OVR_uv, o.OVR_uv);   // the UV palette travels too
+    for (const k in OVR_uv) delete OVR_uv[k];
+    if (o.OVR_uv) for (const k in o.OVR_uv) { const e = o.OVR_uv[k]; OVR_uv[k] = (typeof e === 'string') ? { v: -1, c: e } : e; }   // v54 saves stored a plain colour → activate at −1 (UV); newer are {v,c}
     for (const k in perItem) delete perItem[k]; if (o.perItem) Object.assign(perItem, o.perItem);
     registerSpeckGroups(); registerSelectedColours(); recolour();
     if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor
@@ -2766,12 +2791,21 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     gz.addEventListener('input', () => { const L = layAt(activeLayer.micro); if (L) { L.size = +gz.value; document.getElementById('gsizeV').textContent = (+gz.value).toFixed(2) + '×'; redraw(true); } });
     document.getElementById('granite-reseed').addEventListener('click', () => { const L = layAt(activeLayer.micro); if (L) { L.seed = (Math.random() * 2147483647) | 0; redraw(true); hint('Reseeded ' + L.label + ' — new scatter, same density and size.'); } }); }
   for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => { view = b.dataset.view; press('[data-view]', b); redraw(false); });
-  document.getElementById('uv-toggle').addEventListener('click', () => {   // BLACK LIGHT toggle (a stone-view overlay mode)
-    uvMode = !uvMode; document.getElementById('uv-toggle').setAttribute('aria-pressed', uvMode);
+  function setSpectrum(v) {                               // move the light to a spectrum value; 0 = daylight, else a light is on
+    lightSpectrum = v; uvMode = v !== 0;
+    document.getElementById('uv-toggle').setAttribute('aria-pressed', uvMode);
+    const sp = document.getElementById('lightSpectrum'); if (sp) { sp.value = v; document.getElementById('lightSpectrumV').textContent = v === 0 ? 'daylight' : (+v).toFixed(2); }
     if (uvMode && view !== 'stone') { view = 'stone'; press('[data-view]', document.getElementById('v-stone')); }
-    hint(uvMode ? 'Black light: everything goes dark; only artifacts you give an emission colour glow. Tap one with Tune, then use the Selected swatch — it authors the UV palette now.' : null);
+  }
+  document.getElementById('uv-toggle').addEventListener('click', () => {   // Black light = jump the light to the UV end (−1), or back to daylight
+    setSpectrum(lightSpectrum !== 0 ? 0 : -1);
+    hint(uvMode ? 'Black light (spectrum −1). Only artifacts whose emission activates near the light value glow; the rest goes dark. Author with the Selected swatch; sweep the Spectrum slider to reach other sets.' : null);
     saveLocal(); redraw(false);
   });
+  { const sp = document.getElementById('lightSpectrum');   // the continuous spectrum dial: sweep it and different sets light up
+    if (sp) sp.addEventListener('input', () => { setSpectrum(+sp.value); saveLocal(); redraw(false); }); }
+  { const so = document.getElementById('spot-toggle');     // SPOTLIGHT: the light becomes a movable beam (drag it with the Light tool)
+    if (so) so.addEventListener('click', () => { spotOn = !spotOn; so.setAttribute('aria-pressed', spotOn); hint(spotOn ? 'Spotlight on: only artifacts inside the beam (and at its spectrum value) glow. Drag it with the Light tool; Beam sets its size.' : null); saveLocal(); redraw(false); }); }
   for (const id of Object.keys(NEXT)) {
     const el = document.getElementById(id);
     if (!el) continue;
