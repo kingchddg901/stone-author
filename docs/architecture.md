@@ -166,6 +166,15 @@ selected keys:
   whole light warm ↔ cool (sheen, glint and edge highlights together; neutral = the old warm-white). The
   **fluted slab finish** was dropped.
 
+**Lighting conditions (spectra).** A second override store, the **UV palette** (`OVR_uv`), plus a **Black
+light** toggle (`uvMode`): the render drops the body to near-black and paints *only* artifacts that have an
+emission colour in the UV palette, at full alpha (so a daylight-`op:0` feature reveals) with an additive
+bloom (safe on black). The Selected swatch authors the active palette — `OVR` in daylight, `OVR_uv` under
+black light — and the UV palette saves with the slab. This is deliberately **condition-agnostic**: the
+render doesn't care that the alternate set is called "UV" — infrared, X-ray, moonlight or any theoretical
+spectrum is the *same* mechanism (a named token set + a switch), so this is the first instance of a general
+**spectrum** system, to be generalised from one hard-coded `uvMode`/`OVR_uv` into a named-spectra registry.
+
 This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 
 ### Determinism — a knob edits, it doesn't re-roll
