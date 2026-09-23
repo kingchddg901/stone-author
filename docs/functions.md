@@ -7,7 +7,7 @@ For *why* the pieces fit this way, see [`architecture.md`](architecture.md); for
 
 Conventions: a **mark** `m` is a user action (`{id, kind, seed, samples|at|…, p, fam}`), where `m.p`
 is the frozen `NEXT` settings it was drawn with. `out`/`geo` is the built geometry bag
-(`{lines, byId, web, specks, styl, drusy, knots, grain, guides}`). `F = FAM[fam]` is the family
+(`{lines, byId, web, specks, styl, drusy, guides}`). `F = FAM[fam]` is the family
 (character); `COL` holds colour + effect values. Frame coordinates are `0..1` across, `0..H` down.
 
 ---
@@ -86,8 +86,6 @@ Dispatched by `applyMark(m, out)` on `m.kind`. *(1397)*
   applied per vein/web edge and per speck/drusy **field** (per layer, `OVR['lay:<layer>']` also gives a
   field its colour); `weightOf(...)` scales the stroke width via `runs`'s `wmul`. Fog is left untinted. Row
   select boxes drive membership. Fog is deep-copied in the incremental clone so a fog push never corrupts the base field.
-- `knotGeom(m)` / `woodGrain(F, knots)` / `trace(x, y, sg)` — a wood knot, the grain field flowing
-  around knots, and one traced grain streamline. *(1290/1293/1315)*
 - `delaunay(P)` / `distTo(route, p)` — Bowyer–Watson triangulation and nearest-distance-to-route
   (web support). *(861/891)*
 
@@ -131,8 +129,8 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
 - `build()` — incremental (append the last mark to a cloned `geo`) when possible, else `fullBuild`; then
   `warpGeo`. The incremental path is skipped while warp is on so nothing is warped twice. *(1407)*
 - `fullBuild()` — rebuild all geometry from `marks` in order (older rock first). *(1421)*
-- `warpGeo()` — cloud-driven domain **warp**: displace every built point (veins/grain/specks/styl/drusy/
-  knots) by `G.warp` along the cloud's fBm field, offset by `G.cloudX`/`cloudY` (the field is **moveable**,
+- `warpGeo()` — cloud-driven domain **warp**: displace every built point (veins/specks/styl/drusy)
+  by `G.warp` along the cloud's fBm field, offset by `G.cloudX`/`cloudY` (the field is **moveable**,
   same offset as the cloud mottle) and **scaled per layer** by each layer's `warp` weight. `fbm2()` /
   `vnoise()` / `nz()` are that shared noise; the **Cloud** tool drags `cloudX`/`cloudY` (a `cloudpan`
   gesture). Branch warp is a **generation model** (`depthOf`: major n0, its branch n1, …): vein warp **rises
@@ -184,7 +182,6 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 - `fxOn(key, colour, ident)` / `fxOff(s)` — set a layer's blend mode + colour glow around its paint,
   then restore. *(1669/1676)*
 - `paintLive()` — the in-progress stroke. *(1659)*
-- `ellipse(K, f, jit)` / `drawKnot(K, F, ident, op)` — knot rings and rim. *(1756/1767)*
 - `drawScaleBar()` / `drawGuides()` — the scale bar and the gravity/magnet guide overlay. *(1778/1790)*
 - `drawWarpGuide()` — the **warp field made visible**: samples the same `fbm2` displacement `warpGeo`
   uses, on a coarse grid, and draws each node's base displacement as a teal arrow (direction exact,

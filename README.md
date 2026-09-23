@@ -55,8 +55,8 @@ path that taking one small want seriously actually produced.
 
 ### `app/` — the authoring tools (self-contained HTML, open in any browser)
 - **`stone-author.html`** — the main tool. Draw where the lines go; the family (Carrara,
-  Calacatta, Nero Marquina, Granite, Wood) decides what they are. Tools: Vein, Branch, Web,
-  Pour, Gravity, Magnet, Knot, Chip, Move. Pen pressure and tilt (opt-in). **Lay tiles**
+  Calacatta, Nero Marquina, Granite) decides what they are. Tools: Vein, Branch, Web,
+  Pour, Gravity, Magnet, Chip, Tune, Cloud, Moon, Move. Pen pressure and tilt (opt-in). **Lay tiles**
   cuts the authored slab into a repeating pattern on a floor — 15 patterns (square, rectangle,
   subway, hexagon, Cairo, diagonal, herringbone, basketweave, triangle, rhombus, octagon,
   penny, fish scale, arabesque lantern, French/Versailles), with grout, kerf, edge finish,
@@ -124,9 +124,11 @@ vein variants, the export step, and a colour layer via the vendored token-theme-
 per-artifact colour, selected by clicking, with a full render-time **adjustment set** (blur · hue ·
 saturation · brightness · contrast · weight) that resolves artifact → layer → bucket. Granite is now
 **field-per-layer**: every **+ Granite layer** is its own speck field with its own density, size, seed,
-colour and adjustments — the "Pollock engine". Next up is the **coat tier** (specular polish, subsurface,
-tile-edge light) and a WebGPU render pipeline — see the roadmap in
-[`docs/architecture.md`](docs/architecture.md).
+colour and adjustments — the "Pollock engine". **Stone Author is now stone-only**: the early Wood family
+and Knot tool were removed once the stone system outgrew them — wood (author a tree by its rings, then
+"mill" boards as geometry) and metal are envisioned as their own future systems that reuse this producer/
+consumer spine. Next up is the **coat tier** (specular polish, subsurface, tile-edge light) and a WebGPU
+render pipeline — see the roadmap in [`docs/architecture.md`](docs/architecture.md).
 
 **Licence.** `token-theme-kit` is MIT (© 2026 Chris King); its notice ships with the vendored copy.
 `stone-author`'s own licence is **TBD** — not yet chosen, so treat it as all-rights-reserved until

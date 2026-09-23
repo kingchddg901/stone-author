@@ -40,9 +40,9 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
 ### `app/` — the authoring tools (self-contained HTML, no build, no server)
 
 **`stone-author.html`** is the studio (the focus of the recent work). Draw where lines go; the
-**family** (Carrara, Calacatta, Nero Marquina, Granite, Wood) decides what they are.
+**family** (Carrara, Calacatta, Nero Marquina, Granite) decides what they are.
 
-- **Tools** — Vein, Branch, **Stylolite**, Web, Pour, Gravity, Magnet, Knot, Chip, **Tune** (tap a
+- **Tools** — Vein, Branch, **Stylolite**, Web, Pour, Gravity, Magnet, Chip, **Tune** (tap a
   vein to colour just that one), **Cloud** (drag to move the cloud/warp field), **Moon** (drag a local
   warp brush across the slab), Move.
 - **Slab primitives** (per family, seeded, greyscale) — **clouds/mottling**, **banding**,
@@ -85,8 +85,8 @@ before changing the generator.
 
 ### Character vs colour
 
-A **family** is character only — the *shape* language (rough, swing, breaks, branches; grain vs
-specks). It no longer owns colour. **Colour is its own layer**, applied per render layer, anything
+A **family** is character only — the *shape* language (rough, swing, breaks, branches; the granite
+speck ground). It no longer owns colour. **Colour is its own layer**, applied per render layer, anything
 you like, independent of the family. This split is the recent architecture's spine and the reason
 the colour engine could drop in.
 

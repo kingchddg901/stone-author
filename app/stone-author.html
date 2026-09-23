@@ -74,7 +74,6 @@
     <button id="f-calacatta" type="button" data-fam="calacatta">Calacatta</button>
     <button id="f-marquina" type="button" data-fam="marquina">Nero Marquina</button>
     <button id="f-granite" type="button" data-fam="granite">Granite</button>
-    <button id="f-wood" type="button" data-fam="wood">Wood</button>
   </div>
   <canvas id="field" aria-label="Stone slab. Draw on it to author veins, cracks and pours; tap a vein with the branch tool to grow a minor vein."></canvas>
   <div class="grp" role="group" aria-label="Tool"><span class="lbl">Tool</span>
@@ -84,7 +83,6 @@
     <button id="t-styl" type="button" data-tool="styl">Stylolite</button>
     <button id="t-pour" type="button" data-tool="pour">Pour</button>
     <button id="t-gravity" type="button" data-tool="gravity">Gravity</button>
-    <button id="t-knot" type="button" data-tool="knot">Knot</button>
     <button id="t-magnet" type="button" data-tool="magnet">Magnet</button>
     <button id="t-chip" type="button" data-tool="chip">Chip</button>
     <button id="t-tune" type="button" data-tool="tune">Tune</button>
@@ -143,10 +141,6 @@
   <div class="sliders" id="s-moon" hidden>
     <div class="sl"><label for="moonReach">Ball size <output id="moonReachV"></output></label><input id="moonReach" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="moonStrength">Pull <output id="moonStrengthV"></output></label><input id="moonStrength" type="range" min="0.2" max="3" step="0.05"></div>
-  </div>
-  <div class="sliders" id="s-knot" hidden>
-    <div class="sl"><label for="ksize">Knot size <output id="ksizeV"></output></label><input id="ksize" type="range" min="0.3" max="3" step="0.05"></div>
-    <div class="sl"><label for="spike">Spike <output id="spikeV"></output></label><input id="spike" type="range" min="1" max="4" step="0.1"></div>
   </div>
   <div class="sliders" id="s-chip" hidden>
     <div class="sl"><label for="chipsize">Chip size <output id="chipsizeV"></output></label><input id="chipsize" type="range" min="0.2" max="2.5" step="0.05"></div>
@@ -235,11 +229,6 @@
       <div class="sl"><label for="speckGroups">Speck colours <output id="speckGroupsV"></output></label><input id="speckGroups" type="range" min="1" max="5" step="1"></div>
       <div class="sl"><label for="speckSubs">Speck variants <output id="speckSubsV"></output></label><input id="speckSubs" type="range" min="1" max="4" step="1"></div>
     </div>
-    <div class="sliders" id="g-wood" hidden>
-      <div class="sl"><label for="gspacing">Ring spacing <output id="gspacingV"></output></label><input id="gspacing" type="range" min="0.4" max="3" step="0.05"></div>
-      <div class="sl"><label for="gwave">Waviness <output id="gwaveV"></output></label><input id="gwave" type="range" min="0" max="3" step="0.05"></div>
-      <div class="sl"><label for="gangle">Grain angle <output id="gangleV"></output></label><input id="gangle" type="range" min="-90" max="90" step="1"></div>
-    </div>
   </div>
   <p class="note" id="fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
   <div class="row">
@@ -280,12 +269,11 @@
     Grout is the gap between tiles; kerf is what the saw takes, so the veins drift a little across each joint.
     In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab.
     Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.</p>
-  <p class="note"><b>Granite and wood.</b> Granite lays a ground of specks that bunch but never touch. Gravity
+  <p class="note"><b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity
     moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space.
     A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside
     of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only
-    specks already down are moved, so what you draw first is older rock. In Wood, the Knot tool sets a knot
-    and the grain flows around it.</p>
+    specks already down are moved, so what you draw first is older rock.</p>
   <p class="note"><b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the
     magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it
     combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With
@@ -409,10 +397,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     granite:   { ground: '#151517', vein: '#ebe9e4', web: '#9d9c98', speck: '#d8d3c8', gauge: 0.004, rough: 0.24,
                  onset: 1.7, swing: 0.20, breaks: 0.12, branches: [0, 2], branchLen: 0.7, soft: 1.0, cells: 900, stretch: 2.0, spread: 0.05,
                  groundSpecks: true },
-    // a ground of grain lines that knots bend
-    wood:      { ground: '#c9a076', vein: '#6e4a2c', web: '#8c6a48', speck: '#5a3d26', gauge: 0.003, rough: 0.12,
-                 onset: 2.4, swing: 0.20, breaks: 0.30, branches: [0, 1], branchLen: 0.6, soft: 0.9, cells: 400, stretch: 3.0, spread: 0.03,
-                 grain: '#7b5433', knot: '#5b3a20', ring: 0.011, grainW: 0.0011 },
   };
   // COLOUR LAYER (token-theme-kit). The FAM above is CHARACTER only; colour is these per-layer tokens,
   // resolved to VALUES the canvas paints with (renderer-agnostic - a WebGPU pass would read the same
@@ -422,7 +406,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const COLOUR_TOKENS = [
     { key: 'ground', label: 'Base / ground' }, { key: 'major', label: 'Major veins' }, { key: 'minor', label: 'Minor veins' },
     { key: 'web', label: 'Fracture web' }, { key: 'micro', label: 'Micro / specks' }, { key: 'styl', label: 'Stylolite seam' },
-    { key: 'drusy', label: 'Drusy sparkle' }, { key: 'halo', label: 'Vein halo' }, { key: 'grain', label: 'Wood grain' }, { key: 'knot', label: 'Wood knot' },
+    { key: 'drusy', label: 'Drusy sparkle' }, { key: 'halo', label: 'Vein halo' },
   ];
   // COL = RESOLVED values the renderer paints from. OVR = the overrides the editor edits and we
   // persist. perItem = id -> layer bucket, for per-id (per-item) colour tokens that inherit their
@@ -435,7 +419,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     OVR.ground = F.ground; OVR.major = F.vein; OVR.minor = F.vein; OVR.web = F.web; OVR.micro = F.speck;
     OVR.styl = light ? '#241d16' : '#c9b79a'; OVR.drusy = '#f7f5f0';
     OVR.halo = rgbHex(gr + (255 - gr) * 0.55, gg + (255 - gg) * 0.55, gb + (255 - gb) * 0.55);
-    OVR.grain = F.grain || '#7b5433'; OVR.knot = F.knot || '#5b3a20';
   }
   const FX_LAYERS = ['major', 'minor', 'web', 'micro', 'styl', 'drusy'];   // layers that can carry a per-layer blend + glow
   const BLENDS = ['normal', 'multiply', 'screen', 'overlay', 'soft-light', 'color-dodge', 'lighten', 'darken', 'difference', 'hue', 'color', 'luminosity'];
@@ -450,10 +433,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Settings for the NEXT line. Each mark takes a copy when it is made and keeps it, so a
   // change applies forward and never rewrites what is already down.
   const NEXT = { pressure: false, tilt: false, gauge: 1, rough: 1, breaks: 1, branches: 1, blen: 1, gauge2: 1, spread: 1, density: 1, stretch: 1,
-              prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, ksize: 1, spike: 1.4, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
+              prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
               stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { gspacing: 1, gwave: 1, gangle: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
+  const G = { speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1,
@@ -462,7 +445,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
-  const GFMT = { gangle: v => `${v}\u00b0`, speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
+  const GFMT = { speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2), fogHaze: v => `${Math.round(v * 100)}%`,
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}` };
@@ -476,9 +459,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Selection holds TOKEN KEYS — 'lay:<layer>' for a layer (row checkbox) or 'id:<vein>' for one artifact
   // (a Tune tap). Effects/editor act on the selected keys; the same adjustment set targets either.
   const sculptTarget = () => selected.has('lay:fog') ? 'fog' : selected.has('lay:micro') ? 'micro' : undefined;   // which particle field the force tools grab
-  const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), spike: v => `${(+v).toFixed(1)}:1` };
+  const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2) };
   let fam = 'carrara', tool = 'vein', view = 'stone';
-  let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], knots: [], grain: [], styl: [], drusy: [], fog: [] };
+  let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], styl: [], drusy: [], fog: [] };
   // CANONICAL LAYERS - the contract every consumer reads (VA: base/major/minor/micro; the dashboard
   // adds web and the ids/t-maps). Order is paint order, back to front. A rendered element's layer:
   //   ground fill -> base | web crack -> web | speck -> micro | vein line -> L.major ? major : minor
@@ -547,7 +530,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // own cloud. Built low-res and upscaled soft, cached until fam/scale/strength change.
   function hexRGB(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
   // fBm value noise = the cloud's own character, reused as a domain-WARP field: the cloud structure
-  // displaces the veins / grain / specks so the whole slab flows along one field ("cloud as a warp").
+  // displaces the veins / specks so the whole slab flows along one field ("cloud as a warp").
   function nz(xi, yi, s) { let h = (Math.imul(xi, 374761393) ^ Math.imul(yi, 668265263) ^ Math.imul(s, 2246822519)) >>> 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
   function vnoise(x, y, s) { const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty), a = nz(xi, yi, s), b = nz(xi + 1, yi, s), c = nz(xi, yi + 1, s), d = nz(xi + 1, yi + 1, s); return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy; }
   function fbm2(x, y, s) { return vnoise(x, y, s) * 0.6 + vnoise(x * 2.1, y * 2.1, s + 9) * 0.3 + vnoise(x * 4.3, y * 4.3, s + 19) * 0.1; }
@@ -1407,59 +1390,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     return out;
   }
-  // WOOD: grain as streamlines, and a knot as FLOW AROUND AN OBSTACLE - potential flow round a
-  // circle, stretched to an ellipse for a spike knot. Lines crowd at its flanks and close up behind
-  // it but can never cross, which a plain pull would make them do near the core.
-  function knotGeom(m) {
-    return { id: 'K' + m.id, mark: m.id, x: m.at[0], y: m.at[1], R: m.R || 0.028 * m.p.ksize, ex: m.p.spike, seed: m.seed };
-  }
-  function woodGrain(F, knots) {
-    const [r, g] = sub(9090, 1), th0 = G.gangle * Math.PI / 180, ph = [r() * 6.283, r() * 6.283, r() * 6.283];
-    const base = (x, y) => th0 + 0.3 * G.gwave * (0.55 * Math.sin(2.2 * x + 0.8 * y + ph[0])
-                                                 + 0.3 * Math.sin(3.4 * y - 1.3 * x + ph[1]) + 0.15 * Math.sin(6.1 * x + ph[2]));
-    for (const K of knots) { K.th = base(K.x, K.y); K.c = Math.cos(K.th); K.s = Math.sin(K.th); }
-    const dir = (x, y) => {
-      const a = base(x, y); let vx = Math.cos(a), vy = Math.sin(a);
-      for (const K of knots) {
-        const dx = x - K.x, dy = y - K.y, lx = (dx * K.c + dy * K.s) / K.ex, ly = -dx * K.s + dy * K.c;
-        const r2 = lx * lx + ly * ly; if (r2 < 1e-12) continue;
-        const m4 = r2 * r2, R2 = K.R * K.R, zr = lx * lx - ly * ly, zi = 2 * lx * ly;
-        const pu = -R2 * zr / m4, pv = -R2 * zi / m4 / K.ex;   // w = z + R^2/z, pushed through the stretch
-        vx += pu * K.c - pv * K.s; vy += pu * K.s + pv * K.c;
-      }
-      const L = Math.hypot(vx, vy);
-      return L > 1e-9 ? [vx / L, vy / L] : [Math.cos(a), Math.sin(a)];
-    };
-    const inKnot = (x, y) => knots.some(K => {
-      const dx = x - K.x, dy = y - K.y, lx = (dx * K.c + dy * K.s) / K.ex, ly = -dx * K.s + dy * K.c;
-      return lx * lx + ly * ly < K.R * K.R * 0.98;
-    });
-    const hstep = 0.004;
-    function trace(x, y, sg) {
-      const pts = [[x, y]];
-      for (let i = 0; i < 520; i++) {
-        const [ax, ay] = dir(x, y), [bx, by] = dir(x + ax * hstep * sg / 2, y + ay * hstep * sg / 2);
-        x += bx * hstep * sg; y += by * hstep * sg;
-        if (x < -0.3 || x > 1.3 || y < -0.3 || y > H + 0.3 || inKnot(x, y)) break;
-        pts.push([x, y]);
-      }
-      return pts;
-    }
-    // SEEDED UPSTREAM, outside the slab, where the flow is even. Seeded through the middle, the lines
-    // were evenly spaced exactly at the knot and could not crowd there: flank spacing read 1.0x the far
-    // spacing against the ~0.7x flow round an obstacle gives.
-    const dx = Math.cos(th0), dy = Math.sin(th0), mx = -dy, my = dx;
-    const along = 0.5 * Math.abs(dx) + (H / 2) * Math.abs(dy) + 0.1;
-    const half = 0.5 * Math.abs(mx) + (H / 2) * Math.abs(my) + 0.18;
-    const ox = 0.5 - dx * along, oy = H / 2 - dy * along;
-    const lines = [];
-    for (let o = -half, k = 0; o < half; k++) {
-      const pts = trace(ox + mx * o, oy + my * o, 1);
-      if (pts.length > 3) lines.push({ id: 'G' + k, pts, w: F.grainW * (0.6 + 0.9 * r()), a: 0.3 + 0.5 * r() });
-      o += F.ring * G.gspacing * Math.exp(0.35 * g());
-    }
-    return lines;
-  }
   function buildPour(m, out) {
     const M = m.p;
     const S = m.samples, n = S.length, res = [];
@@ -1515,7 +1445,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
 
   // INCREMENTAL: when the only change is one new mark on top of the same history, apply just that
   // mark to the settled state from last time instead of replaying everything. Anything else - undo,
-  // reroll, family, ground, a knot (it bends all the grain) - rebuilds from the start.
+  // reroll, family, ground - rebuilds from the start.
   let last = null;
   const applyMark = (m, out) => {
     const F = FAM[m.fam];                              // the character it was drawn with
@@ -1527,8 +1457,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     else if (m.kind === 'gravity') applyGravity(m, out);
     else if (m.kind === 'magnet') applyMagnet(m, out);
   };
-  // Cloud-driven domain WARP: displace the built vector geometry (veins, grain, specks, seams, drusy,
-  // knots) by the cloud's own fBm field, so the whole slab flows along one field. Applied after a full
+  // Cloud-driven domain WARP: displace the built vector geometry (veins, specks, seams, drusy) by the
+  // cloud's own fBm field, so the whole slab flows along one field. Applied after a full
   // build; the incremental fast-path is skipped while warp is on so nothing is warped twice.
   // A MOON: a powerful, focused, dragged warp — a "ball" you pull across the slab that drags the geometry
   // it rolls over into its wake (forward-push, in the direction of travel), fading to nothing at its rim.
@@ -1550,11 +1480,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const wp2 = (s, w) => { const [a, b] = disp(s.x, s.y); s.x += a * w; s.y += b * w; };
     for (const L of geo.lines) { const w = W(L.layer || (L.major ? 'major' : 'minor')); if (w) for (const q of L.pts) wp(q, w); }
     for (const e of geo.web) { const ww = W(e.layer || 'web'); if (ww) for (const q of e.pts) wp(q, ww); }
-    const wg = W('micro'); if (wg) for (const gl of geo.grain) for (const q of gl.pts) wp(q, wg);
     const wsy = W('styl'); if (wsy) for (const s of geo.styl) for (const q of s.pts) wp(q, wsy);
     const wmi = W('micro'); if (wmi) for (const s of geo.specks) wp2(s, wmi);
     const wdr = W('drusy'); if (wdr) for (const s of geo.drusy) wp2(s, wdr);
-    const wkn = W('major'); if (wkn) for (const K of geo.knots) wp2(K, wkn);
   }
   function warpGeo() {
     const moons = marks.filter(m => m.kind === 'moon'), hasGlobal = G.warp > 0;
@@ -1577,11 +1505,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // deep bond has something to release: deep branches push harder against a looser anchor and wander off.
       for (const L of geo.lines) { const w = W(L.layer || (L.major ? 'major' : 'minor')) * (1 + depthOf(L) * dg); for (const q of L.pts) wp(q, w); }
       for (const e of geo.web) { const ww = W(e.layer || 'web'); if (ww) for (const q of e.pts) wp(q, ww); }
-      const wg = W('micro'); for (const gl of geo.grain) for (const q of gl.pts) wp(q, wg);
       const wsy = W('styl'); for (const s of geo.styl) for (const q of s.pts) wp(q, wsy);
       const wmi = W('micro'); for (const s of geo.specks) wp2(s, wmi);
       const wdr = W('drusy'); for (const s of geo.drusy) wp2(s, wdr);
-      const wkn = W('major'); for (const K of geo.knots) wp2(K, wkn);
     }
     for (const mn of moons) applyMoon(mn, W);             // the powerful local moons, riding over the current
     // ANCHOR (generation model): every line's root re-pins to its anchor — the major (n0) to its own origin,
@@ -1622,10 +1548,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function fullBuild() {
     const Fc = FAM[fam];
     const out = { lines: [], byId: new Map(), web: [], specks: Fc.groundSpecks ? buildGround() : [], guides: [],
-                  knots: marks.filter(m => m.kind === 'knot').map(knotGeom), grain: [], styl: [], drusy: buildDrusy(), fog: buildFog() };
-    // knots are fields in the wood, there while it grew, so they bend all of its grain
-    if (Fc.grain) out.grain = woodGrain(Fc, out.knots);
-    else for (const K of out.knots) { K.th = G.gangle * Math.PI / 180; K.c = Math.cos(K.th); K.s = Math.sin(K.th); }
+                  styl: [], drusy: buildDrusy(), fog: buildFog() };
     for (const m of marks) applyMark(m, out);         // in order: what is drawn first is older rock
     stampLayers(out);
     geo = out;
@@ -1934,15 +1857,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
       g2d.globalAlpha = 1;
     }
-    if (F.grain) {                                       // wood: grain = fine structure -> micro, knots = major features
-      if (layVis('micro')) geo.grain.forEach((gl, k) => {
-        g2d.beginPath(); g2d.moveTo(gl.pts[0][0], gl.pts[0][1]);
-        for (let i = 1; i < gl.pts.length; i++) g2d.lineTo(gl.pts[i][0], gl.pts[i][1]);
-        g2d.strokeStyle = ident ? idColour(gl.id, 0.6) : COL.grain; g2d.globalAlpha = (ident ? 0.8 : gl.a) * (ident ? 1 : layOp('micro'));
-        g2d.lineWidth = gl.w; g2d.stroke();
-      });
-      if (layVis('major')) for (const K of geo.knots) drawKnot(K, F, ident, ident ? 1 : layOp('major'));
-    }
     if (geo.web.length) { const _fx = fxOn('web', COL.web, ident); for (const e of geo.web) {
       const wl = e.layer || 'web'; if (!layVis(wl)) continue;                        // per web-layer visibility
       const wid = 'W' + e.mark;                                                       // the web SPREAD = one artifact
@@ -2012,26 +1926,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const vcol = L => { const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };   // per-id → per-layer token (flat OVR store) → the bucket
     if (!ident) for (const L of order) if (layVis(lk(L))) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }  // shoulder
     for (const L of order) if (layVis(lk(L))) { const bk = L.major ? 'major' : 'minor'; const _fx = fxOn(lk(L), vcol(L), ident); if (!ident) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false, ident ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; fxOff(_fx); }  // per-item adjustments (ctx.filter + weight)
-  }
-  function ellipse(K, f, jit) {
-    ctx.beginPath();
-    for (let q = 0; q <= 48; q++) {
-      const a = q / 48 * 2 * Math.PI, rr = K.R * f * (1 + (jit ? jit(a) : 0));
-      const lx = Math.cos(a) * rr * K.ex, ly = Math.sin(a) * rr;
-      const x = K.x + lx * K.c - ly * K.s, y = K.y + lx * K.s + ly * K.c;
-      if (q) ctx.lineTo(x, y); else ctx.moveTo(x, y);
-    }
-    ctx.closePath();
-  }
-  // A knot is a branch cut across: its own small rings, darker, a dark rim, the pith at its heart.
-  function drawKnot(K, F, ident, op = 1) {
-    const [r] = sub(K.seed, 50), p1 = r() * 6.28, p2 = r() * 6.28, nr = 4 + Math.floor(r() * 3);
-    const jit = a => 0.05 * (0.6 * Math.sin(3 * a + p1) + 0.4 * Math.sin(5 * a + p2));
-    ellipse(K, 1, jit); ctx.fillStyle = ident ? idColour(K.id, 0.35) : COL.knot; ctx.globalAlpha = 0.88 * op; ctx.fill();
-    ctx.strokeStyle = ident ? idColour(K.id, 0.8) : COL.grain; ctx.globalAlpha = 0.85 * op;
-    for (let k = 1; k < nr; k++) { ellipse(K, k / nr, jit); ctx.lineWidth = 0.0008; ctx.stroke(); }
-    ellipse(K, 1, jit); ctx.lineWidth = 0.0016; ctx.strokeStyle = ident ? '#ffffff' : '#3a2412'; ctx.stroke();
-    ctx.beginPath(); ctx.arc(K.x, K.y, K.R * 0.08, 0, 2 * Math.PI); ctx.fillStyle = '#2e1c0e'; ctx.globalAlpha = op; ctx.fill();
   }
   // Guides are for you, not the stone: a filled dot pulls, an open ring pushes, its size is the
   // reach; a gravity line carries a band each side as wide as its reach, solid to pull, dashed to push.
@@ -2116,10 +2010,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         ctx.setLineDash([]);
       }
     }
-    for (const K of geo.knots) {                       // where the knots are, whatever the stone
-      ctx.strokeStyle = '#ffd36b'; ctx.globalAlpha = 0.75; ctx.setLineDash([4 * px, 4 * px]);
-      ellipse(K, 1); ctx.stroke(); ctx.setLineDash([]);
-    }
     ctx.globalAlpha = 1;
     drawScaleBar();
   }
@@ -2179,7 +2069,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     web: 'Draw a line. A crack runs along it and a web of cells spreads from it and thins out.',
     pour: 'Draw a line and lift. Specks pour along it: slow pools, fast thins, sharp bends fling drops.',
     gravity: 'Tap for a point of gravity, or drag to lay a line of it. Pull gathers specks, push clears them; they bunch but never touch.',
-    knot: 'Tap to set a knot, or drag out from its centre to size it. The grain flows around it in Wood.',
     magnet: 'Drag to comb the specks like iron filings. The pen\u2019s angle is the magnet: upright fans them out from the tip, laid over combs them along its lean. Slow passes align harder.',
     styl: 'Draw a line. It becomes a stylolite — a toothy pressure-dissolution seam of interlocking columns, dark on light stone and pale on dark.',
     tune: 'Tap a vein, web crack or stylolite seam to tune just that one (a crack picks its whole spread). Its colour follows its layer until you change it here; reset it to follow again.',
@@ -2353,10 +2242,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } else if (g.type === 'draw' && tool === 'magnet') {
       commit({ id, kind: 'magnet', seed, samples: g.samples, tgt: sculptTarget() });
       if (!geo.specks.length) hint('The magnet turns specks. Switch to Granite, or pour some first.');
-    } else if (g.type === 'draw' && tool === 'knot') {
-      const a = g.samples[0], b = g.samples[g.samples.length - 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      commit({ id, kind: 'knot', seed, at: [a[0], a[1]], R: len < 0.008 ? null : len });
-      if (!FAM[fam].grain) hint('Knot set. Its grain shows in Wood.');
     } else if (g.type === 'draw' && tool === 'moon') {
       if (pathLen(g.samples) < 0.02) { nextId--; hint('Drag the moon across the slab — it drags what it passes into its wake, hard in the middle, fading at the edge.'); }
       else commit({ id, kind: 'moon', seed, samples: g.samples });
@@ -2560,7 +2445,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const F = FAM[fam];
     document.getElementById('ground').hidden = false;    // clouds apply to every family, so the ground panel always shows
     document.getElementById('g-granite').hidden = !F.groundSpecks;
-    document.getElementById('g-wood').hidden = !F.grain;
   }
 
   // ---- THE SOURCE: marks + family + settings. Everything bakes from this; save it, restore it.
@@ -2573,7 +2457,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   function deserialize(o) {
     if (!o || o.v !== 1 || !Array.isArray(o.marks)) return false;
-    fam = o.fam; tool = o.tool; view = o.view; layTiles = !!o.layTiles; guidesOn = o.guidesOn !== false;
+    fam = FAM[o.fam] ? o.fam : 'carrara';                 // a retired family (e.g. wood) falls back to Carrara
+    tool = document.querySelector('[data-tool="' + o.tool + '"]') ? o.tool : 'vein';   // a retired tool (e.g. knot) falls back to Vein
+    view = o.view; layTiles = !!o.layTiles; guidesOn = o.guidesOn !== false;
     Object.assign(G, o.G || {}); Object.assign(T, o.T || {}); Object.assign(NEXT, o.NEXT || {});
     for (let i = layers.length - 1; i >= 0; i--) if (layers[i].key.includes('#')) layers.splice(i, 1);   // drop the previous slab's user layers
     activeLayer.major = 'major'; activeLayer.minor = 'minor'; activeLayer.web = 'web'; activeLayer.micro = 'micro';
@@ -2599,7 +2485,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const k in perItem) delete perItem[k]; if (o.perItem) Object.assign(perItem, o.perItem);
     registerSpeckGroups(); registerSelectedColours(); recolour();
     if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor
-    marks = o.marks.map(m => ({ ...m }));
+    marks = o.marks.filter(m => m.kind !== 'knot').map(m => ({ ...m }));   // drop retired knot marks
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
     stoneReady = false; buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
   }
@@ -2628,7 +2514,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const id of Object.keys(NEXT)) { const el = document.getElementById(id); if (el) { el.value = NEXT[id]; document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; } }
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
-    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip', 'moon']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
+    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
     showGround(); syncLayerUI(); syncGranite(); hint();
   }
   function download(name, text) {                       // works from a local file; inert in the artifact sandbox
@@ -2748,7 +2634,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     tool = b.dataset.tool; press('[data-tool]', b); hint();
     const show = tool === 'move' ? 'vein' : tool;
-    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'knot', 'magnet', 'chip', 'moon']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
+    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
   });
   for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
   for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
