@@ -2036,6 +2036,77 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!uvMode && G.lens > 0) applyLens(fc, fx);           // the glass, once, on the whole assembled slab
     return fc;
   }
+  // ---- CPU WORKER POOL: parallelise the tile render across cores. The render core (paintStoneContent + coat +
+  // helpers) is serialised via fn.toString() into an inline Blob worker (single-file app → no separate worker
+  // file). Each worker runs on an OffscreenCanvas, renders whole tiles, and transfers ImageBitmaps back. The
+  // cloud/band/breccia modulators are built once on the main thread and posted as bitmaps (ensure* is stubbed).
+  function renderCoreSrc() {
+    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, paintStoneContent };
+    let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
+    s += `var FAM=${JSON.stringify(FAM)};\n`;
+    s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;
+    s += `var ensureClouds=()=>__cl,ensureBands=()=>__bd,ensureBreccia=()=>__br;\n`;
+    s += `var document={createElement:()=>new OffscreenCanvas(1,1)};\n`;
+    for (const n in fns) s += `var ${n}=${fns[n].toString()};\n`;
+    s += `self.onmessage=function(e){var d=e.data;\n`;
+    s += `if(d.type==='init'){geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
+    s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
+    s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_DARK;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=COL.ground;tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
+    s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
+    s += `paintStoneContent(false,false);\n`;
+    s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:false,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
+    s += `var inner=new OffscreenCanvas(d.tileW,d.tileH);inner.getContext('2d').drawImage(tc,d.bleed,d.bleed,d.tileW,d.tileH,0,0,d.tileW,d.tileH);\n`;
+    s += `var bmp=inner.transferToImageBitmap();self.postMessage({i:d.i,tx0:d.tx0,ty0:d.ty0,bmp:bmp},[bmp]);};`;
+    return s;
+  }
+  async function renderTiledParallel(W, opts) {
+    opts = opts || {};
+    const backlit = !layTiles && G.backlight > 0;
+    if (backlit || typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return renderTiled(W);   // no workers / back light → the single-thread tiled path
+    const tilePx = opts.tilePx || 1024, nWorkers = Math.max(1, Math.min(opts.workers || (navigator.hardwareConcurrency || 4), 8));
+    const finalW = W, finalH = Math.round(W * H), bs = W / (Wc || 360), bleed = Math.ceil(12 * bs);
+    // build the shared state + the modulator bitmaps (once)
+    const modBitmap = (need, ensure) => need ? createImageBitmap(ensure()) : Promise.resolve(null);
+    const [clB, bdB, brB] = await Promise.all([
+      modBitmap(layVis('clouds') && G.cloudStrength > 0, ensureClouds),
+      modBitmap(layVis('bands') && G.bandStrength > 0, ensureBands),
+      modBitmap(layVis('breccia') && G.brecStrength > 0, ensureBreccia),
+    ]);
+    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, lightSpectrum, spotOn, hidden: [...hidden] };
+    const url = URL.createObjectURL(new Blob([renderCoreSrc()], { type: 'application/javascript' }));
+    const pool = [];
+    for (let i = 0; i < nWorkers; i++) {
+      const w = new Worker(url);
+      // each worker needs its own bitmap copies (transfer consumes them)
+      const [cl, bd, br] = await Promise.all([clB ? createImageBitmap(clB) : null, bdB ? createImageBitmap(bdB) : null, brB ? createImageBitmap(brB) : null]);
+      const xfer = [cl, bd, br].filter(Boolean);
+      const ready = new Promise(res => { w.onmessage = e => { if (e.data.type === 'ready') res(); }; });
+      w.postMessage({ type: 'init', ...state, cl, bd, br }, xfer);
+      await ready; pool.push(w);
+    }
+    // enumerate tiles
+    const tiles = [];
+    for (let ty0 = 0; ty0 < finalH; ty0 += tilePx) for (let tx0 = 0; tx0 < finalW; tx0 += tilePx)
+      tiles.push({ tx0, ty0, tileW: Math.min(tilePx, finalW - tx0), tileH: Math.min(tilePx, finalH - ty0) });
+    const fc = document.createElement('canvas'); fc.width = finalW; fc.height = finalH; const fx = fc.getContext('2d');
+    // dispatch round-robin, collect
+    let next = 0, done = 0;
+    await new Promise(resolve => {
+      const send = (w, t) => {
+        w.onmessage = e => {
+          fx.drawImage(e.data.bmp, e.data.tx0, e.data.ty0); e.data.bmp.close(); done++;
+          if (next < tiles.length) send(w, tiles[next++]); else if (done === tiles.length) resolve();
+        };
+        w.postMessage({ i: t.tx0 + ',' + t.ty0, tx0: t.tx0, ty0: t.ty0, tileW: t.tileW, tileH: t.tileH,
+          ew: t.tileW + 2 * bleed, eh: t.tileH + 2 * bleed, ex0: t.tx0 - bleed, ey0: t.ty0 - bleed, bleed, bs, finalW, finalH });
+      };
+      for (const w of pool) { if (next < tiles.length) send(w, tiles[next++]); }
+    });
+    for (const w of pool) w.terminate(); URL.revokeObjectURL(url);
+    if (clB) clB.close(); if (bdB) bdB.close(); if (brB) brB.close();
+    if (!uvMode && G.lens > 0) applyLens(fc, fx);
+    return fc;
+  }
   function draw() {
     const F = FAM[fam], ident = view !== 'stone', angleView = view === 'angle';
     const backlit = !ident && !layTiles && G.backlight > 0;   // back light replaces the daylight body + its front-lit coat passes; it takes precedence over uv so emitters can compose at the current spectrum
