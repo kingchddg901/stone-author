@@ -178,8 +178,8 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 ## Rendering
 
 - `size()` — size the canvas to the element and device pixel ratio. *(1636)*
-- `draw()` — one frame: ground/base fill, then `paintStoneContent` (or `drawTiles`), the **subsurface**
-  pass, guides, live stroke, status. *(1643)*
+- `draw()` — one frame: ground/base fill, then `paintStoneContent` (or `drawTiles`), the coat passes in order
+  (emission bloom in uv · **subsurface** · **specular** · **lens**), guides, live stroke, status. *(1643)*
 - **Subsurface** (`G.subsurface`, coat tier v1) — a post-pass in stone view: build the feature **high-pass**
   in the `ssC` scratch canvas (`stone` composited with `difference` against a blur of itself, so flat areas
   are ~black and only veins/specks/edges survive), `multiply` it warm, then add it back over the stone with
@@ -203,6 +203,16 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 - **The one light** (`G.lightAngle`) is shared: `setLight(f)` aims it from the slab centre toward the pointer,
   the **Light tool** drags it (a `lightdrag` gesture; `drawLightGuide()` draws a little sun at the slab edge),
   `edgeFinish` lights tile edges by edge-normal·light, and the specular sheen/glint place their hotspot by it.
+- **Lens top-coat** (`G.lens`, `G.lensType`, `G.lensPitch`) — the last coat pass in stone view: an ideal glass
+  relief on the very top that **refracts** what lies beneath. Real per-pixel refraction (a mesh-blit warp tears
+  at any real amplitude; a **gather** cannot), done on a downscaled snapshot in `lensC` (≤640px, upscaled back —
+  glass softens it) so it stays cheap. Each output pixel samples the source at a displacement from the lens
+  profile: **fresnel** (radial sine → concentric rings), **reeded** (per-column sine → vertical grooves),
+  **water** (crossed sines → hammered/wavy glass). Displacement scales with the groove (`amp = lens·0.5·pw`),
+  so steepness tracks strength not pitch. A soft **caustic** brightens (never darkens — glass has no dark bands)
+  where the relief focuses, via `1/|jacobian|`; it reads on dark stone and washes out on white, as a real caustic
+  does. Latent head-on for an ideal flat lens; built to pair with a future back light (the same fold, run
+  back-to-front). `Lens` / `Lens grooves` sliders + a `Lens type` group; persists in `G` with the slab.
 - `paintStoneContent(ident, angleView)` — paint every layer in stack order
   (`base→breccia→clouds→bands→web→micro→drusy→styl→minor→major`), gated by layer visibility. The
   core of the renderer. *(1677)*

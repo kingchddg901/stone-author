@@ -164,7 +164,7 @@ selected keys:
   reads the *same* `G.lightAngle` (`edgeFinish` lights the bevel/pillow/tumbled chamfer by edge-normal·light),
   and a draggable **Light tool** aims that one shared light for both. A **Light temperature** control tints the
   whole light warm ↔ cool (sheen, glint and edge highlights together; neutral = the old warm-white). The
-  **fluted slab finish** was dropped.
+  **fluted slab finish** was dropped; the **lens top-coat** (its own section below) is the final coat layer.
 
 **Lighting conditions (spectra) — an index-match engine.** The light sits at a **scalar spectrum value**
 (`lightSpectrum`; 0 = daylight, e.g. −1 = UV, +1 = IR). Each artifact's `OVR_uv` entry is `{v, c}` — an
@@ -179,6 +179,19 @@ per-condition feature. **Reactive spotlight** (`spotOn`, `G.lightX/lightY/spotR`
 an artifact also has to fall inside it — per-point for specks (`emit(id,layer,x,y)`), whole-artifact-if-any-
 point-touches for lines (`beamPts`) — so dragging the Light tool sweeps a UV torch over the slab. All O(1)-ish,
 no GPU; a uniform grid would only be an optimisation for a shaped cone or extreme counts.
+
+**Lens top-coat — refraction as pixel displacement.** The last coat pass models an *ideal glass relief* on the
+very top (`G.lens` strength, `G.lensType` = fresnel / reeded / water, `G.lensPitch`). Physically a flat ideal
+lens does almost nothing head-on and only bends light as you view off-axis or light it from behind — and that
+bending is exactly a **displacement of the image beneath it**. So the pass is a per-pixel *gather*: each output
+pixel samples the finished slab at an offset given by the lens profile (radial sine = concentric Fresnel rings,
+per-column sine = reeded grooves, crossed sines = hammered "water" glass). A gather is used rather than a
+mesh-blit warp because a blit tears wherever neighbouring cells diverge by more than the overlap — which, at any
+visible amplitude, is everywhere; a gather never tears. It runs on a downscaled snapshot (`lensC`, ≤640px,
+upscaled back — the glass hides the softening), so real refraction stays cheap **without a GPU**. A soft
+**caustic** brightens (only — glass concentrates light, it never punches dark bands) where the relief focuses,
+so it reads on dark stone and washes out on white, the way a real caustic does. This is the transmission-side
+dual of the spectrum engine's emission, and the same fold will run **back-to-front for a future back light**.
 
 This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 

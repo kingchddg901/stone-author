@@ -205,6 +205,10 @@
       <div class="sl"><label for="lightSpectrum">Light spectrum <output id="lightSpectrumV"></output></label><input id="lightSpectrum" type="range" min="-1" max="1" step="0.02"></div>
       <div class="sl"><span class="lbl">Spotlight</span><div class="grp"><button id="spot-toggle" type="button" aria-pressed="false">Beam</button></div></div>
       <div class="sl"><label for="spotR">Beam size <output id="spotRV"></output></label><input id="spotR" type="range" min="0.05" max="0.6" step="0.01"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">Lens: an ideal glass relief on the very top. Flat and perfect, so head-on it does almost nothing — it refracts what lies beneath as it steepens, and it's built to pair with a back light.</span></div>
+      <div class="sl"><label for="lens">Lens <output id="lensV"></output></label><input id="lens" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="lensPitch">Lens grooves <output id="lensPitchV"></output></label><input id="lensPitch" type="range" min="2" max="40" step="1"></div>
+      <div class="sl" style="grid-column:1/-1"><span class="lbl">Lens type</span><div class="grp" role="group" aria-label="Lens type"><button data-lens="fresnel" type="button">Fresnel</button><button data-lens="reeded" type="button">Reeded</button><button data-lens="water" type="button">Water</button></div></div>
     </div>
     <div class="sliders" id="g-clouds">
       <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
@@ -403,6 +407,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
 (() => {
   const cv = document.getElementById('field'), ctx = cv.getContext('2d');
   const ssC = document.createElement('canvas');            // subsurface scratch: the feature high-pass, warmed, added back as internal glow
+  const lensC = document.createElement('canvas');          // lens scratch: a downscaled snapshot the top-coat refracts per-pixel, then upscales back
   const H = 0.625;                                     // frame height, in frame widths
   // THE SLAB IS 8 x 5 FT: his 5 ft slab, sized to this 16:10 frame. Metric is one multiply away.
   const SLAB_FT = 8, FT_MM = 304.8;                    // frame width in feet; feet to mm
@@ -477,7 +482,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1,
-              fogHaze: 0, fogSize: 1, fogDensity: 1 };
+              fogHaze: 0, fogSize: 1, fogDensity: 1,
+              lens: 0, lensPitch: 10, lensType: 'fresnel' };
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
@@ -485,7 +491,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const GFMT = { subsurface: v => (+v).toFixed(2), specular: v => (+v).toFixed(2), lightAngle: v => `${Math.round(v)}°`, lightTemp: v => (+v == 0 ? 'neutral' : (v < 0 ? 'warm ' : 'cool ') + Math.abs(v).toFixed(2)), spotR: v => (+v).toFixed(2), speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2), fogHaze: v => `${Math.round(v * 100)}%`,
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
-                 drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}` };
+                 drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}`,
+                 lens: v => (+v).toFixed(2), lensPitch: v => `${Math.round(v)}` };
   const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
   const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen };
   let guidesOn = true;
@@ -1882,6 +1889,36 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       ctx.filter = `blur(${0.6 * dpr}px)`; ctx.drawImage(ssC, 0, 0);
       ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.restore();
     }
+    if (!ident && G.lens > 0) {                          // LENS TOP-COAT: an ideal glass relief on the very top refracts what lies beneath.
+      const gw = Math.min(cv.width, 640), gh = Math.max(1, Math.round(gw * cv.height / cv.width));   // gather at reduced res — real per-pixel refraction (a warp tears; a gather can't), done cheap; glass softens the upscale anyway
+      if (lensC.width !== gw || lensC.height !== gh) { lensC.width = gw; lensC.height = gh; }
+      const lc = lensC.getContext('2d');
+      lc.setTransform(1, 0, 0, 1, 0, 0); lc.globalAlpha = 1; lc.filter = 'none'; lc.globalCompositeOperation = 'source-over';
+      lc.clearRect(0, 0, gw, gh); lc.drawImage(cv, 0, 0, gw, gh);           // downscaled snapshot of the finished slab
+      const src = lc.getImageData(0, 0, gw, gh).data, out = lc.createImageData(gw, gh), o = out.data;
+      const pw = Math.max(2, Math.min(gw, gh) / Math.max(1, G.lensPitch)), k = 2 * Math.PI / pw;   // groove period in px
+      const amp = G.lens * 0.5 * pw, caus = G.lens * 0.35, type = G.lensType || 'fresnel', cx = gw / 2, cy = gh / 2;   // displacement scales with the groove, so steepness tracks strength, not pitch
+      const bright = j => { const m = 1 / Math.max(0.3, Math.abs(j)); const b = 1 + caus * Math.max(0, m - 1); return b > 2 ? 2 : b; };   // caustic: a soft highlight only where the relief focuses — glass concentrates light, it never punches dark bands
+      let dxc = null, jc = null, dyr = null;
+      if (type === 'reeded' || type === 'water') { dxc = new Float32Array(gw); for (let x = 0; x < gw; x++) dxc[x] = amp * Math.sin(x * k); }   // 1-D fields: precompute the per-column offset
+      if (type === 'reeded') { jc = new Float32Array(gw); for (let x = 0; x < gw; x++) jc[x] = 1 + amp * k * Math.cos(x * k); }
+      if (type === 'water') { dyr = new Float32Array(gh); for (let y = 0; y < gh; y++) dyr[y] = amp * Math.sin(y * k); }
+      for (let y = 0; y < gh; y++) {
+        for (let x = 0; x < gw; x++) {
+          let dx, dy, jac;
+          if (type === 'reeded') { dx = dxc[x]; dy = 0; jac = jc[x]; }
+          else if (type === 'water') { dx = dyr[y]; dy = dxc[x]; jac = 1; }
+          else { const rx = x - cx, ry = y - cy, r = Math.sqrt(rx * rx + ry * ry) || 1, s = Math.sin(r * k); dx = amp * s * rx / r; dy = amp * s * ry / r; jac = 1 + amp * k * Math.cos(r * k); }   // fresnel: radial
+          let sx = (x + dx) | 0, sy = (y + dy) | 0;
+          sx = sx < 0 ? 0 : sx >= gw ? gw - 1 : sx; sy = sy < 0 ? 0 : sy >= gh ? gh - 1 : sy;   // an ideal lens has no edge; clamp keeps the sample on-slab
+          const si = (sy * gw + sx) << 2, oi = (y * gw + x) << 2, b = bright(jac);
+          o[oi] = Math.min(255, src[si] * b); o[oi + 1] = Math.min(255, src[si + 1] * b); o[oi + 2] = Math.min(255, src[si + 2] * b); o[oi + 3] = src[si + 3];
+        }
+      }
+      lc.putImageData(out, 0, 0);
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(lensC, 0, 0, gw, gh, 0, 0, cv.width, cv.height); ctx.restore();
+    }
     if (guidesOn) drawGuides();
     if (guidesOn && G.warp > 0 && tool === 'cloud') drawWarpGuide();   // show the source while you drag it
     if (tool === 'light') drawLightGuide();                            // show the light while you aim it
@@ -2722,7 +2759,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
     pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
     pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : 'order'); pv('data-unit', T.units);
-    pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant);
+    pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType);
     const tog = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', !!on); };
     tog('pen-pressure', NEXT.pressure); tog('pen-tilt', NEXT.tilt); tog('guides', guidesOn);
     tog('laytiles', layTiles); tog('t-joints', T.joints); tog('m-hover', hoverMag); tog('warp-holdmajor', layAt('major').warp === 0);
@@ -2855,6 +2892,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
   for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
   for (const b of document.querySelectorAll('[data-var]')) b.addEventListener('click', () => { NEXT.variant = b.dataset.var; press('[data-var]', b); });   // variant applies to the NEXT line
+  for (const b of document.querySelectorAll('[data-lens]')) b.addEventListener('click', () => { G.lensType = b.dataset.lens; press('[data-lens]', b); redraw(true); });   // lens profile — whole slab, at once
   document.getElementById('colour-toggle').addEventListener('click', () => { const p = document.getElementById('colour-panel'), b = document.getElementById('colour-toggle'), show = p.hidden; p.hidden = !show; b.setAttribute('aria-pressed', show); b.textContent = show ? 'Hide colour editor' : 'Show colour editor'; });
   document.getElementById('colour-fromfam').addEventListener('click', () => { seedColours(fam); recolour(); mountEditor(); redraw(true); });   // adopt the current family's palette
   document.getElementById('warp-holdmajor').addEventListener('click', () => { const L = layAt('major'); L.warp = L.warp === 0 ? 1 : 0; document.getElementById('warp-holdmajor').setAttribute('aria-pressed', L.warp === 0); redraw(true); });
