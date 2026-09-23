@@ -450,6 +450,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   };
   const beamPts = pts => !spotOn || pts.some(p => Math.hypot(p[0] - G.lightX, p[1] - G.lightY) <= G.spotR);   // does a line/edge touch the beam?
   const hidden = new Set();   // 7th dimension: MARKS tagged "don't render" (one mark = one vein/web/seam, whatever its sub-lines) — skipped by the renderer AND the hit-test, recovered only from the Hidden list
+  let folders = [];   // spectrum workspaces: { name, v (spectrum value), c (emission colour), members: [layer keys] } — batch-tag + enter-to-filter; pure author-side organisation
   function seedColours(f) {                                // seed the colour OVERRIDES from a family's palette
     const F = FAM[f], [gr, gg, gb] = hexRGB(F.ground), light = 0.299 * gr + 0.587 * gg + 0.114 * gb > 128;
     OVR.ground = F.ground; OVR.major = F.vein; OVR.minor = F.vein; OVR.web = F.web; OVR.micro = F.speck;
@@ -2599,6 +2600,39 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
       layEl.appendChild(hp);
     }
+    buildFolderUI();
+  }
+  // FOLDERS: task groups for a spectrum. A folder = layers you care about + a spectrum value + an emission colour.
+  // "tag" batch-authors them all at that value; "enter" sets the light there and selects them (the editor filters
+  // to the selection). Pure author-side organisation — members keep their own tokens; deleting a folder frees nothing.
+  function buildFolderUI() {
+    const fp = document.createElement('div'); fp.className = 'hidden-panel';
+    fp.innerHTML = '<span class="lbl">Folders · spectrum workspaces</span>';
+    folders.forEach((F, fi) => {
+      const it = document.createElement('div'); it.className = 'hidden-item';
+      const nm = document.createElement('span'); nm.style.cursor = 'pointer'; nm.title = 'Double-tap to rename';
+      nm.textContent = F.name + ' · ' + (F.v === 0 ? 'daylight' : '@' + (+F.v).toFixed(2)) + ' · ' + F.members.length;
+      nm.addEventListener('dblclick', () => { const inp = document.createElement('input'); inp.className = 'nm-edit'; inp.value = F.name; nm.replaceWith(inp); inp.focus(); inp.select(); const done = () => { const v = inp.value.trim(); if (v) F.name = v; buildLayerUI(); saveLocal(); }; inp.addEventListener('blur', done); inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); else if (e.key === 'Escape') buildLayerUI(); }); });
+      const grp = document.createElement('span'); grp.className = 'grp';
+      const col = document.createElement('input'); col.type = 'color'; col.value = F.c; col.title = 'Emission colour for this folder'; col.style.cssText = 'width:26px;height:22px;padding:0;border:none;background:none';
+      col.addEventListener('input', () => { F.c = col.value; saveLocal(); });
+      const ent = document.createElement('button'); ent.type = 'button'; ent.textContent = 'enter'; ent.title = 'Set the light to this spectrum and select these layers (the editor filters to them)';
+      ent.addEventListener('click', () => { setSpectrum(F.v); selected.clear(); for (const k of F.members) if (layAt(k)) selected.add('lay:' + k); registerSelectedColours(); if (ed) ed.values = { ...OVR }; buildLayerUI(); redraw(false); hint('Entered "' + F.name + '" — light at ' + (F.v === 0 ? 'daylight' : F.v) + ', its layers selected.'); });
+      const tag = document.createElement('button'); tag.type = 'button'; tag.textContent = 'tag'; tag.title = 'Give every layer here this emission at this spectrum, at once';
+      tag.addEventListener('click', () => { for (const k of F.members) { const key = 'lay:' + k, arr = OVR_uv[key] || (OVR_uv[key] = []), en = arr.find(x => Math.abs(x.v - F.v) <= SPX_TOL); if (en) en.c = F.c; else arr.push({ v: F.v, c: F.c }); } saveLocal(); redraw(false); hint('Tagged ' + F.members.length + ' layers at ' + (F.v === 0 ? 'daylight' : F.v) + '.'); });
+      const del = document.createElement('button'); del.type = 'button'; del.textContent = '×'; del.title = 'Delete the folder (its layers keep their tokens)';
+      del.addEventListener('click', () => { folders.splice(fi, 1); buildLayerUI(); saveLocal(); });
+      grp.append(col, ent, tag, del); it.append(nm, grp); fp.appendChild(it);
+    });
+    const addF = document.createElement('button'); addF.type = 'button'; addF.textContent = '+ folder from selected layers'; addF.style.cssText = 'font-size:12px; margin-top:2px; color:var(--dim)';
+    addF.addEventListener('click', () => {
+      const mem = [...selected].filter(k => k.startsWith('lay:')).map(k => k.slice(4));
+      if (!mem.length) { hint('Select the layers for the folder first (their ▢ boxes), then + folder.'); return; }
+      folders.push({ name: 'Folder ' + (folders.length + 1), v: lightSpectrum, c: '#33ff88', members: mem });
+      buildLayerUI(); saveLocal();
+    });
+    fp.appendChild(addF);
+    layEl.appendChild(fp);
   }
   function syncLayerUI() {
     for (const row of layEl.querySelectorAll('.lay')) {
@@ -2625,7 +2659,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return { v: 1, fam, tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
              layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed })), soloLay, activeLayer: { ...activeLayer },
-             OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden],
+             OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden], folders: folders.map(F => ({ name: F.name, v: F.v, c: F.c, members: [...F.members] })),
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
   }
   function deserialize(o) {
@@ -2663,6 +2697,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (o.OVR_uv) for (const k in o.OVR_uv) { const e = o.OVR_uv[k];   // normalise to a LIST of {v,c}: v54 plain colour → [{v:-1,c}], v55 single {v,c} → [it], v56+ already a list
       OVR_uv[k] = Array.isArray(e) ? e : (typeof e === 'string' ? [{ v: -1, c: e }] : [e]); }
     hidden.clear(); if (Array.isArray(o.hidden)) for (const k of o.hidden) hidden.add(k);   // the 7th dimension travels with the slab
+    folders = Array.isArray(o.folders) ? o.folders.map(F => ({ name: F.name || 'Folder', v: F.v || 0, c: F.c || '#33ff88', members: [...(F.members || [])] })) : [];
     for (const k in perItem) delete perItem[k]; if (o.perItem) Object.assign(perItem, o.perItem);
     registerSpeckGroups(); registerSelectedColours(); recolour();
     if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor

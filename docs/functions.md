@@ -241,6 +241,11 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   live ordinal, recomputed here, never stored) and the name is **double-tap-to-rename** (edits `label`; key
   and tag untouched). The Selected bar's **hide** adds the artifact's **mark** to `hidden` (a whole vein +
   its sub-lines, by mark); the **Hidden list** below is the only way back (each row un-hides). *(2078/2094/2077)*
+- `buildFolderUI()` — the **Folders** panel: spectrum workspaces (`folders` = `{name, v, c, members}`). **+ folder
+  from selected layers** captures the selection at the current `lightSpectrum`; a row's **tag** batch-authors
+  `OVR_uv[member] += {v,c}` for every member at once, **enter** sets the light to the folder's `v` and selects its
+  members (so the editor filters to them via "selected for display"), the swatch sets `c`, double-tap renames.
+  Pure author-side organisation — members keep their own tokens; deleting a folder frees nothing. Persists with the slab.
 
 ## Colour layer
 
