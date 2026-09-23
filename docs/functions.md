@@ -79,7 +79,8 @@ Dispatched by `applyMark(m, out)` on `m.kind`. *(1397)*
   set** — `ADJ` (blur/hue/sat/bright/contrast/weight); `adjTokens(base,label)` generates the `<key>:<name>`
   number tokens per selected target; `adjOf(id,layer,bucket,name,def)` resolves one up the granularity
   (artifact→layer→bucket→default); `filterOf(...)` composes the five filters into a `ctx.filter` string
-  applied per vein/web edge; `weightOf(...)` is the line-width multiplier (not yet wired into `runs`). Row
+  applied per vein/web edge and per speck/drusy **field** (per layer, `OVR['lay:<layer>']` also gives a
+  field its colour); `weightOf(...)` scales the stroke width via `runs`'s `wmul`. Fog is left untinted. Row
   select boxes drive membership. Fog is deep-copied in the incremental clone so a fog push never corrupts the base field.
 - `knotGeom(m)` / `woodGrain(F, knots)` / `trace(x, y, sg)` — a wood knot, the grain field flowing
   around knots, and one traced grain streamline. *(1290/1293/1315)*

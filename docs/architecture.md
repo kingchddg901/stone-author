@@ -145,9 +145,10 @@ selected keys:
   Each is a `<key>:<name>` number token (e.g. `id:L1:hue`, `lay:major#2:blur`), generated per selected
   target with VA-style ranges (blur 0–8, hue ±180, the multipliers 0–2). At render each item resolves every
   adjustment up the granularity — **artifact → its layer → its bucket → default** (`adjOf`) — and the
-  filters compose into one `ctx.filter` string (`filterOf`). So the *same* set tunes a whole layer or a
-  single vein, and a vein only stores what it overrides. (Applied to veins and web now; speck fields and the
-  weight multiplier are the finishing touches.)
+  filters compose into one `ctx.filter` string (`filterOf`); weight scales the stroke width through `runs`.
+  So the *same* set tunes a whole layer or a single vein, and a vein only stores what it overrides. Applied
+  to veins, web, and the **speck / drusy fields** (per layer, with per-layer field colour); the **fog stays
+  untinted by design** (a haze, no colour token). The coat tier (specular/subsurface/edge-light) rides on top.
 
 This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 

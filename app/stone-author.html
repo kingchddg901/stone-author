@@ -1917,14 +1917,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (!ident) g2d.filter = filterOf(null, wl, 'web');               // per web-layer adjustments
       g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp(wl)); g2d.lineWidth = e.width; g2d.stroke(); g2d.filter = 'none';
     } fxOff(_fx); }
-    if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))), nv = Math.max(1, Math.min(4, Math.round(G.speckSubs))); for (const s of geo.specks) {
+    if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))), nv = Math.max(1, Math.min(4, Math.round(G.speckSubs))); if (!ident) g2d.filter = filterOf(null, 'micro', 'micro'); for (const s of geo.specks) {
       const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
       g2d.globalAlpha = (ident ? 0.9 : s.lum) * (ident ? 1 : layOp('micro'));
       // Stone: the speck's colour = its sub-variant (micro:g.v) -> group (micro:g) -> the micro layer.
       // Angle: points as hue (axial); Identity: how far the speck was moved.
       const g_ = Math.floor((s.u || 0) * ng), v_ = Math.floor((s.u2 || 0) * nv),
             mkey = nv > 1 ? 'micro:' + g_ + '.' + v_ : (ng > 1 ? 'micro:' + g_ : null),
-            mcol = mkey && COL[mkey] !== undefined ? COL[mkey] : COL.micro;
+            mcol = OVR['lay:' + (s.layer || 'micro')] || (mkey && COL[mkey] !== undefined ? COL[mkey] : COL.micro);   // per-layer speck colour wins over group/bucket
       g2d.fillStyle = !ident ? mcol
         : angleView ? (s.el > 1.3 ? `hsl(${Math.round(((2 * s.ang * 180 / Math.PI) % 360 + 360) % 360)} 78% 58%)` : '#3a3c48')
         : s.ground ? `hsl(${Math.round(210 - 190 * Math.min(1, Math.hypot(s.x - s.x0, s.y - s.y0) / 0.008))} 80% 55%)`
@@ -1936,19 +1936,20 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         if (q) g2d.lineTo(px, py); else g2d.moveTo(px, py);
       }
       g2d.closePath(); g2d.fill();
-    } fxOff(_fx); }
+    } g2d.filter = 'none'; fxOff(_fx); }
     if (layVis('drusy') && geo.drusy.length) {            // crystal sparkle: pockets (primary group) -> crystals (secondary variant)
       const bright = G.drusyBright, _fx = fxOn('drusy', COL.drusy, ident),
             dng = Math.max(1, Math.min(5, Math.round(G.drusyGroups))), dnv = Math.max(1, Math.min(4, Math.round(G.drusySubs)));
+      if (!ident) g2d.filter = filterOf(null, 'drusy', 'drusy');
       for (const s of geo.drusy) {
         g2d.globalAlpha = ident ? 0.9 : Math.min(1, s.lum * bright);
         const dg = Math.floor((s.dgu || 0) * dng), dv = Math.floor((s.dvu || 0) * dnv),
               dk = dnv > 1 ? 'drusy:' + dg + '.' + dv : (dng > 1 ? 'drusy:' + dg : null),
-              dc = dk && COL[dk] !== undefined ? COL[dk] : COL.drusy;
+              dc = OVR['lay:' + (s.layer || 'drusy')] || (dk && COL[dk] !== undefined ? COL[dk] : COL.drusy);
         g2d.fillStyle = ident ? idColour('drusy', s.lum) : dc;
         g2d.beginPath(); g2d.arc(s.x, s.y, s.r, 0, 6.2832); g2d.fill();
       }
-      fxOff(_fx);
+      g2d.filter = 'none'; fxOff(_fx);
     }
     if (layVis('styl') && geo.styl.length) {              // dark toothy seams, sharp corners (miter), over the ground and under the veins
       const seam = COL.styl, _fx = fxOn('styl', COL.styl, ident);
@@ -1969,8 +1970,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (const L of order) if (L.halo && layVis(lk(L))) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
     }
     const vcol = L => { const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };   // per-id → per-layer token (flat OVR store) → the bucket
-    if (!ident) for (const L of order) if (layVis(lk(L))) { g2d.filter = filterOf(L.id, L.layer, L.major ? 'major' : 'minor'); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true); g2d.filter = 'none'; }  // shoulder
-    for (const L of order) if (layVis(lk(L))) { const _fx = fxOn(lk(L), vcol(L), ident); if (!ident) g2d.filter = filterOf(L.id, L.layer, L.major ? 'major' : 'minor'); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false); g2d.filter = 'none'; fxOff(_fx); }  // per-item adjustments via ctx.filter
+    if (!ident) for (const L of order) if (layVis(lk(L))) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }  // shoulder
+    for (const L of order) if (layVis(lk(L))) { const bk = L.major ? 'major' : 'minor'; const _fx = fxOn(lk(L), vcol(L), ident); if (!ident) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false, ident ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; fxOff(_fx); }  // per-item adjustments (ctx.filter + weight)
   }
   function ellipse(K, f, jit) {
     ctx.beginPath();
@@ -2084,7 +2085,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // Draw a line in runs of ~6 segments, skipping its breaks. The shoulder is one width per run;
   // the core follows the swell and pinch.
-  function runs(L, colour, fixedWidth, alpha, shoulder) {
+  function runs(L, colour, fixedWidth, alpha, shoulder, wmul) {
     const n = L.w.length, CH = shoulder ? 24 : 6;
     for (let i = 0; i < n; i += CH) {
       const j = Math.min(n, i + CH);
@@ -2098,7 +2099,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (!c) continue;
       let lv = 0;
       if (L.lean) { for (let q = i; q < j; q++) lv += L.lean[q]; lv /= (j - i); }
-      g2d.lineWidth = fixedWidth != null ? fixedWidth * (1 + 2.5 * lv) : (wsum / c) * (1 - 0.35 * lv);
+      g2d.lineWidth = (fixedWidth != null ? fixedWidth * (1 + 2.5 * lv) : (wsum / c) * (1 - 0.35 * lv)) * (wmul || 1);
       g2d.strokeStyle = colour((L.cum[i] + L.cum[j]) / 2 / L.total);
       g2d.globalAlpha = Math.min(1, alpha * (shoulder ? 1 + 1.4 * lv : 1 - 0.3 * lv)); g2d.stroke();
     }
