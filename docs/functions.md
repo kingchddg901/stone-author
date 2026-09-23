@@ -211,8 +211,14 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   `occ(c,t) = t + (1−t)(1−c)` drops the light toward each bucket's transmittance where it's covered (veins ~0.05
   nearly opaque, seams 0.12, web 0.22, specks 0.45), a dark matrix passes less (`0.18 + 0.82·lum`), and a soft
   hot-centre sits toward `G.lightX/lightY`. Colour = `lightRGB()` (Light temperature). Drawn under the view
-  transform (pans/zooms). The **lens** still runs over it (glass-over-backlight). First cut — emission-compose
-  (self-luminous inclusions glowing through) and scatter/bloom are the next tunes. `G.backlight` persists in `G`.
+  transform (pans/zooms). The **lens** still runs over it (glass-over-backlight). Then two additive passes:
+  **emission-compose** — reuse the uv `emit` path (paint `paintStoneContent` with `uvMode` forced on into `emitC`,
+  clip the UV_DARK floor, add with `lighter`) so self-luminous inclusions glow *through* the backlight at the
+  current `lightSpectrum` (a no-op at daylight; dark stones need this — it's where the glowing veins come from);
+  and a **scatter/bloom** (two blurred `lighter` copies of the lit result) so the glow reads as light, not tint.
+  Backlight takes **precedence over uv** (`backlit` no longer excludes `uvMode`), so emitters compose at the dial
+  value while the transillumination still shows. Per-bucket `t` are defaults; per-layer `t` is the open seam.
+  `G.backlight` persists in `G`.
 - **Lens top-coat** (`G.lens`, `G.lensType`, `G.lensPitch`) — the last coat pass in stone view: an ideal glass
   relief on the very top that **refracts** what lies beneath. Real per-pixel refraction (a mesh-blit warp tears
   at any real amplitude; a **gather** cannot), done on a downscaled snapshot in `lensC` (≤640px, upscaled back —

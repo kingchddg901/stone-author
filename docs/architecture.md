@@ -201,10 +201,13 @@ stack needs no change. `light = backlightColour · intensity · bodyTransmit · 
 covered bucket drops the light toward its transmittance `tᵦ` (veins nearly opaque → dark veils; specks semi; the
 pale matrix glows; a dense/dark stone blocks most of it, which is why black Marquina goes nearly dark — correct).
 This is the transmission dual of black-light emission: black light turns the external light down so *emitters*
-dominate; back light drives light through from behind so *occlusion* shapes it. First cut ships occlusion +
-glow; **emission-compose** (self-luminous inclusions glowing through, which is what a dark stone needs) and a
-proper **scatter/bloom** are the next tunes. Per-bucket transmittances are defaults for now — the seam to make
-each *layer* declare its own `{emission, transmittance, scatter}` is exactly this fold with per-layer `tᵦ`.
+dominate; back light drives light through from behind so *occlusion* shapes it — and the two now **compose**.
+On top of occlusion + glow the fold adds **emission** (reuse the `emit` path — self-luminous inclusions glow
+*through* the backlight at the current spectrum, which is what a dark stone like Marquina needs to sing) and a
+**scatter/bloom** so the glow reads as light rather than a tint. Back light takes precedence over uv, so you can
+sit at an authored spectrum value and see the transillumination *and* the fluorescence at once. Per-bucket
+transmittances are defaults for now — the open seam is to let each *layer* declare its own
+`{emission, transmittance, scatter}`, which is exactly this same fold with a per-layer `tᵦ`.
 
 This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 

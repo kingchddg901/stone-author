@@ -411,6 +411,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const ssC = document.createElement('canvas');            // subsurface scratch: the feature high-pass, warmed, added back as internal glow
   const lensC = document.createElement('canvas');          // lens scratch: a downscaled snapshot the top-coat refracts per-pixel, then upscales back
   const backC = document.createElement('canvas');          // back-light scratch: the transilluminated fold, built from per-bucket coverage
+  const emitC = document.createElement('canvas');          // back-light emission scratch: self-luminous inclusions, added over the transillumination
   const H = 0.625;                                     // frame height, in frame widths
   // THE SLAB IS 8 x 5 FT: his 5 ft slab, sized to this 16:10 frame. Metric is one multiply away.
   const SLAB_FT = 8, FT_MM = 304.8;                    // frame width in feet; feet to mm
@@ -1844,12 +1845,31 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     bc.putImageData(out, 0, 0);
     g2d.imageSmoothingEnabled = true; g2d.drawImage(backC, 0, 0, gw, gh, 0, 0, 1, H);   // place under the current view transform (respects pan/zoom)
+    // EMISSION-COMPOSE: self-luminous inclusions glow THROUGH the backlight (direction-independent), reusing the
+    // uv emit path. At daylight spectrum nothing emits, so this is a no-op; set the dial to an authored value to light them.
+    if (emitC.width !== gw || emitC.height !== gh) { emitC.width = gw; emitC.height = gh; }
+    const ex = emitC.getContext('2d');
+    ex.setTransform(1, 0, 0, 1, 0, 0); ex.globalAlpha = 1; ex.filter = 'none'; ex.globalCompositeOperation = 'source-over';
+    ex.fillStyle = '#000'; ex.fillRect(0, 0, gw, gh);
+    ex.setTransform(gw, 0, 0, gw, 0, 0); ex.lineCap = 'round'; ex.lineJoin = 'round';   // slab 0..1 → gw px (gh = gw·H)
+    const sg = g2d, su = uvMode; g2d = ex; uvMode = true; paintStoneContent(false, false); uvMode = su; g2d = sg;   // paints emitters as emit()||UV_DARK on black
+    const ed = ex.getImageData(0, 0, gw, gh), da = ed.data;                              // clip the near-black UV_DARK floor so ONLY real emission is added
+    for (let i = 0; i < da.length; i += 4) if (da[i] + da[i + 1] + da[i + 2] < 60) { da[i] = da[i + 1] = da[i + 2] = 0; }
+    ex.putImageData(ed, 0, 0);
+    const prevOp = g2d.globalCompositeOperation; g2d.globalCompositeOperation = 'lighter';
+    g2d.drawImage(emitC, 0, 0, gw, gh, 0, 0, 1, H); g2d.globalCompositeOperation = prevOp;
+    // SCATTER / BLOOM: a real backlight bleeds — soft additive bloom of the whole lit result so it reads as light, not tint
+    g2d.save(); g2d.setTransform(1, 0, 0, 1, 0, 0); g2d.globalCompositeOperation = 'lighter';
+    g2d.globalAlpha = 0.3; g2d.filter = `blur(${5 * dpr}px)`; g2d.drawImage(cv, 0, 0);
+    g2d.globalAlpha = 0.18; g2d.filter = `blur(${11 * dpr}px)`; g2d.drawImage(cv, 0, 0);
+    g2d.filter = 'none'; g2d.globalAlpha = 1; g2d.globalCompositeOperation = 'source-over'; g2d.restore();
   }
   function draw() {
     const F = FAM[fam], ident = view !== 'stone', angleView = view === 'angle';
-    const backlit = !ident && !uvMode && !layTiles && G.backlight > 0;   // back light replaces the daylight body + its front-lit coat passes
+    const backlit = !ident && !layTiles && G.backlight > 0;   // back light replaces the daylight body + its front-lit coat passes; it takes precedence over uv so emitters can compose at the current spectrum
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
     if (ident) { ctx.fillStyle = '#0c0d11'; ctx.fillRect(0, 0, cv.width, cv.height); }
+    else if (backlit) { ctx.fillStyle = '#0b0b0e'; ctx.fillRect(0, 0, cv.width, cv.height); }   // dark surround behind the transilluminated slab
     else if (uvMode) { ctx.fillStyle = UV_DARK; ctx.fillRect(0, 0, cv.width, cv.height); }   // BLACK LIGHT: the stone body goes dark, only fluorescence glows
     else {                                               // base layer is the ground: neutral behind it, ground on top at its opacity
       ctx.fillStyle = STONE_BG; ctx.fillRect(0, 0, cv.width, cv.height);
@@ -1860,7 +1880,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     if (layTiles) { drawTiles(F); paintLive(); if (tool === 'light') drawLightGuide(); ctx.globalAlpha = 1; stat(); return; }
     if (backlit) paintBacklit(); else paintStoneContent(ident, angleView);
-    if (!ident && uvMode) {                              // EMISSION BLOOM: fluorescence glows; the black ground adds ~nothing, so additive is safe
+    if (!ident && uvMode && !backlit) {                  // EMISSION BLOOM: fluorescence glows; the black ground adds ~nothing, so additive is safe (backlit does its own emission)
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.55; ctx.filter = `blur(${3 * dpr}px)`; ctx.drawImage(cv, 0, 0);
