@@ -191,7 +191,7 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   (`lightAngle`) is shared — tile-edge relief will read the same angle. `Specular` / `Light angle` ground
   sliders, plus a **feature glint**: the feature high-pass in `ssC`, masked by the same hotspot radial
   gradient (so features glint only where the light sweeps) and `screen`-composited — veins catch the light.
-- **Spectrum engine** (`lightSpectrum`, `OVR_uv` `{v,c}`, `emit(id,layer,x,y)`, `beamPts`, `SPX_TOL`) — a
+- **Spectrum engine** (`lightSpectrum`, `OVR_uv` = key → **list** of `{v,c}`, `emit(id,layer,x,y)`, `beamPts`, `SPX_TOL`) — a
   stone-view mode when the light is off daylight (`uvMode = lightSpectrum !== 0`). The base fills near-black
   (`UV_DARK`), daylight body layers + coat passes are skipped, and `emit` returns an artifact's emission `c`
   **only when `|lightSpectrum − v| ≤ SPX_TOL`** (index match) **and** (if `spotOn`) it's inside the beam —

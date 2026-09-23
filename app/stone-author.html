@@ -441,10 +441,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // {v, c} — the artifact lights with colour c only when the light's value is within SPX_TOL of its activation value
   // v. With the SPOTLIGHT on it must also fall inside the beam (spotR around G.lightX,lightY). uvMode = a light is on.
   const emit = (id, layer, x, y) => {
-    const e = (id != null && OVR_uv['id:' + id]) || OVR_uv['lay:' + layer];
-    if (!e || Math.abs(lightSpectrum - e.v) > SPX_TOL) return null;                                  // spectral: value match
-    if (spotOn && x != null && Math.hypot(x - G.lightX, y - G.lightY) > G.spotR) return null;        // spatial: inside the beam
-    return e.c;
+    const arr = (id != null && OVR_uv['id:' + id]) || OVR_uv['lay:' + layer];   // a LIST of {v,c} — an artifact can glow in several spectra
+    if (!arr) return null;
+    const en = arr.find(e => Math.abs(lightSpectrum - e.v) <= SPX_TOL);         // spectral: the entry whose value the light matches
+    if (!en) return null;
+    if (spotOn && x != null && Math.hypot(x - G.lightX, y - G.lightY) > G.spotR) return null;   // spatial: inside the beam
+    return en.c;
   };
   const beamPts = pts => !spotOn || pts.some(p => Math.hypot(p[0] - G.lightX, p[1] - G.lightY) <= G.spotR);   // does a line/edge touch the beam?
   const hidden = new Set();   // 7th dimension: MARKS tagged "don't render" (one mark = one vein/web/seam, whatever its sub-lines) — skipped by the renderer AND the hit-test, recovered only from the Hidden list
@@ -2565,8 +2567,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // colour bakes onto each selected key's flat token (OVR[key], key already 'lay:<layer>' or 'id:<vein>');
     // render reads them, the kit resolves them for the editor, ed.values re-syncs so an open editor won't clobber.
     const colourSel = fn => { if (!selected.size) { hint('Select something first (the ▢ box on a row, or tap a vein with Tune).'); return; } for (const k of selected) fn(k); if (!uvMode) { recolour(); if (ed) ed.values = { ...OVR }; } saveLocal(); redraw(false); };   // in black light the swatch authors the UV palette
-    sa.querySelector('[data-act=selcol]').addEventListener('input', e => colourSel(k => { if (uvMode) OVR_uv[k] = { v: lightSpectrum, c: e.target.value }; else OVR[k] = e.target.value; }));   // emission activates at the current light value
-    sa.querySelector('[data-act=uncol]').addEventListener('click', () => colourSel(k => { delete (uvMode ? OVR_uv : OVR)[k]; }));
+    sa.querySelector('[data-act=selcol]').addEventListener('input', e => colourSel(k => {   // author the emission at the CURRENT light value (add or update that entry)
+      if (!uvMode) { OVR[k] = e.target.value; return; }
+      const arr = OVR_uv[k] || (OVR_uv[k] = []); const en = arr.find(x => Math.abs(x.v - lightSpectrum) <= SPX_TOL);
+      if (en) en.c = e.target.value; else arr.push({ v: lightSpectrum, c: e.target.value });
+    }));
+    sa.querySelector('[data-act=uncol]').addEventListener('click', () => colourSel(k => {   // clear only THIS spectrum's entry (in daylight, clear the whole colour)
+      if (!uvMode) { delete OVR[k]; return; }
+      const arr = OVR_uv[k]; if (!arr) return; const i = arr.findIndex(x => Math.abs(x.v - lightSpectrum) <= SPX_TOL);
+      if (i >= 0) arr.splice(i, 1); if (!arr.length) delete OVR_uv[k];
+    }));
     sa.querySelector('[data-act=wfollow]').addEventListener('click', () => { applySel(L => L.warp = 1, true); syncLayerUI(); });
     sa.querySelector('[data-act=whold]').addEventListener('click', () => { applySel(L => L.warp = 0, true); syncLayerUI(); });
     const markOfKey = k => { const id = k.slice(3); if (id[0] === 'W' || id[0] === 'S') return +id.slice(1); const L = geo.byId.get(id); return L ? L.mark : null; };   // any artifact key → its mark
@@ -2650,7 +2660,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const k in OVR) delete OVR[k];                        // colour travels with the slab
     if (o.OVR) Object.assign(OVR, o.OVR); else if (o.COL) Object.assign(OVR, o.COL); else seedColours(fam);   // older saves stored resolved values as `COL`
     for (const k in OVR_uv) delete OVR_uv[k];
-    if (o.OVR_uv) for (const k in o.OVR_uv) { const e = o.OVR_uv[k]; OVR_uv[k] = (typeof e === 'string') ? { v: -1, c: e } : e; }   // v54 saves stored a plain colour → activate at −1 (UV); newer are {v,c}
+    if (o.OVR_uv) for (const k in o.OVR_uv) { const e = o.OVR_uv[k];   // normalise to a LIST of {v,c}: v54 plain colour → [{v:-1,c}], v55 single {v,c} → [it], v56+ already a list
+      OVR_uv[k] = Array.isArray(e) ? e : (typeof e === 'string' ? [{ v: -1, c: e }] : [e]); }
     hidden.clear(); if (Array.isArray(o.hidden)) for (const k of o.hidden) hidden.add(k);   // the 7th dimension travels with the slab
     for (const k in perItem) delete perItem[k]; if (o.perItem) Object.assign(perItem, o.perItem);
     registerSpeckGroups(); registerSelectedColours(); recolour();
