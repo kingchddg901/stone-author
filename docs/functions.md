@@ -172,11 +172,19 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 
 ## Layers
 
-- `layers` / `layAt(k)` — the render-layer list and lookup. *(455)*
+- `layers` / `layAt(k)` — the layer list and lookup. Fixed passes use `key === bucket`; user layers use a
+  `bucket#n` key. Each has `{key, label, bucket, on, op, warp}`. *(455)*
 - `layVis(k)` — visibility, honouring solo (solo keeps `base` under the soloed layer). *(459)*
 - `layOp(k)` — a layer's opacity. *(460)*
-- `buildLayerUI()` / `syncLayerUI()` / `relayer()` — build the Layers panel, reflect state, and
-  repaint (invalidating the tile offscreen). *(2078/2094/2077)*
+- `activeLayer` — the active layer per bucket (`{major, minor, web}`); a mark files into `activeLayer[its
+  bucket]` at commit. `addLayer(bucket)` appends a layer (grouped after its bucket's last) and makes it
+  active; `setActiveLayer(key)` picks the active one. *(≈475)*
+- `stampLayers(out)` — after every build, tag each line (`L.layer`) and web edge (`e.layer`) with its
+  mark's layer, falling back to the bucket for legacy marks or a deleted layer. Render (`lk`) and both
+  warps read this, so eye/opacity/warp are per-layer while export still buckets by kind. *(≈1590)*
+- `buildLayerUI()` / `syncLayerUI()` / `relayer()` — build the Layers panel (eye · name=make-active ·
+  solo · **W** warp-hold · opacity, plus the **+ layer** buttons), reflect state, and repaint. Rebuilt on
+  `deserialize` so restored user layers reappear. *(2078/2094/2077)*
 
 ## Colour layer
 

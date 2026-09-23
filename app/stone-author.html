@@ -39,14 +39,20 @@
   .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 68ch; }
   .note b { color: var(--text); font-weight: 500; }
   .layers { display: grid; gap: 5px; width: 100%; max-width: 460px; }
-  .lay { display: grid; grid-template-columns: 30px minmax(66px, 1fr) 30px minmax(70px, 110px) 3ch;
+  .lay { display: grid; grid-template-columns: 30px minmax(60px, 1fr) 30px 30px minmax(64px, 100px) 3ch;
          align-items: center; gap: 8px; }
-  .lay .nm { font-size: 13px; color: var(--text); }
+  .lay .nm { font-size: 13px; color: var(--text); cursor: pointer; }
   .lay.off .nm { color: var(--dim); }
-  .lay .eye, .lay .solo { padding: 4px 0; text-align: center; font-size: 13px; line-height: 1; }
+  .lay.active .nm { color: #8a8de0; font-weight: 600; }
+  .lay.active .nm::before { content: '\25B8 '; }          /* triangle marks the active layer (new marks land here) */
+  .lay .eye, .lay .solo, .lay .warp { padding: 4px 0; text-align: center; font-size: 13px; line-height: 1; }
   .lay .eye::before { content: '\25C9'; }                 /* filled disc = visible */
   .lay .eye[aria-pressed="false"]::before { content: '\25CB'; color: var(--dim); }   /* ring = hidden */
   .lay .solo[aria-pressed="true"] { color: #f0c46a; border-color: var(--on-line); }
+  .lay .warp[aria-pressed="true"] { color: #6fd3c0; border-color: var(--on-line); }  /* W lit = this layer follows warp */
+  .lay .warp[aria-pressed="false"] { color: var(--dim); }                            /* W dim = held still */
+  .addlay { display: flex; gap: 8px; margin-top: 8px; }
+  .addlay button { flex: 1; font-size: 12px; padding: 5px 0; color: var(--dim); }
   .lay output { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
                 text-align: right; font-variant-numeric: tabular-nums; }
   .lay input[type=range] { width: 100%; accent-color: #8a8de0; }
@@ -491,6 +497,22 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   ];
   const layAt = k => layers.find(L => L.key === k);
   let soloLay = null;
+  // LAYERS WITHIN A BUCKET: a bucket (major/minor/…) can hold many layers; a mark files into the ACTIVE
+  // layer of its bucket, and each layer carries its own eye/opacity/warp. User layers use a '#'-suffixed
+  // key (major#1); the plain bucket key (major) is the default layer. Bucket = export target (per line, by
+  // kind); layer = authoring group (orthogonal — a layer can hold lines of more than one bucket).
+  const activeLayer = { major: 'major', minor: 'minor', web: 'web' };
+  let layerSeq = 0;
+  function addLayer(bucket) {
+    const key = bucket + '#' + (++layerSeq);
+    const nm = { major: 'Major', minor: 'Minor', web: 'Web', micro: 'Micro', base: 'Base' }[bucket] || bucket;
+    const L = { key, label: nm + ' ' + (layers.filter(x => x.bucket === bucket).length + 1), bucket, on: true, op: 1, warp: 1 };
+    let idx = -1; for (let i = 0; i < layers.length; i++) if (layers[i].bucket === bucket) idx = i;   // group after the bucket's last layer
+    layers.splice(idx + 1, 0, L); activeLayer[bucket] = key;
+    if (typeof buildLayerUI === 'function') buildLayerUI();
+    return key;
+  }
+  function setActiveLayer(key) { const L = layAt(key); if (L) { activeLayer[L.bucket] = key; if (typeof syncLayerUI === 'function') syncLayerUI(); } }
   // Solo keeps the BASE ground under the soloed layer, so an isolated feature shows ON the marble
   // (a dark seam on a near-black neutral was invisible); everything else drops away.
   const layVis = k => soloLay ? (k === soloLay || k === 'base') : (layAt(k) ? layAt(k).on : true);
@@ -1489,8 +1511,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     };
     const wp = (q, w) => { const [a, b] = disp(q[0], q[1]); q[0] += a * w; q[1] += b * w; };
     const wp2 = (s, w) => { const [a, b] = disp(s.x, s.y); s.x += a * w; s.y += b * w; };
-    const wmaj = W('major'), wmin = W('minor'); for (const L of geo.lines) { const w = L.major ? wmaj : wmin; if (w) for (const q of L.pts) wp(q, w); }
-    const ww = W('web'); if (ww) for (const e of geo.web) for (const q of e.pts) wp(q, ww);
+    for (const L of geo.lines) { const w = W(L.layer || (L.major ? 'major' : 'minor')); if (w) for (const q of L.pts) wp(q, w); }
+    for (const e of geo.web) { const ww = W(e.layer || 'web'); if (ww) for (const q of e.pts) wp(q, ww); }
     const wg = W('micro'); if (wg) for (const gl of geo.grain) for (const q of gl.pts) wp(q, wg);
     const wsy = W('styl'); if (wsy) for (const s of geo.styl) for (const q of s.pts) wp(q, wsy);
     const wmi = W('micro'); if (wmi) for (const s of geo.specks) wp2(s, wmi);
@@ -1516,8 +1538,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const wp2 = (s, w) => { s.x += dx(s.x, s.y) * w; s.y += dy(s.x, s.y) * w; };
       // veins warp by their layer weight AND rise with generation depth (n0 base, tips more) — so the weakened
       // deep bond has something to release: deep branches push harder against a looser anchor and wander off.
-      for (const L of geo.lines) { const w = W(L.major ? 'major' : 'minor') * (1 + depthOf(L) * dg); for (const q of L.pts) wp(q, w); }
-      const ww = W('web'); for (const e of geo.web) for (const q of e.pts) wp(q, ww);
+      for (const L of geo.lines) { const w = W(L.layer || (L.major ? 'major' : 'minor')) * (1 + depthOf(L) * dg); for (const q of L.pts) wp(q, w); }
+      for (const e of geo.web) { const ww = W(e.layer || 'web'); if (ww) for (const q of e.pts) wp(q, ww); }
       const wg = W('micro'); for (const gl of geo.grain) for (const q of gl.pts) wp(q, wg);
       const wsy = W('styl'); for (const s of geo.styl) for (const q of s.pts) wp(q, wsy);
       const wmi = W('micro'); for (const s of geo.specks) wp2(s, wmi);
@@ -1551,6 +1573,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const out = { ...geo, lines: geo.lines.slice(), byId: new Map(geo.byId), web: geo.web.slice(),
                     specks: geo.specks.map(q => ({ ...q })), fog: geo.fog.map(q => ({ ...q })), guides: geo.guides.slice(), styl: geo.styl.slice(), drusy: geo.drusy.slice() };
       applyMark(nm, out);
+      stampLayers(out);
       geo = out;
       last = { sig, hist: marks.map(m => ({ m, seed: m.seed })) };
       return;
@@ -1567,8 +1590,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (Fc.grain) out.grain = woodGrain(Fc, out.knots);
     else for (const K of out.knots) { K.th = G.gangle * Math.PI / 180; K.c = Math.cos(K.th); K.s = Math.sin(K.th); }
     for (const m of marks) applyMark(m, out);         // in order: what is drawn first is older rock
+    stampLayers(out);
     geo = out;
     if (groundCapped && Fc.groundSpecks) hint(`That many specks this size cannot all fit without touching, so the slab holds ${groundCapped}.`);
+  }
+  // Stamp each line with the LAYER of the mark that made it (falling back to its bucket for legacy marks or
+  // a deleted layer). Runs before warpGeo/render so both read L.layer. A mark's lines share its layer, even
+  // auto-minors — a layer is an authoring group, orthogonal to the export bucket (which stays per-line by kind).
+  function stampLayers(out) {
+    const mL = new Map(marks.map(m => [m.id, m.layer]));
+    for (const L of out.lines) { const v = mL.get(L.mark); L.layer = (v && layAt(v)) ? v : (L.major ? 'major' : 'minor'); }
+    for (const e of out.web) { const v = mL.get(e.mark); e.layer = (v && layAt(v)) ? v : 'web'; }
   }
 
   // ---- TILES ------------------------------------------------------------------
@@ -1851,11 +1883,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       });
       if (layVis('major')) for (const K of geo.knots) drawKnot(K, F, ident, ident ? 1 : layOp('major'));
     }
-    if (layVis('web')) { const _fx = fxOn('web', COL.web, ident); for (const e of geo.web) {
+    if (geo.web.length) { const _fx = fxOn('web', COL.web, ident); for (const e of geo.web) {
+      const wl = e.layer || 'web'; if (!layVis(wl)) continue;                        // per web-layer visibility
       g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
       for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
       g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : COL.web;
-      g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp('web')); g2d.lineWidth = e.width; g2d.stroke();
+      g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp(wl)); g2d.lineWidth = e.width; g2d.stroke();
     } fxOff(_fx); }
     if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))), nv = Math.max(1, Math.min(4, Math.round(G.speckSubs))); for (const s of geo.specks) {
       const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
@@ -1903,7 +1936,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       fxOff(_fx);
     }
     const order = geo.lines.filter(L => !L.major).concat(geo.lines.filter(L => L.major));
-    const lk = L => L.major ? 'major' : 'minor';
+    const lk = L => L.layer || (L.major ? 'major' : 'minor');   // the line's LAYER (eye/opacity/blend/glow), bucket as fallback
     if (!ident) {                                        // halo: a wide, pale bleached selvage under the vein
       const halo = COL.halo;
       for (const L of order) if (L.halo && layVis(lk(L))) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
@@ -2182,7 +2215,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     gesture.samples.push([f[0], f[1], now(), pen(e), leanOf(e), azOf(e)]);
     redraw(false);
   });
-  function commit(m) { marks.push({ ...m, p: { ...NEXT }, fam }); redraw(true); }
+  function commit(m) {
+    const bk = m.kind === 'vein' ? 'major' : m.kind === 'branch' ? 'minor' : m.kind === 'web' ? 'web' : null;   // which bucket this mark files into
+    const layer = m.layer !== undefined ? m.layer : (bk ? activeLayer[bk] : undefined);
+    marks.push({ ...m, layer, p: { ...NEXT }, fam }); redraw(true);
+  }
   function end(e) {
     ptrs.delete(e.pointerId);
     const g = gesture;
@@ -2317,18 +2354,24 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function buildLayerUI() {
     layEl.innerHTML = '';
     for (const L of layers.slice().reverse()) {
-      const row = document.createElement('div'); row.className = 'lay'; row.dataset.key = L.key;
+      const row = document.createElement('div'); row.className = 'lay' + (activeLayer[L.bucket] === L.key ? ' active' : ''); row.dataset.key = L.key;
       row.innerHTML =
         '<button type="button" class="eye" data-act="eye" aria-pressed="' + L.on + '" title="Show or hide"></button>'
-        + '<span class="nm">' + L.label + '</span>'
+        + '<span class="nm" data-act="active" title="Make this the active layer — new marks land here">' + L.label + '</span>'
         + '<button type="button" class="solo" data-act="solo" aria-pressed="' + (soloLay === L.key) + '" title="Solo this layer">S</button>'
+        + '<button type="button" class="warp" data-act="warp" aria-pressed="' + (L.warp > 0) + '" title="W lit = this layer follows warp; dim = held still">W</button>'
         + '<input type="range" min="0" max="1" step="0.01" value="' + L.op + '" data-act="op" aria-label="' + L.label + ' opacity">'
         + '<output>' + Math.round(L.op * 100) + '</output>';
       row.querySelector('[data-act=eye]').addEventListener('click', () => { L.on = !L.on; if (soloLay === L.key && !L.on) soloLay = null; relayer(); });
+      row.querySelector('[data-act=active]').addEventListener('click', () => setActiveLayer(L.key));
       row.querySelector('[data-act=solo]').addEventListener('click', () => { soloLay = soloLay === L.key ? null : L.key; relayer(); });
+      row.querySelector('[data-act=warp]').addEventListener('click', e => { L.warp = L.warp > 0 ? 0 : 1; e.currentTarget.setAttribute('aria-pressed', L.warp > 0); redraw(true); });
       row.querySelector('[data-act=op]').addEventListener('input', e => { L.op = +e.target.value; row.querySelector('output').textContent = Math.round(L.op * 100); relayer(); });
       layEl.appendChild(row);
     }
+    const add = document.createElement('div'); add.className = 'addlay';
+    for (const bk of ['major', 'minor', 'web']) { const b = document.createElement('button'); b.type = 'button'; b.textContent = '+ ' + bk[0].toUpperCase() + bk.slice(1) + ' layer'; b.addEventListener('click', () => { addLayer(bk); redraw(false); }); add.appendChild(b); }
+    layEl.appendChild(add);
   }
   function syncLayerUI() {
     for (const row of layEl.querySelectorAll('.lay')) {
@@ -2336,8 +2379,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const hidden = soloLay ? (soloLay !== L.key && L.key !== 'base') : !L.on;
       row.querySelector('[data-act=eye]').setAttribute('aria-pressed', L.on);
       row.querySelector('[data-act=solo]').setAttribute('aria-pressed', soloLay === L.key);
+      const wb = row.querySelector('[data-act=warp]'); if (wb) wb.setAttribute('aria-pressed', L.warp > 0);
       row.querySelector('[data-act=op]').value = L.op; row.querySelector('output').textContent = Math.round(L.op * 100);
       row.classList.toggle('off', hidden);
+      row.classList.toggle('active', activeLayer[L.bucket] === L.key);
     }
   }
   function showGround() {
@@ -2351,7 +2396,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function serialize() {
     return { v: 1, fam, tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
-             layers: layers.map(L => ({ key: L.key, on: L.on, op: L.op, warp: L.warp })), soloLay,
+             layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, perItem: { ...perItem },
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
   }
@@ -2359,7 +2404,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!o || o.v !== 1 || !Array.isArray(o.marks)) return false;
     fam = o.fam; tool = o.tool; view = o.view; layTiles = !!o.layTiles; guidesOn = o.guidesOn !== false;
     Object.assign(G, o.G || {}); Object.assign(T, o.T || {}); Object.assign(NEXT, o.NEXT || {});
-    if (Array.isArray(o.layers)) for (const s of o.layers) { const L = layAt(s.key); if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; L.warp = typeof s.warp === 'number' ? s.warp : 1; } }
+    for (let i = layers.length - 1; i >= 0; i--) if (layers[i].key.includes('#')) layers.splice(i, 1);   // drop the previous slab's user layers
+    activeLayer.major = 'major'; activeLayer.minor = 'minor';
+    if (Array.isArray(o.layers)) for (const s of o.layers) {
+      let L = layAt(s.key);
+      if (!L && typeof s.key === 'string' && s.key.includes('#')) {                                     // re-create a user layer
+        L = { key: s.key, label: s.label || s.key, bucket: s.bucket || s.key.split('#')[0], on: true, op: 1, warp: 1 };
+        let idx = -1; for (let i = 0; i < layers.length; i++) if (layers[i].bucket === L.bucket) idx = i;
+        layers.splice(idx + 1, 0, L);
+        const n = parseInt(s.key.split('#')[1], 10); if (n > layerSeq) layerSeq = n;
+      }
+      if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; L.warp = typeof s.warp === 'number' ? s.warp : 1; }
+    }
+    for (const b in activeLayer) if (o.activeLayer && layAt(o.activeLayer[b])) activeLayer[b] = o.activeLayer[b];
     soloLay = o.soloLay || null;
     for (const k in OVR) delete OVR[k];                        // colour travels with the slab
     if (o.OVR) Object.assign(OVR, o.OVR); else if (o.COL) Object.assign(OVR, o.COL); else seedColours(fam);   // older saves stored resolved values as `COL`
@@ -2368,7 +2425,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor
     marks = o.marks.map(m => ({ ...m }));
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
-    stoneReady = false; syncUI(); redraw(true); return true;
+    stoneReady = false; buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
   }
   const STORE_KEY = 'stone-author:autosave:v1';
   let saveTimer = 0;

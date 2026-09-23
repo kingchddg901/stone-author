@@ -101,9 +101,26 @@ Two related ideas kept distinct so the system can grow:
   `micro`, stylolites into `minor`. Add a primitive → add a render layer → it exports through its
   bucket automatically.
 
-The paint order is a stack: `base → breccia → clouds → bands → web → micro → drusy → styl →
-minor → major`. Base is the *setter* (breccia is an opaque clast mosaic when on); clouds and bands
-are soft-light *modulators* over it.
+The paint order is a stack: `base → breccia → clouds → bands → fog → web → micro → drusy → styl →
+minor → major`. Base is the *setter* (breccia is an opaque clast mosaic when on); clouds, bands and
+fog are soft *modulators* over it.
+
+### User layers within a bucket
+
+A **bucket can hold many layers**. A mark files into the **active layer** of its bucket (a vein → the
+active `major` layer, a branch → active `minor`, a web stroke → active `web`); each layer carries its
+own **eye / opacity / warp** (and, later, colour / effects / lock). So you can put some majors on one
+layer and warp them while another major layer holds dead still — two layers, one bucket, affected
+independently. `addLayer(bucket)` creates one (key `bucket#n`, the plain `bucket` key is the default
+layer); the Layers panel gives each row eye · name (tap = make active, ▸) · solo · **W** (warp
+follow/hold) · opacity, plus **+ Major / + Minor / + Web layer**.
+
+A **layer is an authoring group, orthogonal to the bucket**: `stampLayers` tags every line/edge with
+its mark's layer (`L.layer` / `e.layer`), and render + warp read *that*, while export still buckets
+each line by its kind. So a single layer can even hold marks that export to different buckets — which
+is what makes a cross-bucket "group as an object" selection possible later. Fields that aren't marks
+(the granite speck ground) are still single-layer for now; per-field layers (each with its own density
+and seed) are the next step.
 
 ### Determinism — a knob edits, it doesn't re-roll
 
@@ -151,7 +168,9 @@ between; the stylus/screen sample rate alone shifts it), so a hand-reverse only 
 leaves a residue that accumulates with repeated tries. That near-miss is the intended authoring feel —
 overshoot and chase it back; the mark of the hand is the residue. The **Undo button** (it drops the mark)
 is the true undo) · the **fog / resin-core** layer (a flat untinted grayscale haze, deep, for sub-surface
-depth; movable particles for the magnet to sculpt).
+depth; movable particles for the magnet to sculpt) · the **layer system, first slice** (multiple user
+layers per bucket for major / minor / web, an active layer marks file into, per-layer eye / opacity /
+warp, saved and restored).
 
 **Next:** per-id beyond veins (clasts / seams) · the remaining canvas colour menu (gradients,
 filters) · per-pixel displacement of the base fields under warp · targeted per-item reroll · a bake
