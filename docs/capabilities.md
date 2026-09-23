@@ -161,15 +161,17 @@ Edge-case / "abuse it coherently" uses, surfaced by the fan-out and reasoned fro
 | # | probe | prediction | status |
 |---|---|---|---|
 | P1 | Cross-family graft (vein X + branch Y) | branch character from own family, width from parent gauge — coherent graft | ✓ verified |
-| P2 | Moon path reversed via Save/Load, `moonStrength=50` (unclamped) | mirrored wake, 50× exaggerated anti-symmetric drift, no NaN | ~predicted |
-| P3 | Echelon vein + `branches`=2.5 | branches slider is a **no-op** (echelon returns before minors); `defl` still applies | ~predicted (silent coupling / gap) |
+| P2 | Moon path reversed via Save/Load, `moonStrength=50` (unclamped) | mirrored wake, exaggerated anti-symmetric drift, no NaN | **✓ verified** — coherent violent drag, geometry stretched into the wake far past the slider |
+| P3 | Echelon vein + `branches`=2.5 | branches slider is a **no-op** (echelon returns before minors); `defl` still applies | **✓ verified** — echelon shows only its offset segments, zero family minors ⚠ *fix candidate: disable/grey the branches slider for echelon* |
 | P4 | `defl`/`fold` maxed, no speck field | **visual no-op** (hard `specks` gate, not gradual) | ~predicted (usability gap) |
 | P5 | Boudinage branch on halo trunk | glowing halo trunk + rhythmic-pinch tributary compose (orthogonal per-mark `extra`) | ~predicted |
-| P6 | Lens over back light | glass refracts + caustic-brightens the transilluminated glow (lens has no `!backlit` guard) | ✓ verified (seen in back-light montage) |
+| P6 | Lens over back light | glass refracts + caustic-brightens the transilluminated glow (lens has no `!backlit` guard) | ✓ verified (back-light montage) |
 | P7 | Spotlight `spotR=0.05` at an unauthored spectrum value | full blackout despite a full UV palette (both `emit` gates fail) | ~predicted (gap: silent) |
-| P8 | `transmit=1` + `scatter=1` on a near-invisible layer | layer looks inert but **globally blurs the whole back-light accumulator** (scatter isn't masked to its coverage) | ~predicted (hidden global trigger) |
-| P9 | `warpDepth=1.5` on a deep branch chain | trunk planted (`d=0`), deep tips fly apart (`1/(1+d)²` anchor decays) — "root stays, tips drift" | ~predicted (coherent extreme) |
+| P8 | `transmit=1` + `scatter=1` on a near-invisible layer | layer looks inert but **globally blurs the whole back-light accumulator** (scatter isn't masked to its coverage) | **✓ verified** — whole backlit slab blurs from one sparse layer ⚠ *real imprecision: scatter should be masked to the layer's own coverage, not the whole accumulator* |
+| P9 | `warpDepth=1.5` on a deep branch chain | trunk planted (`d=0`), deep tips fly apart (`1/(1+d)²` anchor decays) — "root stays, tips drift" | **✓ verified** — deep tips fan out further while the trunk holds |
 | P10 | Stacked ADJ maxima on one `id:` vein | oversized soft double-halo (filter/weight applied twice: shoulder + main stroke) + glow/blend | ~predicted |
 
 Correction logged: one explorer flagged pour `pfling` as a *dead slider*; the source (`buildPour` L1490) reads it — it's **conditional** (fires only when `acc>3`), not dead.
+
+**Two verified probes are genuine fixes, not just curiosities:** P3 (the `branches` slider silently does nothing for echelon veins) and **P8** (back-light `scatter` blurs the entire accumulator regardless of the layer's coverage — physically it should diffuse only where that layer occludes). P8 is the one worth correcting in the render before the hero.
 </content>
