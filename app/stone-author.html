@@ -189,7 +189,7 @@
   <div id="ground">
     <p class="lbl" style="margin:0 0 6px">Ground &middot; the whole slab, changes apply at once</p>
     <div class="sliders" id="g-coat">
-      <div class="sl"><label for="subsurface">Subsurface <output id="subsurfaceV"></output></label><input id="subsurface" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="subsurface">Subsurface <output id="subsurfaceV"></output></label><input id="subsurface" type="range" min="0" max="2" step="0.02"></div>
     </div>
     <div class="sliders" id="g-clouds">
       <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
@@ -1805,9 +1805,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'lighter';          // add the warm feature-glow back over the stone
-      ctx.globalAlpha = 0.9 * ss;
       ctx.filter = `blur(${(1 + 2 * ss) * dpr}px)`;      // soften the glow a touch (the scatter)
-      ctx.drawImage(ssC, 0, 0);
+      for (let g = 0.9 * ss; g > 0.001; g -= 0.95) {     // gain can pass 1 (ss up to 2) via extra additive passes
+        ctx.globalAlpha = Math.min(0.95, g); ctx.drawImage(ssC, 0, 0);
+      }
       ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
       ctx.restore();
     }
