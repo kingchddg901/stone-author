@@ -1883,6 +1883,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (let i = 1; i < e.pts.length; i++) ctx.lineTo(e.pts[i][0], e.pts[i][1]);
       ctx.stroke();
     }
+    for (const s of geo.styl) if (selected.has('id:' + s.id) && s.pts.length) {      // a selected seam
+      ctx.beginPath(); ctx.moveTo(s.pts[0][0], s.pts[0][1]);
+      for (let i = 1; i < s.pts.length; i++) ctx.lineTo(s.pts[i][0], s.pts[i][1]);
+      ctx.stroke();
+    }
     ctx.restore();
   }
   function paintLive() {
@@ -1985,13 +1990,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       g2d.filter = 'none'; fxOff(_fx);
     }
     if (layVis('styl') && geo.styl.length) {              // dark toothy seams, sharp corners (miter), over the ground and under the veins
-      const seam = COL.styl, _fx = fxOn('styl', COL.styl, ident);
+      const _fx = fxOn('styl', COL.styl, ident);
       g2d.lineJoin = 'miter'; g2d.lineCap = 'butt';
       for (const s of geo.styl) {
         g2d.beginPath(); g2d.moveTo(s.pts[0][0], s.pts[0][1]);
         for (let i = 1; i < s.pts.length; i++) g2d.lineTo(s.pts[i][0], s.pts[i][1]);
-        g2d.strokeStyle = ident ? idColour(s.id, 0.5) : seam;
-        g2d.globalAlpha = (ident ? 0.95 : 0.85) * (ident ? 1 : layOp('styl')); g2d.lineWidth = s.width; g2d.stroke();
+        const sc = OVR['id:' + s.id] || OVR['lay:styl'];                          // per-seam → per-layer → bucket colour
+        g2d.strokeStyle = ident ? idColour(s.id, 0.5) : (sc || COL.styl);
+        if (!ident) g2d.filter = filterOf(s.id, 'styl', 'styl');                  // per-seam → per-layer adjustments
+        g2d.globalAlpha = (ident ? 0.95 : 0.85) * (ident ? 1 : layOp('styl')); g2d.lineWidth = s.width * weightOf(s.id, 'styl', 'styl'); g2d.stroke(); g2d.filter = 'none';
       }
       g2d.lineJoin = 'round'; g2d.lineCap = 'round';
       fxOff(_fx);
@@ -2175,7 +2182,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     knot: 'Tap to set a knot, or drag out from its centre to size it. The grain flows around it in Wood.',
     magnet: 'Drag to comb the specks like iron filings. The pen\u2019s angle is the magnet: upright fans them out from the tip, laid over combs them along its lean. Slow passes align harder.',
     styl: 'Draw a line. It becomes a stylolite — a toothy pressure-dissolution seam of interlocking columns, dark on light stone and pale on dark.',
-    tune: 'Tap a vein or a web crack to tune just that one (a crack picks its whole spread). Its colour follows its layer until you change it here; reset it to follow again.',
+    tune: 'Tap a vein, web crack or stylolite seam to tune just that one (a crack picks its whole spread). Its colour follows its layer until you change it here; reset it to follow again.',
     cloud: 'Drag to move the cloud field. The mottle and the warp move together, so you can place where the stone flows. Cloud X / Y set it precisely.',
     moon: 'Drag a moon across the slab. Like gravity, but it drags what it passes into its wake — a powerful local warp, hardest under the ball, fading at its edge. Ball size and pull set the reach and force; passes stack.',
     move: 'Drag to move around. Pinch, or use + and −, to zoom.',
@@ -2241,6 +2248,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (let i = 0; i < e.pts.length - 1; i++) {
         const d = segD(fx, fy, e.pts[i][0], e.pts[i][1], e.pts[i + 1][0], e.pts[i + 1][1]);
         if (!best || d < best.d) best = { mark: e.mark, d };
+      }
+    }
+    return best;
+  }
+  // nearest VISIBLE stylolite seam → its mark. One seam per mark, so the seam IS the artifact (id:S<mark>).
+  function nearestStyl(fx, fy) {
+    if (!layVis('styl')) return null;
+    let best = null;
+    for (const s of geo.styl) {
+      for (let i = 0; i < s.pts.length - 1; i++) {
+        const d = segD(fx, fy, s.pts[i][0], s.pts[i][1], s.pts[i + 1][0], s.pts[i + 1][1]);
+        if (!best || d < best.d) best = { id: s.id, d };
       }
     }
     return best;
@@ -2317,18 +2336,20 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (hit) commit({ id, kind: 'chip', seed, tileKey: hit.key, edge: hit.edge });
       else hint(layTiles ? 'Tap on a tile to chip its nearest edge.' : 'Turn Lay tiles on first, then tap a tile edge to chip it.');
     } else if (g.type === 'draw' && tool === 'tune') {
-      nextId--;                                          // Tune makes no mark — it SELECTS an artifact (a vein or a web spread)
+      nextId--;                                          // Tune makes no mark — it SELECTS an artifact (vein / web spread / seam)
       const f = toFrame(...g.e0 || [0, 0]);
-      const hv = nearestLine(f[0], f[1]), hw = nearestWeb(f[0], f[1]);
-      const dv = hv ? hv.d * Wc * V.z : Infinity, dw = hw ? hw.d * Wc * V.z : Infinity;   // screen px
-      let sk = null, what = '';
-      if (dv <= dw && dv < 26) { sk = 'id:' + hv.L.id; what = 'Vein'; }         // whichever is nearer wins, within 26 px
-      else if (dw < 26) { sk = 'id:W' + hw.mark; what = 'Web'; }                // any crack picks its whole spread
-      if (sk) {                                          // toggle it in the selection (id stays internal)
-        if (selected.has(sk)) selected.delete(sk); else selected.add(sk);
+      const hv = nearestLine(f[0], f[1]), hw = nearestWeb(f[0], f[1]), hs = nearestStyl(f[0], f[1]);
+      const cand = [];                                   // each kind offers its nearest hit; the closest within 26 px wins
+      if (hv) cand.push({ d: hv.d * Wc * V.z, key: 'id:' + hv.L.id, what: 'Vein' });
+      if (hw) cand.push({ d: hw.d * Wc * V.z, key: 'id:W' + hw.mark, what: 'Web' });   // any crack picks its whole spread
+      if (hs) cand.push({ d: hs.d * Wc * V.z, key: 'id:' + hs.id, what: 'Seam' });
+      cand.sort((a, b) => a.d - b.d);
+      const pick = cand[0] && cand[0].d < 26 ? cand[0] : null;
+      if (pick) {                                        // toggle it in the selection (id stays internal)
+        if (selected.has(pick.key)) selected.delete(pick.key); else selected.add(pick.key);
         registerSelectedColours(); if (ed) ed.values = { ...OVR }; syncLayerUI(); redraw(false);
-        hint(selected.size ? selected.size + ' selected — colour or adjust them in the editor / Selected bar.' : (what + ' deselected.'));
-      } else hint('Tap a vein or web crack to select it — then colour or adjust just that one.');
+        hint(selected.size ? selected.size + ' selected — colour or adjust them in the editor / Selected bar.' : (pick.what + ' deselected.'));
+      } else hint('Tap a vein, web crack or seam to select it — then colour or adjust just that one.');
     } else if (g.type === 'draw' && tool === 'magnet') {
       commit({ id, kind: 'magnet', seed, samples: g.samples, tgt: sculptTarget() });
       if (!geo.specks.length) hint('The magnet turns specks. Switch to Granite, or pour some first.');
@@ -2442,6 +2463,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (key.startsWith('lay:')) { const L = layAt(key.slice(4)); if (L) { toks.push(layToken(L)); toks.push(...adjTokens('lay:' + L.key, L.label)); } }
       else if (key.startsWith('id:')) { const id = key.slice(3);
         if (id[0] === 'W') { toks.push({ key, label: 'Web ' + id, type: 'color', inherit: 'web' }); toks.push(...adjTokens('id:' + id, 'Web ' + id)); }
+        else if (id[0] === 'S') { toks.push({ key, label: 'Seam ' + id, type: 'color', inherit: 'styl' }); toks.push(...adjTokens('id:' + id, 'Seam ' + id)); }
         else { const L = geo.byId.get(id); toks.push({ key, label: 'Vein ' + id, type: 'color', inherit: (L && !L.major) ? 'minor' : 'major' }); toks.push(...adjTokens('id:' + id, 'Vein ' + id)); } }
     }
     kit.registerTokenGroup({ id: 'selectedcolours', label: 'Selected', tokens: toks });

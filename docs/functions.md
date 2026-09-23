@@ -66,12 +66,13 @@ Dispatched by `applyMark(m, out)` on `m.kind`. *(1397)*
 - `applyMagnet(m, out)` — comb specks like iron filings along the pen's lean; retargets to `out.fog` when
   `m.tgt === 'fog'`, but it only rotates orientation, so round haze blobs show nothing (yet). *(1231)*
 - **Selection** (`selected` = a set of token keys: `lay:<layer>` from a row checkbox, `id:<artifact>` from a
-  Tune/Select tap — a **vein** (`nearestLine` → `id:L…`) or a **web spread** (`nearestWeb` → `id:W<mark>`,
-  any crack picks the whole spread); `segD` is the point-to-segment helper both share; `highlightSelected()`
-  draws the dashed accent handle on selected veins **and web spreads**, live-only, never exported;
-  `registerSelectedColours()` registers a colour + adjustment token per selected key, each inheriting its
-  bucket (a web id inherits `web`) — "selected for display") is what an effect scopes to; three effects bake
-  onto the selected keys:
+  Tune/Select tap — a **vein** (`nearestLine` → `id:L…`), a **web spread** (`nearestWeb` → `id:W<mark>`,
+  any crack picks the whole spread) or a **stylolite seam** (`nearestStyl` → `id:S<mark>`); `segD` is the
+  point-to-segment helper they share and the tap ranks all candidates by distance, nearest within 26 px wins;
+  `highlightSelected()` draws the dashed accent handle on selected veins, web spreads **and seams**, live-only,
+  never exported; `registerSelectedColours()` registers a colour + adjustment token per selected key, each
+  inheriting its bucket (a web id inherits `web`, a seam id inherits `styl`) — "selected for display") is what
+  an effect scopes to; three effects bake onto the selected keys:
   (1) the **force tools** — `sculptTarget()` → a gravity/magnet mark's `m.tgt`, so they sculpt the selected
   particle field (Fog / specks), else the specks default (replaced the `fogSculpt` toggle; old `fogTarget`
   still reads); (2) **colour** — a generated `lay:<key>` token (`layToken(L)` derives key/label/type/

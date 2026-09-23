@@ -130,9 +130,10 @@ independently-coloured fields.
 **Selection scopes effects.** The selection is a set of **token keys** — `lay:<layer>` for a layer (its
 row checkbox) or `id:<artifact>` for one **artifact** (tap it with the **Tune/Select** tool; the id is
 resolved from the click and stays internal — a selected artifact shows as a dashed accent handle, never a
-number). The hit-test walks both **veins** (`nearestLine`, key `id:L…`/`id:B…`) and **web cracks**
-(`nearestWeb`, point-to-segment; a crack picks its whole **spread**, key `id:W<mark>`) and takes whichever
-is nearer within ~26 px. Layers and artifacts live in one selection, and the *same* adjustment set targets either.
+number). The hit-test walks **veins** (`nearestLine`, key `id:L…`/`id:B…`), **web cracks** (`nearestWeb`; a crack
+picks its whole **spread**, key `id:W<mark>`) and **stylolite seams** (`nearestStyl`, key `id:S<mark>`) —
+web/seam by point-to-segment (`segD`) — ranks the candidates by distance and takes the nearest within
+~26 px. Layers and artifacts live in one selection, and the *same* adjustment set targets any of them.
 Nothing selected = the effect's global default. Three things scope to it today, all *baking* onto the
 selected keys:
 - **Force tools** — select the Fog or a granite layer and Gravity/Magnet sculpt *that* field
