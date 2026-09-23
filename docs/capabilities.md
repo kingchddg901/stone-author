@@ -167,7 +167,7 @@ Edge-case / "abuse it coherently" uses, surfaced by the fan-out and reasoned fro
 | P5 | Boudinage branch on halo trunk | glowing halo trunk + rhythmic-pinch tributary compose (orthogonal per-mark `extra`) | ~predicted |
 | P6 | Lens over back light | glass refracts + caustic-brightens the transilluminated glow (lens has no `!backlit` guard) | ✓ verified (back-light montage) |
 | P7 | Spotlight `spotR=0.05` at an unauthored spectrum value | full blackout despite a full UV palette (both `emit` gates fail) | ~predicted (gap: silent) |
-| P8 | `transmit=1` + `scatter=1` on a near-invisible layer | layer looks inert but **globally blurs the whole back-light accumulator** (scatter isn't masked to its coverage) | **✓ verified** — whole backlit slab blurs from one sparse layer ⚠ *real imprecision: scatter should be masked to the layer's own coverage, not the whole accumulator* |
+| P8 | `transmit=1` + `scatter=1` on a near-invisible layer | layer looks inert but **globally blurs the whole back-light accumulator** (scatter isn't masked to its coverage) | ✓ verified → **✓ FIXED**: scatter now masked to the layer's own coverage (`layerCov` + `destination-in`), so it diffuses only where the layer occludes |
 | P9 | `warpDepth=1.5` on a deep branch chain | trunk planted (`d=0`), deep tips fly apart (`1/(1+d)²` anchor decays) — "root stays, tips drift" | **✓ verified** — deep tips fan out further while the trunk holds |
 | P10 | Stacked ADJ maxima on one `id:` vein | oversized soft double-halo (filter/weight applied twice: shoulder + main stroke) + glow/blend | ~predicted |
 

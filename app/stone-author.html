@@ -1839,11 +1839,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const t = blurC.getContext('2d'); t.setTransform(1, 0, 0, 1, 0, 0); t.globalAlpha = 1; t.globalCompositeOperation = 'source-over';
     t.clearRect(0, 0, blurC.width, blurC.height); t.filter = `blur(${px}px)`; t.drawImage(src, 0, 0); t.filter = 'none'; return blurC;
   }
-  function layerMask(L, W, t) {                            // white where clear, grey(t) where this layer covers → 'multiply' drops the light toward t
-    const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d, key = L.key, b = L.bucket;
-    cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
-    const gt = Math.round(255 * Math.max(0, Math.min(1, t))), col = `rgb(${gt},${gt},${gt})`;
-    cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.strokeStyle = cx.fillStyle = col; g2d = cx;
+  function drawLayerArtifacts(L, col) {                    // draw just THIS layer's geometry into the current g2d, in `col` (shared by mask + coverage)
+    const key = L.key, b = L.bucket, cx = g2d; cx.strokeStyle = cx.fillStyle = col;
     if (b === 'major') { for (const ln of geo.lines) if (ln.major && (ln.layer || 'major') === key) runs(ln, () => col, null, 1, false); }
     else if (b === 'minor') {
       if (key === 'styl') { cx.lineJoin = 'miter'; cx.lineCap = 'butt'; for (const s of geo.styl) { polyPath(cx, s.pts); cx.lineWidth = s.width; cx.stroke(); } cx.lineJoin = 'round'; cx.lineCap = 'round'; }
@@ -1854,6 +1851,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (key === 'drusy') for (const s of geo.drusy) { cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, 6.2832); cx.fill(); }
     }
     else if (b === 'web') { for (const e of geo.web) if ((e.layer || 'web') === key) { polyPath(cx, e.pts); cx.lineWidth = e.width; cx.stroke(); } }
+  }
+  function layerMask(L, W, t) {                            // white where clear, grey(t) where this layer covers → 'multiply' drops the light toward t
+    const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+    const gt = Math.round(255 * Math.max(0, Math.min(1, t)));
+    cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; drawLayerArtifacts(L, `rgb(${gt},${gt},${gt})`);
+    g2d = prev; return c;
+  }
+  function layerCov(L, W) {                                // opaque white where this layer covers, transparent elsewhere — the scatter mask
+    const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, c.width, c.height);
+    cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; drawLayerArtifacts(L, '#fff');
     g2d = prev; return c;
   }
   function paintBacklit() {
@@ -1877,7 +1886,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const L of layers) {                               // each layer, deepest → top, does its own thing to the light
       if (L.bucket === 'base' || !layVis(L.key)) continue;   // base = the body (already lit); a hidden/off layer passes light untouched
       const t = L.transmit != null ? L.transmit : 0.3, sc = L.scatter || 0;
-      if (sc > 0) { const bl = blurCanvas(workC, sc * 8); wx.clearRect(0, 0, gw, gh); wx.drawImage(bl, 0, 0); }   // scatter the light through this layer
+      if (sc > 0) {                                        // scatter: diffuse the light, but ONLY where THIS layer covers (P8 fix — not the whole accumulator)
+        const bl = blurCanvas(workC, sc * 8), bx = bl.getContext('2d');
+        bx.globalCompositeOperation = 'destination-in'; bx.drawImage(layerCov(L, W), 0, 0); bx.globalCompositeOperation = 'source-over';   // keep the blur only under the layer's coverage
+        wx.drawImage(bl, 0, 0);                            // composite the localised scatter over the sharp accumulator
+      }
       const mask = layerMask(L, W, t);
       wx.globalCompositeOperation = 'multiply'; wx.drawImage(mask, 0, 0); wx.globalCompositeOperation = 'source-over';   // occlude by its coverage toward its transmittance
     }
