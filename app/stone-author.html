@@ -188,6 +188,9 @@
   </div>
   <div id="ground">
     <p class="lbl" style="margin:0 0 6px">Ground &middot; the whole slab, changes apply at once</p>
+    <div class="sliders" id="g-coat">
+      <div class="sl"><label for="subsurface">Subsurface <output id="subsurfaceV"></output></label><input id="subsurface" type="range" min="0" max="1" step="0.02"></div>
+    </div>
     <div class="sliders" id="g-clouds">
       <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="cloudScale">Cloud scale <output id="cloudScaleV"></output></label><input id="cloudScale" type="range" min="0.4" max="3" step="0.05"></div>
@@ -383,6 +386,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
 <script>
 (() => {
   const cv = document.getElementById('field'), ctx = cv.getContext('2d');
+  const ssC = document.createElement('canvas');            // subsurface scratch: the feature high-pass, warmed, added back as internal glow
   const H = 0.625;                                     // frame height, in frame widths
   // THE SLAB IS 8 x 5 FT: his 5 ft slab, sized to this 16:10 frame. Metric is one multiply away.
   const SLAB_FT = 8, FT_MM = 304.8;                    // frame width in feet; feet to mm
@@ -436,7 +440,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
               stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
+  const G = { subsurface: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1,
@@ -445,7 +449,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
-  const GFMT = { speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
+  const GFMT = { subsurface: v => (+v).toFixed(2), speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2), fogHaze: v => `${Math.round(v * 100)}%`,
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}` };
@@ -1786,6 +1790,27 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     if (layTiles) { drawTiles(F); paintLive(); ctx.globalAlpha = 1; stat(); return; }
     paintStoneContent(ident, angleView);
+    if (!ident && G.subsurface > 0) {                    // SUBSURFACE (v1): features glow through a thin translucent sheet.
+      const ss = G.subsurface;                           // high-pass (stone - its own blur) so FLAT areas add ~0 (no white-out),
+      if (ssC.width !== cv.width || ssC.height !== cv.height) { ssC.width = cv.width; ssC.height = cv.height; }
+      const sc = ssC.getContext('2d');                   // features glow warm on any base, light or dark.
+      sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none';
+      sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, ssC.width, ssC.height);
+      sc.drawImage(cv, 0, 0);                            // A = stone
+      sc.globalCompositeOperation = 'difference'; sc.filter = `blur(${(2 + 3 * ss) * dpr}px)`;
+      sc.drawImage(cv, 0, 0);                            // A = |stone - blur(stone)| = feature high-pass
+      sc.filter = 'none'; sc.globalCompositeOperation = 'multiply';
+      sc.fillStyle = '#ffcf8f'; sc.fillRect(0, 0, ssC.width, ssC.height);   // warm the glow (internal light)
+      sc.globalCompositeOperation = 'source-over';
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'lighter';          // add the warm feature-glow back over the stone
+      ctx.globalAlpha = 0.9 * ss;
+      ctx.filter = `blur(${(1 + 2 * ss) * dpr}px)`;      // soften the glow a touch (the scatter)
+      ctx.drawImage(ssC, 0, 0);
+      ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      ctx.restore();
+    }
     if (guidesOn) drawGuides();
     if (guidesOn && G.warp > 0 && tool === 'cloud') drawWarpGuide();   // show the source while you drag it
     highlightSelected();                                                // mark the selected veins (live only, never exported)

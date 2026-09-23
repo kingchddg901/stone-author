@@ -173,8 +173,13 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 ## Rendering
 
 - `size()` — size the canvas to the element and device pixel ratio. *(1636)*
-- `draw()` — one frame: ground/base fill, then `paintStoneContent` (or `drawTiles`), guides, live
-  stroke, status. *(1643)*
+- `draw()` — one frame: ground/base fill, then `paintStoneContent` (or `drawTiles`), the **subsurface**
+  pass, guides, live stroke, status. *(1643)*
+- **Subsurface** (`G.subsurface`, coat tier v1) — a post-pass in stone view: build the feature **high-pass**
+  in the `ssC` scratch canvas (`stone` composited with `difference` against a blur of itself, so flat areas
+  are ~black and only veins/specks/edges survive), `multiply` it warm, then add it back over the stone with
+  `lighter`. Because flat regions contribute ~0 it never white-outs, on light or dark stone; features glow
+  warm like light through a thin translucent sheet. One `Subsurface` ground slider (0 = opaque). Tunable v1.
 - `paintStoneContent(ident, angleView)` — paint every layer in stack order
   (`base→breccia→clouds→bands→web→micro→drusy→styl→minor→major`), gated by layer visibility. The
   core of the renderer. *(1677)*

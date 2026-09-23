@@ -156,7 +156,10 @@ selected keys:
   filters compose into one `ctx.filter` string (`filterOf`); weight scales the stroke width through `runs`.
   So the *same* set tunes a whole layer or a single vein, and a vein only stores what it overrides. Applied
   to veins, web, and the **speck / drusy fields** (per layer, with per-layer field colour); the **fog stays
-  untinted by design** (a haze, no colour token). The coat tier (specular/subsurface/edge-light) rides on top.
+  untinted by design** (a haze, no colour token). The **coat tier** rides on top: **subsurface** shipped first
+  (a `Subsurface` ground control — the feature high-pass added back as a warm internal glow, so flat areas
+  never white-out and features glow like light through a thin translucent sheet); **specular top-coat** (a
+  movable polish light) and **tile-edge light** are the next builds; a **fluted slab finish** is a maybe.
 
 This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 
