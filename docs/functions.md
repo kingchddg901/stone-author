@@ -237,7 +237,10 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   warps read this, so eye/opacity/warp are per-layer while export still buckets by kind. *(≈1590)*
 - `buildLayerUI()` / `syncLayerUI()` / `relayer()` — build the Layers panel (eye · name=make-active ·
   solo · **W** warp-hold · opacity, plus the **+ layer** buttons), reflect state, and repaint. Rebuilt on
-  `deserialize` so restored user layers reappear. *(2078/2094/2077)*
+  `deserialize` so restored user layers reappear. Each row carries a **derived tag** (`M1` = bucket letter +
+  live ordinal, recomputed here, never stored) and the name is **double-tap-to-rename** (edits `label`; key
+  and tag untouched). The Selected bar's **hide** adds the artifact's **mark** to `hidden` (a whole vein +
+  its sub-lines, by mark); the **Hidden list** below is the only way back (each row un-hides). *(2078/2094/2077)*
 
 ## Colour layer
 

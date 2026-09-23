@@ -43,6 +43,13 @@
          align-items: center; gap: 6px; padding: 0 4px; }
   .lay.sel-on { background: rgba(138, 141, 224, 0.12); border-radius: 6px; }   /* row in the current selection */
   .lay .nm { font-size: 13px; color: var(--text); cursor: pointer; }
+  .lay .tag { font: 500 10px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim); background: var(--btn);
+              border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; margin-right: 5px; letter-spacing: 0; }
+  .nm-edit { font: inherit; font-size: 13px; width: 100%; background: var(--btn); color: var(--text); border: 1px solid var(--on-line); border-radius: 4px; padding: 1px 4px; }
+  .hidden-panel { display: grid; gap: 4px; width: 100%; max-width: 460px; margin-top: 8px; }
+  .hidden-panel .lbl { font-size: 12px; color: var(--dim); }
+  .hidden-item { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--dim); padding: 1px 4px; }
+  .hidden-item button { font-size: 11px; padding: 2px 8px; }
   .lay.off .nm { color: var(--dim); }
   .lay.active .nm { color: #8a8de0; font-weight: 600; }
   .lay.active .nm::before { content: '\25B8 '; }          /* triangle marks the active layer (new marks land here) */
@@ -440,6 +447,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return e.c;
   };
   const beamPts = pts => !spotOn || pts.some(p => Math.hypot(p[0] - G.lightX, p[1] - G.lightY) <= G.spotR);   // does a line/edge touch the beam?
+  const hidden = new Set();   // 7th dimension: MARKS tagged "don't render" (one mark = one vein/web/seam, whatever its sub-lines) — skipped by the renderer AND the hit-test, recovered only from the Hidden list
   function seedColours(f) {                                // seed the colour OVERRIDES from a family's palette
     const F = FAM[f], [gr, gg, gb] = hexRGB(F.ground), light = 0.299 * gr + 0.587 * gg + 0.114 * gb > 128;
     OVR.ground = F.ground; OVR.major = F.vein; OVR.minor = F.vein; OVR.web = F.web; OVR.micro = F.speck;
@@ -1945,7 +1953,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       g2d.globalAlpha = 1;
     }
     if (geo.web.length) { const _fx = fxOn('web', COL.web, ident); for (const e of geo.web) {
-      const wl = e.layer || 'web'; if (!layVis(wl)) continue;                        // per web-layer visibility
+      const wl = e.layer || 'web'; if (!layVis(wl) || hidden.has(e.mark)) continue;   // per web-layer visibility + hidden
       const wid = 'W' + e.mark;                                                       // the web SPREAD = one artifact
       g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
       for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
@@ -1994,6 +2002,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const _fx = fxOn('styl', COL.styl, ident);
       g2d.lineJoin = 'miter'; g2d.lineCap = 'butt';
       for (const s of geo.styl) {
+        if (hidden.has(s.mark)) continue;
         g2d.beginPath(); g2d.moveTo(s.pts[0][0], s.pts[0][1]);
         for (let i = 1; i < s.pts.length; i++) g2d.lineTo(s.pts[i][0], s.pts[i][1]);
         const sc = uv ? ((beamPts(s.pts) && emit(s.id, 'styl')) || UV_DARK) : (OVR['id:' + s.id] || OVR['lay:styl']);   // UV: emission (in beam) or dark
@@ -2008,11 +2017,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const lk = L => L.layer || (L.major ? 'major' : 'minor');   // the line's LAYER (eye/opacity/blend/glow), bucket as fallback
     if (!ident && !uv) {                                 // halo: a wide, pale bleached selvage under the vein (daylight only)
       const halo = COL.halo;
-      for (const L of order) if (L.halo && layVis(lk(L))) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
+      for (const L of order) if (L.halo && layVis(lk(L)) && !hidden.has(L.mark)) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
     }
     const vcol = L => { if (uv) return (beamPts(L.pts) && emit(L.id, L.layer)) || UV_DARK; const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };   // UV: emission (in beam) or dark
-    if (!ident && !uv) for (const L of order) if (layVis(lk(L))) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }  // shoulder (daylight only)
-    for (const L of order) if (layVis(lk(L))) { const bk = L.major ? 'major' : 'minor'; const _fx = uv ? null : fxOn(lk(L), vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(lk(L)))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }  // per-item adjustments (ctx.filter + weight)
+    if (!ident && !uv) for (const L of order) if (layVis(lk(L)) && !hidden.has(L.mark)) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }  // shoulder (daylight only)
+    for (const L of order) if (layVis(lk(L)) && !hidden.has(L.mark)) { const bk = L.major ? 'major' : 'minor'; const _fx = uv ? null : fxOn(lk(L), vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(lk(L)))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }  // per-item adjustments (ctx.filter + weight)
   }
   // Guides are for you, not the stone: a filled dot pulls, an open ring pushes, its size is the
   // reach; a gravity line carries a band each side as wide as its reach, solid to pull, dashed to push.
@@ -2236,6 +2245,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function nearestLine(fx, fy) {
     let best = null;
     for (const L of geo.lines) {
+      if (hidden.has(L.mark)) continue;               // hidden artifacts aren't selectable
       for (let i = 0; i < L.pts.length; i++) {
         const d = Math.hypot(L.pts[i][0] - fx, L.pts[i][1] - fy);
         if (!best || d < best.d) best = { L, i, d };
@@ -2253,7 +2263,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function nearestWeb(fx, fy) {
     let best = null;
     for (const e of geo.web) {
-      const wl = e.layer || 'web'; if (!layVis(wl)) continue;
+      const wl = e.layer || 'web'; if (!layVis(wl) || hidden.has(e.mark)) continue;
       for (let i = 0; i < e.pts.length - 1; i++) {
         const d = segD(fx, fy, e.pts[i][0], e.pts[i][1], e.pts[i + 1][0], e.pts[i + 1][1]);
         if (!best || d < best.d) best = { mark: e.mark, d };
@@ -2266,6 +2276,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!layVis('styl')) return null;
     let best = null;
     for (const s of geo.styl) {
+      if (hidden.has(s.mark)) continue;
       for (let i = 0; i < s.pts.length - 1; i++) {
         const d = segD(fx, fy, s.pts[i][0], s.pts[i][1], s.pts[i + 1][0], s.pts[i + 1][1]);
         if (!best || d < best.d) best = { id: s.id, d };
@@ -2511,12 +2522,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function relayer() { stoneReady = false; syncLayerUI(); redraw(false); }
   function buildLayerUI() {
     layEl.innerHTML = '';
+    const LET = { base: 'B', web: 'W', micro: 'G', minor: 'N', major: 'M' }, tagOf = {}, cnt = {};   // derived M1-style tag: bucket letter + live ordinal, recomputed each build
+    for (const L of layers) { cnt[L.bucket] = (cnt[L.bucket] || 0) + 1; tagOf[L.key] = (LET[L.bucket] || '?') + cnt[L.bucket]; }
     for (const L of layers.slice().reverse()) {
       const row = document.createElement('div'); row.className = 'lay' + (activeLayer[L.bucket] === L.key ? ' active' : '') + (selected.has('lay:' + L.key) ? ' sel-on' : ''); row.dataset.key = L.key;
       row.innerHTML =
         '<button type="button" class="sel" data-act="sel" aria-pressed="' + selected.has('lay:' + L.key) + '" title="Select — effects and the force tools act on the selected layers"></button>'
         + '<button type="button" class="eye" data-act="eye" aria-pressed="' + L.on + '" title="Show or hide"></button>'
-        + '<span class="nm" data-act="active" title="Make this the active layer — new marks land here">' + L.label + '</span>'
+        + '<span class="nm" data-act="active" title="Tap = make active · double-tap = rename"><span class="tag">' + tagOf[L.key] + '</span>' + L.label + '</span>'
         + '<button type="button" class="solo" data-act="solo" aria-pressed="' + (soloLay === L.key) + '" title="Solo this layer">S</button>'
         + '<button type="button" class="warp" data-act="warp" aria-pressed="' + (L.warp > 0) + '" title="W lit = this layer follows warp; dim = held still">W</button>'
         + '<input type="range" min="0" max="1" step="0.01" value="' + L.op + '" data-act="op" aria-label="' + L.label + ' opacity">'
@@ -2524,6 +2537,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       row.querySelector('[data-act=sel]').addEventListener('click', e => { const sk = 'lay:' + L.key; if (selected.has(sk)) selected.delete(sk); else selected.add(sk); e.currentTarget.setAttribute('aria-pressed', selected.has(sk)); row.classList.toggle('sel-on', selected.has(sk)); registerSelectedColours(); if (ed) ed.values = { ...OVR }; hint(selected.size ? selected.size + ' selected — tools + effects act on them; their colours show in the editor.' : null); });
       row.querySelector('[data-act=eye]').addEventListener('click', () => { L.on = !L.on; if (soloLay === L.key && !L.on) soloLay = null; relayer(); });
       row.querySelector('[data-act=active]').addEventListener('click', () => setActiveLayer(L.key));
+      row.querySelector('[data-act=active]').addEventListener('dblclick', () => {           // double-tap the name to rename (edits the label; the key/tag are untouched)
+        const cell = row.querySelector('[data-act=active]');
+        const inp = document.createElement('input'); inp.type = 'text'; inp.value = L.label; inp.className = 'nm-edit';
+        cell.replaceWith(inp); inp.focus(); inp.select();
+        const done = () => { const v = inp.value.trim(); if (v) L.label = v; buildLayerUI(); saveLocal(); };
+        inp.addEventListener('blur', done);
+        inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); else if (e.key === 'Escape') buildLayerUI(); });
+      });
       row.querySelector('[data-act=solo]').addEventListener('click', () => { soloLay = soloLay === L.key ? null : L.key; relayer(); });
       row.querySelector('[data-act=warp]').addEventListener('click', e => { L.warp = L.warp > 0 ? 0 : 1; e.currentTarget.setAttribute('aria-pressed', L.warp > 0); redraw(true); });
       row.querySelector('[data-act=op]').addEventListener('input', e => { L.op = +e.target.value; row.querySelector('output').textContent = Math.round(L.op * 100); relayer(); });
@@ -2538,7 +2559,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       + '<input type="color" data-act="selcol" title="Colour the selected layers" value="#8a8de0">'
       + '<button type="button" data-act="uncol" title="Clear colour — back to the bucket">no colour</button>'
       + '<button type="button" data-act="wfollow" title="Selected layers follow warp">warp</button>'
-      + '<button type="button" data-act="whold" title="Selected layers hold still">hold</button>';
+      + '<button type="button" data-act="whold" title="Selected layers hold still">hold</button>'
+      + '<button type="button" data-act="hide" title="Hide — the renderer ignores it and it can\'t be clicked; recover it from the Hidden list">hide</button>';
     const applySel = (fn, rebuild) => { if (!selected.size) { hint('Select something first (the ▢ box on a row, or tap a vein with Tune).'); return; } for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) fn(L); } redraw(rebuild); };   // warp = layers only
     // colour bakes onto each selected key's flat token (OVR[key], key already 'lay:<layer>' or 'id:<vein>');
     // render reads them, the kit resolves them for the editor, ed.values re-syncs so an open editor won't clobber.
@@ -2547,7 +2569,26 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     sa.querySelector('[data-act=uncol]').addEventListener('click', () => colourSel(k => { delete (uvMode ? OVR_uv : OVR)[k]; }));
     sa.querySelector('[data-act=wfollow]').addEventListener('click', () => { applySel(L => L.warp = 1, true); syncLayerUI(); });
     sa.querySelector('[data-act=whold]').addEventListener('click', () => { applySel(L => L.warp = 0, true); syncLayerUI(); });
+    const markOfKey = k => { const id = k.slice(3); if (id[0] === 'W' || id[0] === 'S') return +id.slice(1); const L = geo.byId.get(id); return L ? L.mark : null; };   // any artifact key → its mark
+    sa.querySelector('[data-act=hide]').addEventListener('click', () => {   // 7th dimension: tag selected artifacts (by mark) "don't render"; layers just take the eye
+      if (!selected.size) { hint('Select something to hide first (a vein/web/seam with Tune, or a layer row).'); return; }
+      for (const k of selected) { if (k.startsWith('id:')) { const m = markOfKey(k); if (m != null) hidden.add(m); } else if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) L.on = false; } }
+      selected.clear(); registerSelectedColours(); buildLayerUI(); saveLocal(); redraw(false);
+    });
     layEl.appendChild(sa);
+    if (hidden.size) {                                     // the Hidden list — the only way back for an artifact you can no longer click
+      const hp = document.createElement('div'); hp.className = 'hidden-panel';
+      hp.innerHTML = '<span class="lbl">Hidden · not rendered, not selectable</span>';
+      const nameOf = m => { const mk = marks.find(x => x.id === m), k = mk ? mk.kind : '?'; return ({ vein: 'Vein', branch: 'Minor vein', web: 'Web', styl: 'Seam' }[k] || (k[0].toUpperCase() + k.slice(1))) + ' #' + m; };
+      for (const m of hidden) {
+        const it = document.createElement('div'); it.className = 'hidden-item';
+        it.innerHTML = '<span>' + nameOf(m) + '</span>';
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = 'show'; b.title = 'Un-hide — render it again';
+        b.addEventListener('click', () => { hidden.delete(m); buildLayerUI(); saveLocal(); redraw(false); });
+        it.appendChild(b); hp.appendChild(it);
+      }
+      layEl.appendChild(hp);
+    }
   }
   function syncLayerUI() {
     for (const row of layEl.querySelectorAll('.lay')) {
@@ -2574,7 +2615,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return { v: 1, fam, tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
              layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed })), soloLay, activeLayer: { ...activeLayer },
-             OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem },
+             OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden],
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
   }
   function deserialize(o) {
@@ -2610,6 +2651,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (o.OVR) Object.assign(OVR, o.OVR); else if (o.COL) Object.assign(OVR, o.COL); else seedColours(fam);   // older saves stored resolved values as `COL`
     for (const k in OVR_uv) delete OVR_uv[k];
     if (o.OVR_uv) for (const k in o.OVR_uv) { const e = o.OVR_uv[k]; OVR_uv[k] = (typeof e === 'string') ? { v: -1, c: e } : e; }   // v54 saves stored a plain colour → activate at −1 (UV); newer are {v,c}
+    hidden.clear(); if (Array.isArray(o.hidden)) for (const k of o.hidden) hidden.add(k);   // the 7th dimension travels with the slab
     for (const k in perItem) delete perItem[k]; if (o.perItem) Object.assign(perItem, o.perItem);
     registerSpeckGroups(); registerSelectedColours(); recolour();
     if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor
