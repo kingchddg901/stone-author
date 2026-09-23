@@ -75,8 +75,12 @@ Dispatched by `applyMark(m, out)` on `m.kind`. *(1397)*
   `inherit`-bucket from the layer; `registerLayerColours()` registers only the *selected* layers so the
   editor stays parseable). Values live in the flat `OVR`; `vcol`/web read `OVR['lay:<layer>']` (per-id →
   per-layer → bucket); the `.selact` swatch writes them and `ed.values` re-syncs so an open editor won't
-  clobber the write. (3) **warp** — *follow*/*hold* set the selected layers' warp weight. Row select boxes
-  drive membership. Fog is deep-copied in the incremental clone so a fog push never corrupts the base field.
+  clobber the write. (3) **warp** — *follow*/*hold* set the selected layers' warp weight; (4) **adjustment
+  set** — `ADJ` (blur/hue/sat/bright/contrast/weight); `adjTokens(base,label)` generates the `<key>:<name>`
+  number tokens per selected target; `adjOf(id,layer,bucket,name,def)` resolves one up the granularity
+  (artifact→layer→bucket→default); `filterOf(...)` composes the five filters into a `ctx.filter` string
+  applied per vein/web edge; `weightOf(...)` is the line-width multiplier (not yet wired into `runs`). Row
+  select boxes drive membership. Fog is deep-copied in the incremental clone so a fog push never corrupts the base field.
 - `knotGeom(m)` / `woodGrain(F, knots)` / `trace(x, y, sg)` — a wood knot, the grain field flowing
   around knots, and one traced grain streamline. *(1290/1293/1315)*
 - `delaunay(P)` / `distTo(route, p)` — Bowyer–Watson triangulation and nearest-distance-to-route

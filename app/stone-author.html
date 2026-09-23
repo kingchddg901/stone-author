@@ -1914,7 +1914,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
       for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
       const wlc = OVR['lay:' + wl]; g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : (wlc || COL.web);
-      g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp(wl)); g2d.lineWidth = e.width; g2d.stroke();
+      if (!ident) g2d.filter = filterOf(null, wl, 'web');               // per web-layer adjustments
+      g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp(wl)); g2d.lineWidth = e.width; g2d.stroke(); g2d.filter = 'none';
     } fxOff(_fx); }
     if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))), nv = Math.max(1, Math.min(4, Math.round(G.speckSubs))); for (const s of geo.specks) {
       const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
@@ -1968,8 +1969,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (const L of order) if (L.halo && layVis(lk(L))) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
     }
     const vcol = L => { const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };   // per-id → per-layer token (flat OVR store) → the bucket
-    if (!ident) for (const L of order) if (layVis(lk(L))) runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true);  // shoulder
-    for (const L of order) if (layVis(lk(L))) { const _fx = fxOn(lk(L), vcol(L), ident); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false); fxOff(_fx); }
+    if (!ident) for (const L of order) if (layVis(lk(L))) { g2d.filter = filterOf(L.id, L.layer, L.major ? 'major' : 'minor'); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true); g2d.filter = 'none'; }  // shoulder
+    for (const L of order) if (layVis(lk(L))) { const _fx = fxOn(lk(L), vcol(L), ident); if (!ident) g2d.filter = filterOf(L.id, L.layer, L.major ? 'major' : 'minor'); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false); g2d.filter = 'none'; fxOff(_fx); }  // per-item adjustments via ctx.filter
   }
   function ellipse(K, f, jit) {
     ctx.beginPath();
@@ -2351,6 +2352,29 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // is authoring its colour token. Only the SELECTED layers are registered for the editor, so the token list
   // stays parseable no matter how many layers exist (values persist in OVR either way and the render reads them).
   const layToken = L => ({ key: 'lay:' + L.key, label: L.label, type: 'color', inherit: L.bucket });
+  // The render-time adjustment set applied to ANY target (layer or artifact) by token: colour is the bare
+  // key; these six are `<key>:<name>` number tokens. Five are canvas filters, weight is a line-width mult.
+  const ADJ = [
+    { n: 'blur', min: 0, max: 8, step: 0.1, def: 0 }, { n: 'hue', min: -180, max: 180, step: 1, def: 0 },
+    { n: 'sat', min: 0, max: 2, step: 0.05, def: 1 }, { n: 'bright', min: 0, max: 2, step: 0.05, def: 1 },
+    { n: 'contrast', min: 0, max: 2, step: 0.05, def: 1 }, { n: 'weight', min: 0.2, max: 3, step: 0.05, def: 1 },
+  ];
+  const ADJ_LABEL = { blur: 'blur', hue: 'hue', sat: 'saturation', bright: 'brightness', contrast: 'contrast', weight: 'weight' };
+  const adjTokens = (base, label) => ADJ.map(a => ({ key: base + ':' + a.n, label: label + ' — ' + ADJ_LABEL[a.n], type: 'number', min: a.min, max: a.max, step: a.step, default: a.def }));
+  // Resolve one adjustment for an item, walking the granularity: artifact → its layer → its bucket → default.
+  const adjOf = (id, layer, bucket, name, def) => { const v = (id != null ? OVR['id:' + id + ':' + name] : undefined) ?? OVR['lay:' + layer + ':' + name] ?? OVR[bucket + ':' + name]; return v !== undefined && v !== '' ? +v : def; };
+  function filterOf(id, layer, bucket) {                  // the ctx.filter string from the resolved adjustments (none = 'none')
+    const b = adjOf(id, layer, bucket, 'blur', 0), h = adjOf(id, layer, bucket, 'hue', 0), s = adjOf(id, layer, bucket, 'sat', 1),
+          br = adjOf(id, layer, bucket, 'bright', 1), c = adjOf(id, layer, bucket, 'contrast', 1);
+    let f = '';
+    if (b > 0) f += 'blur(' + b + 'px) ';
+    if (h) f += 'hue-rotate(' + h + 'deg) ';
+    if (s !== 1) f += 'saturate(' + s + ') ';
+    if (br !== 1) f += 'brightness(' + br + ') ';
+    if (c !== 1) f += 'contrast(' + c + ') ';
+    return f || 'none';
+  }
+  const weightOf = (id, layer, bucket) => adjOf(id, layer, bucket, 'weight', 1);
   // Register colour tokens ONLY for the selected keys — layers (lay:) and single artifacts (id:), each
   // deriving its inherit from where it lives (a layer → its bucket; a vein → its major/minor bucket). This
   // is "selected for display": the editor shows only what you've selected, however many exist in all.
@@ -2358,8 +2382,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!kit) return;
     const toks = [];
     for (const key of selected) {
-      if (key.startsWith('lay:')) { const L = layAt(key.slice(4)); if (L) toks.push(layToken(L)); }
-      else if (key.startsWith('id:')) { const id = key.slice(3), L = geo.byId.get(id); toks.push({ key, label: 'Vein ' + id, type: 'color', inherit: (L && !L.major) ? 'minor' : 'major' }); }
+      if (key.startsWith('lay:')) { const L = layAt(key.slice(4)); if (L) { toks.push(layToken(L)); toks.push(...adjTokens('lay:' + L.key, L.label)); } }
+      else if (key.startsWith('id:')) { const id = key.slice(3), L = geo.byId.get(id); toks.push({ key, label: 'Vein ' + id, type: 'color', inherit: (L && !L.major) ? 'minor' : 'major' }); toks.push(...adjTokens('id:' + id, 'Vein ' + id)); }
     }
     kit.registerTokenGroup({ id: 'selectedcolours', label: 'Selected', tokens: toks });
   }
