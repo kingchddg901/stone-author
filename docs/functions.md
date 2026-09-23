@@ -179,7 +179,12 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   in the `ssC` scratch canvas (`stone` composited with `difference` against a blur of itself, so flat areas
   are ~black and only veins/specks/edges survive), `multiply` it warm, then add it back over the stone with
   `lighter`. Because flat regions contribute ~0 it never white-outs, on light or dark stone; features glow
-  warm like light through a thin translucent sheet. One `Subsurface` ground slider (0 = opaque). Tunable v1.
+  warm like light through a thin translucent sheet. One `Subsurface` ground slider (0 = opaque, 0–2). Tunable v1.
+- **Specular top-coat** (`G.specular`, `G.lightAngle`, coat tier v1) — a post-pass after subsurface: a soft
+  warm-white radial gloss hotspot placed toward `lightAngle` off the slab centre, `screen`-composited at
+  strength `G.specular`, so a movable sheen sweeps the polished surface as the light moves. The **one light**
+  (`lightAngle`) is shared — tile-edge relief will read the same angle. `Specular` / `Light angle` ground
+  sliders. v1 is a broad sheen (no sharp feature glint yet).
 - `paintStoneContent(ident, angleView)` — paint every layer in stack order
   (`base→breccia→clouds→bands→web→micro→drusy→styl→minor→major`), gated by layer visibility. The
   core of the renderer. *(1677)*
