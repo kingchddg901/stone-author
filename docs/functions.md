@@ -59,14 +59,16 @@ Dispatched by `applyMark(m, out)` on `m.kind`. *(1397)*
 - `buildStyl(m, out)` — a stylolite: the route becomes an interlocking toothy seam. *(901)*
 - `buildWeb(m, F, out)` — a crack along the line plus a Delaunay web of cells that thins out. *(919)*
 - `buildPour(m, out)` — the pour brush: specks thrown along the line (slow pools, fast thins, bends fling). *(1340)*
-- `applyGravity(m, out)` — pull/push specks toward a point or line. Also the **fog sculptor**: when
-  `m.fogTarget` is set it retargets to `out.fog` — **push clears a window** in the haze, **pull gathers a
-  resin pool** (its pull/push *is* the fog's polarity), leaving veins/specks untouched (zero smear). *(1194)*
+- `applyGravity(m, out)` — pull/push specks toward a point or line. Also the **fog sculptor**: when the
+  mark targets fog (`m.tgt === 'fog'`) it retargets to `out.fog` — **push clears a window** in the haze,
+  **pull gathers a resin pool** (its pull/push *is* the fog's polarity), leaving veins/specks untouched
+  (zero smear). *(1194)*
 - `applyMagnet(m, out)` — comb specks like iron filings along the pen's lean; retargets to `out.fog` when
-  `m.fogTarget` is set, but it only rotates orientation, so round haze blobs show nothing (yet). *(1231)*
-- A mark gets `fogTarget` at commit from the temporary **`fogSculpt`** toggle ("Gravity / magnet move the
-  haze") — the stand-in engage until the layer system's selection routes tools to a layer. Fog is
-  deep-copied in the incremental clone so a fog push never corrupts the base field.
+  `m.tgt === 'fog'`, but it only rotates orientation, so round haze blobs show nothing (yet). *(1231)*
+- **Selection** (`selected` set, `sculptTarget()`) routes the force tools: select the Fog (or granite)
+  layer in the panel, and a gravity/magnet mark records that field as `m.tgt` at commit; select nothing
+  and it defaults to the specks. This replaced the old `fogSculpt` toggle. (Old saves' `fogTarget` still
+  reads.) Fog is deep-copied in the incremental clone so a fog push never corrupts the base field.
 - `knotGeom(m)` / `woodGrain(F, knots)` / `trace(x, y, sg)` — a wood knot, the grain field flowing
   around knots, and one traced grain streamline. *(1290/1293/1315)*
 - `delaunay(P)` / `distTo(route, p)` — Bowyer–Watson triangulation and nearest-distance-to-route

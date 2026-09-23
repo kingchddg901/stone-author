@@ -122,6 +122,13 @@ is what makes a cross-bucket "group as an object" selection possible later. Fiel
 (the granite speck ground) are still single-layer for now; per-field layers (each with its own density
 and seed) are the next step.
 
+**Selection scopes effects.** Each row has a select toggle; the selected set is what an effect acts on
+(nothing selected = the effect's global default). First use: the **force tools** — select the Fog (or,
+later, a granite) layer and Gravity/Magnet sculpt *that* field (push clears a window, pull pools),
+leaving everything else untouched; select nothing and they fall back to the specks. This is the real
+mechanism the temporary toggles (`fogSculpt`, "Warp holds major") were standing in for; warp and colour
+scope onto the same selection next, where selecting layers and applying an effect *bakes* it into them.
+
 ### Determinism — a knob edits, it doesn't re-roll
 
 One PRNG stream per role per sample (`mulberry32`, seeded via `sub(seed, salt…)`). Because each
@@ -170,7 +177,8 @@ overshoot and chase it back; the mark of the hand is the residue. The **Undo but
 is the true undo) · the **fog / resin-core** layer (a flat untinted grayscale haze, deep, for sub-surface
 depth; movable particles for the magnet to sculpt) · the **layer system, first slice** (multiple user
 layers per bucket for major / minor / web, an active layer marks file into, per-layer eye / opacity /
-warp, saved and restored).
+warp, saved and restored) · **layer selection** (select layers in the panel; the force tools sculpt the
+selected particle field — Fog / granite — instead of a per-effect toggle).
 
 **Next:** per-id beyond veins (clasts / seams) · the remaining canvas colour menu (gradients,
 filters) · per-pixel displacement of the base fields under warp · targeted per-item reroll · a bake

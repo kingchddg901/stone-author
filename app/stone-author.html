@@ -39,13 +39,16 @@
   .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 68ch; }
   .note b { color: var(--text); font-weight: 500; }
   .layers { display: grid; gap: 5px; width: 100%; max-width: 460px; }
-  .lay { display: grid; grid-template-columns: 30px minmax(60px, 1fr) 30px 30px minmax(64px, 100px) 3ch;
-         align-items: center; gap: 8px; }
+  .lay { display: grid; grid-template-columns: 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch;
+         align-items: center; gap: 6px; padding: 0 4px; }
+  .lay.sel-on { background: rgba(138, 141, 224, 0.12); border-radius: 6px; }   /* row in the current selection */
   .lay .nm { font-size: 13px; color: var(--text); cursor: pointer; }
   .lay.off .nm { color: var(--dim); }
   .lay.active .nm { color: #8a8de0; font-weight: 600; }
   .lay.active .nm::before { content: '\25B8 '; }          /* triangle marks the active layer (new marks land here) */
-  .lay .eye, .lay .solo, .lay .warp { padding: 4px 0; text-align: center; font-size: 13px; line-height: 1; }
+  .lay .sel::before { content: '\25A2'; }                  /* empty square = not selected */
+  .lay .sel[aria-pressed="true"]::before { content: '\25A3'; color: #8a8de0; }   /* filled = selected */
+  .lay .eye, .lay .solo, .lay .warp, .lay .sel { padding: 4px 0; text-align: center; font-size: 13px; line-height: 1; }
   .lay .eye::before { content: '\25C9'; }                 /* filled disc = visible */
   .lay .eye[aria-pressed="false"]::before { content: '\25CB'; color: var(--dim); }   /* ring = hidden */
   .lay .solo[aria-pressed="true"] { color: #f0c46a; border-color: var(--on-line); }
@@ -218,7 +221,7 @@
       <div class="sl"><label for="fogHaze">Fog / resin <output id="fogHazeV"></output></label><input id="fogHaze" type="range" min="0" max="0.06" step="0.005"></div>
       <div class="sl"><label for="fogSize">Fog size <output id="fogSizeV"></output></label><input id="fogSize" type="range" min="0.3" max="2.5" step="0.05"></div>
       <div class="sl"><label for="fogDensity">Fog density <output id="fogDensityV"></output></label><input id="fogDensity" type="range" min="0.2" max="2.5" step="0.05"></div>
-      <div class="sl"><span class="lbl">Sculpt</span><div class="grp"><button id="fog-sculpt" type="button" aria-pressed="false">Gravity / magnet move the haze</button></div></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">To sculpt the haze: select the Fog layer, then use Gravity (push clears a window, pull pools) or Magnet.</span></div>
     </div>
     <div class="sliders" id="g-granite" hidden>
       <div class="sl"><label for="gspecks">Specks <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
@@ -460,7 +463,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
   const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen };
   let guidesOn = true;
-  let fogSculpt = false;   // TEMP engage (until the layer system's selection lands): route the force tools to the fog
+  // SELECTION: the set of layers an effect is scoped to. Empty = global (the effect hits its default).
+  // Select layers, then a tool/effect acts on them. First use: the force tools (gravity/magnet) sculpt the
+  // selected particle field (fog / the granite specks); this replaces the old fog-sculpt toggle.
+  const selected = new Set();
+  const sculptTarget = () => selected.has('fog') ? 'fog' : selected.has('micro') ? 'micro' : undefined;   // which particle field the force tools grab
   const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), spike: v => `${(+v).toFixed(1)}:1` };
   let fam = 'carrara', tool = 'vein', view = 'stone';
   let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], knots: [], grain: [], styl: [], drusy: [], fog: [] };
@@ -1277,7 +1284,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // inverse power, so it clears a space and fades instead of stopping at an edge.
   function applyGravity(m, out) {
     const M = m.p, reach = 0.05 * M.reach, st = M.strength, sign = M.sign;
-    const P = m.fogTarget ? out.fog : out.specks;      // fog: push clears a window, pull gathers a resin pool
+    const P = (m.tgt === 'fog' || m.fogTarget) ? out.fog : out.specks;   // fog: push clears a window, pull gathers a pool (fogTarget = old saves)
     let near;
     if (m.at) {
       const [cx, cy] = m.at;
@@ -1316,7 +1323,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function applyMagnet(m, out) {
     const M = m.p, S = m.samples, R = 0.05 * M.mreach, h = 0.02 * M.mheight, sign = M.mag;
     out.guides.push({ type: 'mag', pts: S.map(q => [q[0], q[1]]), axis: S.map(q => [q[4], q[5]]), sign, hover: !!m.hover });
-    const P = m.fogTarget ? out.fog : out.specks;      // rotates orientation — visible on specks; round fog blobs won't show it (yet)
+    const P = (m.tgt === 'fog' || m.fogTarget) ? out.fog : out.specks;   // rotates orientation; round fog blobs won't show it (yet)
     if (!P.length || !S.length) return;
     const grid = cellGrid(P, R), realP = M.pressure && pressureReal(S);
     let hx = 1, hy = 0;
@@ -2229,8 +2236,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     gesture = null; live = null;
     const seed = (Math.random() * 2147483647) | 0, id = nextId++;
     if (g.type === 'draw' && tool === 'gravity') {
-      commit(pathLen(g.samples) < 0.01 ? { id, kind: 'gravity', seed, at: [g.samples[0][0], g.samples[0][1]], fogTarget: fogSculpt }
-                                        : { id, kind: 'gravity', seed, samples: g.samples, fogTarget: fogSculpt });
+      commit(pathLen(g.samples) < 0.01 ? { id, kind: 'gravity', seed, at: [g.samples[0][0], g.samples[0][1]], tgt: sculptTarget() }
+                                        : { id, kind: 'gravity', seed, samples: g.samples, tgt: sculptTarget() });
       if (!FAM[fam].groundSpecks && !marks.some(m => m.kind === 'pour')) hint('Gravity moves specks. Switch to Granite, or pour some first.');
     } else if (g.type === 'draw' && tool === 'chip') {
       const f = toFrame(...g.e0 || [0, 0]);
@@ -2243,7 +2250,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (hit && hit.d * Wc * V.z < 26) tuneId(hit.L.id, hit.L.major ? 'major' : 'minor');
       else hint('Tap a vein to tune just that one — its colour follows its layer until you change it.');
     } else if (g.type === 'draw' && tool === 'magnet') {
-      commit({ id, kind: 'magnet', seed, samples: g.samples, fogTarget: fogSculpt });
+      commit({ id, kind: 'magnet', seed, samples: g.samples, tgt: sculptTarget() });
       if (!geo.specks.length) hint('The magnet turns specks. Switch to Granite, or pour some first.');
     } else if (g.type === 'draw' && tool === 'knot') {
       const a = g.samples[0], b = g.samples[g.samples.length - 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -2354,14 +2361,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function buildLayerUI() {
     layEl.innerHTML = '';
     for (const L of layers.slice().reverse()) {
-      const row = document.createElement('div'); row.className = 'lay' + (activeLayer[L.bucket] === L.key ? ' active' : ''); row.dataset.key = L.key;
+      const row = document.createElement('div'); row.className = 'lay' + (activeLayer[L.bucket] === L.key ? ' active' : '') + (selected.has(L.key) ? ' sel-on' : ''); row.dataset.key = L.key;
       row.innerHTML =
-        '<button type="button" class="eye" data-act="eye" aria-pressed="' + L.on + '" title="Show or hide"></button>'
+        '<button type="button" class="sel" data-act="sel" aria-pressed="' + selected.has(L.key) + '" title="Select — effects and the force tools act on the selected layers"></button>'
+        + '<button type="button" class="eye" data-act="eye" aria-pressed="' + L.on + '" title="Show or hide"></button>'
         + '<span class="nm" data-act="active" title="Make this the active layer — new marks land here">' + L.label + '</span>'
         + '<button type="button" class="solo" data-act="solo" aria-pressed="' + (soloLay === L.key) + '" title="Solo this layer">S</button>'
         + '<button type="button" class="warp" data-act="warp" aria-pressed="' + (L.warp > 0) + '" title="W lit = this layer follows warp; dim = held still">W</button>'
         + '<input type="range" min="0" max="1" step="0.01" value="' + L.op + '" data-act="op" aria-label="' + L.label + ' opacity">'
         + '<output>' + Math.round(L.op * 100) + '</output>';
+      row.querySelector('[data-act=sel]').addEventListener('click', e => { if (selected.has(L.key)) selected.delete(L.key); else selected.add(L.key); e.currentTarget.setAttribute('aria-pressed', selected.has(L.key)); row.classList.toggle('sel-on', selected.has(L.key)); hint(selected.size ? selected.size + ' layer' + (selected.size > 1 ? 's' : '') + ' selected — tools and effects act on them.' : null); });
       row.querySelector('[data-act=eye]').addEventListener('click', () => { L.on = !L.on; if (soloLay === L.key && !L.on) soloLay = null; relayer(); });
       row.querySelector('[data-act=active]').addEventListener('click', () => setActiveLayer(L.key));
       row.querySelector('[data-act=solo]').addEventListener('click', () => { soloLay = soloLay === L.key ? null : L.key; relayer(); });
@@ -2380,9 +2389,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       row.querySelector('[data-act=eye]').setAttribute('aria-pressed', L.on);
       row.querySelector('[data-act=solo]').setAttribute('aria-pressed', soloLay === L.key);
       const wb = row.querySelector('[data-act=warp]'); if (wb) wb.setAttribute('aria-pressed', L.warp > 0);
+      const sb = row.querySelector('[data-act=sel]'); if (sb) sb.setAttribute('aria-pressed', selected.has(L.key));
       row.querySelector('[data-act=op]').value = L.op; row.querySelector('output').textContent = Math.round(L.op * 100);
       row.classList.toggle('off', hidden);
       row.classList.toggle('active', activeLayer[L.bucket] === L.key);
+      row.classList.toggle('sel-on', selected.has(L.key));
     }
   }
   function showGround() {
@@ -2580,7 +2591,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   document.getElementById('colour-toggle').addEventListener('click', () => { const p = document.getElementById('colour-panel'), b = document.getElementById('colour-toggle'), show = p.hidden; p.hidden = !show; b.setAttribute('aria-pressed', show); b.textContent = show ? 'Hide colour editor' : 'Show colour editor'; });
   document.getElementById('colour-fromfam').addEventListener('click', () => { seedColours(fam); recolour(); mountEditor(); redraw(true); });   // adopt the current family's palette
   document.getElementById('warp-holdmajor').addEventListener('click', () => { const L = layAt('major'); L.warp = L.warp === 0 ? 1 : 0; document.getElementById('warp-holdmajor').setAttribute('aria-pressed', L.warp === 0); redraw(true); });
-  document.getElementById('fog-sculpt').addEventListener('click', () => { fogSculpt = !fogSculpt; document.getElementById('fog-sculpt').setAttribute('aria-pressed', fogSculpt); hint(fogSculpt ? 'Sculpt fog ON: Gravity push clears a window in the haze, pull gathers a resin pool. The veins won’t move — that’s the point.' : null); });
   const mh = document.getElementById('m-hover');
   mh.addEventListener('click', () => {
     hoverMag = !hoverMag; mh.setAttribute('aria-pressed', hoverMag); if (!hoverMag) commitHover();
