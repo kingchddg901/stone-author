@@ -212,6 +212,7 @@
       <div class="sl"><label for="fogHaze">Fog / resin <output id="fogHazeV"></output></label><input id="fogHaze" type="range" min="0" max="0.06" step="0.005"></div>
       <div class="sl"><label for="fogSize">Fog size <output id="fogSizeV"></output></label><input id="fogSize" type="range" min="0.3" max="2.5" step="0.05"></div>
       <div class="sl"><label for="fogDensity">Fog density <output id="fogDensityV"></output></label><input id="fogDensity" type="range" min="0.2" max="2.5" step="0.05"></div>
+      <div class="sl"><span class="lbl">Sculpt</span><div class="grp"><button id="fog-sculpt" type="button" aria-pressed="false">Gravity / magnet move the haze</button></div></div>
     </div>
     <div class="sliders" id="g-granite" hidden>
       <div class="sl"><label for="gspecks">Specks <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
@@ -453,6 +454,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
   const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen };
   let guidesOn = true;
+  let fogSculpt = false;   // TEMP engage (until the layer system's selection lands): route the force tools to the fog
   const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), spike: v => `${(+v).toFixed(1)}:1` };
   let fam = 'carrara', tool = 'vein', view = 'stone';
   let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], knots: [], grain: [], styl: [], drusy: [], fog: [] };
@@ -1253,6 +1255,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // inverse power, so it clears a space and fades instead of stopping at an edge.
   function applyGravity(m, out) {
     const M = m.p, reach = 0.05 * M.reach, st = M.strength, sign = M.sign;
+    const P = m.fogTarget ? out.fog : out.specks;      // fog: push clears a window, pull gathers a resin pool
     let near;
     if (m.at) {
       const [cx, cy] = m.at;
@@ -1263,9 +1266,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       near = pathIndex(path, reach);
       out.guides.push({ type: 'ln', pts: path, reach, sign });
     }
-    if (!out.specks.length) return;
+    if (!P.length) return;
     const a = Math.min(0.9, st), h = st * reach;
-    for (const q of out.specks) {
+    for (const q of P) {
       const hit = near(q.x, q.y, reach * 3);
       if (!hit) continue;
       const d = hit.d;
@@ -1277,7 +1280,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       moveRadial(q, hit, dn, -hit.ty, hit.tx);
       mark(q, x0, y0);
     }
-    settle(out.specks);
+    settle(P);                                          // no-op for fog (no ground flag) — haze overlaps freely
   }
   // THE MAGNET: the pen as a magnet held a little above the slab, the specks as iron filings.
   // Upright, the field leaves the pole straight down and fans out: a STARBURST. Laid over, it
@@ -1291,8 +1294,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function applyMagnet(m, out) {
     const M = m.p, S = m.samples, R = 0.05 * M.mreach, h = 0.02 * M.mheight, sign = M.mag;
     out.guides.push({ type: 'mag', pts: S.map(q => [q[0], q[1]]), axis: S.map(q => [q[4], q[5]]), sign, hover: !!m.hover });
-    if (!out.specks.length || !S.length) return;
-    const grid = cellGrid(out.specks, R), realP = M.pressure && pressureReal(S);
+    const P = m.fogTarget ? out.fog : out.specks;      // rotates orientation — visible on specks; round fog blobs won't show it (yet)
+    if (!P.length || !S.length) return;
+    const grid = cellGrid(P, R), realP = M.pressure && pressureReal(S);
     let hx = 1, hy = 0;
     for (let i = 0; i < S.length; i++) {
       const q = S[i], dt = i ? Math.min(Math.max(q[2] - S[i - 1][2], 0), 0.05) : 1 / 60;
@@ -1309,7 +1313,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const str = M.mstrength * (0.5 + pr) * (m.hover ? 0.35 : 1);
       const [, g] = sub(m.seed, 60, i);
       forNear(grid, R, q[0], q[1], 1, j => {
-        const sp = out.specks[j], dx = sp.x - q[0], dy = sp.y - q[1], rho2 = dx * dx + dy * dy;
+        const sp = P[j], dx = sp.x - q[0], dy = sp.y - q[1], rho2 = dx * dx + dy * dy;
         if (rho2 > R * R) return;
         // the pole's fan and the lean, blended as AXIAL directions (doubled angles), so opposite
         // ends of a speck are the same thing; closer to the pole (lower Height) the fan is sharper
@@ -1545,7 +1549,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (G.warp <= 0 && !marks.some(m => m.kind === 'moon') && last && last.sig === sig && n === last.hist.length + 1 && nm.kind !== 'knot'
         && last.hist.every((h, i) => h.m === marks[i] && h.seed === marks[i].seed)) {
       const out = { ...geo, lines: geo.lines.slice(), byId: new Map(geo.byId), web: geo.web.slice(),
-                    specks: geo.specks.map(q => ({ ...q })), guides: geo.guides.slice(), styl: geo.styl.slice(), drusy: geo.drusy.slice() };
+                    specks: geo.specks.map(q => ({ ...q })), fog: geo.fog.map(q => ({ ...q })), guides: geo.guides.slice(), styl: geo.styl.slice(), drusy: geo.drusy.slice() };
       applyMark(nm, out);
       geo = out;
       last = { sig, hist: marks.map(m => ({ m, seed: m.seed })) };
@@ -2188,8 +2192,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     gesture = null; live = null;
     const seed = (Math.random() * 2147483647) | 0, id = nextId++;
     if (g.type === 'draw' && tool === 'gravity') {
-      commit(pathLen(g.samples) < 0.01 ? { id, kind: 'gravity', seed, at: [g.samples[0][0], g.samples[0][1]] }
-                                        : { id, kind: 'gravity', seed, samples: g.samples });
+      commit(pathLen(g.samples) < 0.01 ? { id, kind: 'gravity', seed, at: [g.samples[0][0], g.samples[0][1]], fogTarget: fogSculpt }
+                                        : { id, kind: 'gravity', seed, samples: g.samples, fogTarget: fogSculpt });
       if (!FAM[fam].groundSpecks && !marks.some(m => m.kind === 'pour')) hint('Gravity moves specks. Switch to Granite, or pour some first.');
     } else if (g.type === 'draw' && tool === 'chip') {
       const f = toFrame(...g.e0 || [0, 0]);
@@ -2202,7 +2206,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (hit && hit.d * Wc * V.z < 26) tuneId(hit.L.id, hit.L.major ? 'major' : 'minor');
       else hint('Tap a vein to tune just that one — its colour follows its layer until you change it.');
     } else if (g.type === 'draw' && tool === 'magnet') {
-      commit({ id, kind: 'magnet', seed, samples: g.samples });
+      commit({ id, kind: 'magnet', seed, samples: g.samples, fogTarget: fogSculpt });
       if (!geo.specks.length) hint('The magnet turns specks. Switch to Granite, or pour some first.');
     } else if (g.type === 'draw' && tool === 'knot') {
       const a = g.samples[0], b = g.samples[g.samples.length - 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -2519,6 +2523,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   document.getElementById('colour-toggle').addEventListener('click', () => { const p = document.getElementById('colour-panel'), b = document.getElementById('colour-toggle'), show = p.hidden; p.hidden = !show; b.setAttribute('aria-pressed', show); b.textContent = show ? 'Hide colour editor' : 'Show colour editor'; });
   document.getElementById('colour-fromfam').addEventListener('click', () => { seedColours(fam); recolour(); mountEditor(); redraw(true); });   // adopt the current family's palette
   document.getElementById('warp-holdmajor').addEventListener('click', () => { const L = layAt('major'); L.warp = L.warp === 0 ? 1 : 0; document.getElementById('warp-holdmajor').setAttribute('aria-pressed', L.warp === 0); redraw(true); });
+  document.getElementById('fog-sculpt').addEventListener('click', () => { fogSculpt = !fogSculpt; document.getElementById('fog-sculpt').setAttribute('aria-pressed', fogSculpt); hint(fogSculpt ? 'Sculpt fog ON: Gravity push clears a window in the haze, pull gathers a resin pool. The veins won’t move — that’s the point.' : null); });
   const mh = document.getElementById('m-hover');
   mh.addEventListener('click', () => {
     hoverMag = !hoverMag; mh.setAttribute('aria-pressed', hoverMag); if (!hoverMag) commitHover();
