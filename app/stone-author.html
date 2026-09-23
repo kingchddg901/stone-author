@@ -1898,7 +1898,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const wl = e.layer || 'web'; if (!layVis(wl)) continue;                        // per web-layer visibility
       g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
       for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
-      const wlc = layAt(wl); g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : (wlc && wlc.col ? wlc.col : COL.web);
+      const wlc = OVR['lay:' + wl]; g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : (wlc || COL.web);
       g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp(wl)); g2d.lineWidth = e.width; g2d.stroke();
     } fxOff(_fx); }
     if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))), nv = Math.max(1, Math.min(4, Math.round(G.speckSubs))); for (const s of geo.specks) {
@@ -1952,7 +1952,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const halo = COL.halo;
       for (const L of order) if (L.halo && layVis(lk(L))) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
     }
-    const vcol = L => { const o = COL['id:' + L.id]; if (o !== undefined) return o; const lc = layAt(L.layer); if (lc && lc.col) return lc.col; return L.major ? COL.major : COL.minor; };   // per-id override → per-layer colour → the bucket
+    const vcol = L => { const o = COL['id:' + L.id]; if (o !== undefined) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };   // per-id → per-layer token (OVR flat store) → the bucket
     if (!ident) for (const L of order) if (layVis(lk(L))) runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true);  // shoulder
     for (const L of order) if (layVis(lk(L))) { const _fx = fxOn(lk(L), vcol(L), ident); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false); fxOff(_fx); }
   }
@@ -2317,6 +2317,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }) });
     registerPerItem();
     registerSpeckGroups();
+    registerLayerColours();
     kit.setAdapter({ load: async () => ({ ...OVR }), save: async v => { for (const k in OVR) delete OVR[k]; Object.assign(OVR, v); recolour(); saveLocal(); redraw(true); } });
     TTK.defineThemeKitEditor();
     recolour();
@@ -2327,6 +2328,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function registerPerItem() {
     if (!kit) return;
     kit.registerTokenGroup({ id: 'peritem', label: 'Per-item (tap a vein with Tune)', tokens: Object.keys(perItem).map(id => ({ key: 'id:' + id, label: 'Vein ' + id, type: 'color', inherit: perItem[id] })) });
+  }
+  // A per-layer colour token, FULLY DERIVED from the layer — key from its key, label from its label, type
+  // bound to colour, and inherit from WHERE it lives (its bucket). Nothing is hand-authored: adding a layer
+  // is authoring its colour token. Only the SELECTED layers are registered for the editor, so the token list
+  // stays parseable no matter how many layers exist (values persist in OVR either way and the render reads them).
+  const layToken = L => ({ key: 'lay:' + L.key, label: L.label, type: 'color', inherit: L.bucket });
+  function registerLayerColours() {
+    if (!kit) return;
+    kit.registerTokenGroup({ id: 'layercolours', label: 'Selected layer colours', tokens: layers.filter(L => selected.has(L.key)).map(layToken) });
   }
   // Speck colour groups: split the micro layer into up to 5 colour groups (feldspar / quartz / mica …).
   // Each group is a token inheriting `micro`; a speck's group is stable (from its birth-position hash).
@@ -2374,7 +2384,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         + '<button type="button" class="warp" data-act="warp" aria-pressed="' + (L.warp > 0) + '" title="W lit = this layer follows warp; dim = held still">W</button>'
         + '<input type="range" min="0" max="1" step="0.01" value="' + L.op + '" data-act="op" aria-label="' + L.label + ' opacity">'
         + '<output>' + Math.round(L.op * 100) + '</output>';
-      row.querySelector('[data-act=sel]').addEventListener('click', e => { if (selected.has(L.key)) selected.delete(L.key); else selected.add(L.key); e.currentTarget.setAttribute('aria-pressed', selected.has(L.key)); row.classList.toggle('sel-on', selected.has(L.key)); hint(selected.size ? selected.size + ' layer' + (selected.size > 1 ? 's' : '') + ' selected — tools and effects act on them.' : null); });
+      row.querySelector('[data-act=sel]').addEventListener('click', e => { if (selected.has(L.key)) selected.delete(L.key); else selected.add(L.key); e.currentTarget.setAttribute('aria-pressed', selected.has(L.key)); row.classList.toggle('sel-on', selected.has(L.key)); registerLayerColours(); if (ed) ed.values = { ...OVR }; hint(selected.size ? selected.size + ' layer' + (selected.size > 1 ? 's' : '') + ' selected — tools + effects act on them; their colours show in the editor.' : null); });
       row.querySelector('[data-act=eye]').addEventListener('click', () => { L.on = !L.on; if (soloLay === L.key && !L.on) soloLay = null; relayer(); });
       row.querySelector('[data-act=active]').addEventListener('click', () => setActiveLayer(L.key));
       row.querySelector('[data-act=solo]').addEventListener('click', () => { soloLay = soloLay === L.key ? null : L.key; relayer(); });
@@ -2393,8 +2403,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       + '<button type="button" data-act="wfollow" title="Selected layers follow warp">warp</button>'
       + '<button type="button" data-act="whold" title="Selected layers hold still">hold</button>';
     const applySel = (fn, rebuild) => { if (!selected.size) { hint('Select one or more layers first (the ▢ box on each row).'); return; } for (const k of selected) { const L = layAt(k); if (L) fn(L); } redraw(rebuild); };
-    sa.querySelector('[data-act=selcol]').addEventListener('input', e => applySel(L => L.col = e.target.value, false));
-    sa.querySelector('[data-act=uncol]').addEventListener('click', () => applySel(L => L.col = null, false));
+    // colour bakes onto the selected layers' flat tokens (OVR['lay:<key>']); the render reads them, the
+    // kit resolves them for the editor, and ed.values re-syncs so an open editor won't clobber the write.
+    const colourSel = fn => { if (!selected.size) { hint('Select one or more layers first (the ▢ box on each row).'); return; } for (const k of selected) fn(k); recolour(); if (ed) ed.values = { ...OVR }; saveLocal(); redraw(false); };
+    sa.querySelector('[data-act=selcol]').addEventListener('input', e => colourSel(k => { OVR['lay:' + k] = e.target.value; }));
+    sa.querySelector('[data-act=uncol]').addEventListener('click', () => colourSel(k => { delete OVR['lay:' + k]; }));
     sa.querySelector('[data-act=wfollow]').addEventListener('click', () => { applySel(L => L.warp = 1, true); syncLayerUI(); });
     sa.querySelector('[data-act=whold]').addEventListener('click', () => { applySel(L => L.warp = 0, true); syncLayerUI(); });
     layEl.appendChild(sa);
@@ -2424,7 +2437,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function serialize() {
     return { v: 1, fam, tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
-             layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, col: L.col || null })), soloLay, activeLayer: { ...activeLayer },
+             layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, perItem: { ...perItem },
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
   }
@@ -2442,14 +2455,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         layers.splice(idx + 1, 0, L);
         const n = parseInt(s.key.split('#')[1], 10); if (n > layerSeq) layerSeq = n;
       }
-      if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; L.warp = typeof s.warp === 'number' ? s.warp : 1; L.col = s.col || null; }
+      if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; L.warp = typeof s.warp === 'number' ? s.warp : 1; }
     }
     for (const b in activeLayer) if (o.activeLayer && layAt(o.activeLayer[b])) activeLayer[b] = o.activeLayer[b];
     soloLay = o.soloLay || null;
     for (const k in OVR) delete OVR[k];                        // colour travels with the slab
     if (o.OVR) Object.assign(OVR, o.OVR); else if (o.COL) Object.assign(OVR, o.COL); else seedColours(fam);   // older saves stored resolved values as `COL`
     for (const k in perItem) delete perItem[k]; if (o.perItem) Object.assign(perItem, o.perItem);
-    registerPerItem(); registerSpeckGroups(); recolour();
+    registerPerItem(); registerSpeckGroups(); registerLayerColours(); recolour();
     if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor
     marks = o.marks.map(m => ({ ...m }));
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);

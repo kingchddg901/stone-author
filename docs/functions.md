@@ -68,10 +68,12 @@ Dispatched by `applyMark(m, out)` on `m.kind`. *(1397)*
 - **Selection** (`selected` set) is what an effect scopes to; three effects bake onto the selected layers:
   (1) the **force tools** — `sculptTarget()` → a gravity/magnet mark's `m.tgt`, so they sculpt the selected
   particle field (Fog / specks), else the specks default (replaced the `fogSculpt` toggle; old `fogTarget`
-  still reads); (2) **colour** — the panel swatch sets each selected layer's `L.col`, which `vcol` /web
-  render read (per-id → per-layer → bucket); (3) **warp** — *follow*/*hold* set the selected layers' warp
-  weight. The `.selact` bar in the panel drives colour + warp; row select boxes drive membership. Fog is
-  deep-copied in the incremental clone so a fog push never corrupts the base field.
+  still reads); (2) **colour** — a generated `lay:<key>` token (`layToken(L)` derives key/label/type/
+  `inherit`-bucket from the layer; `registerLayerColours()` registers only the *selected* layers so the
+  editor stays parseable). Values live in the flat `OVR`; `vcol`/web read `OVR['lay:<layer>']` (per-id →
+  per-layer → bucket); the `.selact` swatch writes them and `ed.values` re-syncs so an open editor won't
+  clobber the write. (3) **warp** — *follow*/*hold* set the selected layers' warp weight. Row select boxes
+  drive membership. Fog is deep-copied in the incremental clone so a fog push never corrupts the base field.
 - `knotGeom(m)` / `woodGrain(F, knots)` / `trace(x, y, sg)` — a wood knot, the grain field flowing
   around knots, and one traced grain streamline. *(1290/1293/1315)*
 - `delaunay(P)` / `distTo(route, p)` — Bowyer–Watson triangulation and nearest-distance-to-route

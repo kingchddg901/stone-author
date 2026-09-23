@@ -127,8 +127,14 @@ and seed) are the next step.
 selected layers:
 - **Force tools** — select the Fog (or, later, a granite) layer and Gravity/Magnet sculpt *that* field
   (push clears a window, pull pools), leaving everything else untouched; select nothing → the specks.
-- **Colour** — a swatch on the selection bakes a per-layer colour (`L.col`); render reads per-id →
-  per-layer → bucket, so a layer paints in its own colour until cleared.
+- **Colour** — per-layer colour is a **generated token**, `lay:<key>`, minted whole from the layer
+  (`layToken(L)`: key from its key, label from its label, `inherit` from its bucket — nothing
+  hand-authored, adding a layer *is* authoring its colour). Values live in the flat `OVR` store and the
+  render reads them (per-id → per-layer → bucket), so every coloured layer paints. **The editor displays
+  only the *selected* layers' tokens** (`registerLayerColours` registers the selection) — so a slab with a
+  hundred coloured layers never floods the editor; select to bring a few into view. A `.selact` swatch is
+  the quick path; the editor is the fine one. (Modeled on the VA theme-token system: generate from a live
+  list, store flat, scope the *display* by selection, inherit from where the token lives.)
 - **Warp** — *follow* / *hold* set the selected layers' warp weight (this is what the temporary "Warp
   holds major" toggle did, now general).
 
