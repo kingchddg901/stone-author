@@ -205,9 +205,17 @@ dominate; back light drives light through from behind so *occlusion* shapes it �
 On top of occlusion + glow the fold adds **emission** (reuse the `emit` path — self-luminous inclusions glow
 *through* the backlight at the current spectrum, which is what a dark stone like Marquina needs to sing) and a
 **scatter/bloom** so the glow reads as light rather than a tint. Back light takes precedence over uv, so you can
-sit at an authored spectrum value and see the transillumination *and* the fluorescence at once. Per-bucket
-transmittances are defaults for now — the open seam is to let each *layer* declare its own
-`{emission, transmittance, scatter}`, which is exactly this same fold with a per-layer `tᵦ`.
+sit at an authored spectrum value and see the transillumination *and* the fluorescence at once.
+
+**Each layer declares what it does to the light** — the full model. Every layer carries `transmit` (0 opaque →
+1 clear) and `scatter`, defaulted per identity and authored on the Selected bar. The fold is now genuinely
+*per-layer*, not per-bucket: the base bucket is the glowing body, then each other layer in turn (deepest → top)
+optionally scatters the accumulated light (a blur) and then occludes by `layerMask` — its *own* coverage
+(`.layer === key`), multiplied toward its *own* `transmit`. So two layers in the same bucket can differ — an
+opaque vein layer throwing a hard dark veil next to a translucent one that barely dims — which per-bucket
+constants could never express. With `emission` already per-artifact (`OVR_uv`), this is the literal
+`{emission, transmittance, scatter}` declaration per layer, folded once in light-travel order. `source-over` is
+still the degenerate case; the light direction (front vs back) is just the direction the fold runs.
 
 This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 

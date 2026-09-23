@@ -204,21 +204,22 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   the **Light tool** drags it (a `lightdrag` gesture; `drawLightGuide()` draws a little sun at the slab edge),
   `edgeFinish` lights tile edges by edge-normal·light, and the specular sheen/glint place their hotspot by it.
 - **Back light** (`paintBacklit`, `G.backlight`) — a stone-view mode (replaces the daylight body + its front-lit
-  coat passes) modelling light from **behind**: the **layer-aware fold**. Reuses the export's per-bucket renders —
-  `expBaseMask` (the translucent matrix, as luminance) and `expCoverage('major'|'minor'|'micro'|'web')` (each
-  occluder's coverage) at a ≤512px `backC` scratch, so no change to `paintStoneContent`. Per pixel, deepest→top:
-  `light = backlightColour · intensity · bodyTransmit(lum) · falloff · Π occ(coverageᵦ, tᵦ)`, where
-  `occ(c,t) = t + (1−t)(1−c)` drops the light toward each bucket's transmittance where it's covered (veins ~0.05
-  nearly opaque, seams 0.12, web 0.22, specks 0.45), a dark matrix passes less (`0.18 + 0.82·lum`), and a soft
-  hot-centre sits toward `G.lightX/lightY`. Colour = `lightRGB()` (Light temperature). Drawn under the view
-  transform (pans/zooms). The **lens** still runs over it (glass-over-backlight). Then two additive passes:
-  **emission-compose** — reuse the uv `emit` path (paint `paintStoneContent` with `uvMode` forced on into `emitC`,
-  clip the UV_DARK floor, add with `lighter`) so self-luminous inclusions glow *through* the backlight at the
-  current `lightSpectrum` (a no-op at daylight; dark stones need this — it's where the glowing veins come from);
-  and a **scatter/bloom** (two blurred `lighter` copies of the lit result) so the glow reads as light, not tint.
-  Backlight takes **precedence over uv** (`backlit` no longer excludes `uvMode`), so emitters compose at the dial
-  value while the transillumination still shows. Per-bucket `t` are defaults; per-layer `t` is the open seam.
-  `G.backlight` persists in `G`.
+  coat passes) modelling light from **behind**: the **per-layer fold**, where *each layer declares what it does to
+  the light*. Every layer carries `transmit` (0 opaque → 1 clear) and `scatter` (diffusion), defaulted per identity
+  (`BL_T`: veins ~0.05, seams 0.1, minor 0.12, web 0.22, specks 0.45, drusy 0.55, base/matrix = the glow) and
+  authored on the Selected bar (`pass` / `scatter` sliders). The fold, on a ≤512px `workC`:
+  1. the **base bucket is the glowing body** — `expBaseMask` luminance → `backC`: `backlightColour · intensity ·
+     (0.18 + 0.82·lum)·baseTransmit · falloff` (a dark matrix passes less; hot-centre toward `G.lightX/lightY`).
+  2. then **each non-base layer in turn, deepest→top**: if it scatters, blur the accumulated light (`blurCanvas`);
+     then `multiply` by `layerMask(L,t)` — white where clear, grey(t) where the layer covers — so the light drops
+     toward that layer's `t` where it occludes. `layerMask` renders just that layer's artifacts (filtered by
+     `.layer === L.key`), so two same-bucket layers can differ (an opaque vein layer vs a translucent one).
+  Then **emission-compose** (reuse the uv `emit` path into `emitC`, clip the UV_DARK floor, add with `lighter`) so
+  self-luminous inclusions glow *through* at the current `lightSpectrum` (dark stones need this), and a
+  **scatter/bloom** so the glow reads as light. Colour = `lightRGB()`; drawn under the view transform; the **lens**
+  still runs over it. Takes **precedence over uv** so emitters compose at the dial value. `transmit`/`scatter`
+  persist per layer with the slab (old saves keep the defaults). This is the full "each layer declares its
+  {emission, transmittance, scatter}" model — `emission` = its `OVR_uv`, the other two on the layer.
 - **Lens top-coat** (`G.lens`, `G.lensType`, `G.lensPitch`) — the last coat pass in stone view: an ideal glass
   relief on the very top that **refracts** what lies beneath. Real per-pixel refraction (a mesh-blit warp tears
   at any real amplitude; a **gather** cannot), done on a downscaled snapshot in `lensC` (≤640px, upscaled back —
