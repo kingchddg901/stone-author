@@ -1878,6 +1878,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (let i = 1; i < L.pts.length; i++) ctx.lineTo(L.pts[i][0], L.pts[i][1]);
       ctx.stroke();
     }
+    for (const e of geo.web) if (selected.has('id:W' + e.mark) && e.pts.length) {   // a selected web spread lights all its cracks
+      ctx.beginPath(); ctx.moveTo(e.pts[0][0], e.pts[0][1]);
+      for (let i = 1; i < e.pts.length; i++) ctx.lineTo(e.pts[i][0], e.pts[i][1]);
+      ctx.stroke();
+    }
     ctx.restore();
   }
   function paintLive() {
@@ -1935,11 +1940,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     if (geo.web.length) { const _fx = fxOn('web', COL.web, ident); for (const e of geo.web) {
       const wl = e.layer || 'web'; if (!layVis(wl)) continue;                        // per web-layer visibility
+      const wid = 'W' + e.mark;                                                       // the web SPREAD = one artifact
       g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
       for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
-      const wlc = OVR['lay:' + wl]; g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : (wlc || COL.web);
-      if (!ident) g2d.filter = filterOf(null, wl, 'web');               // per web-layer adjustments
-      g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp(wl)); g2d.lineWidth = e.width; g2d.stroke(); g2d.filter = 'none';
+      const wlc = OVR['id:' + wid] || OVR['lay:' + wl];                               // per-spread → per-layer → bucket colour
+      g2d.strokeStyle = ident ? idColour(wid, 1 - e.spread) : (wlc || COL.web);
+      if (!ident) g2d.filter = filterOf(wid, wl, 'web');                             // per-spread → per-layer adjustments
+      g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp(wl)); g2d.lineWidth = e.width * weightOf(wid, wl, 'web'); g2d.stroke(); g2d.filter = 'none';
     } fxOff(_fx); }
     if (geo.specks.length) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))), nv = Math.max(1, Math.min(4, Math.round(G.speckSubs))); let curL = null; for (const s of geo.specks) {
       const sl = s.layer || 'micro'; if (!layVis(sl)) continue;                     // per granite-layer visibility
@@ -2168,7 +2175,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     knot: 'Tap to set a knot, or drag out from its centre to size it. The grain flows around it in Wood.',
     magnet: 'Drag to comb the specks like iron filings. The pen\u2019s angle is the magnet: upright fans them out from the tip, laid over combs them along its lean. Slow passes align harder.',
     styl: 'Draw a line. It becomes a stylolite — a toothy pressure-dissolution seam of interlocking columns, dark on light stone and pale on dark.',
-    tune: 'Tap a vein to tune just that one. Its colour follows its layer until you change it in the colour editor; reset it there to follow again.',
+    tune: 'Tap a vein or a web crack to tune just that one (a crack picks its whole spread). Its colour follows its layer until you change it here; reset it to follow again.',
     cloud: 'Drag to move the cloud field. The mottle and the warp move together, so you can place where the stone flows. Cloud X / Y set it precisely.',
     moon: 'Drag a moon across the slab. Like gravity, but it drags what it passes into its wake — a powerful local warp, hardest under the ball, fading at its edge. Ball size and pull set the reach and force; passes stack.',
     move: 'Drag to move around. Pinch, or use + and −, to zoom.',
@@ -2216,6 +2223,24 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (let i = 0; i < L.pts.length; i++) {
         const d = Math.hypot(L.pts[i][0] - fx, L.pts[i][1] - fy);
         if (!best || d < best.d) best = { L, i, d };
+      }
+    }
+    return best;
+  }
+  // point-to-segment distance (frame units) — a crack is sparse enough that vertex-only distance misses mid-segment
+  function segD(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+  // nearest VISIBLE web crack → its whole spread (mark). A web is one artifact, like a vein.
+  function nearestWeb(fx, fy) {
+    let best = null;
+    for (const e of geo.web) {
+      const wl = e.layer || 'web'; if (!layVis(wl)) continue;
+      for (let i = 0; i < e.pts.length - 1; i++) {
+        const d = segD(fx, fy, e.pts[i][0], e.pts[i][1], e.pts[i + 1][0], e.pts[i + 1][1]);
+        if (!best || d < best.d) best = { mark: e.mark, d };
       }
     }
     return best;
@@ -2292,13 +2317,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (hit) commit({ id, kind: 'chip', seed, tileKey: hit.key, edge: hit.edge });
       else hint(layTiles ? 'Tap on a tile to chip its nearest edge.' : 'Turn Lay tiles on first, then tap a tile edge to chip it.');
     } else if (g.type === 'draw' && tool === 'tune') {
-      nextId--;                                          // Tune makes no mark — it SELECTS a vein
-      const f = toFrame(...g.e0 || [0, 0]), hit = nearestLine(f[0], f[1]);
-      if (hit && hit.d * Wc * V.z < 26) {               // toggle this vein in the selection (id stays internal)
-        const sk = 'id:' + hit.L.id; if (selected.has(sk)) selected.delete(sk); else selected.add(sk);
+      nextId--;                                          // Tune makes no mark — it SELECTS an artifact (a vein or a web spread)
+      const f = toFrame(...g.e0 || [0, 0]);
+      const hv = nearestLine(f[0], f[1]), hw = nearestWeb(f[0], f[1]);
+      const dv = hv ? hv.d * Wc * V.z : Infinity, dw = hw ? hw.d * Wc * V.z : Infinity;   // screen px
+      let sk = null, what = '';
+      if (dv <= dw && dv < 26) { sk = 'id:' + hv.L.id; what = 'Vein'; }         // whichever is nearer wins, within 26 px
+      else if (dw < 26) { sk = 'id:W' + hw.mark; what = 'Web'; }                // any crack picks its whole spread
+      if (sk) {                                          // toggle it in the selection (id stays internal)
+        if (selected.has(sk)) selected.delete(sk); else selected.add(sk);
         registerSelectedColours(); if (ed) ed.values = { ...OVR }; syncLayerUI(); redraw(false);
-        hint(selected.size ? selected.size + ' selected — colour or adjust them in the editor / Selected bar.' : 'Vein deselected.');
-      } else hint('Tap a vein to select it — then colour or adjust just that one.');
+        hint(selected.size ? selected.size + ' selected — colour or adjust them in the editor / Selected bar.' : (what + ' deselected.'));
+      } else hint('Tap a vein or web crack to select it — then colour or adjust just that one.');
     } else if (g.type === 'draw' && tool === 'magnet') {
       commit({ id, kind: 'magnet', seed, samples: g.samples, tgt: sculptTarget() });
       if (!geo.specks.length) hint('The magnet turns specks. Switch to Granite, or pour some first.');
@@ -2410,7 +2440,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const toks = [];
     for (const key of selected) {
       if (key.startsWith('lay:')) { const L = layAt(key.slice(4)); if (L) { toks.push(layToken(L)); toks.push(...adjTokens('lay:' + L.key, L.label)); } }
-      else if (key.startsWith('id:')) { const id = key.slice(3), L = geo.byId.get(id); toks.push({ key, label: 'Vein ' + id, type: 'color', inherit: (L && !L.major) ? 'minor' : 'major' }); toks.push(...adjTokens('id:' + id, 'Vein ' + id)); }
+      else if (key.startsWith('id:')) { const id = key.slice(3);
+        if (id[0] === 'W') { toks.push({ key, label: 'Web ' + id, type: 'color', inherit: 'web' }); toks.push(...adjTokens('id:' + id, 'Web ' + id)); }
+        else { const L = geo.byId.get(id); toks.push({ key, label: 'Vein ' + id, type: 'color', inherit: (L && !L.major) ? 'minor' : 'major' }); toks.push(...adjTokens('id:' + id, 'Vein ' + id)); } }
     }
     kit.registerTokenGroup({ id: 'selectedcolours', label: 'Selected', tokens: toks });
   }

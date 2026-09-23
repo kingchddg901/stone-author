@@ -128,9 +128,11 @@ not a leak). This is the "Pollock engine": subdivide a roughly-constant on-scree
 independently-coloured fields.
 
 **Selection scopes effects.** The selection is a set of **token keys** — `lay:<layer>` for a layer (its
-row checkbox) or `id:<vein>` for one **artifact** (tap it with the **Tune/Select** tool; the id is
-resolved from the click and stays internal — a selected vein shows as a dashed accent handle, never a
-number). Layers and artifacts live in one selection, and the *same* adjustment set targets either.
+row checkbox) or `id:<artifact>` for one **artifact** (tap it with the **Tune/Select** tool; the id is
+resolved from the click and stays internal — a selected artifact shows as a dashed accent handle, never a
+number). The hit-test walks both **veins** (`nearestLine`, key `id:L…`/`id:B…`) and **web cracks**
+(`nearestWeb`, point-to-segment; a crack picks its whole **spread**, key `id:W<mark>`) and takes whichever
+is nearer within ~26 px. Layers and artifacts live in one selection, and the *same* adjustment set targets either.
 Nothing selected = the effect's global default. Three things scope to it today, all *baking* onto the
 selected keys:
 - **Force tools** — select the Fog or a granite layer and Gravity/Magnet sculpt *that* field
