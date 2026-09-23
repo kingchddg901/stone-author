@@ -105,6 +105,21 @@ The paint order is a stack: `base → breccia → clouds → bands → fog → w
 minor → major`. Base is the *setter* (breccia is an opaque clast mosaic when on); clouds, bands and
 fog are soft *modulators* over it.
 
+**Render order is the `layers[]` array order — decoupled from kind.** `paintStoneContent` walks the
+layers in array order and dispatches each to its per-kind painter (`paintFogLayer` / `paintWebLayer` /
+`paintSpecksLayer` / `paintDrusyLayer` / `paintStylLayer` / `paintVeinLayer`); the default array order
+*is* the stack above, so a fresh slab is unchanged. But because position is now the array index, not the
+kind, **kinds interleave**: move a web layer up and it composites *over* a major; drop a haze to any
+depth and it diffuses everything below it. Each layer composites **atomically** (a vein layer paints its
+own halo → shoulder → main as a unit). Two things stay welded to kind and are *not* reorderable: the
+three **ground setters** (breccia, clouds, bands) + the base body stay pinned at the bottom (they *set*
+the ground, they aren't content — `isGroundLayer`), and the **export bucket** a mark flattens into is
+still its kind, so reordering never touches the coverage masks VA reads. Reorder with the row's ▲▼
+(`moveLayer`, blocked from sinking a content layer into the pinned ground); the stack order travels with
+the slab (serialized in `layers[]` order, restored on load; `clearUserLayers` resets to
+`DEFAULT_LAYER_ORDER`). *Proven a byte-for-byte no-op against the pre-refactor renderer on a rich slab
+(ground + fog + web + veins + coat), all inputs pinned.*
+
 ### User layers within a bucket
 
 A **bucket can hold many layers**. A mark files into the **active layer** of its bucket (a vein → the

@@ -39,8 +39,12 @@
   .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 68ch; }
   .note b { color: var(--text); font-weight: 500; }
   .layers { display: grid; gap: 5px; width: 100%; max-width: 460px; }
-  .lay { display: grid; grid-template-columns: 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch 18px;
+  .lay { display: grid; grid-template-columns: 16px 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch 18px;
          align-items: center; gap: 6px; padding: 0 4px; }
+  .lay .mv { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+  .lay .mv button { font: 500 9px/1 ui-monospace, Consolas, monospace; padding: 2px 3px; color: var(--dim); border: 1px solid transparent; background: none; cursor: pointer; border-radius: 3px; }
+  .lay .mv button:hover:not(:disabled) { color: var(--text); border-color: var(--line); }
+  .lay .mv button:disabled { opacity: 0.22; cursor: default; }
   .lay .del { padding: 4px 0; text-align: center; font-size: 15px; line-height: 1; color: var(--dim); cursor: pointer; }
   .lay .del:hover { color: #e06a6a; }
   .lay .del.arm { color: #e06a6a; font-weight: 700; }        /* armed: one more tap deletes the layer and its marks */
@@ -572,8 +576,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (typeof buildLayerUI === 'function') buildLayerUI();
     return key;
   }
-  function clearUserLayers() {                                 // drop this slab's user (#) layers, reset the active layer to each bucket's default
+  const DEFAULT_LAYER_ORDER = ['base', 'breccia', 'clouds', 'bands', 'fog', 'web', 'micro', 'drusy', 'styl', 'minor', 'major'];   // canonical stack order
+  function clearUserLayers() {                                 // drop this slab's user (#) layers, restore the canonical stack order, reset the active layer to each bucket's default
     for (let i = layers.length - 1; i >= 0; i--) if (layers[i].key.includes('#')) layers.splice(i, 1);
+    layers.sort((a, b) => DEFAULT_LAYER_ORDER.indexOf(a.key) - DEFAULT_LAYER_ORDER.indexOf(b.key));   // a reordered slab clears back to the default stack
     activeLayer.major = 'major'; activeLayer.minor = 'minor'; activeLayer.web = 'web'; activeLayer.micro = 'micro';
   }
   function purgeLayerTokens(key) {                             // every override / selection / folder-membership keyed to a layer that is going away
@@ -608,6 +614,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     registerSpeckGroups(); registerSelectedColours(); recolour(); if (typeof ed !== 'undefined' && ed) ed.values = { ...OVR };
     buildLayerUI(); saveLocal();
     return ids.size;
+  }
+  const isGroundLayer = L => L.bucket === 'base' && L.key !== 'fog';   // base body + the 3 ground setters — pinned at the bottom, never reordered
+  function moveLayer(key, dir) {                               // reorder a CONTENT layer in the stack (render order = layers[] order); dir +1 = up the stack, -1 = down
+    const i = layers.findIndex(L => L.key === key); if (i < 0 || isGroundLayer(layers[i])) return false;
+    const j = i + dir; if (j < 0 || j >= layers.length || isGroundLayer(layers[j])) return false;   // can't cross into the pinned ground
+    const t = layers[i]; layers[i] = layers[j]; layers[j] = t;
+    stoneReady = false; buildLayerUI(); redraw(true); saveLocal();
+    return true;
   }
   function freshSlab() {                                       // the Clear button: a genuinely blank slab — marks AND user layers AND their tokens — keeping the studio (family / tile / coat / lens)
     marks = []; nextId = 1;
@@ -2097,7 +2111,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // file). Each worker runs on an OffscreenCanvas, renders whole tiles, and transfers ImageBitmaps back. The
   // cloud/band/breccia modulators are built once on the main thread and posted as bitmaps (ensure* is stubbed).
   function renderCoreSrc() {
-    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, paintStoneContent };
+    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent };
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
     s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;
@@ -2226,9 +2240,105 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return saved;
   }
   function fxOff(s) { g2d.globalCompositeOperation = s.op; g2d.shadowColor = s.sc; g2d.shadowBlur = s.sb; }
+  // ---- per-layer painters: each paints ONE layer's marks, so the paint loop can walk layers in
+  // authored order and kinds interleave (a web can sit over a major, a haze at any depth). Render
+  // position is the layers[] order now; export still buckets by kind, untouched. ----
+  function paintFogLayer(ident, uv) {                     // DEEP translucent haze: sub-surface depth / resin core
+    if (ident || uv || !layVis('fog') || !(G.fogHaze > 0) || !geo.fog.length) return;
+    const col = '#c9c9c9', a = G.fogHaze * layOp('fog');  // flat neutral grayscale — never tinted, no colour token
+    for (const p of geo.fog) {
+      const grad = g2d.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+      grad.addColorStop(0, col); grad.addColorStop(1, 'transparent');
+      g2d.globalAlpha = a; g2d.fillStyle = grad;
+      g2d.beginPath(); g2d.arc(p.x, p.y, p.r, 0, 6.2832); g2d.fill();
+    }
+    g2d.globalAlpha = 1;
+  }
+  function paintWebLayer(ident, uv, only) {               // fracture web spreads for one web layer
+    if (!geo.web.length || !layVis(only)) return;
+    const _fx = fxOn('web', COL.web, ident);
+    for (const e of geo.web) {
+      if ((e.layer || 'web') !== only || hidden.has(e.mark)) continue;
+      const wid = 'W' + e.mark;                                                       // the web SPREAD = one artifact
+      g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
+      for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
+      const wlc = uv ? ((beamPts(e.pts) && emit(wid, only)) || UV_DARK) : (OVR['id:' + wid] || OVR['lay:' + only]);
+      g2d.strokeStyle = ident ? idColour(wid, 1 - e.spread) : (wlc || COL.web);
+      if (!ident && !uv) g2d.filter = filterOf(wid, only, 'web');
+      g2d.globalAlpha = ident ? 0.95 : (uv ? 0.9 : 0.8 * layOp(only)); g2d.lineWidth = e.width * (uv ? 1 : weightOf(wid, only, 'web')); g2d.stroke(); g2d.filter = 'none';
+    }
+    fxOff(_fx);
+  }
+  function paintSpecksLayer(ident, uv, angleView, only) { // granite speck field for one micro layer
+    if (!geo.specks.length || !layVis(only)) return;
+    const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))), nv = Math.max(1, Math.min(4, Math.round(G.speckSubs)));
+    if (!ident && !uv) g2d.filter = filterOf(null, only, 'micro');
+    for (const s of geo.specks) {
+      if ((s.layer || 'micro') !== only) continue;
+      const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
+      g2d.globalAlpha = ident ? 0.9 : (uv ? Math.min(1, 0.55 + 0.45 * s.lum) : s.lum * layOp(only));
+      const g_ = Math.floor((s.u || 0) * ng), v_ = Math.floor((s.u2 || 0) * nv),
+            mkey = nv > 1 ? 'micro:' + g_ + '.' + v_ : (ng > 1 ? 'micro:' + g_ : null),
+            mcol = uv ? (emit(null, only, s.x, s.y) || UV_DARK) : (OVR['lay:' + only] || (mkey && COL[mkey] !== undefined ? COL[mkey] : COL.micro));
+      g2d.fillStyle = !ident ? mcol
+        : angleView ? (s.el > 1.3 ? `hsl(${Math.round(((2 * s.ang * 180 / Math.PI) % 360 + 360) % 360)} 78% 58%)` : '#3a3c48')
+        : s.ground ? `hsl(${Math.round(210 - 190 * Math.min(1, Math.hypot(s.x - s.x0, s.y - s.y0) / 0.008))} 80% 55%)`
+        : idColour('P' + s.mark, s.tn);
+      g2d.beginPath();
+      for (let q = 0; q < s.n; q++) {
+        const a = s.spin + q * 2 * Math.PI / s.n, rr = s.rad * s.jit[q], lx = Math.cos(a) * rr * s.el, ly = Math.sin(a) * rr;
+        const px = s.x + lx * ca - ly * sa, py = s.y + lx * sa + ly * ca;
+        if (q) g2d.lineTo(px, py); else g2d.moveTo(px, py);
+      }
+      g2d.closePath(); g2d.fill();
+    }
+    g2d.filter = 'none'; fxOff(_fx);
+  }
+  function paintDrusyLayer(ident, uv) {                   // crystal sparkle: pockets (group) -> crystals (variant)
+    if (!layVis('drusy') || !geo.drusy.length) return;
+    const bright = G.drusyBright, _fx = fxOn('drusy', COL.drusy, ident),
+          dng = Math.max(1, Math.min(5, Math.round(G.drusyGroups))), dnv = Math.max(1, Math.min(4, Math.round(G.drusySubs)));
+    if (!ident && !uv) g2d.filter = filterOf(null, 'drusy', 'drusy');
+    for (const s of geo.drusy) {
+      g2d.globalAlpha = ident ? 0.9 : (uv ? Math.min(1, 0.6 + 0.4 * s.lum) : Math.min(1, s.lum * bright));
+      const dg = Math.floor((s.dgu || 0) * dng), dv = Math.floor((s.dvu || 0) * dnv),
+            dk = dnv > 1 ? 'drusy:' + dg + '.' + dv : (dng > 1 ? 'drusy:' + dg : null),
+            dc = uv ? (emit(null, s.layer || 'drusy', s.x, s.y) || UV_DARK) : (OVR['lay:' + (s.layer || 'drusy')] || (dk && COL[dk] !== undefined ? COL[dk] : COL.drusy));
+      g2d.fillStyle = ident ? idColour('drusy', s.lum) : dc;
+      g2d.beginPath(); g2d.arc(s.x, s.y, s.r, 0, 6.2832); g2d.fill();
+    }
+    g2d.filter = 'none'; fxOff(_fx);
+  }
+  function paintStylLayer(ident, uv) {                    // dark toothy seams, sharp corners (miter)
+    if (!layVis('styl') || !geo.styl.length) return;
+    const _fx = fxOn('styl', COL.styl, ident);
+    g2d.lineJoin = 'miter'; g2d.lineCap = 'butt';
+    for (const s of geo.styl) {
+      if (hidden.has(s.mark)) continue;
+      g2d.beginPath(); g2d.moveTo(s.pts[0][0], s.pts[0][1]);
+      for (let i = 1; i < s.pts.length; i++) g2d.lineTo(s.pts[i][0], s.pts[i][1]);
+      const sc = uv ? ((beamPts(s.pts) && emit(s.id, 'styl')) || UV_DARK) : (OVR['id:' + s.id] || OVR['lay:styl']);
+      g2d.strokeStyle = ident ? idColour(s.id, 0.5) : (sc || COL.styl);
+      if (!ident && !uv) g2d.filter = filterOf(s.id, 'styl', 'styl');
+      g2d.globalAlpha = ident ? 0.95 : (uv ? 0.9 : 0.85 * layOp('styl')); g2d.lineWidth = s.width * (uv ? 1 : weightOf(s.id, 'styl', 'styl')); g2d.stroke(); g2d.filter = 'none';
+    }
+    g2d.lineJoin = 'round'; g2d.lineCap = 'round';
+    fxOff(_fx);
+  }
+  function paintVeinLayer(ident, uv, angleView, only) {   // veins for one layer, composited atomically: halo -> shoulder -> main
+    if (!layVis(only)) return;
+    const F = FAM[fam], halo = COL.halo;
+    const lkOf = L => L.layer || (L.major ? 'major' : 'minor');
+    const mine = geo.lines.filter(L => lkOf(L) === only && !hidden.has(L.mark));
+    if (!mine.length) return;
+    const vcol = L => { if (uv) return (beamPts(L.pts) && emit(L.id, L.layer)) || UV_DARK; const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };
+    if (!ident && !uv) for (const L of mine) if (L.halo) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(only), true);   // halo: wide pale bleached selvage
+    if (!ident && !uv) for (const L of mine) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(only), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }   // shoulder
+    for (const L of mine) { const bk = L.major ? 'major' : 'minor'; const _fx = uv ? null : fxOn(only, vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(only))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }   // main (per-item adjustments)
+  }
   function paintStoneContent(ident, angleView) {
-    const F = FAM[fam];
     const uv = uvMode && !ident;                                // black-light: only the UV palette paints; the stone body is dark
+    // pinned GROUND — base setter + modulators, always at the bottom (they SET the ground, they aren't content):
     if (!ident && !uv && layVis('breccia') && G.brecStrength > 0) {    // base-SETTER: opaque angular clasts with a contrasting matrix, over the flat ground
       g2d.imageSmoothingEnabled = true; g2d.globalAlpha = layOp('breccia');
       g2d.drawImage(ensureBreccia(), 0, 0, 1, H); g2d.globalAlpha = 1;
@@ -2243,86 +2353,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       g2d.imageSmoothingEnabled = true; g2d.globalAlpha = layOp('bands');
       g2d.drawImage(ensureBands(), 0, 0, 1, H); g2d.globalAlpha = 1; g2d.globalCompositeOperation = prev;
     }
-    if (!ident && !uv && layVis('fog') && G.fogHaze > 0 && geo.fog.length) {   // DEEP translucent haze: sub-surface depth / resin core, under the veins
-      const col = '#c9c9c9', a = G.fogHaze * layOp('fog');   // flat neutral grayscale — never tinted, no colour token; just a haze
-      for (const p of geo.fog) {
-        const grad = g2d.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
-        grad.addColorStop(0, col); grad.addColorStop(1, 'transparent');  // soft blob: opaque-ish centre → nothing at the rim
-        g2d.globalAlpha = a; g2d.fillStyle = grad;
-        g2d.beginPath(); g2d.arc(p.x, p.y, p.r, 0, 6.2832); g2d.fill();
-      }
-      g2d.globalAlpha = 1;
+    // CONTENT layers, in AUTHORED (layers[]) order — kinds interleave; each layer composites atomically:
+    for (const L of layers) {
+      if (L.bucket === 'base' && L.key !== 'fog') continue;          // base body + the 3 ground setters (above) / the lit ground (caller)
+      if (L.key === 'fog') paintFogLayer(ident, uv);
+      else if (L.key === 'drusy') paintDrusyLayer(ident, uv);
+      else if (L.key === 'styl') paintStylLayer(ident, uv);
+      else if (L.bucket === 'web') paintWebLayer(ident, uv, L.key);
+      else if (L.bucket === 'micro') paintSpecksLayer(ident, uv, angleView, L.key);
+      else if (L.bucket === 'minor' || L.bucket === 'major') paintVeinLayer(ident, uv, angleView, L.key);
     }
-    if (geo.web.length) { const _fx = fxOn('web', COL.web, ident); for (const e of geo.web) {
-      const wl = e.layer || 'web'; if (!layVis(wl) || hidden.has(e.mark)) continue;   // per web-layer visibility + hidden
-      const wid = 'W' + e.mark;                                                       // the web SPREAD = one artifact
-      g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
-      for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
-      const wlc = uv ? ((beamPts(e.pts) && emit(wid, wl)) || UV_DARK) : (OVR['id:' + wid] || OVR['lay:' + wl]);   // UV: emission (in beam) else dark
-      g2d.strokeStyle = ident ? idColour(wid, 1 - e.spread) : (wlc || COL.web);
-      if (!ident && !uv) g2d.filter = filterOf(wid, wl, 'web');                      // per-spread → per-layer adjustments
-      g2d.globalAlpha = ident ? 0.95 : (uv ? 0.9 : 0.8 * layOp(wl)); g2d.lineWidth = e.width * (uv ? 1 : weightOf(wid, wl, 'web')); g2d.stroke(); g2d.filter = 'none';
-    } fxOff(_fx); }
-    if (geo.specks.length) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))), nv = Math.max(1, Math.min(4, Math.round(G.speckSubs))); let curL = null; for (const s of geo.specks) {
-      const sl = s.layer || 'micro'; if (!layVis(sl)) continue;                     // per granite-layer visibility
-      if (sl !== curL) { curL = sl; if (!ident && !uv) g2d.filter = filterOf(null, sl, 'micro'); }   // per-field filter (fields are grouped in the array)
-      const ca = Math.cos(s.ang), sa = Math.sin(s.ang);
-      g2d.globalAlpha = ident ? 0.9 : (uv ? Math.min(1, 0.55 + 0.45 * s.lum) : s.lum * layOp(sl));
-      // Stone: the speck's colour = its sub-variant (micro:g.v) -> group (micro:g) -> the micro layer.
-      // Angle: points as hue (axial); Identity: how far the speck was moved.
-      const g_ = Math.floor((s.u || 0) * ng), v_ = Math.floor((s.u2 || 0) * nv),
-            mkey = nv > 1 ? 'micro:' + g_ + '.' + v_ : (ng > 1 ? 'micro:' + g_ : null),
-            mcol = uv ? (emit(null, s.layer || 'micro', s.x, s.y) || UV_DARK) : (OVR['lay:' + (s.layer || 'micro')] || (mkey && COL[mkey] !== undefined ? COL[mkey] : COL.micro));   // per-speck emission (in beam) or dark
-      g2d.fillStyle = !ident ? mcol
-        : angleView ? (s.el > 1.3 ? `hsl(${Math.round(((2 * s.ang * 180 / Math.PI) % 360 + 360) % 360)} 78% 58%)` : '#3a3c48')
-        : s.ground ? `hsl(${Math.round(210 - 190 * Math.min(1, Math.hypot(s.x - s.x0, s.y - s.y0) / 0.008))} 80% 55%)`
-        : idColour('P' + s.mark, s.tn);
-      g2d.beginPath();
-      for (let q = 0; q < s.n; q++) {
-        const a = s.spin + q * 2 * Math.PI / s.n, rr = s.rad * s.jit[q], lx = Math.cos(a) * rr * s.el, ly = Math.sin(a) * rr;
-        const px = s.x + lx * ca - ly * sa, py = s.y + lx * sa + ly * ca;
-        if (q) g2d.lineTo(px, py); else g2d.moveTo(px, py);
-      }
-      g2d.closePath(); g2d.fill();
-    } g2d.filter = 'none'; fxOff(_fx); }
-    if (layVis('drusy') && geo.drusy.length) {            // crystal sparkle: pockets (primary group) -> crystals (secondary variant)
-      const bright = G.drusyBright, _fx = fxOn('drusy', COL.drusy, ident),
-            dng = Math.max(1, Math.min(5, Math.round(G.drusyGroups))), dnv = Math.max(1, Math.min(4, Math.round(G.drusySubs)));
-      if (!ident && !uv) g2d.filter = filterOf(null, 'drusy', 'drusy');
-      for (const s of geo.drusy) {
-        g2d.globalAlpha = ident ? 0.9 : (uv ? Math.min(1, 0.6 + 0.4 * s.lum) : Math.min(1, s.lum * bright));
-        const dg = Math.floor((s.dgu || 0) * dng), dv = Math.floor((s.dvu || 0) * dnv),
-              dk = dnv > 1 ? 'drusy:' + dg + '.' + dv : (dng > 1 ? 'drusy:' + dg : null),
-              dc = uv ? (emit(null, s.layer || 'drusy', s.x, s.y) || UV_DARK) : (OVR['lay:' + (s.layer || 'drusy')] || (dk && COL[dk] !== undefined ? COL[dk] : COL.drusy));
-        g2d.fillStyle = ident ? idColour('drusy', s.lum) : dc;
-        g2d.beginPath(); g2d.arc(s.x, s.y, s.r, 0, 6.2832); g2d.fill();
-      }
-      g2d.filter = 'none'; fxOff(_fx);
-    }
-    if (layVis('styl') && geo.styl.length) {              // dark toothy seams, sharp corners (miter), over the ground and under the veins
-      const _fx = fxOn('styl', COL.styl, ident);
-      g2d.lineJoin = 'miter'; g2d.lineCap = 'butt';
-      for (const s of geo.styl) {
-        if (hidden.has(s.mark)) continue;
-        g2d.beginPath(); g2d.moveTo(s.pts[0][0], s.pts[0][1]);
-        for (let i = 1; i < s.pts.length; i++) g2d.lineTo(s.pts[i][0], s.pts[i][1]);
-        const sc = uv ? ((beamPts(s.pts) && emit(s.id, 'styl')) || UV_DARK) : (OVR['id:' + s.id] || OVR['lay:styl']);   // UV: emission (in beam) or dark
-        g2d.strokeStyle = ident ? idColour(s.id, 0.5) : (sc || COL.styl);
-        if (!ident && !uv) g2d.filter = filterOf(s.id, 'styl', 'styl');           // per-seam → per-layer adjustments
-        g2d.globalAlpha = ident ? 0.95 : (uv ? 0.9 : 0.85 * layOp('styl')); g2d.lineWidth = s.width * (uv ? 1 : weightOf(s.id, 'styl', 'styl')); g2d.stroke(); g2d.filter = 'none';
-      }
-      g2d.lineJoin = 'round'; g2d.lineCap = 'round';
-      fxOff(_fx);
-    }
-    const order = geo.lines.filter(L => !L.major).concat(geo.lines.filter(L => L.major));
-    const lk = L => L.layer || (L.major ? 'major' : 'minor');   // the line's LAYER (eye/opacity/blend/glow), bucket as fallback
-    if (!ident && !uv) {                                 // halo: a wide, pale bleached selvage under the vein (daylight only)
-      const halo = COL.halo;
-      for (const L of order) if (L.halo && layVis(lk(L)) && !hidden.has(L.mark)) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
-    }
-    const vcol = L => { if (uv) return (beamPts(L.pts) && emit(L.id, L.layer)) || UV_DARK; const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };   // UV: emission (in beam) or dark
-    if (!ident && !uv) for (const L of order) if (layVis(lk(L)) && !hidden.has(L.mark)) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }  // shoulder (daylight only)
-    for (const L of order) if (layVis(lk(L)) && !hidden.has(L.mark)) { const bk = L.major ? 'major' : 'minor'; const _fx = uv ? null : fxOn(lk(L), vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(lk(L)))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }  // per-item adjustments (ctx.filter + weight)
   }
   // Guides are for you, not the stone: a filled dot pulls, an open ring pushes, its size is the
   // reach; a gravity line carries a band each side as wide as its reach, solid to pull, dashed to push.
@@ -2827,8 +2867,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const L of layers) { cnt[L.bucket] = (cnt[L.bucket] || 0) + 1; tagOf[L.key] = (LET[L.bucket] || '?') + cnt[L.bucket]; }
     for (const L of layers.slice().reverse()) {
       const row = document.createElement('div'); row.className = 'lay' + (activeLayer[L.bucket] === L.key ? ' active' : '') + (selected.has('lay:' + L.key) ? ' sel-on' : ''); row.dataset.key = L.key;
+      const li = layers.indexOf(L), canUp = li < layers.length - 1, canDown = li > 0 && !isGroundLayer(layers[li - 1]);   // stack position; ground stays pinned at the bottom
       row.innerHTML =
-        '<button type="button" class="sel" data-act="sel" aria-pressed="' + selected.has('lay:' + L.key) + '" title="Select — effects and the force tools act on the selected layers"></button>'
+        (!isGroundLayer(L)
+            ? '<span class="mv"><button type="button" data-act="up" title="Move up — renders over the layer above"' + (canUp ? '' : ' disabled') + '>▲</button><button type="button" data-act="down" title="Move down — renders under the layer below"' + (canDown ? '' : ' disabled') + '>▼</button></span>'
+            : '<span class="mv-sp"></span>')                  // base body + the 3 ground setters can't be reordered
+        + '<button type="button" class="sel" data-act="sel" aria-pressed="' + selected.has('lay:' + L.key) + '" title="Select — effects and the force tools act on the selected layers"></button>'
         + '<button type="button" class="eye" data-act="eye" aria-pressed="' + L.on + '" title="Show or hide"></button>'
         + '<span class="nm" data-act="active" title="Tap = make active · double-tap = rename"><span class="tag">' + tagOf[L.key] + '</span>' + L.label + '</span>'
         + '<button type="button" class="solo" data-act="solo" aria-pressed="' + (soloLay === L.key) + '" title="Solo this layer">S</button>'
@@ -2840,6 +2884,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
             : '<span class="del-sp"></span>');                // the five bucket defaults are permanent
       row.querySelector('[data-act=sel]').addEventListener('click', e => { const sk = 'lay:' + L.key; if (selected.has(sk)) selected.delete(sk); else selected.add(sk); e.currentTarget.setAttribute('aria-pressed', selected.has(sk)); row.classList.toggle('sel-on', selected.has(sk)); registerSelectedColours(); if (ed) ed.values = { ...OVR }; hint(selected.size ? selected.size + ' selected — tools + effects act on them; their colours show in the editor.' : null); });
       row.querySelector('[data-act=eye]').addEventListener('click', () => { L.on = !L.on; if (soloLay === L.key && !L.on) soloLay = null; relayer(); });
+      { const up = row.querySelector('[data-act=up]'), dn = row.querySelector('[data-act=down]');
+        if (up) up.addEventListener('click', () => moveLayer(L.key, +1));
+        if (dn) dn.addEventListener('click', () => moveLayer(L.key, -1)); }
       row.querySelector('[data-act=active]').addEventListener('click', () => setActiveLayer(L.key));
       row.querySelector('[data-act=active]').addEventListener('dblclick', () => {           // double-tap the name to rename (edits the label; the key/tag are untouched)
         const cell = row.querySelector('[data-act=active]');
@@ -3003,6 +3050,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; L.warp = typeof s.warp === 'number' ? s.warp : 1;
         if (typeof s.transmit === 'number') L.transmit = s.transmit; if (typeof s.scatter === 'number') L.scatter = s.scatter;   // back-light optical declaration travels with the slab (old saves keep the defaults)
         if (L.field === 'specks') { if (typeof s.density === 'number') L.density = s.density; if (typeof s.size === 'number') L.size = s.size; if (typeof s.seed === 'number') L.seed = s.seed; } }
+    }
+    if (Array.isArray(o.layers)) {                            // restore the saved STACK ORDER (render order = layers[] order); layers absent from the save keep their relative position (older saves)
+      const ord = new Map(o.layers.map((s, ix) => [s.key, ix]));
+      const cur = layers.map((L, ix) => [L, ord.has(L.key) ? ord.get(L.key) : 1000 + ix]);
+      cur.sort((A, B) => A[1] - B[1]);
+      layers.length = 0; for (const [L] of cur) layers.push(L);
     }
     if (o.G && typeof o.G.gspecks === 'number') { layAt('micro').density = o.G.gspecks; layAt('micro').size = typeof o.G.gsize === 'number' ? o.G.gsize : 1; }   // migrate pre-per-layer saves
     delete G.gspecks; delete G.gsize;                                                                    // granite params live on the layer now, not G

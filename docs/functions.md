@@ -230,9 +230,19 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   where the relief focuses, via `1/|jacobian|`; it reads on dark stone and washes out on white, as a real caustic
   does. Latent head-on for an ideal flat lens; built to pair with a future back light (the same fold, run
   back-to-front). `Lens` / `Lens grooves` sliders + a `Lens type` group; persists in `G` with the slab.
-- `paintStoneContent(ident, angleView)` — paint every layer in stack order
-  (`base→breccia→clouds→bands→web→micro→drusy→styl→minor→major`), gated by layer visibility. The
-  core of the renderer. *(1677)*
+- `paintStoneContent(ident, angleView)` — the core of the renderer. Paints the pinned **ground**
+  (breccia / clouds / bands) first, then **walks `layers[]` in array order** and dispatches each to its
+  per-kind painter — so render z-order is the stack order, not the kind, and kinds interleave. Gated by
+  layer visibility. *(≈2229)*
+- `paintFogLayer` / `paintWebLayer(only)` / `paintSpecksLayer(…, only)` / `paintDrusyLayer` /
+  `paintStylLayer` / `paintVeinLayer(…, only)` — each paints ONE layer's marks (the `only` key filters
+  the geometry). A vein layer composites atomically: halo → shoulder → main for just its lines. Extracted
+  from the old fixed kind-sequence so the walk above can order them freely. Also serialized into the
+  worker core (`renderCoreSrc`). *(≈2229)*
+- `moveLayer(key, dir)` — reorder a content layer in the stack (`dir` +1 = up, −1 = down), swapping with
+  the adjacent layer; blocked from crossing into the pinned ground (`isGroundLayer` = base body + the 3
+  setters). Rebuilds + saves. The row's ▲▼ call it. Stack order serializes in `layers[]` order and is
+  restored on load; `DEFAULT_LAYER_ORDER` + `clearUserLayers` reset it. *(≈602)*
 - `runs(L, colour, fixedWidth, alpha, shoulder)` — stroke a line in chunks (shoulder or core pass). *(1838)*
 - `fxOn(key, colour, ident)` / `fxOff(s)` — set a layer's blend mode + colour glow around its paint,
   then restore. *(1669/1676)*
