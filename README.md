@@ -119,9 +119,13 @@ be committed. The harvested corpus stays local.
 ## Status
 
 Extracted from `ha-dashboard-builder` (2026). The authoring app has, so far: save-the-source +
-autosave, first-class layer control, the marble primitives batch, per-line vein variants, and a
-colour layer (per-layer colour + blend + glow via the vendored token-theme-kit). Next up is per-id
-colour, the export step, and a WebGPU render pipeline — see the roadmap in
+autosave, first-class layer control (many layers per bucket), the marble primitives batch, per-line
+vein variants, the export step, and a colour layer via the vendored token-theme-kit — per-layer *and*
+per-artifact colour, selected by clicking, with a full render-time **adjustment set** (blur · hue ·
+saturation · brightness · contrast · weight) that resolves artifact → layer → bucket. Granite is now
+**field-per-layer**: every **+ Granite layer** is its own speck field with its own density, size, seed,
+colour and adjustments — the "Pollock engine". Next up is the **coat tier** (specular polish, subsurface,
+tile-edge light) and a WebGPU render pipeline — see the roadmap in
 [`docs/architecture.md`](docs/architecture.md).
 
 **Licence.** `token-theme-kit` is MIT (© 2026 Chris King); its notice ships with the vendored copy.

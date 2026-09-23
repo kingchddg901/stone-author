@@ -99,7 +99,12 @@ Dispatched by `applyMark(m, out)` on `m.kind`. *(1397)*
 - `deflect(kn, specks, mul)` — bend a vein route a few degrees around dense rock. *(1115)*
 - `intrude(L, specks, M, route)` — push specks aside along a vein (crowded inside a turn, thinned
   outside). *(1148)*
-- `groundCopy()` — a fresh copy of the family's ground speck field. *(1272)*
+- `groundFor(density, size, seed)` — one granite speck field for a `(density, size, seed)` key: minted
+  once (fit-capped, then relaxed) and **cached per key**, returning fresh copies so a rebuild moves
+  nothing a sibling already settled. *(1384)*
+- `buildGround()` — the whole granite ground: the **union of every micro-bucket `field:'specks'`
+  layer's** `groundFor(...)`, each speck tagged `s.layer` so it renders / warps / sculpts / colours per
+  field. One field by default; many once you add **+ Granite layer**. *(1401)*
 
 ## Slab primitives — seeded fields on the base
 
@@ -191,9 +196,13 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   `bucket#n` key. Each has `{key, label, bucket, on, op, warp}`. *(455)*
 - `layVis(k)` — visibility, honouring solo (solo keeps `base` under the soloed layer). *(459)*
 - `layOp(k)` — a layer's opacity. *(460)*
-- `activeLayer` — the active layer per bucket (`{major, minor, web}`); a mark files into `activeLayer[its
-  bucket]` at commit. `addLayer(bucket)` appends a layer (grouped after its bucket's last) and makes it
-  active; `setActiveLayer(key)` picks the active one. *(≈475)*
+- `activeLayer` — the active layer per bucket (`{major, minor, web, micro}`); a mark files into
+  `activeLayer[its bucket]` at commit. `addLayer(bucket)` appends a layer (grouped after its bucket's
+  last) and makes it active — a new **micro** layer gets `field:'specks'` and its own density/size/seed;
+  `setActiveLayer(key)` picks the active one. *(≈475/519)*
+- `syncGranite()` — reflect the **active granite layer's** density/size into the ground sliders. The
+  Specks/Speck-size sliders and **Reseed** all act on `activeLayer.micro` only, so each field is tuned
+  independently. *(532)*
 - `stampLayers(out)` — after every build, tag each line (`L.layer`) and web edge (`e.layer`) with its
   mark's layer, falling back to the bucket for legacy marks or a deleted layer. Render (`lk`) and both
   warps read this, so eye/opacity/warp are per-layer while export still buckets by kind. *(≈1590)*

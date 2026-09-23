@@ -119,8 +119,13 @@ A **layer is an authoring group, orthogonal to the bucket**: `stampLayers` tags 
 its mark's layer (`L.layer` / `e.layer`), and render + warp read *that*, while export still buckets
 each line by its kind. So a single layer can even hold marks that export to different buckets — which
 is what makes a cross-bucket "group as an object" selection possible later. Fields that aren't marks
-(the granite speck ground) are still single-layer for now; per-field layers (each with its own density
-and seed) are the next step.
+follow the same rule: the **granite speck ground is field-per-layer** — every **+ Granite layer** is its
+own micro-bucket layer with its own **density, speck size and seed**, its own colour, and the full
+adjustment set, and `buildGround` unions them (each speck tagged with its layer). The fields are
+generated independently — reseeding one leaves the others bit-identical — and couple only through shared
+marks: a vein deflects around *all* the grains it meets, so both fields' specks bend with it (physical,
+not a leak). This is the "Pollock engine": subdivide a roughly-constant on-screen density across
+independently-coloured fields.
 
 **Selection scopes effects.** The selection is a set of **token keys** — `lay:<layer>` for a layer (its
 row checkbox) or `id:<vein>` for one **artifact** (tap it with the **Tune/Select** tool; the id is
@@ -128,7 +133,7 @@ resolved from the click and stays internal — a selected vein shows as a dashed
 number). Layers and artifacts live in one selection, and the *same* adjustment set targets either.
 Nothing selected = the effect's global default. Three things scope to it today, all *baking* onto the
 selected keys:
-- **Force tools** — select the Fog (or, later, a granite) layer and Gravity/Magnet sculpt *that* field
+- **Force tools** — select the Fog or a granite layer and Gravity/Magnet sculpt *that* field
   (push clears a window, pull pools), leaving everything else untouched; select nothing → the specks.
 - **Colour** — per-layer colour is a **generated token**, `lay:<key>`, minted whole from the layer
   (`layToken(L)`: key from its key, label from its label, `inherit` from its bucket — nothing
