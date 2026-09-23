@@ -1,13 +1,21 @@
 # Provenance
 
-Stone Author was built in a **single continuous Claude Code session**. The complete forensic
-record of that build — every message, every tool call *with its arguments*, and every tool
-result — is archived. It's the provenance oracle: the one source that can answer "why is this
-the way it is?" down to the exact call that made it.
+Stone Author's **build** — the code, the commits, the published artifact — was done with **Claude Code**.
+Its **design** was worked in parallel across two AI conversations at once: the Claude Code build sessions
+and a separate **ChatGPT** design conversation. Chris directed both and relayed ideas between them, so the
+two threads converged rather than ran independently — the same layer-transfer optical model, the
+Fresnel-lens-as-refraction-relief primitive, the semantic-grid spotlight, and the CPU/GPU split each appear
+on both sides. This file points to the record of each track.
 
-The raw record is ~254 MB (a 228 MB transcript plus 45 offloaded sidecar blobs it references),
-so it is **not committed here** — it lives as a compressed archive kept privately and, if ever
-published, attached to a GitHub Release. This file is the pointer to it.
+## Build — Claude Code
+
+The bulk of the build is one continuous Claude Code session, archived complete: every message, every tool
+call *with its arguments*, and every tool result. It's the provenance oracle — the one source that can
+answer "why is this the way it is?" down to the exact call that made it.
+
+The raw record is ~254 MB (a 228 MB transcript plus 45 offloaded sidecar blobs it references), so it is
+**not committed here** — it lives as a compressed archive kept privately and, if ever published, attached
+to a GitHub Release. This table is the pointer to it.
 
 | | |
 |---|---|
@@ -19,11 +27,45 @@ published, attached to a GitHub Release. This file is the pointer to it.
 | Archive | `stone-author-session-698bc007-76d7-4c9f-8f93-ad00bf28ca5c.tar.xz` (101 MB, xz) |
 | SHA-256 | `3d5cc32d62910c09ab1f701004bf0a4ee6053e69a1b9f4cc22733ff9dde6dee2` |
 
-**Contents:** the transcript `.jsonl` (one JSON object per line: messages, tool calls + arguments,
-tool results) and the 45 sidecar files it references (montages and large blobs). It is replayable
-call-by-call — which is how the build's every decision, dead end, and correction can be reconstructed.
+**Contents:** the transcript `.jsonl` (one JSON object per line: messages, tool calls + arguments, tool
+results) and the 45 sidecar files it references (montages and large blobs). It is replayable call-by-call —
+which is how the build's every decision, dead end, and correction can be reconstructed.
 
-**Privacy:** the raw archive contains personal paths, an email, and private working notes, so it is
-kept private. A curated, scrubbed timeline for the origin story (see [`README.md`](README.md)) is
-derived from it — the raw dump is never shared as-is. Verify a copy with
-`sha256sum <archive>` against the hash above.
+The build then **continued in a later Claude Code session**, `28da307f-5ea7-4449-815d-ae43b7b0ba89`, which
+added the coat tier and the back light — subsurface, specular, the one movable light, black light and the
+condition-agnostic spectrum engine, the lens top-coat, and the layer-aware back-light fold (roughly artifact
+v49 onward). That session's transcript is retained separately and not yet folded into the archive above, so
+the table's counts and hash cover the first session only.
+
+## Design — ChatGPT
+
+A parallel design conversation with ChatGPT ran over the same window, working the same problems from the
+architecture side. What it worked through: structure-first generation and keeping the material/document as
+the semantic truth; the Fresnel lens (reframed as a general top-surface **refraction-relief** primitive,
+not a special case); back light and optical depth as a **local layer-transfer fold** — each layer declares
+what it does to the arriving field and hands its result onward; the spotlight as **semantic-grid
+intersection**, exciting a whole artifact when any of its cells is lit rather than masking pixels; a CPU/GPU
+split with Canvas/CPU as the reference renderer and WebGPU as an optional single-frame "beauty" backend
+(GPU→CPU readback is worth it only when a large parallel calculation collapses to a compact field); and the
+observation that "spectroscopy" fell out for free as composition of existing machinery — the signal that a
+feature lock was timely.
+
+Chris provided a curated, scoped extract of that conversation. It is Stone-Author-only (unrelated sidebars
+omitted) and it labels its own evidence: it distinguishes exact current-chat wording, timestamped facts
+recovered from prior-chat context, and project docs used only to anchor the chronology, and it does not
+invent per-turn clock times it could not recover. The full raw ChatGPT conversation is not part of this
+record — only the extract is.
+
+| | |
+|---|---|
+| Extract | `Stone_Author_Transcript_Extract_2026-09-20_to_2026-09-23.docx` |
+| Span | 2026-09-20 → 2026-09-23 |
+| Size | 43,676 bytes |
+| SHA-256 | `e4e6ae9a231746e74e90abb86198ccd92b9d52f24bf815e80dcb074e612fd343` |
+
+## Privacy
+
+The raw Claude archive contains personal paths, an email, and private working notes, so it is kept private;
+a curated, scrubbed timeline for the origin story (see [`README.md`](README.md)) is derived from it, and the
+raw dump is never shared as-is. The ChatGPT extract above was already curated and scoped before it reached
+this record. Verify any copy with `sha256sum <file>` against the hash listed for it.
