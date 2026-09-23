@@ -1,11 +1,13 @@
 # Provenance
 
-Stone Author's **build** — the code, the commits, the published artifact — was done with **Claude Code**.
-Its **design** was worked in parallel across two AI conversations at once: the Claude Code build sessions
-and a separate **ChatGPT** design conversation. Chris directed both and relayed ideas between them, so the
-two threads converged rather than ran independently — the same layer-transfer optical model, the
-Fresnel-lens-as-refraction-relief primitive, the semantic-grid spotlight, and the CPU/GPU split each appear
-on both sides. This file points to the record of each track.
+Stone Author's **build** — the code, the commits, the published artifact, and the design as it was actually
+worked out — was done with **Claude Code**, directed by Chris. Alongside it, Chris used a separate **ChatGPT**
+conversation as a **sounding board**: a place to pressure-test an idea and head off side-quest distractions
+before committing it to the build, while Claude implemented. The same topics (the layer-transfer optical
+model, the Fresnel-lens-as-refraction-relief primitive, the semantic-grid spotlight, the CPU/GPU split)
+appear on both sides because Chris carried them between the two — but the decisions and the implementation
+live in the Claude build; the ChatGPT thread is the idea-check, not a second builder. This file points to the
+record of each.
 
 ## Build — Claude Code
 
@@ -39,16 +41,17 @@ the table's counts and hash cover the first session only.
 
 ## Design — ChatGPT
 
-A parallel design conversation with ChatGPT ran over the same window, working the same problems from the
-architecture side. What it worked through: structure-first generation and keeping the material/document as
-the semantic truth; the Fresnel lens (reframed as a general top-surface **refraction-relief** primitive,
-not a special case); back light and optical depth as a **local layer-transfer fold** — each layer declares
-what it does to the arriving field and hands its result onward; the spotlight as **semantic-grid
-intersection**, exciting a whole artifact when any of its cells is lit rather than masking pixels; a CPU/GPU
-split with Canvas/CPU as the reference renderer and WebGPU as an optional single-frame "beauty" backend
-(GPU→CPU readback is worth it only when a large parallel calculation collapses to a compact field); and the
-observation that "spectroscopy" fell out for free as composition of existing machinery — the signal that a
-feature lock was timely.
+Alongside the build, Chris ran a ChatGPT conversation as a **sounding board** — somewhere to check an idea
+and avoid getting pulled onto tangents while Claude implemented. It pressure-tested the same problems from
+the architecture side: structure-first generation and keeping the material/document as the semantic truth;
+the Fresnel lens (reframed as a general top-surface **refraction-relief** primitive, not a special case);
+back light and optical depth as a **local layer-transfer fold** — each layer declares what it does to the
+arriving field and hands its result onward; the spotlight as **semantic-grid intersection**, exciting a
+whole artifact when any of its cells is lit rather than masking pixels; a CPU/GPU split with Canvas/CPU as
+the reference renderer and WebGPU as an optional single-frame "beauty" backend (GPU→CPU readback is worth it
+only when a large parallel calculation collapses to a compact field); and the observation that "spectroscopy"
+fell out for free as composition of existing machinery — the signal that a feature lock was timely. These
+were vetted here; the calls and the code were made in the build.
 
 Chris provided a curated, scoped extract of that conversation. It is Stone-Author-only (unrelated sidebars
 omitted) and it labels its own evidence: it distinguishes exact current-chat wording, timestamped facts
