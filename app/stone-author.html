@@ -193,6 +193,7 @@
       <div class="sl"><label for="subsurface">Subsurface <output id="subsurfaceV"></output></label><input id="subsurface" type="range" min="0" max="2" step="0.02"></div>
       <div class="sl"><label for="specular">Specular / polish <output id="specularV"></output></label><input id="specular" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="lightAngle">Light angle <output id="lightAngleV"></output></label><input id="lightAngle" type="range" min="-180" max="180" step="1"></div>
+      <div class="sl"><label for="lightTemp">Light temperature <output id="lightTempV"></output></label><input id="lightTemp" type="range" min="-1" max="1" step="0.02"></div>
     </div>
     <div class="sliders" id="g-clouds">
       <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
@@ -443,7 +444,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
               stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { subsurface: 0, specular: 0, lightAngle: 135, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
+  const G = { subsurface: 0, specular: 0, lightAngle: 135, lightTemp: 0, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1,
@@ -452,7 +453,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
-  const GFMT = { subsurface: v => (+v).toFixed(2), specular: v => (+v).toFixed(2), lightAngle: v => `${Math.round(v)}°`, speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
+  const GFMT = { subsurface: v => (+v).toFixed(2), specular: v => (+v).toFixed(2), lightAngle: v => `${Math.round(v)}°`, lightTemp: v => (+v == 0 ? 'neutral' : (v < 0 ? 'warm ' : 'cool ') + Math.abs(v).toFixed(2)), speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2), fogHaze: v => `${Math.round(v * 100)}%`,
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}` };
@@ -1752,12 +1753,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const w = T.edge === 'bevel' ? inFr(0.09 * T.sizeIn) : inFr(0.13 * T.sizeIn);
     const inner = insetPoly(poly, w), passes = T.edge === 'pillow' || T.edge === 'tumbled' ? 5 : 2;
     const ang = G.lightAngle * Math.PI / 180, Lx = Math.cos(ang), Ly = -Math.sin(ang);   // unit vector toward the light (y-down), same light the specular sheen uses
+    const [lr, lg, lb] = lightRGB();                     // the light's colour tints the lit edges too
     for (let s = 0; s < passes; s++) {
       const f = passes === 1 ? 1 : s / (passes - 1), ring = poly.map((q, i) => [q[0] + (inner[i][0] - q[0]) * f, q[1] + (inner[i][1] - q[1]) * f]);
       for (let i = 0; i < ring.length; i++) {
         const a = ring[i], b = ring[(i + 1) % ring.length], nx = (b[1] - a[1]), ny = -(b[0] - a[0]), L = Math.hypot(nx, ny) || 1;
         const lit = (nx / L * Lx + ny / L * Ly);        // edge outward-normal · light
-        const shade = lit > 0 ? `rgba(255,255,255,${0.10 * lit * (1 - f)})` : `rgba(0,0,0,${0.16 * -lit * (1 - f)})`;
+        const shade = lit > 0 ? `rgba(${lr},${lg},${lb},${0.10 * lit * (1 - f)})` : `rgba(0,0,0,${0.16 * -lit * (1 - f)})`;
         ctx.strokeStyle = shade; ctx.lineWidth = Math.max(px, w / passes * 1.4);
         ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
       }
@@ -1819,9 +1821,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!ident && G.specular > 0) {                      // SPECULAR TOP-COAT (v1): a movable glossy sheen — the polish catching one light
       const sp = G.specular, ang = G.lightAngle * Math.PI / 180, w = cv.width, h = cv.height;
       const cx = w * 0.5 + Math.cos(ang) * w * 0.4, cy = h * 0.5 - Math.sin(ang) * h * 0.4;   // hotspot sits toward the light
-      const rad = Math.hypot(w, h) * 0.45, a = Math.min(1, 0.85 * sp);
+      const rad = Math.hypot(w, h) * 0.45, a = Math.min(1, 0.85 * sp), [lr, lg, lb] = lightRGB();
       const grd = ctx.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
-      grd.addColorStop(0, `rgba(255,252,245,${a})`); grd.addColorStop(0.35, `rgba(255,249,235,${a * 0.35})`); grd.addColorStop(1, 'rgba(255,248,232,0)');
+      grd.addColorStop(0, `rgba(${lr},${lg},${lb},${a})`); grd.addColorStop(0.35, `rgba(${lr},${lg},${lb},${a * 0.35})`); grd.addColorStop(1, `rgba(${lr},${lg},${lb},0)`);
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = grd; ctx.fillRect(0, 0, w, h);   // 1) the broad polish sheen
       ctx.globalCompositeOperation = 'source-over'; ctx.restore();
@@ -1835,7 +1837,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       sc.filter = 'none'; sc.globalCompositeOperation = 'multiply';                                           // mask it to the lit hotspot
       const msk = sc.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
       msk.addColorStop(0, 'rgba(255,255,255,1)'); msk.addColorStop(0.5, 'rgba(255,255,255,0.45)'); msk.addColorStop(1, 'rgba(0,0,0,1)');
-      sc.fillStyle = msk; sc.fillRect(0, 0, w, h); sc.globalCompositeOperation = 'source-over';
+      sc.fillStyle = msk; sc.fillRect(0, 0, w, h);
+      sc.fillStyle = `rgb(${lr},${lg},${lb})`; sc.fillRect(0, 0, w, h);   // tint the glint the light's colour (still multiply)
+      sc.globalCompositeOperation = 'source-over';
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = Math.min(1, 0.9 * sp);
       ctx.filter = `blur(${0.6 * dpr}px)`; ctx.drawImage(ssC, 0, 0);
@@ -2026,6 +2030,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       ctx.stroke();
     }
     ctx.restore();
+  }
+  // The light's colour from its temperature: warm (amber) ← neutral → cool (blue). Neutral keeps the old warm-white look.
+  function lightRGB() {
+    const N = [255, 250, 242], W = [255, 206, 150], C = [198, 220, 255], t = Math.max(-1, Math.min(1, G.lightTemp || 0));
+    const m = t < 0 ? W : C, k = Math.abs(t);
+    return [Math.round(N[0] + (m[0] - N[0]) * k), Math.round(N[1] + (m[1] - N[1]) * k), Math.round(N[2] + (m[2] - N[2]) * k)];
   }
   // The ONE light both the specular sheen and the tile edges read. Dragging the Light tool aims it toward the pointer.
   function setLight(f) {

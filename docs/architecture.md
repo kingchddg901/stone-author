@@ -162,7 +162,9 @@ selected keys:
   shipped next (a `Specular` strength + a `Light angle` — a movable glossy sheen screen-composited toward the
   light, plus a **feature glint** masked to the lit hotspot so veins catch the light). **Tile-edge light**
   reads the *same* `G.lightAngle` (`edgeFinish` lights the bevel/pillow/tumbled chamfer by edge-normal·light),
-  and a draggable **Light tool** aims that one shared light for both. The **fluted slab finish** was dropped.
+  and a draggable **Light tool** aims that one shared light for both. A **Light temperature** control tints the
+  whole light warm ↔ cool (sheen, glint and edge highlights together; neutral = the old warm-white). The
+  **fluted slab finish** was dropped.
 
 This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 

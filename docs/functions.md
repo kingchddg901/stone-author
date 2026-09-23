@@ -170,6 +170,8 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   normal · the shared light `G.lightAngle` (highlight facing the light, shadow away). *(1610)*
 - `setLight(f)` / `drawLightGuide()` — aim the shared light from the slab centre toward `f` (the Light
   tool's `lightdrag`), and draw the little sun marker at the slab edge in the light's direction.
+- `lightRGB()` — the light's colour from `G.lightTemp` (warm amber ← neutral warm-white → cool blue). The
+  specular sheen, the vein glint, and the tile-edge highlights all tint to it; neutral (0) = the old look.
 - `whichTile(fx, fy)` — hit-test a point to a tile and its nearest edge. *(1625)*
 - `inFr(v)` — inches → frame units. *(1435)*
 
