@@ -166,7 +166,10 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 - `renderStoneOffscreen()` — bake the authored slab once to a reused offscreen. *(1546)*
 - `chipEdge(poly, mk)` — replace one edge with a jagged inward bite (Chip tool). *(1557)*
 - `drawTiles(F)` — lay the tiled floor: clip each tile, wrap the slab image, grout, edges, chips. *(1573)*
-- `edgeFinish(poly, px)` — a lit chamfer (bevel / pillow / tumbled). *(1610)*
+- `edgeFinish(poly, px)` — a lit chamfer (bevel / pillow / tumbled), each edge shaded by its outward
+  normal · the shared light `G.lightAngle` (highlight facing the light, shadow away). *(1610)*
+- `setLight(f)` / `drawLightGuide()` — aim the shared light from the slab centre toward `f` (the Light
+  tool's `lightdrag`), and draw the little sun marker at the slab edge in the light's direction.
 - `whichTile(fx, fy)` — hit-test a point to a tile and its nearest edge. *(1625)*
 - `inFr(v)` — inches → frame units. *(1435)*
 
@@ -184,7 +187,11 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   warm-white radial gloss hotspot placed toward `lightAngle` off the slab centre, `screen`-composited at
   strength `G.specular`, so a movable sheen sweeps the polished surface as the light moves. The **one light**
   (`lightAngle`) is shared — tile-edge relief will read the same angle. `Specular` / `Light angle` ground
-  sliders. v1 is a broad sheen (no sharp feature glint yet).
+  sliders, plus a **feature glint**: the feature high-pass in `ssC`, masked by the same hotspot radial
+  gradient (so features glint only where the light sweeps) and `screen`-composited — veins catch the light.
+- **The one light** (`G.lightAngle`) is shared: `setLight(f)` aims it from the slab centre toward the pointer,
+  the **Light tool** drags it (a `lightdrag` gesture; `drawLightGuide()` draws a little sun at the slab edge),
+  `edgeFinish` lights tile edges by edge-normal·light, and the specular sheen/glint place their hotspot by it.
 - `paintStoneContent(ident, angleView)` — paint every layer in stack order
   (`base→breccia→clouds→bands→web→micro→drusy→styl→minor→major`), gated by layer visibility. The
   core of the renderer. *(1677)*

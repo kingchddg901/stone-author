@@ -88,6 +88,7 @@
     <button id="t-tune" type="button" data-tool="tune">Tune</button>
     <button id="t-cloud" type="button" data-tool="cloud">Cloud</button>
     <button id="t-moon" type="button" data-tool="moon">Moon</button>
+    <button id="t-light" type="button" data-tool="light">Light</button>
     <button id="t-move" type="button" data-tool="move">Move</button>
   </div>
   <div class="grp" role="group" aria-label="Pen"><span class="lbl">Pen</span>
@@ -1745,16 +1746,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         ctx.beginPath(); poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath(); ctx.stroke(); } }
     drawScaleBar();
   }
-  // Edge finish: a lit chamfer. Light from the top-left, so top/left edges catch it, bottom/right fall dark.
+  // Edge finish: a lit chamfer. Edges facing the shared light (G.lightAngle) catch it; those facing away fall dark.
   function edgeFinish(poly, px) {
     if (T.edge === 'square') return;
     const w = T.edge === 'bevel' ? inFr(0.09 * T.sizeIn) : inFr(0.13 * T.sizeIn);
     const inner = insetPoly(poly, w), passes = T.edge === 'pillow' || T.edge === 'tumbled' ? 5 : 2;
+    const ang = G.lightAngle * Math.PI / 180, Lx = Math.cos(ang), Ly = -Math.sin(ang);   // unit vector toward the light (y-down), same light the specular sheen uses
     for (let s = 0; s < passes; s++) {
       const f = passes === 1 ? 1 : s / (passes - 1), ring = poly.map((q, i) => [q[0] + (inner[i][0] - q[0]) * f, q[1] + (inner[i][1] - q[1]) * f]);
       for (let i = 0; i < ring.length; i++) {
         const a = ring[i], b = ring[(i + 1) % ring.length], nx = (b[1] - a[1]), ny = -(b[0] - a[0]), L = Math.hypot(nx, ny) || 1;
-        const lit = (nx / L * -0.7 + ny / L * -0.7);    // dot with the light from top-left
+        const lit = (nx / L * Lx + ny / L * Ly);        // edge outward-normal · light
         const shade = lit > 0 ? `rgba(255,255,255,${0.10 * lit * (1 - f)})` : `rgba(0,0,0,${0.16 * -lit * (1 - f)})`;
         ctx.strokeStyle = shade; ctx.lineWidth = Math.max(px, w / passes * 1.4);
         ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
@@ -1790,7 +1792,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const k = Wc * V.z * dpr;
     ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    if (layTiles) { drawTiles(F); paintLive(); ctx.globalAlpha = 1; stat(); return; }
+    if (layTiles) { drawTiles(F); paintLive(); if (tool === 'light') drawLightGuide(); ctx.globalAlpha = 1; stat(); return; }
     paintStoneContent(ident, angleView);
     if (!ident && G.subsurface > 0) {                    // SUBSURFACE (v1): features glow through a thin translucent sheet.
       const ss = G.subsurface;                           // high-pass (stone - its own blur) so FLAT areas add ~0 (no white-out),
@@ -1821,11 +1823,27 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const grd = ctx.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
       grd.addColorStop(0, `rgba(255,252,245,${a})`); grd.addColorStop(0.35, `rgba(255,249,235,${a * 0.35})`); grd.addColorStop(1, 'rgba(255,248,232,0)');
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = grd; ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = grd; ctx.fillRect(0, 0, w, h);   // 1) the broad polish sheen
       ctx.globalCompositeOperation = 'source-over'; ctx.restore();
+      // 2) feature glint — the polish catches the crystalline features, brightest where the light sweeps
+      if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
+      const sc = ssC.getContext('2d');
+      sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none';
+      sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, w, h);
+      sc.drawImage(cv, 0, 0);
+      sc.globalCompositeOperation = 'difference'; sc.filter = `blur(${2 * dpr}px)`; sc.drawImage(cv, 0, 0);   // feature high-pass (neutral)
+      sc.filter = 'none'; sc.globalCompositeOperation = 'multiply';                                           // mask it to the lit hotspot
+      const msk = sc.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
+      msk.addColorStop(0, 'rgba(255,255,255,1)'); msk.addColorStop(0.5, 'rgba(255,255,255,0.45)'); msk.addColorStop(1, 'rgba(0,0,0,1)');
+      sc.fillStyle = msk; sc.fillRect(0, 0, w, h); sc.globalCompositeOperation = 'source-over';
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = Math.min(1, 0.9 * sp);
+      ctx.filter = `blur(${0.6 * dpr}px)`; ctx.drawImage(ssC, 0, 0);
+      ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.restore();
     }
     if (guidesOn) drawGuides();
     if (guidesOn && G.warp > 0 && tool === 'cloud') drawWarpGuide();   // show the source while you drag it
+    if (tool === 'light') drawLightGuide();                            // show the light while you aim it
     highlightSelected();                                                // mark the selected veins (live only, never exported)
     paintLive(); ctx.globalAlpha = 1; stat();
   }
@@ -2009,6 +2027,24 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     ctx.restore();
   }
+  // The ONE light both the specular sheen and the tile edges read. Dragging the Light tool aims it toward the pointer.
+  function setLight(f) {
+    const dx = f[0] - 0.5, dy = f[1] - H / 2;
+    G.lightAngle = Math.round(Math.atan2(-dy, dx) * 180 / Math.PI);
+    const el = document.getElementById('lightAngle');
+    if (el) { el.value = G.lightAngle; document.getElementById('lightAngleV').textContent = GFMT.lightAngle(G.lightAngle); }
+  }
+  function drawLightGuide() {                             // a little sun at the slab edge in the light's direction
+    const ang = G.lightAngle * Math.PI / 180, px = 1 / (Wc * V.z);
+    const cx = 0.5, cy = H / 2, tx = cx + Math.cos(ang) * 0.46, ty = cy - Math.sin(ang) * 0.46;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(240,196,106,0.7)'; ctx.lineWidth = 1.5 * px; ctx.setLineDash([5 * px, 4 * px]);
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#f0c46a'; ctx.beginPath(); ctx.arc(tx, ty, 7 * px, 0, 6.2832); ctx.fill();
+    ctx.strokeStyle = 'rgba(240,196,106,0.9)'; ctx.lineWidth = 1.5 * px;
+    for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; ctx.beginPath(); ctx.moveTo(tx + Math.cos(a) * 9 * px, ty + Math.sin(a) * 9 * px); ctx.lineTo(tx + Math.cos(a) * 13 * px, ty + Math.sin(a) * 13 * px); ctx.stroke(); }
+    ctx.restore();
+  }
   function drawGuides() {
     const px = 1 / (Wc * V.z);
     ctx.lineWidth = 1.4 * px;
@@ -2112,6 +2148,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     tune: 'Tap a vein, web crack or stylolite seam to tune just that one (a crack picks its whole spread). Its colour follows its layer until you change it here; reset it to follow again.',
     cloud: 'Drag to move the cloud field. The mottle and the warp move together, so you can place where the stone flows. Cloud X / Y set it precisely.',
     moon: 'Drag a moon across the slab. Like gravity, but it drags what it passes into its wake — a powerful local warp, hardest under the ball, fading at its edge. Ball size and pull set the reach and force; passes stack.',
+    light: 'Drag to move the light. It lights the polish sheen (Specular) and the tile edges — one light for both. Light angle sets it precisely.',
     move: 'Drag to move around. Pinch, or use + and −, to zoom.',
   };
   let flashT = 0;
@@ -2205,6 +2242,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const [ex, ey] = local(e), f = toFrame(ex, ey);
     if (tool === 'move') { gesture = { type: 'pan', e0: [ex, ey], c0: [V.cx, V.cy] }; return; }
     if (tool === 'cloud') { gesture = { type: 'cloudpan', e0: [ex, ey], c0: [G.cloudX, G.cloudY] }; hint(); return; }
+    if (tool === 'light') { setLight(f); gesture = { type: 'lightdrag' }; redraw(false); return; }
     if (tool === 'branch') {
       const hit = nearestLine(f[0], f[1]);
       if (!hit || hit.d * Wc * V.z > 26) { gesture = null; hint('Tap on a vein to grow a minor vein off it.'); return; }
@@ -2235,6 +2273,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (const id of ['cloudX', 'cloudY']) { const el = document.getElementById(id); el.value = G[id]; document.getElementById(id + 'V').textContent = GFMT[id](G[id]); }
       redraw(true); return;
     }
+    if (gesture.type === 'lightdrag') { setLight(toFrame(ex, ey)); redraw(false); return; }   // move the shared light
     const f = toFrame(ex, ey);
     if (gesture.type === 'branch' && Math.hypot(ex - gesture.e0[0], ey - gesture.e0[1]) > 12) gesture.moved = true;
     gesture.samples.push([f[0], f[1], now(), pen(e), leanOf(e), azOf(e)]);
@@ -2688,7 +2727,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const gb = document.getElementById('guides');
   gb.addEventListener('click', () => { guidesOn = !guidesOn; gb.setAttribute('aria-pressed', guidesOn); redraw(false); });
   for (const id of Object.keys(G)) {
-    const el = document.getElementById(id);
+    const el = document.getElementById(id); if (!el) continue;   // a G key without a slider (e.g. lightAngle driven by the Light tool) is fine
     const show = () => { document.getElementById(id + 'V').textContent = GFMT[id] ? GFMT[id](G[id]) : `${(+G[id]).toFixed(2)}\u00d7`; };
     el.value = G[id]; show();
     el.addEventListener('input', () => { G[id] = +el.value; show(); redraw(true); });   // the slab: at once

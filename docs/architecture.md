@@ -159,9 +159,10 @@ selected keys:
   untinted by design** (a haze, no colour token). The **coat tier** rides on top: **subsurface** shipped first
   (a `Subsurface` ground control — the feature high-pass added back as a warm internal glow, so flat areas
   never white-out and features glow like light through a thin translucent sheet); **specular top-coat**
-  shipped next (a `Specular` strength + a `Light angle` — a movable glossy sheen, one light screen-composited
-  toward its direction). **Tile-edge light** reuses that same light and is the next build; a **fluted slab
-  finish** is the maybe.
+  shipped next (a `Specular` strength + a `Light angle` — a movable glossy sheen screen-composited toward the
+  light, plus a **feature glint** masked to the lit hotspot so veins catch the light). **Tile-edge light**
+  reads the *same* `G.lightAngle` (`edgeFinish` lights the bevel/pillow/tumbled chamfer by edge-normal·light),
+  and a draggable **Light tool** aims that one shared light for both. The **fluted slab finish** was dropped.
 
 This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 
