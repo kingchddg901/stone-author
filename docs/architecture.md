@@ -123,11 +123,16 @@ is what makes a cross-bucket "group as an object" selection possible later. Fiel
 and seed) are the next step.
 
 **Selection scopes effects.** Each row has a select toggle; the selected set is what an effect acts on
-(nothing selected = the effect's global default). First use: the **force tools** — select the Fog (or,
-later, a granite) layer and Gravity/Magnet sculpt *that* field (push clears a window, pull pools),
-leaving everything else untouched; select nothing and they fall back to the specks. This is the real
-mechanism the temporary toggles (`fogSculpt`, "Warp holds major") were standing in for; warp and colour
-scope onto the same selection next, where selecting layers and applying an effect *bakes* it into them.
+(nothing selected = the effect's global default). Three things scope to it today, all *baking* onto the
+selected layers:
+- **Force tools** — select the Fog (or, later, a granite) layer and Gravity/Magnet sculpt *that* field
+  (push clears a window, pull pools), leaving everything else untouched; select nothing → the specks.
+- **Colour** — a swatch on the selection bakes a per-layer colour (`L.col`); render reads per-id →
+  per-layer → bucket, so a layer paints in its own colour until cleared.
+- **Warp** — *follow* / *hold* set the selected layers' warp weight (this is what the temporary "Warp
+  holds major" toggle did, now general).
+
+This is the real mechanism the temporary toggles (`fogSculpt`, "Warp holds major") stood in for.
 
 ### Determinism — a knob edits, it doesn't re-roll
 
@@ -177,8 +182,8 @@ overshoot and chase it back; the mark of the hand is the residue. The **Undo but
 is the true undo) · the **fog / resin-core** layer (a flat untinted grayscale haze, deep, for sub-surface
 depth; movable particles for the magnet to sculpt) · the **layer system, first slice** (multiple user
 layers per bucket for major / minor / web, an active layer marks file into, per-layer eye / opacity /
-warp, saved and restored) · **layer selection** (select layers in the panel; the force tools sculpt the
-selected particle field — Fog / granite — instead of a per-effect toggle).
+warp, saved and restored) · **layer selection** (select layers; the **force tools**, a **colour** swatch,
+and **warp** follow/hold all scope to the selection and bake onto those layers).
 
 **Next:** per-id beyond veins (clasts / seams) · the remaining canvas colour menu (gradients,
 filters) · per-pixel displacement of the base fields under warp · targeted per-item reroll · a bake

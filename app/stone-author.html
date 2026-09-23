@@ -56,6 +56,10 @@
   .lay .warp[aria-pressed="false"] { color: var(--dim); }                            /* W dim = held still */
   .addlay { display: flex; gap: 8px; margin-top: 8px; }
   .addlay button { flex: 1; font-size: 12px; padding: 5px 0; color: var(--dim); }
+  .selact { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  .selact .lbl { font-size: 12px; color: #8a8de0; }
+  .selact input[type=color] { width: 30px; height: 24px; padding: 0; border: none; background: none; }
+  .selact button { font-size: 12px; padding: 4px 8px; color: var(--dim); }
   .lay output { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
                 text-align: right; font-variant-numeric: tabular-nums; }
   .lay input[type=range] { width: 100%; accent-color: #8a8de0; }
@@ -1894,7 +1898,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const wl = e.layer || 'web'; if (!layVis(wl)) continue;                        // per web-layer visibility
       g2d.beginPath(); g2d.moveTo(e.pts[0][0], e.pts[0][1]);
       for (let i = 1; i < e.pts.length; i++) g2d.lineTo(e.pts[i][0], e.pts[i][1]);
-      g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : COL.web;
+      const wlc = layAt(wl); g2d.strokeStyle = ident ? idColour('W' + e.mark, 1 - e.spread) : (wlc && wlc.col ? wlc.col : COL.web);
       g2d.globalAlpha = (ident ? 0.95 : 0.8) * (ident ? 1 : layOp(wl)); g2d.lineWidth = e.width; g2d.stroke();
     } fxOff(_fx); }
     if (layVis('micro')) { const _fx = fxOn('micro', COL.micro, ident), ng = Math.max(1, Math.min(5, Math.round(G.speckGroups))), nv = Math.max(1, Math.min(4, Math.round(G.speckSubs))); for (const s of geo.specks) {
@@ -1948,7 +1952,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const halo = COL.halo;
       for (const L of order) if (L.halo && layVis(lk(L))) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(lk(L)), true);
     }
-    const vcol = L => { const o = COL['id:' + L.id]; return o !== undefined ? o : (L.major ? COL.major : COL.minor); };   // per-id override, else the layer
+    const vcol = L => { const o = COL['id:' + L.id]; if (o !== undefined) return o; const lc = layAt(L.layer); if (lc && lc.col) return lc.col; return L.major ? COL.major : COL.minor; };   // per-id override → per-layer colour → the bucket
     if (!ident) for (const L of order) if (layVis(lk(L))) runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(lk(L)), true);  // shoulder
     for (const L of order) if (layVis(lk(L))) { const _fx = fxOn(lk(L), vcol(L), ident); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : 0.94 * layOp(lk(L))), false); fxOff(_fx); }
   }
@@ -2381,6 +2385,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const add = document.createElement('div'); add.className = 'addlay';
     for (const bk of ['major', 'minor', 'web']) { const b = document.createElement('button'); b.type = 'button'; b.textContent = '+ ' + bk[0].toUpperCase() + bk.slice(1) + ' layer'; b.addEventListener('click', () => { addLayer(bk); redraw(false); }); add.appendChild(b); }
     layEl.appendChild(add);
+    // apply to the selection: colour and warp bake onto the selected layers
+    const sa = document.createElement('div'); sa.className = 'selact';
+    sa.innerHTML = '<span class="lbl">Selected ▸</span>'
+      + '<input type="color" data-act="selcol" title="Colour the selected layers" value="#8a8de0">'
+      + '<button type="button" data-act="uncol" title="Clear colour — back to the bucket">no colour</button>'
+      + '<button type="button" data-act="wfollow" title="Selected layers follow warp">warp</button>'
+      + '<button type="button" data-act="whold" title="Selected layers hold still">hold</button>';
+    const applySel = (fn, rebuild) => { if (!selected.size) { hint('Select one or more layers first (the ▢ box on each row).'); return; } for (const k of selected) { const L = layAt(k); if (L) fn(L); } redraw(rebuild); };
+    sa.querySelector('[data-act=selcol]').addEventListener('input', e => applySel(L => L.col = e.target.value, false));
+    sa.querySelector('[data-act=uncol]').addEventListener('click', () => applySel(L => L.col = null, false));
+    sa.querySelector('[data-act=wfollow]').addEventListener('click', () => { applySel(L => L.warp = 1, true); syncLayerUI(); });
+    sa.querySelector('[data-act=whold]').addEventListener('click', () => { applySel(L => L.warp = 0, true); syncLayerUI(); });
+    layEl.appendChild(sa);
   }
   function syncLayerUI() {
     for (const row of layEl.querySelectorAll('.lay')) {
@@ -2407,7 +2424,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function serialize() {
     return { v: 1, fam, tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
-             layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp })), soloLay, activeLayer: { ...activeLayer },
+             layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, col: L.col || null })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, perItem: { ...perItem },
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
   }
@@ -2425,7 +2442,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         layers.splice(idx + 1, 0, L);
         const n = parseInt(s.key.split('#')[1], 10); if (n > layerSeq) layerSeq = n;
       }
-      if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; L.warp = typeof s.warp === 'number' ? s.warp : 1; }
+      if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; L.warp = typeof s.warp === 'number' ? s.warp : 1; L.col = s.col || null; }
     }
     for (const b in activeLayer) if (o.activeLayer && layAt(o.activeLayer[b])) activeLayer[b] = o.activeLayer[b];
     soloLay = o.soloLay || null;
