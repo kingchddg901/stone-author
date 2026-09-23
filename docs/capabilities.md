@@ -150,7 +150,7 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → uv bloom �
 ## 10. Export / serialize
 
 - **`exportAll(W)`** → one store-zip: `render.png` (`expCompleted`), `masks/{base,major,minor,micro,web}.png`, `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, `slab.ora` (capped `min(W,2048)`).
-- **⚠ Gap:** `expCompleted` stops at `paintStoneContent` — **no coat / back light / lens** in any export. The `.ora` merged image has the same gap. Final Render fixes this (see [`final-render.md`]).
+- **✓ Gap fixed:** `expCompleted` now delegates to `renderFull(W)`, so `render.png` (and the `.ora` merged image) bake the full pipeline — coat tier, back light, lens. The coverage masks stay geometry-only by design.
 - **`serialize()`** persists: `v, fam, tool, view, layTiles, guidesOn, G, T, NEXT, nextId, layers[{key,label,bucket,on,op,warp,field,density,size,seed,transmit,scatter}], soloLay, activeLayer, OVR, OVR_uv, perItem, hidden[], folders[], marks[]`. Not persisted: `selected`, `COL` (derived), `uvMode/lightSpectrum/spotOn` (reset on load), `layerSeq` (rederived).
 - **`deserialize`** migrations: retired family→carrara, retired tool→vein, drop `knot` marks, `gspecks/gsize`→micro layer, `COL`→`OVR`, `OVR_uv` normalized to lists, folder defaults, always opens in daylight.
 

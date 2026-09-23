@@ -1865,7 +1865,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; drawLayerArtifacts(L, '#fff');
     g2d = prev; return c;
   }
-  function paintBacklit() {
+  function paintBacklit(tcv, bs) {                          // tcv/bs default to the live canvas; renderFull passes an offscreen target + its blur scale
+    tcv = tcv || cv; bs = bs || dpr;
     const W = 512, body = expBaseMask(W);                  // the base bucket = the translucent matrix that GLOWS
     const gw = body.width, gh = body.height;
     if (backC.width !== gw || backC.height !== gh) { backC.width = gw; backC.height = gh; }
@@ -1910,9 +1911,95 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     g2d.drawImage(emitC, 0, 0, gw, gh, 0, 0, 1, H); g2d.globalCompositeOperation = prevOp;
     // SCATTER / BLOOM: a real backlight bleeds — soft additive bloom of the whole lit result so it reads as light, not tint
     g2d.save(); g2d.setTransform(1, 0, 0, 1, 0, 0); g2d.globalCompositeOperation = 'lighter';
-    g2d.globalAlpha = 0.3; g2d.filter = `blur(${5 * dpr}px)`; g2d.drawImage(cv, 0, 0);
-    g2d.globalAlpha = 0.18; g2d.filter = `blur(${11 * dpr}px)`; g2d.drawImage(cv, 0, 0);
+    g2d.globalAlpha = 0.3; g2d.filter = `blur(${5 * bs}px)`; g2d.drawImage(tcv, 0, 0);
+    g2d.globalAlpha = 0.18; g2d.filter = `blur(${11 * bs}px)`; g2d.drawImage(tcv, 0, 0);
     g2d.filter = 'none'; g2d.globalAlpha = 1; g2d.globalCompositeOperation = 'source-over'; g2d.restore();
+  }
+  // COAT PASSES — factored so live draw() and the offline renderFull share one implementation (no drift).
+  // tcv = the finished-so-far canvas (read from), tx = its context (drawn to), bs = blur scale (dpr live / W·ref offline).
+  function applyCoat(tcv, tx, bs, f) {
+    const w = tcv.width, h = tcv.height;
+    if (!f.ident && f.uvMode && !f.backlit) {              // EMISSION BLOOM: fluorescence glows on the black ground
+      tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'lighter';
+      tx.globalAlpha = 0.55; tx.filter = `blur(${3 * bs}px)`; tx.drawImage(tcv, 0, 0);
+      tx.globalAlpha = 0.35; tx.filter = `blur(${8 * bs}px)`; tx.drawImage(tcv, 0, 0);
+      tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
+    }
+    if (!f.ident && !f.uvMode && !f.backlit && G.subsurface > 0) {   // SUBSURFACE: feature high-pass, warmed, added back as internal glow
+      const ss = G.subsurface;
+      if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
+      const sc = ssC.getContext('2d');
+      sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none'; sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, w, h);
+      sc.drawImage(tcv, 0, 0);
+      sc.globalCompositeOperation = 'difference'; sc.filter = `blur(${(2 + 3 * ss) * bs}px)`; sc.drawImage(tcv, 0, 0);
+      sc.filter = 'none'; sc.globalCompositeOperation = 'multiply'; sc.fillStyle = '#ffcf8f'; sc.fillRect(0, 0, w, h); sc.globalCompositeOperation = 'source-over';
+      tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'lighter'; tx.filter = `blur(${(1 + 2 * ss) * bs}px)`;
+      for (let g = 0.9 * ss; g > 0.001; g -= 0.95) { tx.globalAlpha = Math.min(0.95, g); tx.drawImage(ssC, 0, 0); }
+      tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
+    }
+    if (!f.ident && !f.uvMode && !f.backlit && G.specular > 0) {     // SPECULAR TOP-COAT: movable gloss sheen + feature glint
+      const sp = G.specular, ang = G.lightAngle * Math.PI / 180;
+      const cx = w * 0.5 + Math.cos(ang) * w * 0.4, cy = h * 0.5 - Math.sin(ang) * h * 0.4;
+      const rad = Math.hypot(w, h) * 0.45, a = Math.min(1, 0.85 * sp), [lr, lg, lb] = lightRGB();
+      const grd = tx.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
+      grd.addColorStop(0, `rgba(${lr},${lg},${lb},${a})`); grd.addColorStop(0.35, `rgba(${lr},${lg},${lb},${a * 0.35})`); grd.addColorStop(1, `rgba(${lr},${lg},${lb},0)`);
+      tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'screen'; tx.fillStyle = grd; tx.fillRect(0, 0, w, h); tx.globalCompositeOperation = 'source-over'; tx.restore();
+      if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
+      const sc = ssC.getContext('2d');
+      sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none'; sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, w, h);
+      sc.drawImage(tcv, 0, 0);
+      sc.globalCompositeOperation = 'difference'; sc.filter = `blur(${2 * bs}px)`; sc.drawImage(tcv, 0, 0);
+      sc.filter = 'none'; sc.globalCompositeOperation = 'multiply';
+      const msk = sc.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
+      msk.addColorStop(0, 'rgba(255,255,255,1)'); msk.addColorStop(0.5, 'rgba(255,255,255,0.45)'); msk.addColorStop(1, 'rgba(0,0,0,1)');
+      sc.fillStyle = msk; sc.fillRect(0, 0, w, h);
+      sc.fillStyle = `rgb(${lr},${lg},${lb})`; sc.fillRect(0, 0, w, h);
+      sc.globalCompositeOperation = 'source-over';
+      tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'screen'; tx.globalAlpha = Math.min(1, 0.9 * sp);
+      tx.filter = `blur(${0.6 * bs}px)`; tx.drawImage(ssC, 0, 0);
+      tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
+    }
+    if (!f.ident && G.lens > 0) {                          // LENS TOP-COAT: ideal glass relief, per-pixel refraction gather (res-independent, ≤640px)
+      const gw = Math.min(w, 640), gh = Math.max(1, Math.round(gw * h / w));
+      if (lensC.width !== gw || lensC.height !== gh) { lensC.width = gw; lensC.height = gh; }
+      const lc = lensC.getContext('2d');
+      lc.setTransform(1, 0, 0, 1, 0, 0); lc.globalAlpha = 1; lc.filter = 'none'; lc.globalCompositeOperation = 'source-over';
+      lc.clearRect(0, 0, gw, gh); lc.drawImage(tcv, 0, 0, gw, gh);
+      const src = lc.getImageData(0, 0, gw, gh).data, out = lc.createImageData(gw, gh), o = out.data;
+      const pw = Math.max(2, Math.min(gw, gh) / Math.max(1, G.lensPitch)), k = 2 * Math.PI / pw;
+      const amp = G.lens * 0.5 * pw, caus = G.lens * 0.35, type = G.lensType || 'fresnel', cx = gw / 2, cy = gh / 2;
+      const bright = j => { const m = 1 / Math.max(0.3, Math.abs(j)); const b = 1 + caus * Math.max(0, m - 1); return b > 2 ? 2 : b; };
+      let dxc = null, jc = null, dyr = null;
+      if (type === 'reeded' || type === 'water') { dxc = new Float32Array(gw); for (let x = 0; x < gw; x++) dxc[x] = amp * Math.sin(x * k); }
+      if (type === 'reeded') { jc = new Float32Array(gw); for (let x = 0; x < gw; x++) jc[x] = 1 + amp * k * Math.cos(x * k); }
+      if (type === 'water') { dyr = new Float32Array(gh); for (let y = 0; y < gh; y++) dyr[y] = amp * Math.sin(y * k); }
+      for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+        let dx, dy, jac;
+        if (type === 'reeded') { dx = dxc[x]; dy = 0; jac = jc[x]; }
+        else if (type === 'water') { dx = dyr[y]; dy = dxc[x]; jac = 1; }
+        else { const rx = x - cx, ry = y - cy, r = Math.sqrt(rx * rx + ry * ry) || 1, s = Math.sin(r * k); dx = amp * s * rx / r; dy = amp * s * ry / r; jac = 1 + amp * k * Math.cos(r * k); }
+        let sx = (x + dx) | 0, sy = (y + dy) | 0; sx = sx < 0 ? 0 : sx >= gw ? gw - 1 : sx; sy = sy < 0 ? 0 : sy >= gh ? gh - 1 : sy;
+        const si = (sy * gw + sx) << 2, oi = (y * gw + x) << 2, b = bright(jac);
+        o[oi] = Math.min(255, src[si] * b); o[oi + 1] = Math.min(255, src[si + 1] * b); o[oi + 2] = Math.min(255, src[si + 2] * b); o[oi + 3] = src[si + 3];
+      }
+      lc.putImageData(out, 0, 0);
+      tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.imageSmoothingEnabled = true;
+      tx.drawImage(lensC, 0, 0, gw, gh, 0, 0, w, h); tx.restore();
+    }
+  }
+  // FULL-FIDELITY OFFLINE RENDER: the complete pipeline (base → content → coat, incl. back light + lens) to a fresh
+  // W-wide canvas, whole slab, no pan/zoom. Shares applyCoat/paintStoneContent/paintBacklit with live draw().
+  function renderFull(W) {
+    const oc = document.createElement('canvas'); oc.width = W; oc.height = Math.round(W * H);
+    const ox = oc.getContext('2d'), prevG = g2d, bs = W / (Wc || 360), backlit = !layTiles && G.backlight > 0;
+    ox.setTransform(1, 0, 0, 1, 0, 0); ox.globalAlpha = 1;
+    if (backlit) { ox.fillStyle = '#0b0b0e'; ox.fillRect(0, 0, oc.width, oc.height); }
+    else if (uvMode) { ox.fillStyle = UV_DARK; ox.fillRect(0, 0, oc.width, oc.height); }
+    else { ox.fillStyle = STONE_BG; ox.fillRect(0, 0, oc.width, oc.height); if (layVis('base')) { ox.globalAlpha = layOp('base'); ox.fillStyle = COL.ground; ox.fillRect(0, 0, oc.width, oc.height); ox.globalAlpha = 1; } }
+    ox.setTransform(W, 0, 0, W, 0, 0); ox.lineCap = 'round'; ox.lineJoin = 'round'; g2d = ox;
+    if (backlit) paintBacklit(oc, bs); else paintStoneContent(false, false);
+    applyCoat(oc, ox, bs, { ident: false, uvMode, backlit });
+    g2d = prevG; return oc;
   }
   function draw() {
     const F = FAM[fam], ident = view !== 'stone', angleView = view === 'angle';
@@ -1930,92 +2017,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     if (layTiles) { drawTiles(F); paintLive(); if (tool === 'light') drawLightGuide(); ctx.globalAlpha = 1; stat(); return; }
     if (backlit) paintBacklit(); else paintStoneContent(ident, angleView);
-    if (!ident && uvMode && !backlit) {                  // EMISSION BLOOM: fluorescence glows; the black ground adds ~nothing, so additive is safe (backlit does its own emission)
-      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.55; ctx.filter = `blur(${3 * dpr}px)`; ctx.drawImage(cv, 0, 0);
-      ctx.globalAlpha = 0.35; ctx.filter = `blur(${8 * dpr}px)`; ctx.drawImage(cv, 0, 0);
-      ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.restore();
-    }
-    if (!ident && !uvMode && !backlit && G.subsurface > 0) {         // SUBSURFACE (v1): features glow through a thin translucent sheet.
-      const ss = G.subsurface;                           // high-pass (stone - its own blur) so FLAT areas add ~0 (no white-out),
-      if (ssC.width !== cv.width || ssC.height !== cv.height) { ssC.width = cv.width; ssC.height = cv.height; }
-      const sc = ssC.getContext('2d');                   // features glow warm on any base, light or dark.
-      sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none';
-      sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, ssC.width, ssC.height);
-      sc.drawImage(cv, 0, 0);                            // A = stone
-      sc.globalCompositeOperation = 'difference'; sc.filter = `blur(${(2 + 3 * ss) * dpr}px)`;
-      sc.drawImage(cv, 0, 0);                            // A = |stone - blur(stone)| = feature high-pass
-      sc.filter = 'none'; sc.globalCompositeOperation = 'multiply';
-      sc.fillStyle = '#ffcf8f'; sc.fillRect(0, 0, ssC.width, ssC.height);   // warm the glow (internal light)
-      sc.globalCompositeOperation = 'source-over';
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = 'lighter';          // add the warm feature-glow back over the stone
-      ctx.filter = `blur(${(1 + 2 * ss) * dpr}px)`;      // soften the glow a touch (the scatter)
-      for (let g = 0.9 * ss; g > 0.001; g -= 0.95) {     // gain can pass 1 (ss up to 2) via extra additive passes
-        ctx.globalAlpha = Math.min(0.95, g); ctx.drawImage(ssC, 0, 0);
-      }
-      ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-      ctx.restore();
-    }
-    if (!ident && !uvMode && !backlit && G.specular > 0) {           // SPECULAR TOP-COAT (v1): a movable glossy sheen — the polish catching one light
-      const sp = G.specular, ang = G.lightAngle * Math.PI / 180, w = cv.width, h = cv.height;
-      const cx = w * 0.5 + Math.cos(ang) * w * 0.4, cy = h * 0.5 - Math.sin(ang) * h * 0.4;   // hotspot sits toward the light
-      const rad = Math.hypot(w, h) * 0.45, a = Math.min(1, 0.85 * sp), [lr, lg, lb] = lightRGB();
-      const grd = ctx.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
-      grd.addColorStop(0, `rgba(${lr},${lg},${lb},${a})`); grd.addColorStop(0.35, `rgba(${lr},${lg},${lb},${a * 0.35})`); grd.addColorStop(1, `rgba(${lr},${lg},${lb},0)`);
-      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = grd; ctx.fillRect(0, 0, w, h);   // 1) the broad polish sheen
-      ctx.globalCompositeOperation = 'source-over'; ctx.restore();
-      // 2) feature glint — the polish catches the crystalline features, brightest where the light sweeps
-      if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
-      const sc = ssC.getContext('2d');
-      sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none';
-      sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, w, h);
-      sc.drawImage(cv, 0, 0);
-      sc.globalCompositeOperation = 'difference'; sc.filter = `blur(${2 * dpr}px)`; sc.drawImage(cv, 0, 0);   // feature high-pass (neutral)
-      sc.filter = 'none'; sc.globalCompositeOperation = 'multiply';                                           // mask it to the lit hotspot
-      const msk = sc.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
-      msk.addColorStop(0, 'rgba(255,255,255,1)'); msk.addColorStop(0.5, 'rgba(255,255,255,0.45)'); msk.addColorStop(1, 'rgba(0,0,0,1)');
-      sc.fillStyle = msk; sc.fillRect(0, 0, w, h);
-      sc.fillStyle = `rgb(${lr},${lg},${lb})`; sc.fillRect(0, 0, w, h);   // tint the glint the light's colour (still multiply)
-      sc.globalCompositeOperation = 'source-over';
-      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = Math.min(1, 0.9 * sp);
-      ctx.filter = `blur(${0.6 * dpr}px)`; ctx.drawImage(ssC, 0, 0);
-      ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.restore();
-    }
-    if (!ident && G.lens > 0) {                          // LENS TOP-COAT: an ideal glass relief on the very top refracts what lies beneath.
-      const gw = Math.min(cv.width, 640), gh = Math.max(1, Math.round(gw * cv.height / cv.width));   // gather at reduced res — real per-pixel refraction (a warp tears; a gather can't), done cheap; glass softens the upscale anyway
-      if (lensC.width !== gw || lensC.height !== gh) { lensC.width = gw; lensC.height = gh; }
-      const lc = lensC.getContext('2d');
-      lc.setTransform(1, 0, 0, 1, 0, 0); lc.globalAlpha = 1; lc.filter = 'none'; lc.globalCompositeOperation = 'source-over';
-      lc.clearRect(0, 0, gw, gh); lc.drawImage(cv, 0, 0, gw, gh);           // downscaled snapshot of the finished slab
-      const src = lc.getImageData(0, 0, gw, gh).data, out = lc.createImageData(gw, gh), o = out.data;
-      const pw = Math.max(2, Math.min(gw, gh) / Math.max(1, G.lensPitch)), k = 2 * Math.PI / pw;   // groove period in px
-      const amp = G.lens * 0.5 * pw, caus = G.lens * 0.35, type = G.lensType || 'fresnel', cx = gw / 2, cy = gh / 2;   // displacement scales with the groove, so steepness tracks strength, not pitch
-      const bright = j => { const m = 1 / Math.max(0.3, Math.abs(j)); const b = 1 + caus * Math.max(0, m - 1); return b > 2 ? 2 : b; };   // caustic: a soft highlight only where the relief focuses — glass concentrates light, it never punches dark bands
-      let dxc = null, jc = null, dyr = null;
-      if (type === 'reeded' || type === 'water') { dxc = new Float32Array(gw); for (let x = 0; x < gw; x++) dxc[x] = amp * Math.sin(x * k); }   // 1-D fields: precompute the per-column offset
-      if (type === 'reeded') { jc = new Float32Array(gw); for (let x = 0; x < gw; x++) jc[x] = 1 + amp * k * Math.cos(x * k); }
-      if (type === 'water') { dyr = new Float32Array(gh); for (let y = 0; y < gh; y++) dyr[y] = amp * Math.sin(y * k); }
-      for (let y = 0; y < gh; y++) {
-        for (let x = 0; x < gw; x++) {
-          let dx, dy, jac;
-          if (type === 'reeded') { dx = dxc[x]; dy = 0; jac = jc[x]; }
-          else if (type === 'water') { dx = dyr[y]; dy = dxc[x]; jac = 1; }
-          else { const rx = x - cx, ry = y - cy, r = Math.sqrt(rx * rx + ry * ry) || 1, s = Math.sin(r * k); dx = amp * s * rx / r; dy = amp * s * ry / r; jac = 1 + amp * k * Math.cos(r * k); }   // fresnel: radial
-          let sx = (x + dx) | 0, sy = (y + dy) | 0;
-          sx = sx < 0 ? 0 : sx >= gw ? gw - 1 : sx; sy = sy < 0 ? 0 : sy >= gh ? gh - 1 : sy;   // an ideal lens has no edge; clamp keeps the sample on-slab
-          const si = (sy * gw + sx) << 2, oi = (y * gw + x) << 2, b = bright(jac);
-          o[oi] = Math.min(255, src[si] * b); o[oi + 1] = Math.min(255, src[si + 1] * b); o[oi + 2] = Math.min(255, src[si + 2] * b); o[oi + 3] = src[si + 3];
-        }
-      }
-      lc.putImageData(out, 0, 0);
-      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(lensC, 0, 0, gw, gh, 0, 0, cv.width, cv.height); ctx.restore();
-    }
+    applyCoat(cv, ctx, dpr, { ident, uvMode, backlit });   // coat tier: emission bloom · subsurface · specular · lens (shared with renderFull)
     if (guidesOn) drawGuides();
     if (guidesOn && G.warp > 0 && tool === 'cloud') drawWarpGuide();   // show the source while you drag it
     if (tool === 'light') drawLightGuide();                            // show the light while you aim it
@@ -2898,11 +2900,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const toU8 = c => new Promise(r => c.toBlob(b => b.arrayBuffer().then(a => r(new Uint8Array(a))), 'image/png'));
   const expCanvas = W => { const c = document.createElement('canvas'); c.width = W; c.height = Math.round(W * H); return c; };
   const polyPath = (cx, pts) => { cx.beginPath(); cx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) cx.lineTo(pts[i][0], pts[i][1]); };
-  function expCompleted(W) {                              // the finished slab, everything baked in
-    const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
-    cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = STONE_BG; cx.fillRect(0, 0, c.width, c.height);
-    if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, c.width, c.height); cx.globalAlpha = 1; }
-    cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; paintStoneContent(false, false); g2d = prev; return c;
+  function expCompleted(W) {                              // the finished slab — now the FULL pipeline (base + content + coat + back light + lens) via renderFull
+    return renderFull(W);
   }
   function expBaseMask(W) {                               // base value map: the base composite as luminance
     const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
