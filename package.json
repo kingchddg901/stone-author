@@ -1,0 +1,15 @@
+{
+  "name": "stone-author-harness",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Headless render + determinism harness for the Stone Author gallery.",
+  "type": "module",
+  "scripts": {
+    "build": "node harness/inject.mjs",
+    "verify": "node harness/inject.mjs && node harness/render.mjs",
+    "render": "node harness/inject.mjs && node harness/render.mjs --write"
+  },
+  "devDependencies": {
+    "playwright": "1.48.2"
+  }
+}
