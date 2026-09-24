@@ -127,8 +127,12 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   of `syncGranite`; the sliders drive `layAt(activeLayer.fog)`, not `G`). *(≈654)*
 - `addLayer(bucket)` also takes `'fog'`: a new haze plane (`field:'fog'`, own `haze`/`size`/`density`/`seed`,
   bucket `base` for export), added by the **+ Fog layer** button and reorderable in the stack like any
-  content layer. *(Fog planes are not individually sculptable yet — the force tools still move all fog blobs;
-  a follow-up.)* *(≈568)*
+  content layer. *(≈568)*
+- `sculptParticles(m, out)` — **layer-select sculpt**: the particles a force mark grabs are its *target
+  layer's* field only. `sculptTarget()` returns the selected fog plane or granite layer's key (fog
+  preferred), stored on the mark as `m.tgt`; `sculptParticles` picks `out.fog`/`out.specks` by kind and
+  filters to `p.layer === m.tgt`. A bare `'fog'`/`'micro'` (legacy mark or the default layer) moves that
+  default plane; a `#` key moves only its own plane. Works for granite layers too. *(≈1427)*
 - `hexRGB(h)` — parse `#rgb`/`#rrggbb` to `[r,g,b]`. *(467)*
 
 ## Build pipeline

@@ -158,8 +158,11 @@ that render order is the stack order — a plane sits at whatever *depth* you pl
 haze's depth is what it diffuses (a deep dense resin core under everything, a light veil near the top),
 which was the whole "insert a haze at a depth" idea made concrete. A fog plane exports through `base` like
 the original, and it's *not* pinned ground (`isGroundLayer` excludes `field==='fog'`), so it reorders
-freely. The Fog sliders drive the active fog plane (`syncFog`, like `syncGranite`). *(Not yet: sculpting a
-single fog plane — the force tools still move all fog blobs.)*
+freely. The Fog sliders drive the active fog plane (`syncFog`, like `syncGranite`). **Layer-select sculpt:**
+select a fog plane (or a granite layer) and the force tools — gravity clears a window / gathers a pool,
+magnet combs — act on *that* layer's field only (`sculptTarget` → the layer key on the mark, `sculptParticles`
+filters `p.layer === m.tgt`). A legacy mark's bare `'fog'`/`'micro'` still moves the default plane, so old
+slabs are unchanged; only a slab with *several* fields of a kind plus a sculpt sees the tighter targeting.
 
 **Selection scopes effects.** The selection is a set of **token keys** — `lay:<layer>` for a layer (its
 row checkbox) or `id:<artifact>` for one **artifact** (tap it with the **Tune/Select** tool; the id is

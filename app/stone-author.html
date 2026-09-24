@@ -516,7 +516,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const selected = new Set();
   // Selection holds TOKEN KEYS — 'lay:<layer>' for a layer (row checkbox) or 'id:<vein>' for one artifact
   // (a Tune tap). Effects/editor act on the selected keys; the same adjustment set targets either.
-  const sculptTarget = () => selected.has('lay:fog') ? 'fog' : selected.has('lay:micro') ? 'micro' : undefined;   // which particle field the force tools grab
+  const sculptTarget = () => {   // which LAYER the force tools sculpt: the selected fog plane or granite layer (layer-select sculpt), fog preferred
+    let micro;
+    for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) { if (L.field === 'fog') return L.key; if (L.field === 'specks' && !micro) micro = L.key; } }
+    return micro;
+  };
   const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2) };
   let fam = 'carrara', tool = 'vein', view = 'stone';
   let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], styl: [], drusy: [], fog: [] };
@@ -1424,9 +1428,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // GRAVITY: a point (tap) or a line (drag), pull or push, strength and reach. It moves specks and
   // never lines. Both maps keep order - nothing overtakes its neighbour - and push falls off as an
   // inverse power, so it clears a space and fades instead of stopping at an edge.
+  function sculptParticles(m, out) {                        // the particles a force mark grabs: ITS target layer's field only (layer-select sculpt)
+    const tgt = m.tgt || (m.fogTarget ? 'fog' : null);      // old saves used m.fogTarget
+    if (!tgt) return out.specks;                            // no target → the granite ground (default)
+    const L = layAt(tgt), isFog = tgt === 'fog' || (L && L.field === 'fog');
+    const arr = isFog ? out.fog : out.specks, dflt = isFog ? 'fog' : 'micro';
+    return arr.filter(p => (p.layer || dflt) === tgt);      // a bare 'fog'/'micro' moves the default plane; a '#' key moves its own plane
+  }
   function applyGravity(m, out) {
     const M = m.p, reach = 0.05 * M.reach, st = M.strength, sign = M.sign;
-    const P = (m.tgt === 'fog' || m.fogTarget) ? out.fog : out.specks;   // fog: push clears a window, pull gathers a pool (fogTarget = old saves)
+    const P = sculptParticles(m, out);   // fog: push clears a window, pull gathers a pool; per target plane/layer
     let near;
     if (m.at) {
       const [cx, cy] = m.at;
@@ -1465,7 +1476,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function applyMagnet(m, out) {
     const M = m.p, S = m.samples, R = 0.05 * M.mreach, h = 0.02 * M.mheight, sign = M.mag;
     out.guides.push({ type: 'mag', pts: S.map(q => [q[0], q[1]]), axis: S.map(q => [q[4], q[5]]), sign, hover: !!m.hover });
-    const P = (m.tgt === 'fog' || m.fogTarget) ? out.fog : out.specks;   // rotates orientation; round fog blobs won't show it (yet)
+    const P = sculptParticles(m, out);   // rotates orientation; per target plane/layer (round fog blobs won't show it yet)
     if (!P.length || !S.length) return;
     const grid = cellGrid(P, R), realP = M.pressure && pressureReal(S);
     let hx = 1, hy = 0;
