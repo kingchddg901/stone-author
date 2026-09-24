@@ -44,8 +44,9 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
 
 - **Tools** — Vein, Branch, **Stylolite**, Web, Pour, Gravity, Magnet, Chip, **Tune** (tap a
   vein to colour just that one), **Cloud** (drag to move the cloud/warp field), **Moon** (drag a local
-  warp brush across the slab), **Mask** (tap/drag a protected island the warp holds still — optionally a
-  reality window that shows daylight through), **Light** (drag to aim the one shared light / spotlight beam),
+  warp brush across the slab), **Mask** (tap/drag an island that holds the warp still — or *inverts*, so the
+  warp acts only inside it — optionally a reality window showing the disc under a light of its own),
+  **Light** (drag to aim the one shared light / spotlight beam),
   Move.
 - **Slab primitives** (per family, seeded, greyscale) — **clouds/mottling**, **banding**,
   **breccia clasts**, **drusy sparkle**, and a **fog / resin core** (a flat, untinted grayscale haze of
@@ -336,14 +337,18 @@ already-warped geometry, and no hand can retrace a pass point-for-point anyway (
 between; the stylus/screen sample rate alone shifts it), so a hand-reverse only ever gets *close* and
 leaves a residue that accumulates with repeated tries. That near-miss is the intended authoring feel —
 overshoot and chase it back; the mark of the hand is the residue. The **Undo button** (it drops the mark)
-is the true undo) · the **Mask tool → protected islands** (tap or drag to place a feathered disc the warp holds
-still — both the global field and every moon multiply their displacement by it, so a region stays **normal**
-while the rest distorts: a cauterised scar, a burn, an *island of normalcy*. Re-editable marks like everything
-else; the anchor pass is left unmasked, so it freezes the field warp, not the root bond. A parallel
-`G.warpMask` list holds programmatic/legacy discs) · the **reality window** (a mask can *show a different light
-through* its disc — SA re-renders the slab at that spectrum and feathers it in, baked into the live view **and**
-every export, so *daylight seen through a UV/psyker view* is authored in the tool, not composited by hand
-afterward) · the **fog / resin-core** layer (a flat untinted grayscale haze, deep, for sub-surface
+is the true undo) · the **Mask tool → islands** (tap or drag to place a feathered disc that decides where the
+warp is allowed to act — both the global field and every moon multiply their displacement by it. **Protects**
+holds a region **normal** while the rest distorts: a cauterised scar, a burn, an *island of normalcy*.
+**Window into chaos** inverts the sense, and once one exists the slab holds still everywhere *except* inside
+these discs — so the disc is a window onto the only part still churning. One product, so they compose: a
+protect island inside a chaos window is a calm eye in the storm, and with no chaos disc placed the arithmetic
+is unchanged, which is why old slabs are untouched. Re-editable marks like everything else; the anchor pass is
+left unmasked, so it shapes the field warp, not the root bond. A parallel `G.warpMask` list holds
+programmatic/legacy discs) · the **reality window** (a mask can *show a different light through* its disc, at
+whatever spectrum that island carries — SA re-renders the slab at it and feathers it in, baked into the live
+view **and** every export, so *daylight seen through a UV/psyker view* is authored in the tool, not composited
+by hand afterward) · the **fog / resin-core** layer (a flat untinted grayscale haze, deep, for sub-surface
 depth; movable particles for the magnet to sculpt) · the **layer system, first slice** (multiple user
 layers per bucket for major / minor / web, an active layer marks file into, per-layer eye / opacity /
 warp, saved and restored) · **layer selection** (select layers; the **force tools**, a **colour** swatch,

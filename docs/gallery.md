@@ -45,7 +45,8 @@ emission palette, a protective mask). `reference.json` is that recipe plus the r
   electric cyan, granite scatters in neon). Applied by writing `{v:-1, c}` emission entries onto the
   live `OVR_uv` before rendering.
 - **`heroes[]`** — per hero: `slab`, output `image`, and the extra steps — `spectrum`, `moonStrength`
-  (overrides the slab's moon force), `mask` (`{at, r, feather, window}` — a protected island, with
+  (overrides the slab's moon force), `mask` (`{at, r, feather, window}` — the harness sets `maskFeather` and
+  `maskWin` only, so a recipe mask is always a **protect** island at **daylight**; with
   `window:true` = a reality window), `palette` (`"psyker"` or false), `burn` (bool).
 - **`pixelSHA256`** — SHA-256 over the **raw RGBA `getImageData`** of the final canvas. This is the
   cross-*system* reference: file bytes are encoder-specific, raw pixels are not.

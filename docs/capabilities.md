@@ -64,7 +64,7 @@ Character only (structure + preview colours). Fields:
 | Tune | — | no mark; tap an artifact to toggle it into `selected` (`id:` keys). |
 | Cloud | — | drag pans `G.cloudX/Y` (cloud + warp field origin). |
 | Moon | `moon` → `applyMoon` | drag a ball; forward-warps geometry into its wake. Applied in `warpGeo`, not baked. |
-| Mask | `mask` → `gatherMasks`/`warpMaskAt` | tap or drag a **protected island** the warp holds still (an island of normalcy). With the reality-window toggle on, the island also **shows daylight through** it (baked into the live view and every export). `p:{maskFeather, maskWin}`. |
+| Mask | `mask` → `gatherMasks`/`warpMaskAt` | tap or drag an island. **Protects** holds the warp still inside it (an island of normalcy); **Window into chaos** (`maskInvert`) inverts the sense, so once one exists the warp acts *only* inside these discs. With the show-through toggle on, the island also renders at its own **Window spectrum** (`maskSpec`, 0 = daylight), baked into the live view and every export. `p:{maskFeather, maskWin, maskSpec, maskInvert}`. |
 | Light | — | drag sets `G.lightX/Y/lightAngle` (shared light + spotlight beam). |
 | Move | — | pan the viewport. Two-finger pinch always zooms. |
 
@@ -100,7 +100,9 @@ Snapshot onto every mark as `p: {...NEXT}`. Defaults / range / effect:
 | `moonReach` | 1 | 0.3–3 | moon ball radius |
 | `moonStrength` | 1 | 0.2–3 | moon drag multiplier — **unclamped in `applyMoon`** (a Save/Load can exceed the slider) |
 | `maskFeather` | 0.06 | — | Mask disc edge softness (feathered `r`→`r+feather`) |
-| `maskWin` | 0 | 0/1 | reality window off / on (`FMT`: `off` / `daylight`) — on = the island shows daylight through |
+| `maskWin` | 0 | 0/1 | reality window off / on (`FMT`: `off` / `on`) — on = the island shows another light through |
+| `maskSpec` | 0 | −1–1 | the window's **own** light spectrum (`FMT`: `daylight` at 0, else the value). Absent on a mark saved before it existed ⇒ falls back to 0 |
+| `maskInvert` | 0 | 0/1 | island sense (`FMT`: `protect` / `chaos`) — 1 = a window into chaos, the warp acts only inside |
 
 **Variants:** `natural` (plain); `sinuous` (low-freq wobble, `varAmt`); `dendritic` (×2.2 minors, each throws sub-branches); `echelon` (route diced into 3–6 offset segments — **returns before spawning any family minors**, so `branches` is a no-op); `boudinage` (rhythmic width pinch/swell, orthogonal per-mark); `halo` (wide soft low-alpha shoulder, `L.gauge*6*F.soft`).
 
@@ -143,7 +145,7 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat`
 - **Spectrum engine** — `lightSpectrum` scalar; `emit(id,layer,x,y)` returns `c` when `|lightSpectrum−v| ≤ SPX_TOL` (0.12) and (if `spotOn`) inside `spotR`; else `UV_DARK`. `beamPts` gates whole strokes. Black light = preset −1. Folders = spectrum workspaces.
 - **Back light** (`paintBacklit`) — per-layer optical fold: base bucket = glowing body; each layer occludes toward its `transmit` and diffuses by its `scatter` (blur of the **whole** accumulator); emission composed through; scatter/bloom. Defaults `BL_T` (veins .05 … matrix 1).
 - **Lens** — ideal glass relief (fresnel/reeded/water), per-pixel refraction at ≤640px, brighten-only caustic; runs on `cv` **after** everything (incl. back light).
-- **Reality window** — a Mask island with its window on shows a *different light through* its disc: `renderSlabTo` re-renders the whole slab at the island's `show` spectrum (daylight for a tool mask; any spectrum for a `G.warpMask` entry), `compositeWindow` feathers that alt render in through the disc, and `applyWindows` / `applyWindowsScreen` run it onto every finished render — the live view **and** every export (end of `renderFull` / `renderTiled` / `renderTiledParallel`). So *daylight through a UV/psyker view* is authored in the tool, not hand-composited after.
+- **Reality window** — a Mask island with its window on shows a *different light through* its disc: `renderSlabTo` re-renders the whole slab at the island's `show` spectrum (its own `maskSpec` for a tool mask, `e.show` for a `G.warpMask` entry — **any** spectrum either way), `compositeWindow` feathers that alt render in through the disc, and `applyWindows` / `applyWindowsScreen` run it onto every finished render — the live view **and** every export (end of `renderFull` / `renderTiled` / `renderTiledParallel`). So *daylight through a UV/psyker view* is authored in the tool, not hand-composited after — and the window can point the other way just as easily.
 
 ## 9. Layers / selection / hide / folders
 

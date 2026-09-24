@@ -166,19 +166,28 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   the intended feel; the **Undo button** (drops the mark) is the real undo. Warps only layers whose
   `warp` weight is on; the anchor pass after still keeps a dragged branch from snapping off. Passes are
   marks, so they stack. *(1441)*
-- `gatherMasks()` — the **protected-island** set, unioned from two sources: `G.warpMask` (programmatic / legacy
-  discs) and every **Mask mark** the tool places (`{kind:'mask', at, r, p:{maskFeather, maskWin}}`). Returns
-  `{x, y, r, feather, show}` discs — `show` is the reality-window light: a spectrum value, or `null` for
-  freeze-only. A **tool** mask sets `show = 0` (daylight) when its `maskWin` is on, else `null`; a
-  `G.warpMask` entry may carry **any** spectrum (`'show' in e ? e.show : null`), so the programmatic path can
-  show an arbitrary light through, not just daylight. `warpGeo` caches the set in `_wmask` before it warps;
-  the render reads it live for windows.
-- `warpMaskAt(x, y)` — **freeze** lookup over the cached `_wmask`: a 0–1 multiplier, **0 inside `r`**,
-  smoothstepping to **1 across `feather`**, **1 everywhere else** (empty ⇒ 1). Both warps multiply their
-  per-point displacement by it — the global field **and** every moon — so a region holds **normal** while the
-  rest distorts: a cauterised scar, a burn, an *island of normalcy*. The shared **anchor** pass is deliberately
-  **not** masked, so a line whose root lies outside a mask still re-pins its first ~4%; the mask freezes the
-  *field* warp, not the root bond. *(1637)*
+- `gatherMasks()` — the **island** set, unioned from two sources: `G.warpMask` (programmatic / legacy discs)
+  and every **Mask mark** the tool places (`{kind:'mask', at, r, p:{maskFeather, maskWin, maskSpec,
+  maskInvert}}`). Returns `{x, y, r, feather, invert, show}` discs. `invert` picks the disc's **sense**
+  (false = protect, true = a window into chaos). `show` is the reality-window light: a spectrum value, or
+  `null` for no window — a tool mask with `maskWin` on resolves to its own `maskSpec`, and a mark saved
+  before `maskSpec` existed falls back to `0` (daylight), so old slabs keep their meaning. A `G.warpMask`
+  entry carries `show` directly (`'show' in e ? e.show : null`). `warpGeo` caches the set in `_wmask` before
+  it warps; the render reads it live for windows.
+- `warpMaskAt(x, y)` — the warp-authority lookup over the cached `_wmask`: a 0–1 multiplier that both warps
+  multiply their per-point displacement by, the global field **and** every moon. Each disc is **1 inside
+  `r`**, smoothstepping to **0 across `feather`**, **0 beyond** — the two senses then read that ramp
+  opposite ways:
+  - **protect** discs multiply the running product by `1 - a`, so a region holds **normal** while the rest
+    distorts: a cauterised scar, a burn, an *island of normalcy*.
+  - **chaos** discs (`invert`) are unioned (`max`), and the product is multiplied by that union. So the
+    moment one exists the slab holds still **everywhere except** inside their union — a window onto the only
+    part still churning. With none placed the union is skipped entirely and the result is bit-for-bit the
+    protect-only arithmetic, which is why existing slabs are untouched.
+
+  Because it is one product, the two compose with no special case: a protect disc inside a chaos disc is a
+  calm eye in the storm. The shared **anchor** pass is deliberately **not** masked, so a line whose root lies
+  outside a mask still re-pins its first ~4%; the mask shapes the *field* warp, not the root bond. *(1637)*
 - `renderSlabTo(w, h, tf, coatScale, spec)` — paint the **current** geometry once more into a fresh canvas at a
   given transform and **light spectrum** `spec` (`uvMode` derived as `spec !== 0`), coat and all. The machinery a
   reality window needs to show one region under a different light without re-authoring. Saves/restores `g2d`,
@@ -189,9 +198,12 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   `applyWindows` on an export canvas (full-slab transform, `0..1 → 0..W`) — called at the end of `renderFull`,
   `renderTiled` and `renderTiledParallel`; `applyWindowsScreen` on the live `ctx` at the view transform, from
   `draw`. A no-op unless a mask carries a `show`. This is why *island of normalcy = daylight through a UV/psyker
-  view* is authored in SA, not hand-composited afterwards.
-- `drawMaskGuides()` — the Mask tool's dashed rings (solid at `r`, faint at `r+feather`; amber = freeze-only,
-  teal = reality window), plus the live disc as you drag. Guide-only, never exported. *(draw, tool === 'mask')*
+  view* is authored in SA, not hand-composited afterwards — and since `show` is the island's own `maskSpec`,
+  the window can look out on any light, not only daylight.
+- `drawMaskGuides()` — the Mask tool's dashed rings (solid at `r`, faint at `r+feather`), plus the live disc as
+  you drag. Colour carries both bits at once via `maskCol(win, inv)`: amber = protects, rose = window into
+  chaos, and the lit pair (teal / magenta) means that disc also shows through. Guide-only, never exported.
+  *(draw, tool === 'mask')*
 
 ## Tile engine
 
