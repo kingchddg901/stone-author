@@ -1,0 +1,1408 @@
+{
+ "a11y.black-light-only-the-uv": {
+  "terms": [
+   "light"
+  ],
+  "where": "accessibility label (title), not visible on screen"
+ },
+ "a11y.choose-the-interface-language": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.edit": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.export-width": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.export-width-px": {
+  "where": "accessibility label (title), not visible on screen"
+ },
+ "a11y.family": {
+  "terms": [
+   "family"
+  ],
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.file": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.gravity-sign": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.island-sense": {
+  "terms": [
+   "island"
+  ],
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.lens-type": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.magnet-mode": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.pen": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.reality-window": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.stone-slab-draw-on-it": {
+  "terms": [
+   "slab",
+   "vein"
+  ],
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.tile-options": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.tiles": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.tool": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.vein-variant": {
+  "terms": [
+   "vein"
+  ],
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.view": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.zoom": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.zoom-in": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "a11y.zoom-out": {
+  "where": "accessibility label (aria-label), not visible on screen"
+ },
+ "app.sub": {
+  "terms": [
+   "family"
+  ],
+  "where": "in the studio header"
+ },
+ "app.title": {
+  "where": "in the studio header"
+ },
+ "btn.clear": {
+  "where": "in the \"Edit\" group/panel"
+ },
+ "btn.colour-fromfam": {
+  "terms": [
+   "family"
+  ],
+  "where": "under the \"colour\" section"
+ },
+ "btn.colour-toggle": {
+  "where": "under the \"colour\" section"
+ },
+ "btn.export": {
+  "where": "in the \"File\" group/panel, under the \"file\" section"
+ },
+ "btn.fwd": {
+  "terms": [
+   "pour",
+   "vein"
+  ],
+  "where": "under the \"how-the-tools-read\" section"
+ },
+ "btn.granite-reseed": {
+  "where": "under the \"granite-ground\" section"
+ },
+ "btn.guides": {
+  "where": "in the \"View\" group/panel"
+ },
+ "btn.laytiles": {
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "btn.load": {
+  "where": "in the \"File\" group/panel, under the \"file\" section"
+ },
+ "btn.pen-pressure": {
+  "where": "in the \"Pen\" group/panel"
+ },
+ "btn.pen-tilt": {
+  "where": "in the \"Pen\" group/panel"
+ },
+ "btn.penlive": {
+  "terms": [
+   "slab"
+  ],
+  "where": "in the \"Pen\" group/panel"
+ },
+ "btn.reroll": {
+  "where": "in the \"Edit\" group/panel"
+ },
+ "btn.save": {
+  "where": "in the \"File\" group/panel, under the \"file\" section"
+ },
+ "btn.spot-toggle": {
+  "where": "under the \"coat-and-light\" section"
+ },
+ "btn.undo": {
+  "where": "in the \"Edit\" group/panel"
+ },
+ "btn.uv-toggle": {
+  "terms": [
+   "light"
+  ],
+  "where": "in the \"View\" group/panel"
+ },
+ "btn.warp-holdmajor": {
+  "where": "under the \"clouds-and-warp\" section"
+ },
+ "btn.zfit": {
+  "where": "in the \"Zoom\" group/panel"
+ },
+ "fam.calacatta": {
+  "where": "in the \"Family\" group/panel"
+ },
+ "fam.carrara": {
+  "where": "in the \"Family\" group/panel"
+ },
+ "fam.granite": {
+  "where": "in the \"Family\" group/panel"
+ },
+ "fam.marquina": {
+  "where": "in the \"Family\" group/panel"
+ },
+ "grav.pull": {
+  "where": "in the \"Gravity sign\" group/panel"
+ },
+ "grav.push": {
+  "where": "in the \"Gravity sign\" group/panel"
+ },
+ "help.protects": {
+  "terms": [
+   "island",
+   "light",
+   "slab",
+   "warp"
+  ],
+  "where": "in the \"Reality window\" group/panel"
+ },
+ "hint.and-it-looks-out-on": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.and-shows": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.black-light-spectrum-1-only-artifacts": {
+  "terms": [
+   "light",
+   "spectrum"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.colour-editor-unavailable": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.confirm-delete-layer": {
+  "placeholders": {
+   "n": "a count — supply your language's plural forms as {one,few,many,other} as needed",
+   "name": "a layer or folder name the user typed; never translate it, only place it"
+  },
+  "plural": "a count string: supply the plural forms your language needs",
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.could-not-read-that-file": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.daylight": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.declined": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.deleted-layer": {
+  "placeholders": {
+   "name": "a layer or folder name the user typed; never translate it, only place it"
+  },
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.deleted-layer-marks": {
+  "placeholders": {
+   "n": "a count — supply your language's plural forms as {one,few,many,other} as needed",
+   "name": "a layer or folder name the user typed; never translate it, only place it"
+  },
+  "plural": "a count string: supply the plural forms your language needs",
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.deselected": {
+  "placeholders": {
+   "what": "the kind of artifact that was deselected (a vein, a web crack, a seam)"
+  },
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.drag-the-moon-across-the-slab": {
+  "terms": [
+   "moon",
+   "slab"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.entered-folder": {
+  "placeholders": {
+   "light": "a spectrum value, or the word for daylight",
+   "name": "a layer or folder name the user typed; never translate it, only place it"
+  },
+  "terms": [
+   "light"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.export-failed-msg": {
+  "placeholders": {
+   "err": "an error message from the browser; not translatable"
+  },
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.exported-files": {
+  "placeholders": {
+   "n": "a count — supply your language's plural forms as {one,few,many,other} as needed"
+  },
+  "plural": "a count string: supply the plural forms your language needs",
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.exporting-encode": {
+  "placeholders": {
+   "n": "a count — supply your language's plural forms as {one,few,many,other} as needed"
+  },
+  "plural": "a count string: supply the plural forms your language needs",
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.exporting-render": {
+  "placeholders": {
+   "w": "a pixel width, e.g. 4096"
+  },
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.gravity-moves-specks-switch-to-granite": {
+  "terms": [
+   "pour"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.hover-traces-on-move-the-pen": {
+  "terms": [
+   "slab"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.island-placed-it-freezes-the-warp": {
+  "terms": [
+   "island",
+   "warp"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.loaded": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.n-selected-editor": {
+  "placeholders": {
+   "n": "a count — supply your language's plural forms as {one,few,many,other} as needed"
+  },
+  "plural": "a count string: supply the plural forms your language needs",
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.n-selected-tools": {
+  "placeholders": {
+   "n": "a count — supply your language's plural forms as {one,few,many,other} as needed"
+  },
+  "plural": "a count string: supply the plural forms your language needs",
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.pressure-is-on-for-your-next": {
+  "terms": [
+   "vein"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.protects-the-next-island-freezes-the": {
+  "terms": [
+   "island",
+   "slab",
+   "warp"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.reseeded-layer": {
+  "placeholders": {
+   "name": "a layer or folder name the user typed; never translate it, only place it"
+  },
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.save-cancelled": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.save-is-unavailable-here-this-device": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.saved-stone-json": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.saved-stone-json-this-device-also": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.select-something-first-the-box-on": {
+  "terms": [
+   "vein"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.select-something-to-hide-first-a": {
+  "terms": [
+   "seam",
+   "vein",
+   "web"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.select-the-layers-for-the-folder": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.show-through-off-the-next-island": {
+  "terms": [
+   "island",
+   "warp"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.show-through-on-the-next-island": {
+  "terms": [
+   "island",
+   "light",
+   "slab",
+   "spectrum"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.spotlight-on-only-artifacts-inside-the": {
+  "terms": [
+   "light",
+   "spectrum"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.switch-show-through-on-to-also": {
+  "terms": [
+   "light"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.switch-show-through-on-to-give": {
+  "terms": [
+   "light"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.tagged-layers": {
+  "placeholders": {
+   "light": "a spectrum value, or the word for daylight",
+   "n": "a count — supply your language's plural forms as {one,few,many,other} as needed"
+  },
+  "plural": "a count string: supply the plural forms your language needs",
+  "terms": [
+   "light"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.tap-a-vein-web-crack-or": {
+  "terms": [
+   "seam",
+   "vein",
+   "web"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.tap-on-a-tile-to-chip": {
+  "terms": [
+   "chip"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.tap-on-a-vein-to-grow": {
+  "terms": [
+   "vein"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.that-file-is-not-a-stone": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.that-input-sent-no-pressure-so": {
+  "terms": [
+   "gauge"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.that-input-sent-no-tilt-so": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.the-magnet-turns-specks-switch-to": {
+  "terms": [
+   "pour"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.this-device-remembers-your-work-automatically": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.through-the-disc": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.tilt-is-on-for-your-next": {
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.tuning-vein-full": {
+  "placeholders": {
+   "bucket": "the name of an export bucket (base/web/micro/minor/major)",
+   "id": "a vein number, e.g. 12"
+  },
+  "terms": [
+   "bucket",
+   "vein"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.turn-lay-tiles-on-first-then": {
+  "terms": [
+   "chip"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.window-into-chaos-placed-the-slab": {
+  "terms": [
+   "slab"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "hint.window-into-chaos-the-next-island": {
+  "terms": [
+   "island",
+   "slab",
+   "warp"
+  ],
+  "where": "transient hint line under the tool palette"
+ },
+ "lay.banding": {
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.base-ground": {
+  "terms": [
+   "ground"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.breccia-clasts": {
+  "terms": [
+   "breccia"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.clouds-mottling": {
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.colour-per-layer": {
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.drusy-colours": {
+  "terms": [
+   "drusy"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.drusy-sparkle": {
+  "terms": [
+   "drusy"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.effects-per-layer": {
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.fog-resin-core": {
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.fracture-web": {
+  "terms": [
+   "web"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.major-veins": {
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.micro-specks": {
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.minor-veins": {
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.per-item-tap-a-vein-with": {
+  "terms": [
+   "vein"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.seam": {
+  "terms": [
+   "seam"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.selected": {
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.speck-colours": {
+  "terms": [
+   "speck"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.stylolite-seam": {
+  "terms": [
+   "seam",
+   "stylolite"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.stylolites": {
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.vein": {
+  "terms": [
+   "vein"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.vein-halo": {
+  "terms": [
+   "halo",
+   "vein"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lay.web": {
+  "terms": [
+   "web"
+  ],
+  "where": "label in the generated colour editor / layers panel"
+ },
+ "lbl.edit": {
+  "where": "in the \"Edit\" group/panel"
+ },
+ "lbl.family": {
+  "terms": [
+   "family"
+  ],
+  "where": "in the \"Family\" group/panel"
+ },
+ "lbl.gravity": {
+  "where": "in the \"gravity\" group/panel"
+ },
+ "lbl.island": {
+  "terms": [
+   "island"
+  ],
+  "where": "in the \"mask\" group/panel"
+ },
+ "lbl.language": {
+  "where": "in the \"Family\" group/panel"
+ },
+ "lbl.layout": {
+  "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "lbl.lens-type": {
+  "where": "under the \"coat-and-light\" section"
+ },
+ "lbl.magnet": {
+  "where": "in the \"magnet\" group/panel"
+ },
+ "lbl.pen": {
+  "where": "in the \"Pen\" group/panel"
+ },
+ "lbl.scatter": {
+  "where": "under the \"granite-ground\" section"
+ },
+ "lbl.show-through": {
+  "where": "in the \"Island sense\" group/panel"
+ },
+ "lbl.spotlight": {
+  "where": "under the \"coat-and-light\" section"
+ },
+ "lbl.tiles": {
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "lbl.tool": {
+  "where": "in the \"Tool\" group/panel"
+ },
+ "lbl.units": {
+  "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "lbl.variant": {
+  "where": "in the \"vein\" group/panel"
+ },
+ "lbl.view": {
+  "where": "in the \"View\" group/panel"
+ },
+ "lbl.warp-holds": {
+  "terms": [
+   "warp"
+  ],
+  "where": "under the \"clouds-and-warp\" section"
+ },
+ "lbl.zoom": {
+  "where": "in the \"Zoom\" group/panel"
+ },
+ "lens.fresnel": {
+  "terms": [
+   "fresnel"
+  ],
+  "where": "in the \"Lens type\" group/panel, under the \"coat-and-light\" section"
+ },
+ "lens.reeded": {
+  "terms": [
+   "reeded"
+  ],
+  "where": "in the \"Lens type\" group/panel, under the \"coat-and-light\" section"
+ },
+ "lens.water": {
+  "where": "in the \"Lens type\" group/panel, under the \"coat-and-light\" section"
+ },
+ "mag.align": {
+  "where": "in the \"Magnet mode\" group/panel"
+ },
+ "mag.hover": {
+  "where": "in the \"Magnet mode\" group/panel"
+ },
+ "mag.scatter": {
+  "where": "in the \"Magnet mode\" group/panel"
+ },
+ "mask.sense.chaos": {
+  "where": "in the \"Island sense\" group/panel"
+ },
+ "mask.sense.protect": {
+  "where": "in the \"Island sense\" group/panel"
+ },
+ "mask.win.off": {
+  "where": "in the \"Reality window\" group/panel"
+ },
+ "mask.win.on": {
+  "where": "in the \"Reality window\" group/panel"
+ },
+ "note.each-line-keeps-what-it": {
+  "terms": [
+   "family",
+   "vein"
+  ],
+  "where": "under the \"how-the-tools-read\" section"
+ },
+ "note.granite": {
+  "terms": [
+   "ground",
+   "vein"
+  ],
+  "where": "under the \"how-the-tools-read\" section"
+ },
+ "note.identity": {
+  "terms": [
+   "identity",
+   "web"
+  ],
+  "where": "under the \"how-the-tools-read\" section"
+ },
+ "note.lay-tiles": {
+  "terms": [
+   "chip",
+   "grout",
+   "kerf",
+   "slab"
+  ],
+  "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "note.magnet": {
+  "terms": [
+   "angle",
+   "slab",
+   "speck"
+  ],
+  "where": "under the \"how-the-tools-read\" section"
+ },
+ "sec.banding": {
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.breccia": {
+  "terms": [
+   "breccia"
+  ],
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.clouds-and-warp": {
+  "terms": [
+   "warp"
+  ],
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.coat-and-light": {
+  "terms": [
+   "light"
+  ],
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.colour": {
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.drusy": {
+  "terms": [
+   "drusy"
+  ],
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.file": {
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.fog-and-resin": {
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.granite-ground": {
+  "terms": [
+   "ground"
+  ],
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.how-the-tools-read": {
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.layers": {
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.tiles-and-floor": {
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sl.backlight": {
+  "terms": [
+   "light"
+  ],
+  "where": "under the \"coat-and-light\" section"
+ },
+ "sl.bandAngle": {
+  "terms": [
+   "angle"
+  ],
+  "where": "under the \"banding\" section"
+ },
+ "sl.bandFreq": {
+  "where": "under the \"banding\" section"
+ },
+ "sl.bandStrength": {
+  "where": "under the \"banding\" section"
+ },
+ "sl.bandWave": {
+  "where": "under the \"banding\" section"
+ },
+ "sl.blen": {
+  "where": "in the \"branch\" group/panel"
+ },
+ "sl.branches": {
+  "where": "in the \"vein\" group/panel"
+ },
+ "sl.breaks": {
+  "where": "in the \"vein\" group/panel"
+ },
+ "sl.brecClasts": {
+  "where": "under the \"breccia\" section"
+ },
+ "sl.brecSeam": {
+  "terms": [
+   "matrix"
+  ],
+  "where": "under the \"breccia\" section"
+ },
+ "sl.brecStrength": {
+  "terms": [
+   "breccia"
+  ],
+  "where": "under the \"breccia\" section"
+ },
+ "sl.chipsize": {
+  "terms": [
+   "chip"
+  ],
+  "where": "in the \"chip\" group/panel"
+ },
+ "sl.cloudScale": {
+  "where": "under the \"clouds-and-warp\" section"
+ },
+ "sl.cloudStrength": {
+  "where": "under the \"clouds-and-warp\" section"
+ },
+ "sl.cloudX": {
+  "where": "under the \"clouds-and-warp\" section"
+ },
+ "sl.cloudY": {
+  "where": "under the \"clouds-and-warp\" section"
+ },
+ "sl.defl": {
+  "where": "in the \"vein\" group/panel"
+ },
+ "sl.density": {
+  "where": "in the \"web\" group/panel"
+ },
+ "sl.drusyBright": {
+  "where": "under the \"drusy\" section"
+ },
+ "sl.drusyDensity": {
+  "terms": [
+   "drusy"
+  ],
+  "where": "under the \"drusy\" section"
+ },
+ "sl.drusyGroups": {
+  "terms": [
+   "drusy"
+  ],
+  "where": "under the \"drusy\" section"
+ },
+ "sl.drusySize": {
+  "where": "under the \"drusy\" section"
+ },
+ "sl.drusySubs": {
+  "terms": [
+   "drusy"
+  ],
+  "where": "under the \"drusy\" section"
+ },
+ "sl.fogDensity": {
+  "where": "under the \"fog-and-resin\" section"
+ },
+ "sl.fogHaze": {
+  "where": "under the \"fog-and-resin\" section"
+ },
+ "sl.fogSize": {
+  "where": "under the \"fog-and-resin\" section"
+ },
+ "sl.fold": {
+  "terms": [
+   "fold"
+  ],
+  "where": "in the \"vein\" group/panel"
+ },
+ "sl.gauge": {
+  "terms": [
+   "gauge"
+  ],
+  "where": "in the \"vein\" group/panel"
+ },
+ "sl.gauge2": {
+  "terms": [
+   "gauge"
+  ],
+  "where": "in the \"branch\" group/panel"
+ },
+ "sl.gsize": {
+  "terms": [
+   "speck"
+  ],
+  "where": "under the \"granite-ground\" section"
+ },
+ "sl.gspecks": {
+  "where": "under the \"granite-ground\" section"
+ },
+ "sl.lens": {
+  "where": "under the \"coat-and-light\" section"
+ },
+ "sl.lensPitch": {
+  "where": "under the \"coat-and-light\" section"
+ },
+ "sl.lightAngle": {
+  "terms": [
+   "angle",
+   "light"
+  ],
+  "where": "under the \"coat-and-light\" section"
+ },
+ "sl.lightSpectrum": {
+  "terms": [
+   "light",
+   "spectrum"
+  ],
+  "where": "under the \"coat-and-light\" section"
+ },
+ "sl.lightTemp": {
+  "terms": [
+   "light"
+  ],
+  "where": "under the \"coat-and-light\" section"
+ },
+ "sl.maskFeather": {
+  "where": "in the \"Island sense\" group/panel"
+ },
+ "sl.maskSpec": {
+  "terms": [
+   "spectrum"
+  ],
+  "where": "in the \"Reality window\" group/panel"
+ },
+ "sl.mheight": {
+  "where": "in the \"Magnet mode\" group/panel"
+ },
+ "sl.moonReach": {
+  "where": "in the \"moon\" group/panel"
+ },
+ "sl.moonStrength": {
+  "where": "in the \"moon\" group/panel"
+ },
+ "sl.mreach": {
+  "where": "in the \"Magnet mode\" group/panel"
+ },
+ "sl.mstrength": {
+  "where": "in the \"Magnet mode\" group/panel"
+ },
+ "sl.pfling": {
+  "where": "in the \"pour\" group/panel"
+ },
+ "sl.prate": {
+  "terms": [
+   "pour"
+  ],
+  "where": "in the \"pour\" group/panel"
+ },
+ "sl.pwidth": {
+  "where": "in the \"pour\" group/panel"
+ },
+ "sl.reach": {
+  "where": "in the \"Gravity sign\" group/panel"
+ },
+ "sl.rough": {
+  "where": "in the \"vein\" group/panel"
+ },
+ "sl.speckGroups": {
+  "terms": [
+   "speck"
+  ],
+  "where": "under the \"granite-ground\" section"
+ },
+ "sl.speckSubs": {
+  "terms": [
+   "speck"
+  ],
+  "where": "under the \"granite-ground\" section"
+ },
+ "sl.specular": {
+  "terms": [
+   "specular"
+  ],
+  "where": "under the \"coat-and-light\" section"
+ },
+ "sl.spotR": {
+  "where": "under the \"coat-and-light\" section"
+ },
+ "sl.spread": {
+  "where": "in the \"web\" group/panel"
+ },
+ "sl.strength": {
+  "where": "in the \"Gravity sign\" group/panel"
+ },
+ "sl.stretch": {
+  "where": "in the \"web\" group/panel"
+ },
+ "sl.stylAmp": {
+  "where": "in the \"styl\" group/panel"
+ },
+ "sl.stylTooth": {
+  "where": "in the \"styl\" group/panel"
+ },
+ "sl.stylWidth": {
+  "terms": [
+   "seam"
+  ],
+  "where": "in the \"styl\" group/panel"
+ },
+ "sl.subsurface": {
+  "terms": [
+   "subsurface"
+  ],
+  "where": "under the \"coat-and-light\" section"
+ },
+ "sl.tedge": {
+  "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "sl.tgrout": {
+  "terms": [
+   "grout"
+  ],
+  "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "sl.tkerf": {
+  "terms": [
+   "kerf"
+  ],
+  "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "sl.tsize": {
+  "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "sl.varAmt": {
+  "where": "in the \"Vein variant\" group/panel"
+ },
+ "sl.warp": {
+  "terms": [
+   "warp"
+  ],
+  "where": "under the \"clouds-and-warp\" section"
+ },
+ "sl.warpDepth": {
+  "where": "under the \"clouds-and-warp\" section"
+ },
+ "tile.edge.bevel": {
+  "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.edge.pillow": {
+  "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.edge.square": {
+  "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.edge.tumbled": {
+  "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.basketweave": {
+  "terms": [
+   "basketweave"
+  ],
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.cairo": {
+  "terms": [
+   "cairo"
+  ],
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.diagonal": {
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.herringbone": {
+  "terms": [
+   "herringbone"
+  ],
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.hex": {
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.octagon": {
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.rect": {
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.rhombus": {
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.square": {
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.subway": {
+  "terms": [
+   "subway"
+  ],
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tile.pat.triangle": {
+  "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tip.back-light-how-much-light-passes": {
+  "terms": [
+   "light"
+  ],
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.back-light-how-much-these-layers": {
+  "terms": [
+   "light"
+  ],
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.clear-colour-back-to-the-bucket": {
+  "terms": [
+   "bucket"
+  ],
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.colour-the-selected-layers": {
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.delete-the-folder-its-layers-keep": {
+  "where": "tooltip on a generated control (hover text)"
+ },
+ "tip.delete-this-layer-and-everything-drawn": {
+  "where": "tooltip on a generated control (hover text)"
+ },
+ "tip.double-tap-to-rename": {
+  "where": "tooltip on a generated control (hover text)"
+ },
+ "tip.emission-colour-for-this-folder": {
+  "where": "tooltip on a generated control (hover text)"
+ },
+ "tip.give-every-layer-here-this-emission": {
+  "terms": [
+   "spectrum"
+  ],
+  "where": "tooltip on a generated control (hover text)"
+ },
+ "tip.hide-the-renderer-ignores-it-and": {
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.select-effects-and-the-force-tools": {
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.selected-layers-follow-warp": {
+  "terms": [
+   "warp"
+  ],
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.selected-layers-hold-still": {
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.set-the-light-to-this-spectrum": {
+  "terms": [
+   "light",
+   "spectrum"
+  ],
+  "where": "tooltip on a generated control (hover text)"
+ },
+ "tip.show-or-hide": {
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.solo-this-layer": {
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.tap-again-to-delete-no-undo": {
+  "where": "tooltip on a generated control (hover text)"
+ },
+ "tip.tap-make-active-double-tap-rename": {
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.un-hide-render-it-again": {
+  "where": "tooltip on a generated control (hover text)"
+ },
+ "tip.w-lit-this-layer-follows-warp": {
+  "terms": [
+   "warp"
+  ],
+  "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tool.branch": {
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.chip": {
+  "terms": [
+   "chip"
+  ],
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.cloud": {
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.gravity": {
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.inorder": {
+  "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tool.joints": {
+  "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tool.light": {
+  "terms": [
+   "light"
+  ],
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.magnet": {
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.mask": {
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.moon": {
+  "terms": [
+   "moon"
+  ],
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.move": {
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.pour": {
+  "terms": [
+   "pour"
+  ],
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.shuffle": {
+  "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "tool.styl": {
+  "terms": [
+   "stylolite"
+  ],
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.tune": {
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.vein": {
+  "terms": [
+   "vein"
+  ],
+  "where": "in the \"Tool\" group/panel"
+ },
+ "tool.web": {
+  "terms": [
+   "web"
+  ],
+  "where": "in the \"Tool\" group/panel"
+ },
+ "ui.back-light-light-from-behind": {
+  "terms": [
+   "bucket",
+   "light",
+   "matrix"
+  ],
+  "where": "under the \"coat-and-light\" section"
+ },
+ "ui.colour-editor-unavailable": {
+  "where": "text on a generated control"
+ },
+ "ui.daylight": {
+  "where": "text on a generated control"
+ },
+ "ui.enter": {
+  "where": "text on a generated control"
+ },
+ "ui.folder-from-selected-layers": {
+  "where": "text on a generated control"
+ },
+ "ui.folders-spectrum-workspaces": {
+  "terms": [
+   "spectrum"
+  ],
+  "where": "button or label in the Folders bar, under Layers"
+ },
+ "ui.hidden-not-rendered-not-selectable": {
+  "where": "button or label in the Hidden list, under Layers"
+ },
+ "ui.hide": {
+  "where": "button or label in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "ui.hold": {
+  "where": "button or label in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "ui.lens-an-ideal-glass-relief": {
+  "terms": [
+   "light"
+  ],
+  "where": "under the \"coat-and-light\" section"
+ },
+ "ui.no-colour": {
+  "where": "button or label in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "ui.pass": {
+  "where": "button or label in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "ui.scatter": {
+  "where": "button or label in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "ui.selected": {
+  "where": "button or label in a generated panel, under Layers"
+ },
+ "ui.show": {
+  "where": "text on a generated control"
+ },
+ "ui.specks-size-reseed-act-on": {
+  "where": "under the \"granite-ground\" section"
+ },
+ "ui.spectrum-0-daylight-sweep-to": {
+  "terms": [
+   "light",
+   "spectrum"
+  ],
+  "where": "under the \"coat-and-light\" section"
+ },
+ "ui.tag": {
+  "where": "text on a generated control"
+ },
+ "ui.the-three-families-are-starting": {
+  "where": "under the \"how-the-tools-read\" section"
+ },
+ "ui.to-sculpt-the-haze-select": {
+  "where": "under the \"fog-and-resin\" section"
+ },
+ "ui.warp": {
+  "terms": [
+   "warp"
+  ],
+  "where": "button or label in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "unit.in": {
+  "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "unit.mm": {
+  "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
+ },
+ "vein.variant.boudinage": {
+  "terms": [
+   "boudinage"
+  ],
+  "where": "in the \"Vein variant\" group/panel"
+ },
+ "vein.variant.dendritic": {
+  "terms": [
+   "dendritic"
+  ],
+  "where": "in the \"Vein variant\" group/panel"
+ },
+ "vein.variant.echelon": {
+  "terms": [
+   "en-echelon"
+  ],
+  "where": "in the \"Vein variant\" group/panel"
+ },
+ "vein.variant.halo": {
+  "terms": [
+   "halo"
+  ],
+  "where": "in the \"Vein variant\" group/panel"
+ },
+ "vein.variant.natural": {
+  "where": "in the \"Vein variant\" group/panel"
+ },
+ "vein.variant.sinuous": {
+  "where": "in the \"Vein variant\" group/panel"
+ },
+ "view.angle": {
+  "terms": [
+   "angle"
+  ],
+  "where": "in the \"View\" group/panel"
+ },
+ "view.identity": {
+  "terms": [
+   "identity"
+  ],
+  "where": "in the \"View\" group/panel"
+ },
+ "view.stone": {
+  "where": "in the \"View\" group/panel"
+ }
+}

@@ -52,7 +52,9 @@ const forms = v => (v && typeof v === 'object') ? Object.values(v) : [v];
 const allHoles = v => { const s = new Set(); for (const f of forms(v)) for (const h of holes(f)) s.add(h); return s; };
 
 const dir = join(root, 'i18n');
-const packs = existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith('.json')) : [];
+// `_`-prefixed files are translator apparatus (_glossary, _context), not packs — they hold different
+// shapes and would fail every key comparison below.
+const packs = existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith('.json') && !f.startsWith('_')) : [];
 for (const file of packs) {
   const lang = file.replace(/\.json$/, '');
   const pack = JSON.parse(readFileSync(join(dir, file), 'utf8'));
@@ -66,7 +68,39 @@ for (const file of packs) {
   }
 }
 
+// ---- 5. translator context: every key explained, every placeholder named, no stale entries ---------
+// These words are mostly ordinary English carrying a domain meaning (gauge, family, ground, matrix,
+// island, warp, moon, web), so a translator without context picks the wrong sense and the result reads
+// fine. Context is therefore part of the source, not a nicety — and it has to be kept honest.
+let ctx = null, glossary = null;
+const ctxPath = join(dir, '_context.json'), glPath = join(dir, '_glossary.json');
+if (existsSync(ctxPath)) ctx = JSON.parse(readFileSync(ctxPath, 'utf8'));
+if (existsSync(glPath)) glossary = JSON.parse(readFileSync(glPath, 'utf8'));
+let terms = new Set();
+if (glossary) for (const group of ['homographs', 'termsOfArt']) for (const t of Object.keys(glossary[group] || {})) terms.add(t);
+
+if (ctx) {
+  const holesOf = v => new Set([...String(v).matchAll(/\{(\w+)\}/g)].map(m => m[1]));
+  for (const k of enKeys) {
+    const e = ctx[k];
+    if (!e) { fail.push(`no translator context for ${k} — add it to i18n/_context.json`); continue; }
+    if (!e.where) fail.push(`${k}: context has no "where" — a translator cannot see the screen`);
+    const want = new Set();
+    for (const f of (EN[k] && typeof EN[k] === 'object') ? Object.values(EN[k]) : [EN[k]]) for (const h of holesOf(f)) want.add(h);
+    for (const h of want) {
+      if (!e.placeholders || !e.placeholders[h]) fail.push(`${k}: placeholder {${h}} is not described in _context.json`);
+      else if (!String(e.placeholders[h]).trim()) fail.push(`${k}: placeholder {${h}} has an empty description`);
+    }
+    for (const t of (e.terms || [])) if (!terms.has(t)) fail.push(`${k}: context cites "${t}", which is not in _glossary.json`);
+  }
+  for (const k of Object.keys(ctx)) if (!enKeys.has(k)) fail.push(`stale context entry for a key that no longer exists: ${k}`);
+} else {
+  fail.push('i18n/_context.json is missing — translators would be working blind');
+}
+
+const flagged = ctx ? Object.values(ctx).filter(e => e.terms).length : 0;
 console.log(`i18n: ${enKeys.size} English keys · ${asked.size} referenced · ${packs.length} translation pack(s)`);
+console.log(`i18n: ${ctx ? Object.keys(ctx).length : 0} context entries · ${terms.size} glossary terms · ${flagged} strings carrying one`);
 if (fail.length) {
   console.error(`\n${fail.length} problem(s):`);
   for (const f of fail.slice(0, 40)) console.error('  - ' + f);
