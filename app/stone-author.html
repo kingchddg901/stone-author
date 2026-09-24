@@ -492,7 +492,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
               stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { subsurface: 0, specular: 0, lightAngle: 135, lightTemp: 0, lightX: 0.5, lightY: 0.3125, spotR: 0.25, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0,
+  const G = { subsurface: 0, specular: 0, lightAngle: 135, lightTemp: 0, lightX: 0.5, lightY: 0.3125, spotR: 0.25, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0, warpMask: [],
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1,
@@ -1620,6 +1620,21 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Local, where the global field is gentle-everywhere: a moon over a viscous ocean, tracing its own path.
   // A mark — deterministic, re-editable, and passes stack. Only layers whose warp weight is on get grabbed;
   // the anchor pass after warpGeo still keeps a dragged branch from snapping off its parent.
+  // WARP MASK: protected islands the warp does not touch — a region can hold NORMAL while the rest distorts.
+  // Each entry {x, y, r, feather}: inside r the warp is fully frozen (returns 0); across feather it smoothsteps
+  // back to full (1). Both the global current and the moons multiply their displacement by this, so a scar or a
+  // burn stays an island of normalcy. Read from G.warpMask so it persists and re-edits with the slab; empty ⇒ 1.
+  function warpMaskAt(x, y) {
+    const MK = G.warpMask; if (!MK || !MK.length) return 1;
+    let m = 1;
+    for (const k of MK) {
+      const d = Math.hypot(x - k.x, y - k.y), r = k.r || 0, f = k.feather || 0;
+      let a; if (d <= r) a = 1; else if (f <= 0 || d >= r + f) a = 0; else a = 1 - (d - r) / f;
+      a = a * a * (3 - 2 * a);                            // smoothstep the feathered edge
+      m *= (1 - a);
+    }
+    return m;
+  }
   function applyMoon(m, W) {
     const M = m.p, R = 0.08 * (M.moonReach || 1), st = 0.5 * (M.moonStrength || 1), R2 = R * R;
     const path = resample(m.samples, 0.006); if (path.length < 2) return;
@@ -1631,8 +1646,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
       return [ax * st, ay * st];
     };
-    const wp = (q, w) => { const [a, b] = disp(q[0], q[1]); q[0] += a * w; q[1] += b * w; };
-    const wp2 = (s, w) => { const [a, b] = disp(s.x, s.y); s.x += a * w; s.y += b * w; };
+    const wp = (q, w) => { const mk = warpMaskAt(q[0], q[1]); if (!mk) return; const [a, b] = disp(q[0], q[1]); q[0] += a * w * mk; q[1] += b * w * mk; };
+    const wp2 = (s, w) => { const mk = warpMaskAt(s.x, s.y); if (!mk) return; const [a, b] = disp(s.x, s.y); s.x += a * w * mk; s.y += b * w * mk; };
     for (const L of geo.lines) { const w = W(L.layer || (L.major ? 'major' : 'minor')); if (w) for (const q of L.pts) wp(q, w); }
     for (const e of geo.web) { const ww = W(e.layer || 'web'); if (ww) for (const q of e.pts) wp(q, ww); }
     const wsy = W('styl'); if (wsy) for (const s of geo.styl) for (const q of s.pts) wp(q, wsy);
@@ -1654,8 +1669,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (hasGlobal) {                                      // the gentle whole-slab current: the fbm ocean itself
       const amp = G.warp * 0.12, scale = G.cloudScale * 3.5, s0 = mix(strHue(fam), 7), ox = G.cloudX, oy = G.cloudY, dg = G.warpDepth;
       const dx = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0) - 0.5), dy = (x, y) => amp * (fbm2((x - ox) * scale, (y - oy) * scale, s0 + 100) - 0.5);
-      const wp = (q, w) => { q[0] += dx(q[0], q[1]) * w; q[1] += dy(q[0], q[1]) * w; };
-      const wp2 = (s, w) => { s.x += dx(s.x, s.y) * w; s.y += dy(s.x, s.y) * w; };
+      const wp = (q, w) => { const mk = warpMaskAt(q[0], q[1]); if (!mk) return; q[0] += dx(q[0], q[1]) * w * mk; q[1] += dy(q[0], q[1]) * w * mk; };
+      const wp2 = (s, w) => { const mk = warpMaskAt(s.x, s.y); if (!mk) return; s.x += dx(s.x, s.y) * w * mk; s.y += dy(s.x, s.y) * w * mk; };
       // veins warp by their layer weight AND rise with generation depth (n0 base, tips more) — so the weakened
       // deep bond has something to release: deep branches push harder against a looser anchor and wander off.
       for (const L of geo.lines) { const w = W(L.layer || (L.major ? 'major' : 'minor')) * (1 + depthOf(L) * dg); for (const q of L.pts) wp(q, w); }

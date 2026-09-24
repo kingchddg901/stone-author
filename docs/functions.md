@@ -152,7 +152,8 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   while each deeper generation pushes harder against a weaker bond, so tips wander off; `warpDepth = 0`
   collapses to coherent uniform warp. (The per-layer `warp` weight + "Warp holds major veins" toggle still
   gate whether a whole layer warps at all.) `warpGeo` runs **two warps** before the shared anchor pass: the
-  gentle global field (above, when `G.warp > 0`) and every **moon** mark (below); `build()`'s incremental
+  gentle global field (above, when `G.warp > 0`) and every **moon** mark (below) — each point's displacement
+  scaled by `warpMaskAt` (protected islands, below); `build()`'s incremental
   path is also skipped whenever a moon exists, so a moon always rebuilds. *(1421)*
 - `applyMoon(m, W)` — one **moon**: a dragged local warp brush ("ball" of radius `M.moonReach`, force
   `M.moonStrength`). A **forward-warp** — each point's displacement is the ball's motion summed along the
@@ -165,6 +166,13 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   the intended feel; the **Undo button** (drops the mark) is the real undo. Warps only layers whose
   `warp` weight is on; the anchor pass after still keeps a dragged branch from snapping off. Passes are
   marks, so they stack. *(1441)*
+- `warpMaskAt(x, y)` — **protected islands** the warp does not touch. Reads `G.warpMask`, a list of
+  `{x, y, r, feather}` discs, and returns a 0–1 multiplier: **0 inside `r`** (frozen), smoothstepping back
+  to **1 across `feather`**, and **1 everywhere else** (empty list ⇒ 1). Both warps multiply their per-point
+  displacement by it — the global field **and** every moon — so a region can hold **normal** while the rest
+  distorts: a cauterised scar, a burn, an *island of normalcy*. The shared **anchor** pass is deliberately
+  **not** masked, so a line whose root lies outside a mask still re-pins its first ~4%; the mask freezes the
+  *field* warp, not the root bond. Lives on `G.warpMask`, so it serialises and re-edits with the slab. *(1624)*
 
 ## Tile engine
 

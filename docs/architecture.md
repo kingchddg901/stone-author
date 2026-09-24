@@ -301,7 +301,10 @@ already-warped geometry, and no hand can retrace a pass point-for-point anyway (
 between; the stylus/screen sample rate alone shifts it), so a hand-reverse only ever gets *close* and
 leaves a residue that accumulates with repeated tries. That near-miss is the intended authoring feel —
 overshoot and chase it back; the mark of the hand is the residue. The **Undo button** (it drops the mark)
-is the true undo) · the **fog / resin-core** layer (a flat untinted grayscale haze, deep, for sub-surface
+is the true undo) · the **warp mask** (protected islands — feathered discs on `G.warpMask`; both the global
+field and every moon multiply their displacement by it, so a region can hold **normal** while the rest
+distorts: a cauterised scar, a burn, an *island of normalcy*. The anchor pass is left unmasked, so it freezes
+the field warp, not the root bond) · the **fog / resin-core** layer (a flat untinted grayscale haze, deep, for sub-surface
 depth; movable particles for the magnet to sculpt) · the **layer system, first slice** (multiple user
 layers per bucket for major / minor / web, an active layer marks file into, per-layer eye / opacity /
 warp, saved and restored) · **layer selection** (select layers; the **force tools**, a **colour** swatch,
