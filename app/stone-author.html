@@ -12,11 +12,30 @@
   }
   body { background: var(--ground); color: var(--text);
          font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .wrap { max-width: 1232px; margin-inline: auto; padding-inline: 16px; padding-block: 18px 36px;
+  [hidden] { display: none !important; }
+  .wrap { max-width: 1640px; margin-inline: auto; padding-inline: 16px; padding-block: 14px 36px;
           display: grid; gap: 12px; }
   h1 { font-size: 18px; font-weight: 500; margin: 0; text-wrap: balance; }
   .sub { margin: 2px 0 0; color: var(--dim); font-size: 13px; }
-  #field { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 10; border-radius: 6px;
+  /* Two panes: the slab stays put on the left while the rail on the right scrolls. */
+  .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+  .work { display: grid; gap: 20px; align-items: start; }
+  @media (min-width: 1080px) { .work { grid-template-columns: minmax(0, 1fr) minmax(330px, 430px); } }
+  .stage { display: grid; gap: 9px; min-width: 0; }
+  @media (min-width: 1080px) { .stage { position: sticky; top: 12px; } }
+  .rail { display: grid; gap: 7px; min-width: 0; align-content: start; }
+  .sec { border: 1px solid var(--line); border-radius: 7px; background: #101119; }
+  .sec > summary { cursor: pointer; list-style: none; padding: 8px 10px; display: flex; align-items: center; gap: 6px;
+                   font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .sec > summary::-webkit-details-marker { display: none; }
+  .sec > summary::before { content: '\25B8'; display: inline-block; font-size: 10px; transition: transform .12s; }
+  .sec[open] > summary { color: var(--text); border-bottom: 1px solid var(--line); }
+  .sec[open] > summary::before { transform: rotate(90deg); }
+  .sec > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 6px; }
+  .sec .body { padding: 10px; display: grid; gap: 11px; }
+  .sec .body > .note { font-size: 13px; }
+  #field { display: block; width: 100%; max-width: min(100%, calc(56vh * 1.6)); aspect-ratio: 16 / 10;
+           margin-inline: auto; border-radius: 6px;
            outline: 1px solid var(--line); background: #1a1b20; touch-action: none; cursor: crosshair; }
   .row { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
   .grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -27,8 +46,8 @@
   button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   .hint { margin: 0; font-size: 14px; color: var(--text); min-height: 1.5em; }
   .hint.flash { color: #f0c46a; }
-  .sliders { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 18px; }
-  @media (min-width: 720px) { .sliders { grid-template-columns: repeat(4, 1fr); } }
+  /* One rule for both panes: as many slider columns as fit, never one too narrow to aim. */
+  .sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px 18px; }
   .sl { display: grid; gap: 2px; }
   .sl label { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; letter-spacing: .08em;
               text-transform: uppercase; color: var(--dim); }
@@ -39,7 +58,7 @@
           font-variant-numeric: tabular-nums; }
   .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 68ch; }
   .note b { color: var(--text); font-weight: 500; }
-  .layers { display: grid; gap: 5px; width: 100%; max-width: 460px; }
+  .layers { display: grid; gap: 5px; width: 100%; }
   .lay { display: grid; grid-template-columns: 16px 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch 18px;
          align-items: center; gap: 6px; padding: 0 4px; }
   .lay .mv { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
@@ -55,7 +74,7 @@
   .lay .tag { font: 500 10px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim); background: var(--btn);
               border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; margin-right: 5px; letter-spacing: 0; }
   .nm-edit { font: inherit; font-size: 13px; width: 100%; background: var(--btn); color: var(--text); border: 1px solid var(--on-line); border-radius: 4px; padding: 1px 4px; }
-  .hidden-panel { display: grid; gap: 4px; width: 100%; max-width: 460px; margin-top: 8px; }
+  .hidden-panel { display: grid; gap: 4px; width: 100%; margin-top: 8px; }
   .hidden-panel .lbl { font-size: 12px; color: var(--dim); }
   .hidden-item { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--dim); padding: 1px 4px; }
   .hidden-item button { font-size: 11px; padding: 2px 8px; }
@@ -81,17 +100,38 @@
   .lay input[type=range] { width: 100%; accent-color: #8a8de0; }
 </style>
 <div class="wrap">
-  <div>
-    <h1>Stone author</h1>
-    <p class="sub">You draw where the lines go. The family decides what they are.</p>
+  <div class="head">
+    <div>
+      <h1>Stone author</h1>
+      <p class="sub">You draw where the lines go. The family decides what they are.</p>
+    </div>
+    <div class="grp" role="group" aria-label="Family"><span class="lbl">Family</span>
+      <button id="f-carrara" type="button" data-fam="carrara">Carrara</button>
+      <button id="f-calacatta" type="button" data-fam="calacatta">Calacatta</button>
+      <button id="f-marquina" type="button" data-fam="marquina">Nero Marquina</button>
+      <button id="f-granite" type="button" data-fam="granite">Granite</button>
+    </div>
   </div>
-  <div class="grp" role="group" aria-label="Family"><span class="lbl">Family</span>
-    <button id="f-carrara" type="button" data-fam="carrara">Carrara</button>
-    <button id="f-calacatta" type="button" data-fam="calacatta">Calacatta</button>
-    <button id="f-marquina" type="button" data-fam="marquina">Nero Marquina</button>
-    <button id="f-granite" type="button" data-fam="granite">Granite</button>
-  </div>
+  <div class="work">
+  <div class="stage">
   <canvas id="field" aria-label="Stone slab. Draw on it to author veins, cracks and pours; tap a vein with the branch tool to grow a minor vein."></canvas>
+  <div class="row">
+    <div class="grp" role="group" aria-label="View"><span class="lbl">View</span>
+      <button id="v-stone" type="button" data-view="stone">Stone</button>
+      <button id="v-identity" type="button" data-view="identity">Identity</button>
+      <button id="v-angle" type="button" data-view="angle">Angle</button>
+      <button id="uv-toggle" type="button" aria-pressed="false" title="Black light — only the UV palette glows">Black light</button>
+      <button id="guides" type="button" aria-pressed="true">Guides</button></div>
+    <div class="grp" role="group" aria-label="Zoom"><span class="lbl">Zoom</span>
+      <button id="zout" type="button" aria-label="Zoom out">&minus;</button>
+      <button id="zin" type="button" aria-label="Zoom in">+</button>
+      <button id="zfit" type="button">Fit</button></div>
+    <div class="grp" role="group" aria-label="Edit"><span class="lbl">Edit</span>
+      <button id="undo" type="button">Undo</button>
+      <button id="reroll" type="button">Reroll last</button>
+      <button id="clear" type="button">Clear</button></div>
+    <span class="stat" id="stat">&mdash;</span>
+  </div>
   <div class="grp" role="group" aria-label="Tool"><span class="lbl">Tool</span>
     <button id="t-vein" type="button" data-tool="vein">Vein</button>
     <button id="t-branch" type="button" data-tool="branch">Branch</button>
@@ -169,6 +209,28 @@
   <div class="sliders" id="s-chip" hidden>
     <div class="sl"><label for="chipsize">Chip size <output id="chipsizeV"></output></label><input id="chipsize" type="range" min="0.2" max="2.5" step="0.05"></div>
   </div>
+  <div class="sliders" id="s-magnet" hidden>
+    <div class="sl"><span class="lbl">Magnet</span><div class="grp" role="group" aria-label="Magnet mode">
+      <button id="m-align" type="button" data-mag="1" aria-pressed="true">Align</button>
+      <button id="m-scatter" type="button" data-mag="-1" aria-pressed="false">Scatter</button>
+      <button id="m-hover" type="button" aria-pressed="false">Hover traces</button></div></div>
+    <div class="sl"><label for="mstrength">Strength <output id="mstrengthV"></output></label><input id="mstrength" type="range" min="0.1" max="1.5" step="0.05"></div>
+    <div class="sl"><label for="mreach">Reach <output id="mreachV"></output></label><input id="mreach" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="mheight">Height <output id="mheightV"></output></label><input id="mheight" type="range" min="0.3" max="3" step="0.05"></div>
+  </div>
+  </div><!-- /stage -->
+
+  <div class="rail">
+  <details class="sec" open><summary>Layers</summary><div class="body">
+    <div class="layers" id="layers"></div>
+  </div></details>
+  <details class="sec"><summary>Colour</summary><div class="body">
+    <div class="grp">
+      <button id="colour-toggle" type="button" aria-pressed="false">Show colour editor</button>
+      <button id="colour-fromfam" type="button">Palette from family</button></div>
+    <div id="colour-panel" hidden></div>
+  </div></details>
+  <details class="sec"><summary>Tiles &amp; floor</summary><div class="body">
   <div class="grp" role="group" aria-label="Tiles"><span class="lbl">Tiles</span>
     <button id="laytiles" type="button" aria-pressed="false">Lay tiles</button>
     <button id="p-square" type="button" data-pat="square" aria-pressed="true">Square</button>
@@ -201,17 +263,13 @@
     <button id="u-mm" type="button" data-unit="mm" aria-pressed="false">mm</button>
     <button id="t-joints" type="button" aria-pressed="true">Show hairline joints</button>
   </div>
-  <div class="sliders" id="s-magnet" hidden>
-    <div class="sl"><span class="lbl">Magnet</span><div class="grp" role="group" aria-label="Magnet mode">
-      <button id="m-align" type="button" data-mag="1" aria-pressed="true">Align</button>
-      <button id="m-scatter" type="button" data-mag="-1" aria-pressed="false">Scatter</button>
-      <button id="m-hover" type="button" aria-pressed="false">Hover traces</button></div></div>
-    <div class="sl"><label for="mstrength">Strength <output id="mstrengthV"></output></label><input id="mstrength" type="range" min="0.1" max="1.5" step="0.05"></div>
-    <div class="sl"><label for="mreach">Reach <output id="mreachV"></output></label><input id="mreach" type="range" min="0.3" max="3" step="0.05"></div>
-    <div class="sl"><label for="mheight">Height <output id="mheightV"></output></label><input id="mheight" type="range" min="0.3" max="3" step="0.05"></div>
-  </div>
-  <div id="ground">
-    <p class="lbl" style="margin:0 0 6px">Ground &middot; the whole slab, changes apply at once</p>
+  <p class="note"><b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor.
+    Grout is the gap between tiles; kerf is what the saw takes, so the veins drift a little across each joint.
+    In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab.
+    Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.</p>
+  </div></details>
+  <div id="ground" class="rail">
+    <details class="sec" open><summary>Coat &amp; light</summary><div class="body">
     <div class="sliders" id="g-coat">
       <div class="sl"><label for="subsurface">Subsurface <output id="subsurfaceV"></output></label><input id="subsurface" type="range" min="0" max="2" step="0.02"></div>
       <div class="sl"><label for="specular">Specular / polish <output id="specularV"></output></label><input id="specular" type="range" min="0" max="1" step="0.02"></div>
@@ -228,6 +286,8 @@
       <div class="sl"><label for="lensPitch">Lens grooves <output id="lensPitchV"></output></label><input id="lensPitch" type="range" min="2" max="40" step="1"></div>
       <div class="sl" style="grid-column:1/-1"><span class="lbl">Lens type</span><div class="grp" role="group" aria-label="Lens type"><button data-lens="fresnel" type="button">Fresnel</button><button data-lens="reeded" type="button">Reeded</button><button data-lens="water" type="button">Water</button></div></div>
     </div>
+    </div></details>
+    <details class="sec"><summary>Clouds &amp; warp</summary><div class="body">
     <div class="sliders" id="g-clouds">
       <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="cloudScale">Cloud scale <output id="cloudScaleV"></output></label><input id="cloudScale" type="range" min="0.4" max="3" step="0.05"></div>
@@ -237,17 +297,23 @@
       <div class="sl"><label for="cloudY">Cloud Y <output id="cloudYV"></output></label><input id="cloudY" type="range" min="-2" max="2" step="0.02"></div>
       <div class="sl"><span class="lbl">Warp holds</span><div class="grp"><button id="warp-holdmajor" type="button" aria-pressed="false">Major veins stable</button></div></div>
     </div>
+    </div></details>
+    <details class="sec"><summary>Banding</summary><div class="body">
     <div class="sliders" id="g-bands">
       <div class="sl"><label for="bandStrength">Banding <output id="bandStrengthV"></output></label><input id="bandStrength" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="bandFreq">Bands <output id="bandFreqV"></output></label><input id="bandFreq" type="range" min="2" max="20" step="1"></div>
       <div class="sl"><label for="bandAngle">Angle <output id="bandAngleV"></output></label><input id="bandAngle" type="range" min="-90" max="90" step="1"></div>
       <div class="sl"><label for="bandWave">Waviness <output id="bandWaveV"></output></label><input id="bandWave" type="range" min="0" max="1" step="0.02"></div>
     </div>
+    </div></details>
+    <details class="sec"><summary>Breccia</summary><div class="body">
     <div class="sliders" id="g-breccia">
       <div class="sl"><label for="brecStrength">Breccia <output id="brecStrengthV"></output></label><input id="brecStrength" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="brecClasts">Clasts <output id="brecClastsV"></output></label><input id="brecClasts" type="range" min="6" max="90" step="1"></div>
       <div class="sl"><label for="brecSeam">Matrix <output id="brecSeamV"></output></label><input id="brecSeam" type="range" min="0.3" max="2.5" step="0.05"></div>
     </div>
+    </div></details>
+    <details class="sec"><summary>Drusy</summary><div class="body">
     <div class="sliders" id="g-drusy">
       <div class="sl"><label for="drusyDensity">Drusy <output id="drusyDensityV"></output></label><input id="drusyDensity" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="drusySize">Crystal size <output id="drusySizeV"></output></label><input id="drusySize" type="range" min="0.4" max="2.5" step="0.05"></div>
@@ -255,13 +321,17 @@
       <div class="sl"><label for="drusyGroups">Drusy colours <output id="drusyGroupsV"></output></label><input id="drusyGroups" type="range" min="1" max="5" step="1"></div>
       <div class="sl"><label for="drusySubs">Drusy variants <output id="drusySubsV"></output></label><input id="drusySubs" type="range" min="1" max="4" step="1"></div>
     </div>
+    </div></details>
+    <details class="sec"><summary>Fog &amp; resin</summary><div class="body">
     <div class="sliders" id="g-fog">
       <div class="sl"><label for="fogHaze">Fog / resin <output id="fogHazeV"></output></label><input id="fogHaze" type="range" min="0" max="0.06" step="0.005"></div>
       <div class="sl"><label for="fogSize">Fog size <output id="fogSizeV"></output></label><input id="fogSize" type="range" min="0.3" max="2.5" step="0.05"></div>
       <div class="sl"><label for="fogDensity">Fog density <output id="fogDensityV"></output></label><input id="fogDensity" type="range" min="0.2" max="2.5" step="0.05"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">To sculpt the haze: select the Fog layer, then use Gravity (push clears a window, pull pools) or Magnet.</span></div>
     </div>
-    <div class="sliders" id="g-granite" hidden>
+    </div></details>
+    <details class="sec" id="g-granite" hidden><summary>Granite ground</summary><div class="body">
+    <div class="sliders">
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">Specks / size / reseed act on the ACTIVE granite layer. Add more with "+ Granite layer" — each its own field + colour.</span></div>
       <div class="sl"><label for="gspecks">Specks <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
       <div class="sl"><label for="gsize">Speck size <output id="gsizeV"></output></label><input id="gsize" type="range" min="0.4" max="2" step="0.05"></div>
@@ -269,47 +339,22 @@
       <div class="sl"><label for="speckGroups">Speck colours <output id="speckGroupsV"></output></label><input id="speckGroups" type="range" min="1" max="5" step="1"></div>
       <div class="sl"><label for="speckSubs">Speck variants <output id="speckSubsV"></output></label><input id="speckSubs" type="range" min="1" max="4" step="1"></div>
     </div>
-  </div>
-  <p class="note" id="fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
-  <div class="row">
-    <div class="grp" role="group" aria-label="Edit"><span class="lbl">Edit</span>
-      <button id="undo" type="button">Undo</button>
-      <button id="reroll" type="button">Reroll last</button>
-      <button id="clear" type="button">Clear</button></div>
-    <div class="grp" role="group" aria-label="File"><span class="lbl">File</span>
+    </div></details>
+  </div><!-- /#ground -->
+  <details class="sec"><summary>File</summary><div class="body">
+    <div class="grp" role="group" aria-label="File">
       <button id="save" type="button">Save</button>
       <button id="load" type="button">Load</button>
       <button id="export" type="button">Export</button>
       <select id="expres" aria-label="Export width" title="Export width (px)"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option></select>
       <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
-    <div class="grp" role="group" aria-label="View"><span class="lbl">View</span>
-      <button id="v-stone" type="button" data-view="stone">Stone</button>
-      <button id="v-identity" type="button" data-view="identity">Identity</button>
-      <button id="v-angle" type="button" data-view="angle">Angle</button>
-      <button id="uv-toggle" type="button" aria-pressed="false" title="Black light — only the UV palette glows">Black light</button>
-      <button id="guides" type="button" aria-pressed="true">Guides</button></div>
-    <div class="grp" role="group" aria-label="Zoom"><span class="lbl">Zoom</span>
-      <button id="zout" type="button" aria-label="Zoom out">&minus;</button>
-      <button id="zin" type="button" aria-label="Zoom in">+</button>
-      <button id="zfit" type="button">Fit</button></div>
-    <span class="stat" id="stat">&mdash;</span>
-  </div>
-  <div class="row"><div class="grp" role="group" aria-label="Layers" style="align-items:flex-start">
-    <span class="lbl">Layers</span>
-    <div class="layers" id="layers"></div>
-  </div></div>
-  <div class="row"><div class="grp" role="group" aria-label="Colour"><span class="lbl">Colour</span>
-    <button id="colour-toggle" type="button" aria-pressed="false">Show colour editor</button>
-    <button id="colour-fromfam" type="button">Palette from family</button></div></div>
-  <div id="colour-panel" hidden></div>
+  </div></details>
+  <details class="sec"><summary>How the tools read</summary><div class="body">
+  <p class="note" id="fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
   <p class="note"><b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw
     it, so changing them shapes the next line only. This generates the base structure; the colours here are
     only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor
     vein grown while zoomed in comes out shorter, at the scale you are working.</p>
-  <p class="note"><b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor.
-    Grout is the gap between tiles; kerf is what the saw takes, so the veins drift a little across each joint.
-    In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab.
-    Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.</p>
   <p class="note"><b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity
     moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space.
     A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside
@@ -325,6 +370,9 @@
     along its length in the direction you drew it; web cracks brighten toward the line that spread them.
     Nothing had to be traced &mdash; the line was known when it was made.</p>
   <p class="note">The three families are starting points set by eye, not yet measured from the harvested stones.</p>
+  </div></details>
+  </div><!-- /rail -->
+  </div><!-- /work -->
 </div>
 <!-- vendored token-theme-kit (CC0 1.0, Chris King) @65b401a -->
 <script id="ttk-vendor">
