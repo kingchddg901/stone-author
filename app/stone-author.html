@@ -509,6 +509,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true };
   let layTiles = false;
+  // Pristine defaults, captured before any edit. deserialize() resets to these before applying a slab, so a
+  // load is a PURE FUNCTION of the slab: a key absent from the save falls to its default, never a leftover from
+  // whatever was loaded before. Without this, loading a partial/older slab into a dirtied session renders differently.
+  const G0 = JSON.parse(JSON.stringify(G)), T0 = JSON.parse(JSON.stringify(T)), NEXT0 = JSON.parse(JSON.stringify(NEXT));
   const GFMT = { subsurface: v => (+v).toFixed(2), specular: v => (+v).toFixed(2), lightAngle: v => `${Math.round(v)}°`, lightTemp: v => (+v == 0 ? 'neutral' : (v < 0 ? 'warm ' : 'cool ') + Math.abs(v).toFixed(2)), spotR: v => (+v).toFixed(2), speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2), fogHaze: v => `${Math.round(v * 100)}%`,
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
@@ -3164,7 +3168,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { const ub = document.getElementById('uv-toggle'); if (ub) ub.setAttribute('aria-pressed', 'false');
       const so = document.getElementById('spot-toggle'); if (so) so.setAttribute('aria-pressed', 'false');
       const sp = document.getElementById('lightSpectrum'); if (sp) { sp.value = 0; document.getElementById('lightSpectrumV').textContent = 'daylight'; } }
-    Object.assign(G, o.G || {}); Object.assign(T, o.T || {}); Object.assign(NEXT, o.NEXT || {});
+    const reset = (dst, def, src) => { for (const k in dst) delete dst[k]; Object.assign(dst, JSON.parse(JSON.stringify(def))); if (src) Object.assign(dst, JSON.parse(JSON.stringify(src))); };
+    reset(G, G0, o.G); reset(T, T0, o.T); reset(NEXT, NEXT0, o.NEXT);   // HARD reset to defaults, THEN apply the slab — a load never inherits the previous slab's non-saved keys
+    cloudSig = bandSig = brecSig = ''; last = null;                     // invalidate the render caches so nothing survives a load
     clearUserLayers();                                                                                   // drop the previous slab's user layers, reset the active layer to the bucket defaults
     layAt('micro').density = 1; layAt('micro').size = 1; layAt('micro').seed = 7070;                     // reset the default granite field
     { const f = layAt('fog'); if (f) { f.haze = 0; f.size = 1; f.density = 1; f.seed = 770511; } }        // reset the default haze plane
