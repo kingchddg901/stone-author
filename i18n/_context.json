@@ -195,6 +195,7 @@
  },
  "hint.black-light-spectrum-1-only-artifacts": {
   "terms": [
+   "emission",
    "light",
    "spectrum"
   ],
@@ -387,7 +388,8 @@
  "hint.spotlight-on-only-artifacts-inside-the": {
   "terms": [
    "light",
-   "spectrum"
+   "spectrum",
+   "spotlight"
   ],
   "where": "transient hint line under the tool palette"
  },
@@ -636,6 +638,9 @@
   "where": "in the \"Island sense\" group/panel"
  },
  "lbl.spotlight": {
+  "terms": [
+   "spotlight"
+  ],
   "where": "under the \"coat-and-light\" section"
  },
  "lbl.tiles": {
@@ -1150,10 +1155,14 @@
   "where": "tooltip on a generated control (hover text)"
  },
  "tip.emission-colour-for-this-folder": {
+  "terms": [
+   "emission"
+  ],
   "where": "tooltip on a generated control (hover text)"
  },
  "tip.give-every-layer-here-this-emission": {
   "terms": [
+   "emission",
    "spectrum"
   ],
   "where": "tooltip on a generated control (hover text)"
@@ -1277,7 +1286,8 @@
   "terms": [
    "bucket",
    "light",
-   "matrix"
+   "matrix",
+   "transmittance"
   ],
   "where": "under the \"coat-and-light\" section"
  },
@@ -1334,8 +1344,10 @@
  },
  "ui.spectrum-0-daylight-sweep-to": {
   "terms": [
+   "emission",
    "light",
-   "spectrum"
+   "spectrum",
+   "spotlight"
   ],
   "where": "under the \"coat-and-light\" section"
  },
