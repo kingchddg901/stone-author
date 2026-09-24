@@ -496,7 +496,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1,
-              fogHaze: 0, fogSize: 1, fogDensity: 1, backlight: 0,
+              backlight: 0,
               lens: 0, lensPitch: 10, lensType: 'fresnel' };
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
@@ -543,7 +543,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { key: 'breccia', label: 'Breccia clasts',  bucket: 'base',  on: true, op: 1, warp: 1 },
     { key: 'clouds', label: 'Clouds / mottling', bucket: 'base', on: true, op: 1, warp: 1 },
     { key: 'bands',  label: 'Banding',          bucket: 'base',  on: true, op: 1, warp: 1 },
-    { key: 'fog',    label: 'Fog / resin core', bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'fog',    label: 'Fog / resin core', bucket: 'base',  on: true, op: 1, warp: 1, field: 'fog', haze: 0, size: 1, density: 1, seed: 770511 },
     { key: 'web',    label: 'Fracture web',     bucket: 'web',   on: true, op: 1, warp: 1 },
     { key: 'micro',  label: 'Micro / specks',   bucket: 'micro', on: true, op: 1, warp: 1, field: 'specks', density: 1, size: 1, seed: 7070 },
     { key: 'drusy',  label: 'Drusy sparkle',    bucket: 'micro', on: true, op: 1, warp: 1 },
@@ -563,16 +563,20 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // layer of its bucket, and each layer carries its own eye/opacity/warp. User layers use a '#'-suffixed
   // key (major#1); the plain bucket key (major) is the default layer. Bucket = export target (per line, by
   // kind); layer = authoring group (orthogonal — a layer can hold lines of more than one bucket).
-  const activeLayer = { major: 'major', minor: 'minor', web: 'web', micro: 'micro' };
+  const activeLayer = { major: 'major', minor: 'minor', web: 'web', micro: 'micro', fog: 'fog' };
   let layerSeq = 0;
   function addLayer(bucket) {
-    const key = bucket + '#' + (++layerSeq);
-    const nm = { major: 'Major', minor: 'Minor', web: 'Web', micro: 'Micro', base: 'Base' }[bucket] || bucket;
-    const L = { key, label: nm + ' ' + (layers.filter(x => x.bucket === bucket).length + 1), bucket, on: true, op: 1, warp: 1 };
+    const isFog = bucket === 'fog';                             // fog is a base-bucket FIELD kind (like granite in micro), keyed 'fog#N'
+    const realBucket = isFog ? 'base' : bucket, kind = isFog ? 'fog' : realBucket;
+    const key = kind + '#' + (++layerSeq);
+    const nm = { major: 'Major', minor: 'Minor', web: 'Web', micro: 'Micro', base: 'Base', fog: 'Fog' }[bucket] || bucket;
+    const sameKind = x => isFog ? x.field === 'fog' : (x.bucket === realBucket && x.field !== 'fog');
+    const L = { key, label: nm + ' ' + (layers.filter(sameKind).length + 1), bucket: realBucket, on: true, op: 1, warp: 1 };
     Object.assign(L, blDefault(L));                              // inherits the bucket's back-light transmittance
     if (bucket === 'micro') { L.field = 'specks'; L.density = 1; L.size = 1; L.seed = (Math.random() * 2147483647) | 0; }   // a new granite field: own density/size/seed
-    let idx = -1; for (let i = 0; i < layers.length; i++) if (layers[i].bucket === bucket) idx = i;   // group after the bucket's last layer
-    layers.splice(idx + 1, 0, L); activeLayer[bucket] = key;
+    if (isFog) { L.field = 'fog'; L.haze = 0.03; L.size = 1; L.density = 1; L.seed = (Math.random() * 2147483647) | 0; }     // a new haze plane: own haze/size/density/seed
+    let idx = -1; for (let i = 0; i < layers.length; i++) if (sameKind(layers[i])) idx = i;   // group after the last layer of the same KIND
+    layers.splice(idx + 1, 0, L); activeLayer[isFog ? 'fog' : realBucket] = key;
     if (typeof buildLayerUI === 'function') buildLayerUI();
     return key;
   }
@@ -580,7 +584,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function clearUserLayers() {                                 // drop this slab's user (#) layers, restore the canonical stack order, reset the active layer to each bucket's default
     for (let i = layers.length - 1; i >= 0; i--) if (layers[i].key.includes('#')) layers.splice(i, 1);
     layers.sort((a, b) => DEFAULT_LAYER_ORDER.indexOf(a.key) - DEFAULT_LAYER_ORDER.indexOf(b.key));   // a reordered slab clears back to the default stack
-    activeLayer.major = 'major'; activeLayer.minor = 'minor'; activeLayer.web = 'web'; activeLayer.micro = 'micro';
+    activeLayer.major = 'major'; activeLayer.minor = 'minor'; activeLayer.web = 'web'; activeLayer.micro = 'micro'; activeLayer.fog = 'fog';
   }
   function purgeLayerTokens(key) {                             // every override / selection / folder-membership keyed to a layer that is going away
     const pfx = 'lay:' + key;
@@ -615,7 +619,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     buildLayerUI(); saveLocal();
     return ids.size;
   }
-  const isGroundLayer = L => L.bucket === 'base' && L.key !== 'fog';   // base body + the 3 ground setters — pinned at the bottom, never reordered
+  const isGroundLayer = L => L.bucket === 'base' && L.field !== 'fog';   // base body + the 3 ground setters — pinned at the bottom; fog planes are reorderable content
   function moveLayer(key, dir) {                               // reorder a CONTENT layer in the stack (render order = layers[] order); dir +1 = up the stack, -1 = down
     const i = layers.findIndex(L => L.key === key); if (i < 0 || isGroundLayer(layers[i])) return false;
     const j = i + dir; if (j < 0 || j >= layers.length || isGroundLayer(layers[j])) return false;   // can't cross into the pinned ground
@@ -628,6 +632,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     clearUserLayers();
     soloLay = null; selected.clear(); hidden.clear(); folders = [];
     const g = layAt('micro'); if (g) { g.density = 1; g.size = 1; g.seed = 7070; }   // reset the default granite field
+    const f = layAt('fog'); if (f) { f.haze = 0; f.size = 1; f.density = 1; f.seed = 770511; }   // reset the default haze plane (off)
+    activeLayer.fog = 'fog';
     for (const L of layers) { L.on = true; L.op = 1; L.warp = 1; Object.assign(L, blDefault(L)); }   // reset the surviving default layers' visual + optical state
     for (const k in OVR) delete OVR[k];
     for (const k in OVR_uv) delete OVR_uv[k];
@@ -638,12 +644,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (typeof mountEditor === 'function') mountEditor();
     saveLocal();
   }
-  function setActiveLayer(key) { const L = layAt(key); if (L) { activeLayer[L.bucket] = key; if (typeof syncLayerUI === 'function') syncLayerUI(); if (L.bucket === 'micro' && typeof syncGranite === 'function') syncGranite(); } }
+  function setActiveLayer(key) { const L = layAt(key); if (L) { const slot = L.field === 'fog' ? 'fog' : L.bucket; activeLayer[slot] = key; if (typeof syncLayerUI === 'function') syncLayerUI(); if (L.field === 'fog') { if (typeof syncFog === 'function') syncFog(); } else if (L.bucket === 'micro' && typeof syncGranite === 'function') syncGranite(); } }
   function syncGranite() {                                // reflect the ACTIVE granite layer's density/size in the ground sliders
     const L = layAt(activeLayer.micro); if (!L) return;
     const gs = document.getElementById('gspecks'), gz = document.getElementById('gsize');
     if (gs) { gs.value = L.density ?? 1; document.getElementById('gspecksV').textContent = (+(L.density ?? 1)).toFixed(2) + '×'; }
     if (gz) { gz.value = L.size ?? 1; document.getElementById('gsizeV').textContent = (+(L.size ?? 1)).toFixed(2) + '×'; }
+  }
+  function syncFog() {                                    // reflect the ACTIVE fog layer's haze/size/density in the fog sliders
+    const L = layAt(activeLayer.fog); if (!L) return;
+    const set = (id, v, txt) => { const el = document.getElementById(id); if (el) { el.value = v; const o = document.getElementById(id + 'V'); if (o) o.textContent = txt; } };
+    set('fogHaze', L.haze ?? 0, Math.round((L.haze ?? 0) * 100) + '%');
+    set('fogSize', L.size ?? 1, (+(L.size ?? 1)).toFixed(2) + '×');
+    set('fogDensity', L.density ?? 1, (+(L.density ?? 1)).toFixed(2) + '×');
   }
   // Solo keeps the BASE ground under the soloed layer, so an isolated feature shows ON the marble
   // (a dark seam on a near-black neutral was invisible); everything else drops away.
@@ -666,15 +679,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // magnet can push them into clear windows later (polarity, default unaffected — no tool touches them yet).
   // Family-independent (a defect, not character), so switching family leaves it put. Off by default.
   function buildFog() {
-    if (G.fogHaze <= 0) return [];
     // A flat, even SHEET at rest — a jittered grid of heavily-overlapping soft blobs reads as a uniform
     // grey veil, not random clumps. The magnet does every bit of the variation (clear windows, pools) later.
-    const [r] = sub(770511, 3), out = [];
-    const cols = Math.max(2, Math.round(22 * Math.sqrt(G.fogDensity))), rows = Math.max(1, Math.round(cols * H));
-    const cw = 1 / cols, ch = H / rows, rad = Math.max(cw, ch) * 0.95 * G.fogSize;   // radius ≳ cell so neighbours overlap into a sheet
-    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
-      const x = (i + 0.5 + (r() - 0.5) * 0.8) * cw, y = (j + 0.5 + (r() - 0.5) * 0.8) * ch;
-      out.push({ x, y, r: rad * (0.85 + 0.3 * r()), x0: x, y0: y });   // x0/y0 = birth, for the magnet to push from / reset to
+    // The whole haze = the union of every fog PLANE's blobs, each with its own size/density/seed, tagged
+    // with its layer so it renders / warps / sculpts per plane. One plane today, many once you add "+ Fog layer".
+    const out = [];
+    for (const L of layers) if (L.field === 'fog' && (L.haze || 0) > 0) {
+      const [r] = sub(L.seed || 770511, 3);
+      const cols = Math.max(2, Math.round(22 * Math.sqrt(L.density || 1))), rows = Math.max(1, Math.round(cols * H));
+      const cw = 1 / cols, ch = H / rows, rad = Math.max(cw, ch) * 0.95 * (L.size || 1);   // radius ≳ cell so neighbours overlap into a sheet
+      for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+        const x = (i + 0.5 + (r() - 0.5) * 0.8) * cw, y = (j + 0.5 + (r() - 0.5) * 0.8) * ch;
+        out.push({ x, y, r: rad * (0.85 + 0.3 * r()), x0: x, y0: y, layer: L.key });   // x0/y0 = birth, for the magnet to push from / reset to
+      }
     }
     return out;
   }
@@ -2243,10 +2260,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // ---- per-layer painters: each paints ONE layer's marks, so the paint loop can walk layers in
   // authored order and kinds interleave (a web can sit over a major, a haze at any depth). Render
   // position is the layers[] order now; export still buckets by kind, untouched. ----
-  function paintFogLayer(ident, uv) {                     // DEEP translucent haze: sub-surface depth / resin core
-    if (ident || uv || !layVis('fog') || !(G.fogHaze > 0) || !geo.fog.length) return;
-    const col = '#c9c9c9', a = G.fogHaze * layOp('fog');  // flat neutral grayscale — never tinted, no colour token
+  function paintFogLayer(ident, uv, only) {               // DEEP translucent haze plane: sub-surface depth / resin core
+    only = only || 'fog';
+    if (ident || uv || !layVis(only) || !geo.fog.length) return;
+    const L = layAt(only), haze = L ? (L.haze || 0) : 0; if (haze <= 0) return;
+    const col = '#c9c9c9', a = haze * layOp(only);        // flat neutral grayscale — never tinted, no colour token
     for (const p of geo.fog) {
+      if ((p.layer || 'fog') !== only) continue;
       const grad = g2d.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
       grad.addColorStop(0, col); grad.addColorStop(1, 'transparent');
       g2d.globalAlpha = a; g2d.fillStyle = grad;
@@ -2355,8 +2375,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     // CONTENT layers, in AUTHORED (layers[]) order — kinds interleave; each layer composites atomically:
     for (const L of layers) {
-      if (L.bucket === 'base' && L.key !== 'fog') continue;          // base body + the 3 ground setters (above) / the lit ground (caller)
-      if (L.key === 'fog') paintFogLayer(ident, uv);
+      if (L.bucket === 'base' && L.field !== 'fog') continue;        // base body + the 3 ground setters (above) / the lit ground (caller)
+      if (L.field === 'fog') paintFogLayer(ident, uv, L.key);        // any fog PLANE, at its own depth
       else if (L.key === 'drusy') paintDrusyLayer(ident, uv);
       else if (L.key === 'styl') paintStylLayer(ident, uv);
       else if (L.bucket === 'web') paintWebLayer(ident, uv, L.key);
@@ -2863,8 +2883,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function relayer() { stoneReady = false; syncLayerUI(); redraw(false); }
   function buildLayerUI() {
     layEl.innerHTML = '';
-    const LET = { base: 'B', web: 'W', micro: 'G', minor: 'N', major: 'M' }, tagOf = {}, cnt = {};   // derived M1-style tag: bucket letter + live ordinal, recomputed each build
-    for (const L of layers) { cnt[L.bucket] = (cnt[L.bucket] || 0) + 1; tagOf[L.key] = (LET[L.bucket] || '?') + cnt[L.bucket]; }
+    const LET = { base: 'B', web: 'W', micro: 'G', minor: 'N', major: 'M' }, tagOf = {}, cnt = {};   // derived M1-style tag: kind letter + live ordinal, recomputed each build
+    for (const L of layers) { const kind = L.field === 'fog' ? 'fog' : L.bucket; cnt[kind] = (cnt[kind] || 0) + 1; tagOf[L.key] = (L.field === 'fog' ? 'F' : (LET[L.bucket] || '?')) + cnt[kind]; }
     for (const L of layers.slice().reverse()) {
       const row = document.createElement('div'); row.className = 'lay' + (activeLayer[L.bucket] === L.key ? ' active' : '') + (selected.has('lay:' + L.key) ? ' sel-on' : ''); row.dataset.key = L.key;
       const li = layers.indexOf(L), canUp = li < layers.length - 1, canDown = li > 0 && !isGroundLayer(layers[li - 1]);   // stack position; ground stays pinned at the bottom
@@ -2911,7 +2931,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       layEl.appendChild(row);
     }
     const add = document.createElement('div'); add.className = 'addlay';
-    for (const bk of ['major', 'minor', 'web', 'micro']) { const b = document.createElement('button'); b.type = 'button'; const nm = bk === 'micro' ? 'Granite' : bk[0].toUpperCase() + bk.slice(1); b.textContent = '+ ' + nm + ' layer'; b.addEventListener('click', () => { addLayer(bk); redraw(true); }); add.appendChild(b); }
+    for (const bk of ['major', 'minor', 'web', 'micro', 'fog']) { const b = document.createElement('button'); b.type = 'button'; const nm = bk === 'micro' ? 'Granite' : bk[0].toUpperCase() + bk.slice(1); b.textContent = '+ ' + nm + ' layer'; b.addEventListener('click', () => { addLayer(bk); redraw(true); }); add.appendChild(b); }
     layEl.appendChild(add);
     // apply to the selection: colour and warp bake onto the selected layers
     const sa = document.createElement('div'); sa.className = 'selact';
@@ -3021,7 +3041,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function serialize() {
     return { v: 1, fam, tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
-             layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed, transmit: L.transmit, scatter: L.scatter })), soloLay, activeLayer: { ...activeLayer },
+             layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed, haze: L.haze, transmit: L.transmit, scatter: L.scatter })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden], folders: folders.map(F => ({ name: F.name, v: F.v, c: F.c, members: [...F.members] })),
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
   }
@@ -3037,19 +3057,22 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     Object.assign(G, o.G || {}); Object.assign(T, o.T || {}); Object.assign(NEXT, o.NEXT || {});
     clearUserLayers();                                                                                   // drop the previous slab's user layers, reset the active layer to the bucket defaults
     layAt('micro').density = 1; layAt('micro').size = 1; layAt('micro').seed = 7070;                     // reset the default granite field
+    { const f = layAt('fog'); if (f) { f.haze = 0; f.size = 1; f.density = 1; f.seed = 770511; } }        // reset the default haze plane
     if (Array.isArray(o.layers)) for (const s of o.layers) {
       let L = layAt(s.key);
       if (!L && typeof s.key === 'string' && s.key.includes('#')) {                                     // re-create a user layer
         L = { key: s.key, label: s.label || s.key, bucket: s.bucket || s.key.split('#')[0], on: true, op: 1, warp: 1 };
         Object.assign(L, blDefault(L));                          // back-light defaults for a re-created user layer (s.transmit/scatter override below)
         if (L.bucket === 'micro') L.field = 'specks';
+        if (s.field === 'fog') L.field = 'fog';                   // a re-created haze plane
         let idx = -1; for (let i = 0; i < layers.length; i++) if (layers[i].bucket === L.bucket) idx = i;
         layers.splice(idx + 1, 0, L);
         const n = parseInt(s.key.split('#')[1], 10); if (n > layerSeq) layerSeq = n;
       }
       if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; L.warp = typeof s.warp === 'number' ? s.warp : 1;
         if (typeof s.transmit === 'number') L.transmit = s.transmit; if (typeof s.scatter === 'number') L.scatter = s.scatter;   // back-light optical declaration travels with the slab (old saves keep the defaults)
-        if (L.field === 'specks') { if (typeof s.density === 'number') L.density = s.density; if (typeof s.size === 'number') L.size = s.size; if (typeof s.seed === 'number') L.seed = s.seed; } }
+        if (L.field === 'specks') { if (typeof s.density === 'number') L.density = s.density; if (typeof s.size === 'number') L.size = s.size; if (typeof s.seed === 'number') L.seed = s.seed; }
+        if (L.field === 'fog') { if (typeof s.haze === 'number') L.haze = s.haze; if (typeof s.size === 'number') L.size = s.size; if (typeof s.density === 'number') L.density = s.density; if (typeof s.seed === 'number') L.seed = s.seed; } }
     }
     if (Array.isArray(o.layers)) {                            // restore the saved STACK ORDER (render order = layers[] order); layers absent from the save keep their relative position (older saves)
       const ord = new Map(o.layers.map((s, ix) => [s.key, ix]));
@@ -3059,6 +3082,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     if (o.G && typeof o.G.gspecks === 'number') { layAt('micro').density = o.G.gspecks; layAt('micro').size = typeof o.G.gsize === 'number' ? o.G.gsize : 1; }   // migrate pre-per-layer saves
     delete G.gspecks; delete G.gsize;                                                                    // granite params live on the layer now, not G
+    if (o.G && typeof o.G.fogHaze === 'number') { const f = layAt('fog'); if (f) { f.haze = o.G.fogHaze; f.size = typeof o.G.fogSize === 'number' ? o.G.fogSize : 1; f.density = typeof o.G.fogDensity === 'number' ? o.G.fogDensity : 1; } }   // migrate pre-per-plane fog saves
+    delete G.fogHaze; delete G.fogSize; delete G.fogDensity;                                             // fog params live on the plane now, not G
     for (const b in activeLayer) if (o.activeLayer && layAt(o.activeLayer[b])) activeLayer[b] = o.activeLayer[b];
     soloLay = o.soloLay || null;
     for (const k in OVR) delete OVR[k];                        // colour travels with the slab
@@ -3101,7 +3126,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
     for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
-    showGround(); syncLayerUI(); syncGranite(); hint();
+    showGround(); syncLayerUI(); syncGranite(); syncFog(); hint();
   }
   function download(name, text) {                       // works from a local file; inert in the artifact sandbox
     try { const b = text instanceof Blob ? text : new Blob([text], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); return true; } catch (_) { return false; }
@@ -3271,6 +3296,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     gs.addEventListener('input', () => { const L = layAt(activeLayer.micro); if (L) { L.density = +gs.value; document.getElementById('gspecksV').textContent = (+gs.value).toFixed(2) + '×'; redraw(true); } });
     gz.addEventListener('input', () => { const L = layAt(activeLayer.micro); if (L) { L.size = +gz.value; document.getElementById('gsizeV').textContent = (+gz.value).toFixed(2) + '×'; redraw(true); } });
     document.getElementById('granite-reseed').addEventListener('click', () => { const L = layAt(activeLayer.micro); if (L) { L.seed = (Math.random() * 2147483647) | 0; redraw(true); hint('Reseeded ' + L.label + ' — new scatter, same density and size.'); } }); }
+  // Fog haze/size/density act on the ACTIVE fog plane (each plane has its own), like granite.
+  { const fh = document.getElementById('fogHaze'), fz = document.getElementById('fogSize'), fd = document.getElementById('fogDensity'), af = () => layAt(activeLayer.fog);
+    if (fh) fh.addEventListener('input', () => { const L = af(); if (L) { L.haze = +fh.value; document.getElementById('fogHazeV').textContent = Math.round(L.haze * 100) + '%'; redraw(true); } });
+    if (fz) fz.addEventListener('input', () => { const L = af(); if (L) { L.size = +fz.value; document.getElementById('fogSizeV').textContent = (+fz.value).toFixed(2) + '×'; redraw(true); } });
+    if (fd) fd.addEventListener('input', () => { const L = af(); if (L) { L.density = +fd.value; document.getElementById('fogDensityV').textContent = (+fd.value).toFixed(2) + '×'; redraw(true); } }); }
   for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => { view = b.dataset.view; press('[data-view]', b); redraw(false); });
   function setSpectrum(v) {                               // move the light to a spectrum value; 0 = daylight, else a light is on
     lightSpectrum = v; uvMode = v !== 0;

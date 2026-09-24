@@ -152,6 +152,15 @@ marks: a vein deflects around *all* the grains it meets, so both fields' specks 
 not a leak). This is the "Pollock engine": subdivide a roughly-constant on-screen density across
 independently-coloured fields.
 
+The **fog / haze is field-per-layer the same way**: every **+ Fog layer** is a fog *plane* with its own
+`haze` / `size` / `density` / `seed`, `buildFog` unions them (each blob tagged with its layer), and — now
+that render order is the stack order — a plane sits at whatever *depth* you place it. That's the point: a
+haze's depth is what it diffuses (a deep dense resin core under everything, a light veil near the top),
+which was the whole "insert a haze at a depth" idea made concrete. A fog plane exports through `base` like
+the original, and it's *not* pinned ground (`isGroundLayer` excludes `field==='fog'`), so it reorders
+freely. The Fog sliders drive the active fog plane (`syncFog`, like `syncGranite`). *(Not yet: sculpting a
+single fog plane — the force tools still move all fog blobs.)*
+
 **Selection scopes effects.** The selection is a set of **token keys** — `lay:<layer>` for a layer (its
 row checkbox) or `id:<artifact>` for one **artifact** (tap it with the **Tune/Select** tool; the id is
 resolved from the click and stays internal — a selected artifact shows as a dashed accent handle, never a
