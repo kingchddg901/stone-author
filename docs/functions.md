@@ -166,13 +166,29 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   the intended feel; the **Undo button** (drops the mark) is the real undo. Warps only layers whose
   `warp` weight is on; the anchor pass after still keeps a dragged branch from snapping off. Passes are
   marks, so they stack. *(1441)*
-- `warpMaskAt(x, y)` — **protected islands** the warp does not touch. Reads `G.warpMask`, a list of
-  `{x, y, r, feather}` discs, and returns a 0–1 multiplier: **0 inside `r`** (frozen), smoothstepping back
-  to **1 across `feather`**, and **1 everywhere else** (empty list ⇒ 1). Both warps multiply their per-point
-  displacement by it — the global field **and** every moon — so a region can hold **normal** while the rest
-  distorts: a cauterised scar, a burn, an *island of normalcy*. The shared **anchor** pass is deliberately
+- `gatherMasks()` — the **protected-island** set, unioned from two sources: `G.warpMask` (programmatic / legacy
+  discs) and every **Mask mark** the tool places (`{kind:'mask', at, r, p:{maskFeather, maskWin}}`). Returns
+  `{x, y, r, feather, show}` discs — `show` is the reality-window light (a spectrum, or `null` for freeze-only,
+  set from `maskWin`). `warpGeo` caches this in `_wmask` before it warps; the render reads it live for windows.
+- `warpMaskAt(x, y)` — **freeze** lookup over the cached `_wmask`: a 0–1 multiplier, **0 inside `r`**,
+  smoothstepping to **1 across `feather`**, **1 everywhere else** (empty ⇒ 1). Both warps multiply their
+  per-point displacement by it — the global field **and** every moon — so a region holds **normal** while the
+  rest distorts: a cauterised scar, a burn, an *island of normalcy*. The shared **anchor** pass is deliberately
   **not** masked, so a line whose root lies outside a mask still re-pins its first ~4%; the mask freezes the
-  *field* warp, not the root bond. Lives on `G.warpMask`, so it serialises and re-edits with the slab. *(1624)*
+  *field* warp, not the root bond. *(1637)*
+- `renderSlabTo(w, h, tf, coatScale, spec)` — paint the **current** geometry once more into a fresh canvas at a
+  given transform and **light spectrum** `spec` (`uvMode` derived as `spec !== 0`), coat and all. The machinery a
+  reality window needs to show one region under a different light without re-authoring. Saves/restores `g2d`,
+  `lightSpectrum`, `uvMode`. Calls only `paintStoneContent`/`applyCoat`, never `renderFull` — so no recursion.
+- `compositeWindow(target, win, w, h, tf, coatScale, cx, cy, kr)` — feather one island's `renderSlabTo` in
+  through its disc (a `destination-in` radial: solid to `r`, fading across `feather`) and draw it onto `target`.
+- `applyWindows(canvas, W)` / `applyWindowsScreen()` — run every reality-window island onto a finished render:
+  `applyWindows` on an export canvas (full-slab transform, `0..1 → 0..W`) — called at the end of `renderFull`,
+  `renderTiled` and `renderTiledParallel`; `applyWindowsScreen` on the live `ctx` at the view transform, from
+  `draw`. A no-op unless a mask carries a `show`. This is why *island of normalcy = daylight through a UV/psyker
+  view* is authored in SA, not hand-composited afterwards.
+- `drawMaskGuides()` — the Mask tool's dashed rings (solid at `r`, faint at `r+feather`; amber = freeze-only,
+  teal = reality window), plus the live disc as you drag. Guide-only, never exported. *(draw, tool === 'mask')*
 
 ## Tile engine
 

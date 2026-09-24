@@ -103,6 +103,7 @@
     <button id="t-tune" type="button" data-tool="tune">Tune</button>
     <button id="t-cloud" type="button" data-tool="cloud">Cloud</button>
     <button id="t-moon" type="button" data-tool="moon">Moon</button>
+    <button id="t-mask" type="button" data-tool="mask">Mask</button>
     <button id="t-light" type="button" data-tool="light">Light</button>
     <button id="t-move" type="button" data-tool="move">Move</button>
   </div>
@@ -157,6 +158,12 @@
   <div class="sliders" id="s-moon" hidden>
     <div class="sl"><label for="moonReach">Ball size <output id="moonReachV"></output></label><input id="moonReach" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="moonStrength">Pull <output id="moonStrengthV"></output></label><input id="moonStrength" type="range" min="0.2" max="3" step="0.05"></div>
+  </div>
+  <div class="sliders" id="s-mask" hidden>
+    <div class="sl"><label for="maskFeather">Feather <output id="maskFeatherV"></output></label><input id="maskFeather" type="range" min="0" max="0.3" step="0.005"></div>
+    <div class="sl"><span class="lbl">Reality window</span><div class="grp" role="group" aria-label="Reality window">
+      <button id="mw-off" type="button" data-mwin="0" aria-pressed="true">Off</button>
+      <button id="mw-day" type="button" data-mwin="1" aria-pressed="false">Show daylight</button></div></div>
   </div>
   <div class="sliders" id="s-chip" hidden>
     <div class="sl"><label for="chipsize">Chip size <output id="chipsizeV"></output></label><input id="chipsize" type="range" min="0.2" max="2.5" step="0.05"></div>
@@ -490,7 +497,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // change applies forward and never rewrites what is already down.
   const NEXT = { pressure: false, tilt: false, gauge: 1, rough: 1, breaks: 1, branches: 1, blen: 1, gauge2: 1, spread: 1, density: 1, stretch: 1,
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
-              stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1 };
+              stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1, maskFeather: 0.06, maskWin: 0 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
   const G = { subsurface: 0, specular: 0, lightAngle: 135, lightTemp: 0, lightX: 0.5, lightY: 0.3125, spotR: 0.25, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0, warpMask: [],
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
@@ -521,7 +528,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) { if (L.field === 'fog') return L.key; if (L.field === 'specks' && !micro) micro = L.key; } }
     return micro;
   };
-  const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2) };
+  const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), maskFeather: v => (+v).toFixed(3), maskWin: v => (+v ? 'daylight' : 'off') };
   let fam = 'carrara', tool = 'vein', view = 'stone';
   let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], styl: [], drusy: [], fog: [] };
   // CANONICAL LAYERS - the contract every consumer reads (VA: base/major/minor/micro; the dashboard
@@ -1621,11 +1628,20 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // A mark — deterministic, re-editable, and passes stack. Only layers whose warp weight is on get grabbed;
   // the anchor pass after warpGeo still keeps a dragged branch from snapping off its parent.
   // WARP MASK: protected islands the warp does not touch — a region can hold NORMAL while the rest distorts.
-  // Each entry {x, y, r, feather}: inside r the warp is fully frozen (returns 0); across feather it smoothsteps
-  // back to full (1). Both the global current and the moons multiply their displacement by this, so a scar or a
-  // burn stays an island of normalcy. Read from G.warpMask so it persists and re-edits with the slab; empty ⇒ 1.
+  // A protected disc {x, y, r, feather, show}: inside r the warp is fully frozen (returns 0); across feather it
+  // smoothsteps back to full (1). Both the global current and the moons multiply their displacement by this, so a
+  // scar or a burn stays an island of normalcy. Discs come from G.warpMask (programmatic / legacy) AND from Mask
+  // MARKS (the tool) — gatherMasks() unions both; warpGeo caches the set in _wmask before it warps. `show` (a light
+  // spectrum, or null) is unused for the freeze — it drives the reality window in the render, not the geometry.
+  let _wmask = [];
+  function gatherMasks() {
+    const out = [];
+    if (Array.isArray(G.warpMask)) for (const e of G.warpMask) out.push({ x: e.x, y: e.y, r: e.r || 0, feather: e.feather || 0, show: ('show' in e) ? e.show : null });
+    for (const m of marks) if (m.kind === 'mask') out.push({ x: m.at[0], y: m.at[1], r: m.r || 0, feather: (m.p && m.p.maskFeather) || 0, show: (m.p && m.p.maskWin) ? 0 : null });
+    return out;
+  }
   function warpMaskAt(x, y) {
-    const MK = G.warpMask; if (!MK || !MK.length) return 1;
+    const MK = _wmask; if (!MK.length) return 1;
     let m = 1;
     for (const k of MK) {
       const d = Math.hypot(x - k.x, y - k.y), r = k.r || 0, f = k.feather || 0;
@@ -1655,6 +1671,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const wdr = W('drusy'); if (wdr) for (const s of geo.drusy) wp2(s, wdr);
   }
   function warpGeo() {
+    _wmask = gatherMasks();                               // the protected islands, unioned + cached, before any warp reads them
     const moons = marks.filter(m => m.kind === 'moon'), hasGlobal = G.warp > 0;
     if (!hasGlobal && !moons.length) return;             // two warps: the gentle global current, and the powerful local moons
     const W = k => { const L = layAt(k); return L ? L.warp : 1; };        // per-layer warp weight (a layer can hold still)
@@ -2115,7 +2132,64 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ox.setTransform(W, 0, 0, W, 0, 0); ox.lineCap = 'round'; ox.lineJoin = 'round'; g2d = ox;
     if (backlit) paintBacklit(oc, bs); else paintStoneContent(false, false);
     applyCoat(oc, ox, bs, { ident: false, uvMode, backlit });
+    applyWindows(oc, W);
     g2d = prevG; return oc;
+  }
+  // REALITY WINDOW — a mask island can show the slab under a DIFFERENT light through its disc, baked into every
+  // render and export. renderSlabTo paints the current geometry once more at the island's `show` spectrum;
+  // compositeWindow feathers that alt render in through the disc. So an island of normalcy — daylight stone seen
+  // through a UV/psyker view — is authored in SA, not hand-composited afterwards.
+  function renderSlabTo(w, h, tf, coatScale, spec) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const cx = c.getContext('2d'), svG = g2d, svS = lightSpectrum, svU = uvMode;
+    lightSpectrum = spec; uvMode = spec !== 0;
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;
+    if (uvMode) { cx.fillStyle = UV_DARK; cx.fillRect(0, 0, w, h); }
+    else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, w, h); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, w, h); cx.globalAlpha = 1; } }
+    cx.setTransform(tf[0], tf[1], tf[2], tf[3], tf[4], tf[5]); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
+    paintStoneContent(false, false);
+    applyCoat(c, cx, coatScale, { ident: false, uvMode, backlit: false });
+    g2d = svG; lightSpectrum = svS; uvMode = svU;
+    return c;
+  }
+  function compositeWindow(target, win, w, h, tf, coatScale, cx, cy, kr) {
+    const alt = renderSlabTo(w, h, tf, coatScale, win.show);
+    const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h;
+    const tc = tmp.getContext('2d'); tc.drawImage(alt, 0, 0);
+    tc.globalCompositeOperation = 'destination-in';                    // keep only the feathered disc of the alt render
+    const r0 = win.r * kr, r1 = Math.max(r0 + 1, (win.r + win.feather) * kr);
+    const rg = tc.createRadialGradient(cx, cy, Math.max(0, r0 * 0.6), cx, cy, r1);
+    rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(0.62, 'rgba(0,0,0,1)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+    tc.fillStyle = rg; tc.fillRect(0, 0, w, h);
+    target.setTransform(1, 0, 0, 1, 0, 0); target.globalAlpha = 1; target.drawImage(tmp, 0, 0);
+  }
+  function applyWindows(canvas, W) {                                    // export path: full-slab transform (0..1 → 0..W)
+    const wins = gatherMasks().filter(m => m.show != null); if (!wins.length) return;
+    const cx = canvas.getContext('2d'), h = canvas.height;
+    for (const win of wins) compositeWindow(cx, win, W, h, [W, 0, 0, W, 0, 0], W / (Wc || 360), win.x * W, win.y * W, W);
+  }
+  function applyWindowsScreen() {                                       // interactive path: the live view transform
+    const wins = gatherMasks().filter(m => m.show != null); if (!wins.length) return;
+    const k = Wc * V.z * dpr, ex = (Wc / 2 - V.cx * Wc * V.z) * dpr, ey = (Hc / 2 - V.cy * Wc * V.z) * dpr;
+    for (const win of wins) compositeWindow(ctx, win, cv.width, cv.height, [k, 0, 0, k, ex, ey], dpr, win.x * k + ex, win.y * k + ey, k);
+  }
+  // The protected islands, drawn as dashed rings while the Mask tool is active (never exported): solid ring at r,
+  // a fainter ring at r+feather; amber = warp-freeze only, teal = a reality window. Plus the live disc as you drag.
+  function drawMaskGuides() {
+    const px = 1 / (Wc * V.z);
+    ctx.save(); ctx.lineCap = 'round';
+    const ring = (x, y, r, dash, alpha, col) => { ctx.strokeStyle = col; ctx.globalAlpha = alpha; ctx.lineWidth = 1.6 * px; ctx.setLineDash(dash); ctx.beginPath(); ctx.arc(x, y, Math.max(r, px), 0, 6.2832); ctx.stroke(); };
+    for (const m of marks) if (m.kind === 'mask') {
+      const win = !!(m.p && m.p.maskWin), col = win ? '#7fe0c0' : '#e0b070', ft = (m.p && m.p.maskFeather) || 0;
+      ring(m.at[0], m.at[1], m.r, [5 * px, 4 * px], 0.9, col);
+      if (ft > 0) ring(m.at[0], m.at[1], m.r + ft, [2 * px, 3 * px], 0.45, col);
+    }
+    if (Array.isArray(G.warpMask)) for (const e of G.warpMask) ring(e.x, e.y, e.r || 0, [5 * px, 4 * px], 0.7, '#e0b070');
+    if (gesture && gesture.type === 'draw' && tool === 'mask' && gesture.samples && gesture.samples.length) {   // live disc while dragging
+      const c = gesture.samples[0], last = gesture.samples[gesture.samples.length - 1], dr = Math.hypot(last[0] - c[0], last[1] - c[1]);
+      ring(c[0], c[1], dr < 0.02 ? 0.08 : dr, [4 * px, 3 * px], 0.95, NEXT.maskWin ? '#7fe0c0' : '#e0b070');
+    }
+    ctx.restore();
   }
   // TILED OFFLINE RENDER: same result as renderFull(W) but bounded memory — one tile's buffers at a time.
   // Each tile renders its slab sub-region expanded by a BLEED margin (so cross-tile blur/subsurface/specular are
@@ -2147,6 +2221,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
     }
     if (!uvMode && G.lens > 0) applyLens(fc, fx);           // the glass, once, on the whole assembled slab
+    applyWindows(fc, finalW);
     return fc;
   }
   // ---- CPU WORKER POOL: parallelise the tile render across cores. The render core (paintStoneContent + coat +
@@ -2218,6 +2293,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const w of pool) w.terminate(); URL.revokeObjectURL(url);
     if (clB) clB.close(); if (bdB) bdB.close(); if (brB) brB.close();
     if (!uvMode && G.lens > 0) applyLens(fc, fx);
+    applyWindows(fc, finalW);
     return fc;
   }
   function draw() {
@@ -2237,8 +2313,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (layTiles) { drawTiles(F); paintLive(); if (tool === 'light') drawLightGuide(); ctx.globalAlpha = 1; stat(); return; }
     if (backlit) paintBacklit(); else paintStoneContent(ident, angleView);
     applyCoat(cv, ctx, dpr, { ident, uvMode, backlit });   // coat tier: emission bloom · subsurface · specular · lens (shared with renderFull)
+    if (!ident && !layTiles) applyWindowsScreen();                      // reality windows: daylight (or another light) through the islands
+    ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);   // restore the view for guides/live
     if (guidesOn) drawGuides();
     if (guidesOn && G.warp > 0 && tool === 'cloud') drawWarpGuide();   // show the source while you drag it
+    if (tool === 'mask') drawMaskGuides();                             // show the protected islands while you place them
     if (tool === 'light') drawLightGuide();                            // show the light while you aim it
     highlightSelected();                                                // mark the selected veins (live only, never exported)
     paintLive(); ctx.globalAlpha = 1; stat();
@@ -2589,6 +2668,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     tune: 'Tap a vein, web crack or stylolite seam to tune just that one (a crack picks its whole spread). Its colour follows its layer until you change it here; reset it to follow again.',
     cloud: 'Drag to move the cloud field. The mottle and the warp move together, so you can place where the stone flows. Cloud X / Y set it precisely.',
     moon: 'Drag a moon across the slab. Like gravity, but it drags what it passes into its wake — a powerful local warp, hardest under the ball, fading at its edge. Ball size and pull set the reach and force; passes stack.',
+    mask: 'Tap for an island, or drag to size one. It freezes the warp inside — an island of normalcy. Turn the reality window on and it shows daylight through, so under a UV/psyker light it stays a window of normal stone.',
     light: 'Drag to move the light. It lights the polish sheen (Specular) and the tile edges — one light for both. Light angle sets it precisely.',
     move: 'Drag to move around. Pinch, or use + and −, to zoom.',
   };
@@ -2765,6 +2845,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } else if (g.type === 'draw' && tool === 'moon') {
       if (pathLen(g.samples) < 0.02) { nextId--; hint('Drag the moon across the slab — it drags what it passes into its wake, hard in the middle, fading at the edge.'); }
       else commit({ id, kind: 'moon', seed, samples: g.samples });
+    } else if (g.type === 'draw' && tool === 'mask') {
+      const c = g.samples[0], last = g.samples[g.samples.length - 1], dr = Math.hypot(last[0] - c[0], last[1] - c[1]);
+      commit({ id, kind: 'mask', at: [c[0], c[1]], r: dr < 0.02 ? 0.08 : dr });   // tap = default disc, drag = sized disc; feather/window from the panel
+      hint(NEXT.maskWin ? 'Island placed — a reality window: it holds the warp still here AND shows daylight through under a UV/psyker light. Feather softens the edge.' : 'Island placed — it freezes the warp here (an island of normalcy). Switch the reality window on to also show daylight through it.');
     } else if (g.type === 'draw') {
       if (tool !== 'pour' && pathLen(g.samples) < 0.02) { nextId--; redraw(false); return; }
       commit({ id, kind: tool, seed, samples: g.samples, rest: g.rest });
@@ -3143,7 +3227,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
     pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
     pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : 'order'); pv('data-unit', T.units);
-    pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType);
+    pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType); pv('data-mwin', NEXT.maskWin);
     const tog = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', !!on); };
     tog('pen-pressure', NEXT.pressure); tog('pen-tilt', NEXT.tilt); tog('guides', guidesOn);
     tog('laytiles', layTiles); tog('t-joints', T.joints); tog('m-hover', hoverMag); tog('warp-holdmajor', layAt('major').warp === 0);
@@ -3151,7 +3235,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const id of Object.keys(NEXT)) { const el = document.getElementById(id); if (el) { el.value = NEXT[id]; document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; } }
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
-    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
+    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
     showGround(); syncLayerUI(); syncGranite(); syncFog(); hint();
   }
   function download(name, text) {                       // works from a local file; inert in the artifact sandbox
@@ -3293,11 +3377,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     tool = b.dataset.tool; press('[data-tool]', b); hint();
     const show = tool === 'move' ? 'vein' : tool;
-    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
+    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
   });
   for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
   for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
   for (const b of document.querySelectorAll('[data-var]')) b.addEventListener('click', () => { NEXT.variant = b.dataset.var; press('[data-var]', b); });   // variant applies to the NEXT line
+  for (const b of document.querySelectorAll('[data-mwin]')) b.addEventListener('click', () => { NEXT.maskWin = +b.dataset.mwin; press('[data-mwin]', b); hint(NEXT.maskWin ? 'Reality window on: the next island shows daylight through it — so under a UV/psyker light it stays a window of normal stone. Paint an island (drag to size it).' : 'Reality window off: the next island only freezes the warp (its geometry holds still), no show-through.'); });
   for (const b of document.querySelectorAll('[data-lens]')) b.addEventListener('click', () => { G.lensType = b.dataset.lens; press('[data-lens]', b); redraw(true); });   // lens profile — whole slab, at once
   document.getElementById('colour-toggle').addEventListener('click', () => { const p = document.getElementById('colour-panel'), b = document.getElementById('colour-toggle'), show = p.hidden; p.hidden = !show; b.setAttribute('aria-pressed', show); b.textContent = show ? 'Hide colour editor' : 'Show colour editor'; });
   document.getElementById('colour-fromfam').addEventListener('click', () => { seedColours(fam); recolour(); mountEditor(); redraw(true); });   // adopt the current family's palette
