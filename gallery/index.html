@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stone Author — Gallery</title>
+<meta name="description" content="One authored marble slab, shown three ways — pristine, subtly wrong, and screaming. Rendered from a deterministic vector recipe by Stone Author.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #0d0e12; --panel: #14151b; --line: #262836; --text: #d7d8e3; --dim: #8b8da2;
+    --accent: #8a8de0; --gold: #d8a24a; --cyan: #35c8ff;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--text);
+         font: 16px/1.6 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1120px; margin-inline: auto; padding-inline: 16px; padding-block: 48px 64px; }
+  header { max-width: 68ch; }
+  h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; text-wrap: balance; }
+  .kicker { font: 500 12px "IBM Plex Mono", ui-monospace, monospace; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
+  .lede { font-size: 18px; color: var(--text); margin: 0 0 10px; }
+  .note { font-size: 15px; color: var(--dim); max-width: 66ch; }
+  .note code { font: 500 13px "IBM Plex Mono", ui-monospace, monospace; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; }
+  a:hover { border-bottom-color: currentColor; }
+  .heroes { display: grid; gap: 56px; margin-top: 52px; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line);
+               background: #000; box-shadow: 0 18px 50px rgba(0,0,0,.5); }
+  .cap { margin-top: 16px; display: grid; gap: 6px; }
+  .cap .idx { font: 500 12px "IBM Plex Mono", ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  .cap h2 { font-size: 22px; font-weight: 600; margin: 0; }
+  .cap h2 .light { color: var(--dim); font-weight: 400; }
+  .cap p { margin: 2px 0 0; color: var(--dim); max-width: 62ch; }
+  .cap .meta { margin-top: 8px; font-size: 14px; }
+  .cap .meta a { font: 500 13px "IBM Plex Mono", ui-monospace, monospace; }
+  .cap .meta .sep { color: var(--line); margin: 0 8px; }
+  .bridge { border-left: 2px solid var(--line); padding-left: 16px; color: var(--dim); font-size: 15px; max-width: 60ch; }
+  .bridge b { color: var(--text); font-weight: 500; }
+  footer { margin-top: 64px; padding-top: 28px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; display: grid; gap: 10px; }
+  footer a { color: var(--dim); border-bottom-color: var(--line); }
+  footer a:hover { color: var(--text); }
+  .cc0 { font: 500 13px "IBM Plex Mono", ui-monospace, monospace; color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="kicker">Stone Author · sample slab</p>
+    <h1>African St Laurent, Warped</h1>
+    <p class="lede">One authored marble slab, shown three ways — pristine, subtly wrong, and screaming.</p>
+    <p class="note">Stone Author draws stone as <b>vector geometry</b>, not pixels: veins, specks, fog and warp are a
+      few thousand simple shapes driven by a small recipe. The recipe — a <code>.json</code> slab — is the master,
+      and the render is a deterministic function of it: the same slab produces the same image, byte for byte, at any
+      resolution. These three heroes came off two slabs (below), rendered up to 168 megapixels.</p>
+  </header>
+
+  <div class="heroes">
+    <figure>
+      <img src="img/before.jpg" alt="Pristine black-and-gold marble: a married gold-and-white fracture vein network over dark granite." loading="lazy" width="1600" height="1000">
+      <figcaption class="cap">
+        <span class="idx">01 · before</span>
+        <h2>Pristine <span class="light">— no warp, no burn</span></h2>
+        <p>The married gold-and-white fracture network on near-black granite, exactly as authored. The base state the
+          other two happen to.</p>
+        <p class="meta"><a href="slabs/before.json" download>slabs/before.json</a></p>
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="img/daylight.jpg" alt="The same marble, subtly distorted, with a scorched burn mark at the central junction." loading="lazy" width="1600" height="1000">
+      <figcaption class="cap">
+        <span class="idx">02 · daylight</span>
+        <h2>What people see <span class="light">— subtly wrong</span></h2>
+        <p>The same stone warped about 1.5% and scorched at the junction. Nothing you can point to, but the eye knows
+          the veins don't quite land where they should.</p>
+        <p class="meta"><a href="slabs/warped.json" download>slabs/warped.json</a></p>
+      </figcaption>
+    </figure>
+
+    <p class="bridge"><b>Daylight and psyker are the same slab.</b> One authored geometry, two lights: at rest it's
+      near-true; under the other spectrum the full distortion it was always carrying is exposed.</p>
+
+    <figure>
+      <img src="img/psyker.jpg" alt="The same slab under a psyker spectrum: veins glow electric cyan, granite scatters in neon, with a calm daylight window held at the burn." loading="lazy" width="1600" height="1000">
+      <figcaption class="cap">
+        <span class="idx">03 · psyker</span>
+        <h2>What a psyker sees <span class="light">— screaming</span></h2>
+        <p>The same slab at full warp, recolored into emission: gold veins fire electric cyan, the granite scatters in
+          neon. The burn holds as an <b>island of normalcy</b> — a window where the warp never reached, so real
+          daylight stone shows through the screaming.</p>
+        <p class="meta"><a href="slabs/warped.json" download>slabs/warped.json</a></p>
+      </figcaption>
+    </figure>
+  </div>
+
+  <footer>
+    <p class="cc0">Dedicated to the public domain under CC0 1.0 — <a href="https://creativecommons.org/publicdomain/zero/1.0/">No Rights Reserved</a>.</p>
+    <p>Authored by Chris King in <a href="https://github.com/kingchddg901/stone-author">Stone Author</a>, built with Claude Code.
+      Open the studio: <a href="https://claude.ai/artifact/QNnjrqE2Zv4KY7mChVyaaP">claude.ai/artifact</a>.</p>
+    <p>Each slab above re-loads into Stone Author (Load → the <code>.json</code>) and re-renders at any size.</p>
+  </footer>
+</div>
+</body>
+</html>
