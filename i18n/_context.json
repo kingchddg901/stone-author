@@ -27,6 +27,9 @@
   "where": "accessibility label (aria-label), not visible on screen"
  },
  "a11y.gravity-sign": {
+  "terms": [
+   "gravity"
+  ],
   "where": "accessibility label (aria-label), not visible on screen"
  },
  "a11y.island-sense": {
@@ -39,6 +42,9 @@
   "where": "accessibility label (aria-label), not visible on screen"
  },
  "a11y.magnet-mode": {
+  "terms": [
+   "magnet"
+  ],
   "where": "accessibility label (aria-label), not visible on screen"
  },
  "a11y.pen": {
@@ -108,6 +114,8 @@
  "btn.fwd": {
   "terms": [
    "pour",
+   "pressure",
+   "tilt",
    "vein"
   ],
   "where": "under the \"how-the-tools-read\" section"
@@ -125,9 +133,15 @@
   "where": "in the \"File\" group/panel, under the \"file\" section"
  },
  "btn.pen-pressure": {
+  "terms": [
+   "pressure"
+  ],
   "where": "in the \"Pen\" group/panel"
  },
  "btn.pen-tilt": {
+  "terms": [
+   "tilt"
+  ],
   "where": "in the \"Pen\" group/panel"
  },
  "btn.penlive": {
@@ -197,6 +211,7 @@
   "terms": [
    "emission",
    "light",
+   "reach",
    "spectrum"
   ],
   "where": "transient hint line under the tool palette"
@@ -286,12 +301,14 @@
  },
  "hint.gravity-moves-specks-switch-to-granite": {
   "terms": [
+   "gravity",
    "pour"
   ],
   "where": "transient hint line under the tool palette"
  },
  "hint.hover-traces-on-move-the-pen": {
   "terms": [
+   "hover",
    "slab"
   ],
   "where": "transient hint line under the tool palette"
@@ -322,6 +339,7 @@
  },
  "hint.pressure-is-on-for-your-next": {
   "terms": [
+   "pressure",
    "vein"
   ],
   "where": "transient hint line under the tool palette"
@@ -338,6 +356,9 @@
   "placeholders": {
    "name": "a layer or folder name the user typed; never translate it, only place it"
   },
+  "terms": [
+   "scatter"
+  ],
   "where": "transient hint line under the tool palette"
  },
  "hint.save-cancelled": {
@@ -441,15 +462,20 @@
  },
  "hint.that-input-sent-no-pressure-so": {
   "terms": [
-   "gauge"
+   "gauge",
+   "pressure"
   ],
   "where": "transient hint line under the tool palette"
  },
  "hint.that-input-sent-no-tilt-so": {
+  "terms": [
+   "tilt"
+  ],
   "where": "transient hint line under the tool palette"
  },
  "hint.the-magnet-turns-specks-switch-to": {
   "terms": [
+   "magnet",
    "pour"
   ],
   "where": "transient hint line under the tool palette"
@@ -461,6 +487,9 @@
   "where": "transient hint line under the tool palette"
  },
  "hint.tilt-is-on-for-your-next": {
+  "terms": [
+   "tilt"
+  ],
   "where": "transient hint line under the tool palette"
  },
  "hint.tuning-vein-full": {
@@ -608,6 +637,9 @@
   "where": "in the \"Family\" group/panel"
  },
  "lbl.gravity": {
+  "terms": [
+   "gravity"
+  ],
   "where": "in the \"gravity\" group/panel"
  },
  "lbl.island": {
@@ -626,12 +658,18 @@
   "where": "under the \"coat-and-light\" section"
  },
  "lbl.magnet": {
+  "terms": [
+   "magnet"
+  ],
   "where": "in the \"magnet\" group/panel"
  },
  "lbl.pen": {
   "where": "in the \"Pen\" group/panel"
  },
  "lbl.scatter": {
+  "terms": [
+   "scatter"
+  ],
   "where": "under the \"granite-ground\" section"
  },
  "lbl.show-through": {
@@ -683,12 +721,21 @@
   "where": "in the \"Lens type\" group/panel, under the \"coat-and-light\" section"
  },
  "mag.align": {
+  "terms": [
+   "align"
+  ],
   "where": "in the \"Magnet mode\" group/panel"
  },
  "mag.hover": {
+  "terms": [
+   "hover"
+  ],
   "where": "in the \"Magnet mode\" group/panel"
  },
  "mag.scatter": {
+  "terms": [
+   "scatter"
+  ],
   "where": "in the \"Magnet mode\" group/panel"
  },
  "mask.sense.chaos": {
@@ -712,6 +759,7 @@
  },
  "note.granite": {
   "terms": [
+   "gravity",
    "ground",
    "vein"
   ],
@@ -735,7 +783,13 @@
  },
  "note.magnet": {
   "terms": [
+   "align",
    "angle",
+   "filings",
+   "hover",
+   "magnet",
+   "pressure",
+   "scatter",
    "slab",
    "speck"
   ],
@@ -957,6 +1011,9 @@
   "where": "in the \"Reality window\" group/panel"
  },
  "sl.mheight": {
+  "terms": [
+   "height"
+  ],
   "where": "in the \"Magnet mode\" group/panel"
  },
  "sl.moonReach": {
@@ -966,9 +1023,15 @@
   "where": "in the \"moon\" group/panel"
  },
  "sl.mreach": {
+  "terms": [
+   "reach"
+  ],
   "where": "in the \"Magnet mode\" group/panel"
  },
  "sl.mstrength": {
+  "terms": [
+   "strength"
+  ],
   "where": "in the \"Magnet mode\" group/panel"
  },
  "sl.pfling": {
@@ -984,6 +1047,9 @@
   "where": "in the \"pour\" group/panel"
  },
  "sl.reach": {
+  "terms": [
+   "reach"
+  ],
   "where": "in the \"Gravity sign\" group/panel"
  },
  "sl.rough": {
@@ -1014,12 +1080,18 @@
   "where": "in the \"web\" group/panel"
  },
  "sl.strength": {
+  "terms": [
+   "strength"
+  ],
   "where": "in the \"Gravity sign\" group/panel"
  },
  "sl.stretch": {
   "where": "in the \"web\" group/panel"
  },
  "sl.stylAmp": {
+  "terms": [
+   "height"
+  ],
   "where": "in the \"styl\" group/panel"
  },
  "sl.stylTooth": {
@@ -1132,7 +1204,8 @@
  },
  "tip.back-light-how-much-these-layers": {
   "terms": [
-   "light"
+   "light",
+   "scatter"
   ],
   "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
  },
@@ -1223,6 +1296,9 @@
   "where": "in the \"Tool\" group/panel"
  },
  "tool.gravity": {
+  "terms": [
+   "gravity"
+  ],
   "where": "in the \"Tool\" group/panel"
  },
  "tool.inorder": {
@@ -1238,6 +1314,9 @@
   "where": "in the \"Tool\" group/panel"
  },
  "tool.magnet": {
+  "terms": [
+   "magnet"
+  ],
   "where": "in the \"Tool\" group/panel"
  },
  "tool.mask": {
@@ -1331,6 +1410,9 @@
   "where": "button or label in the Selected bar (acts on the layers you have selected), under Layers"
  },
  "ui.scatter": {
+  "terms": [
+   "scatter"
+  ],
   "where": "button or label in the Selected bar (acts on the layers you have selected), under Layers"
  },
  "ui.selected": {
@@ -1358,6 +1440,10 @@
   "where": "under the \"how-the-tools-read\" section"
  },
  "ui.to-sculpt-the-haze-select": {
+  "terms": [
+   "gravity",
+   "magnet"
+  ],
   "where": "under the \"fog-and-resin\" section"
  },
  "ui.warp": {
