@@ -1,12 +1,10 @@
 name: gallery determinism
 
 # Renders every gallery hero from its slab (gallery/reference.json) inside a pinned Playwright/Chromium
-# container and checks two things:
-#   - SELF-DETERMINISM (hard gate): each hero renders byte-identical twice from a fresh load — the render is a
-#     pure function of the slab in this environment.
-#   - REFERENCE MATCH (reported): whether this container's raw-pixel hash equals the committed pixelSHA256, which
-#     was captured in a different browser build. A cross-build DIFF is expected-and-informative, not a failure,
-#     until the reference is blessed from this environment (then add --strict to gate on it).
+# container and gates on SELF-DETERMINISM: each hero renders byte-identical twice from a fresh load, so the
+# render is a pure function of the slab in this environment. A cross-build REFERENCE match against the
+# committed pixelSHA256 is deliberately NOT gated — sub-pixel canvas AA varies between Chromium builds, so
+# the picture is identical but the bytes are not (that comparison was dropped from harness/render.mjs).
 
 on:
   push:
