@@ -201,10 +201,15 @@
     <div class="sl"><label for="moonStrength">Pull <output id="moonStrengthV"></output></label><input id="moonStrength" type="range" min="0.2" max="3" step="0.05"></div>
   </div>
   <div class="sliders" id="s-mask" hidden>
+    <div class="sl" style="grid-column:1/-1"><span class="lbl">Island</span><div class="grp" role="group" aria-label="Island sense">
+      <button id="mi-protect" type="button" data-minv="0" aria-pressed="true">Protects</button>
+      <button id="mi-chaos" type="button" data-minv="1" aria-pressed="false">Window into chaos</button></div></div>
     <div class="sl"><label for="maskFeather">Feather <output id="maskFeatherV"></output></label><input id="maskFeather" type="range" min="0" max="0.3" step="0.005"></div>
-    <div class="sl"><span class="lbl">Reality window</span><div class="grp" role="group" aria-label="Reality window">
+    <div class="sl"><span class="lbl">Show through</span><div class="grp" role="group" aria-label="Reality window">
       <button id="mw-off" type="button" data-mwin="0" aria-pressed="true">Off</button>
-      <button id="mw-day" type="button" data-mwin="1" aria-pressed="false">Show daylight</button></div></div>
+      <button id="mw-on" type="button" data-mwin="1" aria-pressed="false">On</button></div></div>
+    <div class="sl"><label for="maskSpec">Window spectrum <output id="maskSpecV"></output></label><input id="maskSpec" type="range" min="-1" max="1" step="0.02"></div>
+    <div class="sl" style="grid-column:1/-1"><span class="note" style="margin:0"><b>Protects</b> freezes the warp inside the disc &mdash; an island of normalcy. <b>Window into chaos</b> inverts that: place one and the slab holds still everywhere <i>except</i> inside these discs. <b>Show through</b> renders the disc at its own light, so the window can look out on a different reality (0 = daylight).</span></div>
   </div>
   <div class="sliders" id="s-chip" hidden>
     <div class="sl"><label for="chipsize">Chip size <output id="chipsizeV"></output></label><input id="chipsize" type="range" min="0.2" max="2.5" step="0.05"></div>
@@ -546,7 +551,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // change applies forward and never rewrites what is already down.
   const NEXT = { pressure: false, tilt: false, gauge: 1, rough: 1, breaks: 1, branches: 1, blen: 1, gauge2: 1, spread: 1, density: 1, stretch: 1,
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
-              stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1, maskFeather: 0.06, maskWin: 0 };
+              stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1, maskFeather: 0.06, maskWin: 0, maskSpec: 0, maskInvert: 0 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
   const G = { subsurface: 0, specular: 0, lightAngle: 135, lightTemp: 0, lightX: 0.5, lightY: 0.3125, spotR: 0.25, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0, warpMask: [],
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
@@ -581,7 +586,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) { if (L.field === 'fog') return L.key; if (L.field === 'specks' && !micro) micro = L.key; } }
     return micro;
   };
-  const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), maskFeather: v => (+v).toFixed(3), maskWin: v => (+v ? 'daylight' : 'off') };
+  const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), maskFeather: v => (+v).toFixed(3), maskWin: v => (+v ? 'on' : 'off'), maskSpec: v => (+v === 0 ? 'daylight' : (+v).toFixed(2)), maskInvert: v => (+v ? 'chaos' : 'protect') };
   let fam = 'carrara', tool = 'vein', view = 'stone';
   let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], styl: [], drusy: [], fog: [] };
   // CANONICAL LAYERS - the contract every consumer reads (VA: base/major/minor/micro; the dashboard
@@ -1681,28 +1686,39 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // A mark — deterministic, re-editable, and passes stack. Only layers whose warp weight is on get grabbed;
   // the anchor pass after warpGeo still keeps a dragged branch from snapping off its parent.
   // WARP MASK: protected islands the warp does not touch — a region can hold NORMAL while the rest distorts.
-  // A protected disc {x, y, r, feather, show}: inside r the warp is fully frozen (returns 0); across feather it
-  // smoothsteps back to full (1). Both the global current and the moons multiply their displacement by this, so a
-  // scar or a burn stays an island of normalcy. Discs come from G.warpMask (programmatic / legacy) AND from Mask
-  // MARKS (the tool) — gatherMasks() unions both; warpGeo caches the set in _wmask before it warps. `show` (a light
-  // spectrum, or null) is unused for the freeze — it drives the reality window in the render, not the geometry.
+  // A disc {x, y, r, feather, invert, show}: inside r its effect is full, across feather it smoothsteps away.
+  // Both the global current and the moons multiply their displacement by warpMaskAt, so the discs shape WHERE the
+  // warp is allowed to act. Two senses, and they compose:
+  //   invert false (PROTECT) — the warp is frozen inside the disc: a scar or a burn stays an island of normalcy.
+  //   invert true  (CHAOS)   — inverted. The moment ANY chaos disc exists the slab holds still everywhere EXCEPT
+  //                            inside their union, so the disc is a window onto the only part still churning.
+  // A protect disc laid inside a chaos disc therefore reads as a calm eye in the storm — the product handles it,
+  // no special case. With no chaos disc placed the result is identical to protect-only, so old slabs are untouched.
+  // Discs come from G.warpMask (programmatic / legacy) AND from Mask MARKS (the tool) — gatherMasks() unions both;
+  // warpGeo caches the set in _wmask before it warps. `show` (a light spectrum, or null) is unused for the geometry
+  // — it drives the reality window in the render.
   let _wmask = [];
   function gatherMasks() {
     const out = [];
-    if (Array.isArray(G.warpMask)) for (const e of G.warpMask) out.push({ x: e.x, y: e.y, r: e.r || 0, feather: e.feather || 0, show: ('show' in e) ? e.show : null });
-    for (const m of marks) if (m.kind === 'mask') out.push({ x: m.at[0], y: m.at[1], r: m.r || 0, feather: (m.p && m.p.maskFeather) || 0, show: (m.p && m.p.maskWin) ? 0 : null });
+    if (Array.isArray(G.warpMask)) for (const e of G.warpMask) out.push({ x: e.x, y: e.y, r: e.r || 0, feather: e.feather || 0, invert: !!e.invert, show: ('show' in e) ? e.show : null });
+    for (const m of marks) if (m.kind === 'mask') {
+      const P = m.p || {};
+      // maskSpec is the window's own light; a slab saved before it existed carries maskWin alone and means daylight.
+      out.push({ x: m.at[0], y: m.at[1], r: m.r || 0, feather: P.maskFeather || 0, invert: !!P.maskInvert, show: P.maskWin ? (P.maskSpec != null ? +P.maskSpec : 0) : null });
+    }
     return out;
   }
   function warpMaskAt(x, y) {
     const MK = _wmask; if (!MK.length) return 1;
-    let m = 1;
+    let m = 1, chaos = -1;                                // -1 = no chaos disc placed, so the slab warps as normal
     for (const k of MK) {
       const d = Math.hypot(x - k.x, y - k.y), r = k.r || 0, f = k.feather || 0;
       let a; if (d <= r) a = 1; else if (f <= 0 || d >= r + f) a = 0; else a = 1 - (d - r) / f;
       a = a * a * (3 - 2 * a);                            // smoothstep the feathered edge
-      m *= (1 - a);
+      if (k.invert) { if (a > chaos) chaos = a; }         // union of the chaos windows: the strongest one wins
+      else m *= (1 - a);
     }
-    return m;
+    return chaos < 0 ? m : m * chaos;                     // any chaos disc ⇒ warp lives only inside their union
   }
   function applyMoon(m, W) {
     const M = m.p, R = 0.08 * (M.moonReach || 1), st = 0.5 * (M.moonStrength || 1), R2 = R * R;
@@ -2226,21 +2242,23 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const k = Wc * V.z * dpr, ex = (Wc / 2 - V.cx * Wc * V.z) * dpr, ey = (Hc / 2 - V.cy * Wc * V.z) * dpr;
     for (const win of wins) compositeWindow(ctx, win, cv.width, cv.height, [k, 0, 0, k, ex, ey], dpr, win.x * k + ex, win.y * k + ey, k);
   }
-  // The protected islands, drawn as dashed rings while the Mask tool is active (never exported): solid ring at r,
-  // a fainter ring at r+feather; amber = warp-freeze only, teal = a reality window. Plus the live disc as you drag.
+  // The islands, drawn as dashed rings while the Mask tool is active (never exported): solid ring at r, a fainter
+  // ring at r+feather. Colour carries both bits at once — amber = protects, rose = window into chaos; the lit pair
+  // (teal / magenta) means that disc also shows through at its own spectrum. Plus the live disc as you drag.
+  const maskCol = (win, inv) => inv ? (win ? '#e070d8' : '#e0738f') : (win ? '#7fe0c0' : '#e0b070');
   function drawMaskGuides() {
     const px = 1 / (Wc * V.z);
     ctx.save(); ctx.lineCap = 'round';
     const ring = (x, y, r, dash, alpha, col) => { ctx.strokeStyle = col; ctx.globalAlpha = alpha; ctx.lineWidth = 1.6 * px; ctx.setLineDash(dash); ctx.beginPath(); ctx.arc(x, y, Math.max(r, px), 0, 6.2832); ctx.stroke(); };
     for (const m of marks) if (m.kind === 'mask') {
-      const win = !!(m.p && m.p.maskWin), col = win ? '#7fe0c0' : '#e0b070', ft = (m.p && m.p.maskFeather) || 0;
+      const P = m.p || {}, col = maskCol(!!P.maskWin, !!P.maskInvert), ft = P.maskFeather || 0;
       ring(m.at[0], m.at[1], m.r, [5 * px, 4 * px], 0.9, col);
       if (ft > 0) ring(m.at[0], m.at[1], m.r + ft, [2 * px, 3 * px], 0.45, col);
     }
-    if (Array.isArray(G.warpMask)) for (const e of G.warpMask) ring(e.x, e.y, e.r || 0, [5 * px, 4 * px], 0.7, '#e0b070');
+    if (Array.isArray(G.warpMask)) for (const e of G.warpMask) ring(e.x, e.y, e.r || 0, [5 * px, 4 * px], 0.7, maskCol(e.show != null, !!e.invert));
     if (gesture && gesture.type === 'draw' && tool === 'mask' && gesture.samples && gesture.samples.length) {   // live disc while dragging
       const c = gesture.samples[0], last = gesture.samples[gesture.samples.length - 1], dr = Math.hypot(last[0] - c[0], last[1] - c[1]);
-      ring(c[0], c[1], dr < 0.02 ? 0.08 : dr, [4 * px, 3 * px], 0.95, NEXT.maskWin ? '#7fe0c0' : '#e0b070');
+      ring(c[0], c[1], dr < 0.02 ? 0.08 : dr, [4 * px, 3 * px], 0.95, maskCol(!!NEXT.maskWin, !!NEXT.maskInvert));
     }
     ctx.restore();
   }
@@ -2901,7 +2919,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } else if (g.type === 'draw' && tool === 'mask') {
       const c = g.samples[0], last = g.samples[g.samples.length - 1], dr = Math.hypot(last[0] - c[0], last[1] - c[1]);
       commit({ id, kind: 'mask', at: [c[0], c[1]], r: dr < 0.02 ? 0.08 : dr });   // tap = default disc, drag = sized disc; feather/window from the panel
-      hint(NEXT.maskWin ? 'Island placed — a reality window: it holds the warp still here AND shows daylight through under a UV/psyker light. Feather softens the edge.' : 'Island placed — it freezes the warp here (an island of normalcy). Switch the reality window on to also show daylight through it.');
+      const sp = NEXT.maskSpec === 0 ? 'daylight' : 'a light of ' + (+NEXT.maskSpec).toFixed(2);
+      hint(NEXT.maskInvert
+        ? 'Window into chaos placed — the slab now holds still everywhere EXCEPT inside this disc' + (NEXT.maskWin ? ', and it looks out on ' + sp + '.' : '. Switch Show through on to give it its own light.')
+        : 'Island placed — it freezes the warp here (an island of normalcy)' + (NEXT.maskWin ? ', and shows ' + sp + ' through the disc.' : '. Switch Show through on to also see another light through it.'));
     } else if (g.type === 'draw') {
       if (tool !== 'pour' && pathLen(g.samples) < 0.02) { nextId--; redraw(false); return; }
       commit({ id, kind: tool, seed, samples: g.samples, rest: g.rest });
@@ -3282,7 +3303,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
     pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
     pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : 'order'); pv('data-unit', T.units);
-    pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType); pv('data-mwin', NEXT.maskWin);
+    pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType); pv('data-mwin', NEXT.maskWin); pv('data-minv', NEXT.maskInvert);
     const tog = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', !!on); };
     tog('pen-pressure', NEXT.pressure); tog('pen-tilt', NEXT.tilt); tog('guides', guidesOn);
     tog('laytiles', layTiles); tog('t-joints', T.joints); tog('m-hover', hoverMag); tog('warp-holdmajor', layAt('major').warp === 0);
@@ -3437,7 +3458,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
   for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
   for (const b of document.querySelectorAll('[data-var]')) b.addEventListener('click', () => { NEXT.variant = b.dataset.var; press('[data-var]', b); });   // variant applies to the NEXT line
-  for (const b of document.querySelectorAll('[data-mwin]')) b.addEventListener('click', () => { NEXT.maskWin = +b.dataset.mwin; press('[data-mwin]', b); hint(NEXT.maskWin ? 'Reality window on: the next island shows daylight through it — so under a UV/psyker light it stays a window of normal stone. Paint an island (drag to size it).' : 'Reality window off: the next island only freezes the warp (its geometry holds still), no show-through.'); });
+  for (const b of document.querySelectorAll('[data-mwin]')) b.addEventListener('click', () => { NEXT.maskWin = +b.dataset.mwin; press('[data-mwin]', b); hint(NEXT.maskWin ? 'Show through on: the next island renders the slab again at its Window spectrum and feathers it in through the disc — 0 is daylight, so under a UV/psyker light that reads as a window of normal stone. Paint an island (drag to size it).' : 'Show through off: the next island only shapes the warp, no show-through.'); });
+  for (const b of document.querySelectorAll('[data-minv]')) b.addEventListener('click', () => { NEXT.maskInvert = +b.dataset.minv; press('[data-minv]', b); redraw(false); hint(NEXT.maskInvert ? 'Window into chaos: the next island INVERTS the mask — once one exists the warp acts only inside these discs and the rest of the slab holds still. A Protects island dropped inside one is a calm eye in the storm.' : 'Protects: the next island freezes the warp inside it, the rest of the slab warps as set.'); });
   for (const b of document.querySelectorAll('[data-lens]')) b.addEventListener('click', () => { G.lensType = b.dataset.lens; press('[data-lens]', b); redraw(true); });   // lens profile — whole slab, at once
   document.getElementById('colour-toggle').addEventListener('click', () => { const p = document.getElementById('colour-panel'), b = document.getElementById('colour-toggle'), show = p.hidden; p.hidden = !show; b.setAttribute('aria-pressed', show); b.textContent = show ? 'Hide colour editor' : 'Show colour editor'; });
   document.getElementById('colour-fromfam').addEventListener('click', () => { seedColours(fam); recolour(); mountEditor(); redraw(true); });   // adopt the current family's palette
