@@ -14,14 +14,15 @@ resolution, in a fixed browser build.
 ## The gallery — `gallery/`
 
 A static showcase page (`gallery/index.html`, no build) titled **"African St Laurent, Warped"**: one
-authored marble idea shown three ways — **pristine → subtly wrong → screaming**. Three *heroes* rendered
-from **two slabs**:
+authored marble idea shown four ways — **pristine → subtly wrong → screaming → turned inside out**. Four
+*heroes* rendered from **two slabs**:
 
 | # | hero | slab | what it is |
 |---|---|---|---|
 | 01 | **before** | `slabs/before.json` | the married gold-and-white fracture network on near-black granite, exactly as authored — no warp, no burn |
 | 02 | **daylight** | `slabs/warped.json` | the same stone warped ~1.5 % and scorched at the junction: nothing you can point to, but the veins don't quite land |
 | 03 | **psyker** | `slabs/warped.json` | the *same* slab at full warp, recoloured into emission under a −1 (UV/psyker) spectrum, with a **reality window** at the burn — daylight stone showing through the screaming |
+| 04 | **chaos** | `slabs/warped.json` | the same slab, same disc, **mask inverted** — the warp acts *only* inside the disc, so the stone around it holds still in daylight while the window looks out on the −1 spectrum. The 03 relationship turned inside out |
 
 Daylight and psyker are one geometry under two lights: at rest it reads near-true; under the other
 spectrum the distortion it was always carrying is exposed. Committed PNGs live in `gallery/img/` at
@@ -45,9 +46,11 @@ emission palette, a protective mask). `reference.json` is that recipe plus the r
   electric cyan, granite scatters in neon). Applied by writing `{v:-1, c}` emission entries onto the
   live `OVR_uv` before rendering.
 - **`heroes[]`** — per hero: `slab`, output `image`, and the extra steps — `spectrum`, `moonStrength`
-  (overrides the slab's moon force), `mask` (`{at, r, feather, window}` — the harness sets `maskFeather` and
-  `maskWin` only, so a recipe mask is always a **protect** island at **daylight**; with
-  `window:true` = a reality window), `palette` (`"psyker"` or false), `burn` (bool).
+  (overrides the slab's moon force), `mask` (`{at, r, feather, window, invert, spec}` — `window:true` = a
+  reality window, `invert:true` makes the disc the **only** place the warp may act, and `spec` is the
+  window's own light, 0 = daylight. `invert`/`spec` both default off, which is exactly what heroes 01–03
+  were rendered with before either existed, so their hashes are unmoved), `palette` (`"psyker"` or false),
+  `burn` (bool).
 - **`pixelSHA256`** — SHA-256 over the **raw RGBA `getImageData`** of the final canvas. This is the
   cross-*system* reference: file bytes are encoder-specific, raw pixels are not.
 - **`fileSHA256`** — SHA-256 of the committed PNG (same-encoder integrity of what's in `img/`).

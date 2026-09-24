@@ -26,7 +26,10 @@ async function renderHero(page, hero) {
     sa.deserialize(slab);
     sa.G.warpMask = [];
     if (h.moonStrength != null) { const m = sa.marks.find(x => x.kind === 'moon'); if (m) m.p.moonStrength = h.moonStrength; }
-    if (h.mask) sa.marks.push({ id: 990000, kind: 'mask', at: h.mask.at, r: h.mask.r, p: { maskFeather: h.mask.feather, maskWin: h.mask.window ? 1 : 0 }, fam: 'granite' });
+    // maskSpec is the window's own light (0 = daylight) and maskInvert flips the disc from protecting a region
+    // to being the only region the warp may touch. Both default to 0, which is what the first three heroes were
+    // rendered with before either existed — so adding them here leaves those renders untouched.
+    if (h.mask) sa.marks.push({ id: 990000, kind: 'mask', at: h.mask.at, r: h.mask.r, p: { maskFeather: h.mask.feather, maskWin: h.mask.window ? 1 : 0, maskSpec: h.mask.spec || 0, maskInvert: h.mask.invert ? 1 : 0 }, fam: 'granite' });
     if (h.palette === 'psyker') { const p = ref.psykerPalette.OVR_uv; for (const k in p) sa.OVR_uv[k] = [{ v: -1, c: p[k] }]; delete sa.OVR_uv['lay:minor']; }
     sa.setSpectrum(h.spectrum || 0);
     sa.render();

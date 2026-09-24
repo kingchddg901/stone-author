@@ -1,5 +1,5 @@
 {
-  "note": "Render recipe + reference hashes for the gallery heroes. pixelSHA256 = SHA-256 over the raw RGBA getImageData of the final 1600x1000 canvas — the CROSS-SYSTEM determinism reference — a CI render reproduces it only within the same Chromium build (sub-pixel canvas AA varies between builds), so it is recorded for comparison, not gated on (JPEG/PNG file bytes are encoder-specific; raw pixels are not). fileSHA256 = the committed PNG's SHA-256 (same-encoder integrity). 'before' is a pure slab render (deserialize + renderFull, daylight); 'daylight' and 'psyker' apply the extra steps below.",
+  "note": "Render recipe + reference hashes for the gallery heroes. pixelSHA256 = SHA-256 over the raw RGBA getImageData of the final 1600x1000 canvas — the CROSS-SYSTEM determinism reference — a CI render reproduces it only within the same Chromium build (sub-pixel canvas AA varies between builds), so it is recorded for comparison, not gated on (JPEG/PNG file bytes are encoder-specific; raw pixels are not). fileSHA256 = the committed PNG's SHA-256 (same-encoder integrity). 'before' is a pure slab render (deserialize + renderFull, daylight); 'daylight', 'psyker' and 'chaos' apply the extra steps below. mask.invert flips the disc from protecting a region to being the only region the warp may touch; mask.spec is the window's own light (0 = daylight). Both default off, which is what the first three heroes were rendered with before either existed.",
   "width": 1600,
   "height": 1000,
   "burn": {
@@ -34,6 +34,14 @@
       "palette": "psyker", "burn": true,
       "pixelSHA256": "af01f9b07e92955a018e800fc1e17356c37c31821996fb4efcdb0f1f8650a3b8",
       "fileSHA256": "b81ec45c153c33ff44904ae151eb9214128e6113b1ba90c04beced9d4dfdf761"
+    },
+    {
+      "name": "chaos", "slab": "slabs/warped.json", "image": "img/chaos.png",
+      "spectrum": 0, "moonStrength": 2.15,
+      "mask": { "at": [0.385, 0.185], "r": 0.1, "feather": 0.075, "window": true, "invert": true, "spec": -1 },
+      "palette": "psyker", "burn": true,
+      "pixelSHA256": "6cc2f44e0ee2a2786d4a2bdd09f0b0999b0d4c517f19fe887b8f658d88d5e627",
+      "fileSHA256": "db3bbfc27e6752813dcb5b41e819ea8a09ae5ea8b16ecc1721f45df1f999173f"
     }
   ]
 }
