@@ -1,5 +1,5 @@
 {
-  "note": "Render recipe + reference hashes for the gallery heroes. pixelSHA256 = SHA-256 over the raw RGBA getImageData of the final 1600x1000 canvas — the CROSS-SYSTEM determinism reference a CI render must reproduce (JPEG/PNG file bytes are encoder-specific; raw pixels are not). fileSHA256 = the committed PNG's SHA-256 (same-encoder integrity). 'before' is a pure slab render (deserialize + renderFull, daylight); 'daylight' and 'psyker' apply the extra steps below.",
+  "note": "Render recipe + reference hashes for the gallery heroes. pixelSHA256 = SHA-256 over the raw RGBA getImageData of the final 1600x1000 canvas — the CROSS-SYSTEM determinism reference — a CI render reproduces it only within the same Chromium build (sub-pixel canvas AA varies between builds), so it is recorded for comparison, not gated on (JPEG/PNG file bytes are encoder-specific; raw pixels are not). fileSHA256 = the committed PNG's SHA-256 (same-encoder integrity). 'before' is a pure slab render (deserialize + renderFull, daylight); 'daylight' and 'psyker' apply the extra steps below.",
   "width": 1600,
   "height": 1000,
   "burn": {
