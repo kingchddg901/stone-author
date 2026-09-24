@@ -4,7 +4,7 @@ What this system is and how its parts fit — the documentation of the code. The
 deliberately *not* here; it lives in the [README](../README.md). Companion docs:
 [`functions.md`](functions.md) (the function reference), [`colour-layer.md`](colour-layer.md) (the
 colour engine), [`stone-generator.md`](stone-generator.md) (the Python/panel generator, rule by
-rule).
+rule), [`i18n.md`](i18n.md) (translating the studio).
 
 The shared spine, in one line: **colour routes, greyscale stores** — the generator emits
 structure, rasterises it to greyscale value masks, and a theme decides colour at draw time.

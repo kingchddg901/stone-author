@@ -1,0 +1,33 @@
+name: i18n
+
+# Guards the four ways a translated UI rots silently: a user-facing string that never got a key, a key the
+# studio asks for that no pack defines, a translation pack that has drifted from English, and a translation
+# whose placeholders differ from the English (which drops the value at runtime without throwing).
+# No browser needed — this reads the app and the packs as text.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'app/stone-author.html'
+      - 'i18n/**'
+      - 'tools/check-i18n.mjs'
+      - '.github/workflows/i18n.yml'
+  pull_request:
+    paths:
+      - 'app/stone-author.html'
+      - 'i18n/**'
+      - 'tools/check-i18n.mjs'
+      - '.github/workflows/i18n.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check every user-facing string is routed and every pack matches English
+        run: node tools/check-i18n.mjs

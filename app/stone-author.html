@@ -102,283 +102,711 @@
 <div class="wrap">
   <div class="head">
     <div>
-      <h1>Stone author</h1>
-      <p class="sub">You draw where the lines go. The family decides what they are.</p>
+      <h1 data-i18n="app.title">Stone author</h1>
+      <p class="sub" data-i18n="app.sub">You draw where the lines go. The family decides what they are.</p>
     </div>
-    <div class="grp" role="group" aria-label="Family"><span class="lbl">Family</span>
-      <button id="f-carrara" type="button" data-fam="carrara">Carrara</button>
-      <button id="f-calacatta" type="button" data-fam="calacatta">Calacatta</button>
-      <button id="f-marquina" type="button" data-fam="marquina">Nero Marquina</button>
-      <button id="f-granite" type="button" data-fam="granite">Granite</button>
+    <div class="grp" role="group" aria-label="Family" data-i18n-attr="aria-label=a11y.family"><span class="lbl" data-i18n="lbl.family">Family</span>
+      <button id="f-carrara" type="button" data-fam="carrara" data-i18n="fam.carrara">Carrara</button>
+      <button id="f-calacatta" type="button" data-fam="calacatta" data-i18n="fam.calacatta">Calacatta</button>
+      <button id="f-marquina" type="button" data-fam="marquina" data-i18n="fam.marquina">Nero Marquina</button>
+      <button id="f-granite" type="button" data-fam="granite" data-i18n="fam.granite">Granite</button>
+    </div>
+    <div class="grp" style="margin-left:auto">
+      <label for="lang" class="lbl" data-i18n="lbl.language">Language</label>
+      <select id="lang" data-i18n-attr="aria-label=a11y.choose-the-interface-language" aria-label="Choose the interface language"></select>
     </div>
   </div>
   <div class="work">
   <div class="stage">
-  <canvas id="field" aria-label="Stone slab. Draw on it to author veins, cracks and pours; tap a vein with the branch tool to grow a minor vein."></canvas>
+  <canvas id="field" aria-label="Stone slab. Draw on it to author veins, cracks and pours; tap a vein with the branch tool to grow a minor vein." data-i18n-attr="aria-label=a11y.stone-slab-draw-on-it"></canvas>
   <div class="row">
-    <div class="grp" role="group" aria-label="View"><span class="lbl">View</span>
-      <button id="v-stone" type="button" data-view="stone">Stone</button>
-      <button id="v-identity" type="button" data-view="identity">Identity</button>
-      <button id="v-angle" type="button" data-view="angle">Angle</button>
-      <button id="uv-toggle" type="button" aria-pressed="false" title="Black light — only the UV palette glows">Black light</button>
-      <button id="guides" type="button" aria-pressed="true">Guides</button></div>
-    <div class="grp" role="group" aria-label="Zoom"><span class="lbl">Zoom</span>
-      <button id="zout" type="button" aria-label="Zoom out">&minus;</button>
-      <button id="zin" type="button" aria-label="Zoom in">+</button>
-      <button id="zfit" type="button">Fit</button></div>
-    <div class="grp" role="group" aria-label="Edit"><span class="lbl">Edit</span>
-      <button id="undo" type="button">Undo</button>
-      <button id="reroll" type="button">Reroll last</button>
-      <button id="clear" type="button">Clear</button></div>
+    <div class="grp" role="group" aria-label="View" data-i18n-attr="aria-label=a11y.view"><span class="lbl" data-i18n="lbl.view">View</span>
+      <button id="v-stone" type="button" data-view="stone" data-i18n="view.stone">Stone</button>
+      <button id="v-identity" type="button" data-view="identity" data-i18n="view.identity">Identity</button>
+      <button id="v-angle" type="button" data-view="angle" data-i18n="view.angle">Angle</button>
+      <button id="uv-toggle" type="button" aria-pressed="false" title="Black light — only the UV palette glows" data-i18n="btn.uv-toggle" data-i18n-attr="title=a11y.black-light-only-the-uv">Black light</button>
+      <button id="guides" type="button" aria-pressed="true" data-i18n="btn.guides">Guides</button></div>
+    <div class="grp" role="group" aria-label="Zoom" data-i18n-attr="aria-label=a11y.zoom"><span class="lbl" data-i18n="lbl.zoom">Zoom</span>
+      <button id="zout" type="button" aria-label="Zoom out" data-i18n-attr="aria-label=a11y.zoom-out">&minus;</button>
+      <button id="zin" type="button" aria-label="Zoom in" data-i18n-attr="aria-label=a11y.zoom-in">+</button>
+      <button id="zfit" type="button" data-i18n="btn.zfit">Fit</button></div>
+    <div class="grp" role="group" aria-label="Edit" data-i18n-attr="aria-label=a11y.edit"><span class="lbl" data-i18n="lbl.edit">Edit</span>
+      <button id="undo" type="button" data-i18n="btn.undo">Undo</button>
+      <button id="reroll" type="button" data-i18n="btn.reroll">Reroll last</button>
+      <button id="clear" type="button" data-i18n="btn.clear">Clear</button></div>
     <span class="stat" id="stat">&mdash;</span>
   </div>
-  <div class="grp" role="group" aria-label="Tool"><span class="lbl">Tool</span>
-    <button id="t-vein" type="button" data-tool="vein">Vein</button>
-    <button id="t-branch" type="button" data-tool="branch">Branch</button>
-    <button id="t-web" type="button" data-tool="web">Web</button>
-    <button id="t-styl" type="button" data-tool="styl">Stylolite</button>
-    <button id="t-pour" type="button" data-tool="pour">Pour</button>
-    <button id="t-gravity" type="button" data-tool="gravity">Gravity</button>
-    <button id="t-magnet" type="button" data-tool="magnet">Magnet</button>
-    <button id="t-chip" type="button" data-tool="chip">Chip</button>
-    <button id="t-tune" type="button" data-tool="tune">Tune</button>
-    <button id="t-cloud" type="button" data-tool="cloud">Cloud</button>
-    <button id="t-moon" type="button" data-tool="moon">Moon</button>
-    <button id="t-mask" type="button" data-tool="mask">Mask</button>
-    <button id="t-light" type="button" data-tool="light">Light</button>
-    <button id="t-move" type="button" data-tool="move">Move</button>
+  <div class="grp" role="group" aria-label="Tool" data-i18n-attr="aria-label=a11y.tool"><span class="lbl" data-i18n="lbl.tool">Tool</span>
+    <button id="t-vein" type="button" data-tool="vein" data-i18n="tool.vein">Vein</button>
+    <button id="t-branch" type="button" data-tool="branch" data-i18n="tool.branch">Branch</button>
+    <button id="t-web" type="button" data-tool="web" data-i18n="tool.web">Web</button>
+    <button id="t-styl" type="button" data-tool="styl" data-i18n="tool.styl">Stylolite</button>
+    <button id="t-pour" type="button" data-tool="pour" data-i18n="tool.pour">Pour</button>
+    <button id="t-gravity" type="button" data-tool="gravity" data-i18n="tool.gravity">Gravity</button>
+    <button id="t-magnet" type="button" data-tool="magnet" data-i18n="tool.magnet">Magnet</button>
+    <button id="t-chip" type="button" data-tool="chip" data-i18n="tool.chip">Chip</button>
+    <button id="t-tune" type="button" data-tool="tune" data-i18n="tool.tune">Tune</button>
+    <button id="t-cloud" type="button" data-tool="cloud" data-i18n="tool.cloud">Cloud</button>
+    <button id="t-moon" type="button" data-tool="moon" data-i18n="tool.moon">Moon</button>
+    <button id="t-mask" type="button" data-tool="mask" data-i18n="tool.mask">Mask</button>
+    <button id="t-light" type="button" data-tool="light" data-i18n="tool.light">Light</button>
+    <button id="t-move" type="button" data-tool="move" data-i18n="tool.move">Move</button>
   </div>
-  <div class="grp" role="group" aria-label="Pen"><span class="lbl">Pen</span>
-    <button id="pen-pressure" type="button" aria-pressed="false">Pressure</button>
-    <button id="pen-tilt" type="button" aria-pressed="false">Tilt</button>
-    <span class="stat" id="penlive">hold the pen over the slab to read it</span>
+  <div class="grp" role="group" aria-label="Pen" data-i18n-attr="aria-label=a11y.pen"><span class="lbl" data-i18n="lbl.pen">Pen</span>
+    <button id="pen-pressure" type="button" aria-pressed="false" data-i18n="btn.pen-pressure">Pressure</button>
+    <button id="pen-tilt" type="button" aria-pressed="false" data-i18n="btn.pen-tilt">Tilt</button>
+    <span class="stat" id="penlive" data-i18n="btn.penlive">hold the pen over the slab to read it</span>
   </div>
   <p class="hint" id="hint" aria-live="polite"></p>
   <div class="sliders" id="s-vein">
-    <div class="sl"><label for="gauge">Gauge <output id="gaugeV"></output></label><input id="gauge" type="range" min="0.3" max="3" step="0.05"></div>
-    <div class="sl"><label for="rough">Roughness <output id="roughV"></output></label><input id="rough" type="range" min="0" max="2.5" step="0.05"></div>
-    <div class="sl"><label for="breaks">Breaks <output id="breaksV"></output></label><input id="breaks" type="range" min="0" max="3" step="0.05"></div>
-    <div class="sl"><label for="branches">Minor veins <output id="branchesV"></output></label><input id="branches" type="range" min="0" max="2.5" step="0.05"></div>
-    <div class="sl"><label for="defl">Deflection <output id="deflV"></output></label><input id="defl" type="range" min="0" max="2" step="0.05"></div>
-    <div class="sl"><label for="fold">Fold <output id="foldV"></output></label><input id="fold" type="range" min="0" max="2.5" step="0.05"></div>
-    <div class="sl" style="grid-column:1/-1"><span class="lbl">Variant</span><div class="grp" role="group" aria-label="Vein variant">
-      <button type="button" data-var="natural" aria-pressed="true">Natural</button>
-      <button type="button" data-var="sinuous">Sinuous</button>
-      <button type="button" data-var="dendritic">Dendritic</button>
-      <button type="button" data-var="echelon">En-echelon</button>
-      <button type="button" data-var="boudinage">Boudinage</button>
-      <button type="button" data-var="halo">Halo</button></div></div>
-    <div class="sl"><label for="varAmt">Variant amount <output id="varAmtV"></output></label><input id="varAmt" type="range" min="0.3" max="2" step="0.05"></div>
+    <div class="sl"><label for="gauge"><span data-i18n="sl.gauge">Gauge</span> <output id="gaugeV"></output></label><input id="gauge" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="rough"><span data-i18n="sl.rough">Roughness</span> <output id="roughV"></output></label><input id="rough" type="range" min="0" max="2.5" step="0.05"></div>
+    <div class="sl"><label for="breaks"><span data-i18n="sl.breaks">Breaks</span> <output id="breaksV"></output></label><input id="breaks" type="range" min="0" max="3" step="0.05"></div>
+    <div class="sl"><label for="branches"><span data-i18n="sl.branches">Minor veins</span> <output id="branchesV"></output></label><input id="branches" type="range" min="0" max="2.5" step="0.05"></div>
+    <div class="sl"><label for="defl"><span data-i18n="sl.defl">Deflection</span> <output id="deflV"></output></label><input id="defl" type="range" min="0" max="2" step="0.05"></div>
+    <div class="sl"><label for="fold"><span data-i18n="sl.fold">Fold</span> <output id="foldV"></output></label><input id="fold" type="range" min="0" max="2.5" step="0.05"></div>
+    <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.variant">Variant</span><div class="grp" role="group" aria-label="Vein variant" data-i18n-attr="aria-label=a11y.vein-variant">
+      <button type="button" data-var="natural" aria-pressed="true" data-i18n="vein.variant.natural">Natural</button>
+      <button type="button" data-var="sinuous" data-i18n="vein.variant.sinuous">Sinuous</button>
+      <button type="button" data-var="dendritic" data-i18n="vein.variant.dendritic">Dendritic</button>
+      <button type="button" data-var="echelon" data-i18n="vein.variant.echelon">En-echelon</button>
+      <button type="button" data-var="boudinage" data-i18n="vein.variant.boudinage">Boudinage</button>
+      <button type="button" data-var="halo" data-i18n="vein.variant.halo">Halo</button></div></div>
+    <div class="sl"><label for="varAmt"><span data-i18n="sl.varAmt">Variant amount</span> <output id="varAmtV"></output></label><input id="varAmt" type="range" min="0.3" max="2" step="0.05"></div>
   </div>
   <div class="sliders" id="s-branch" hidden>
-    <div class="sl"><label for="blen">Minor length <output id="blenV"></output></label><input id="blen" type="range" min="0.3" max="3" step="0.05"></div>
-    <div class="sl"><label for="gauge2">Gauge <output id="gauge2V"></output></label><input id="gauge2" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="blen"><span data-i18n="sl.blen">Minor length</span> <output id="blenV"></output></label><input id="blen" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="gauge2"><span data-i18n="sl.gauge2">Gauge</span> <output id="gauge2V"></output></label><input id="gauge2" type="range" min="0.3" max="3" step="0.05"></div>
   </div>
   <div class="sliders" id="s-web" hidden>
-    <div class="sl"><label for="spread">Spread <output id="spreadV"></output></label><input id="spread" type="range" min="0.3" max="3" step="0.05"></div>
-    <div class="sl"><label for="density">Density <output id="densityV"></output></label><input id="density" type="range" min="0.3" max="3" step="0.05"></div>
-    <div class="sl"><label for="stretch">Stretch <output id="stretchV"></output></label><input id="stretch" type="range" min="0.4" max="2.5" step="0.05"></div>
+    <div class="sl"><label for="spread"><span data-i18n="sl.spread">Spread</span> <output id="spreadV"></output></label><input id="spread" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="density"><span data-i18n="sl.density">Density</span> <output id="densityV"></output></label><input id="density" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="stretch"><span data-i18n="sl.stretch">Stretch</span> <output id="stretchV"></output></label><input id="stretch" type="range" min="0.4" max="2.5" step="0.05"></div>
   </div>
   <div class="sliders" id="s-styl" hidden>
-    <div class="sl"><label for="stylAmp">Tooth height <output id="stylAmpV"></output></label><input id="stylAmp" type="range" min="0.2" max="3" step="0.05"></div>
-    <div class="sl"><label for="stylTooth">Teeth <output id="stylToothV"></output></label><input id="stylTooth" type="range" min="0.3" max="3" step="0.05"></div>
-    <div class="sl"><label for="stylWidth">Seam width <output id="stylWidthV"></output></label><input id="stylWidth" type="range" min="0.4" max="3" step="0.05"></div>
+    <div class="sl"><label for="stylAmp"><span data-i18n="sl.stylAmp">Tooth height</span> <output id="stylAmpV"></output></label><input id="stylAmp" type="range" min="0.2" max="3" step="0.05"></div>
+    <div class="sl"><label for="stylTooth"><span data-i18n="sl.stylTooth">Teeth</span> <output id="stylToothV"></output></label><input id="stylTooth" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="stylWidth"><span data-i18n="sl.stylWidth">Seam width</span> <output id="stylWidthV"></output></label><input id="stylWidth" type="range" min="0.4" max="3" step="0.05"></div>
   </div>
   <div class="sliders" id="s-pour" hidden>
-    <div class="sl"><label for="prate">Pour <output id="prateV"></output></label><input id="prate" type="range" min="200" max="4000" step="50"></div>
-    <div class="sl"><label for="pwidth">Width <output id="pwidthV"></output></label><input id="pwidth" type="range" min="0.3" max="4" step="0.1"></div>
-    <div class="sl"><label for="pfling">Fling <output id="pflingV"></output></label><input id="pfling" type="range" min="0" max="3" step="0.1"></div>
+    <div class="sl"><label for="prate"><span data-i18n="sl.prate">Pour</span> <output id="prateV"></output></label><input id="prate" type="range" min="200" max="4000" step="50"></div>
+    <div class="sl"><label for="pwidth"><span data-i18n="sl.pwidth">Width</span> <output id="pwidthV"></output></label><input id="pwidth" type="range" min="0.3" max="4" step="0.1"></div>
+    <div class="sl"><label for="pfling"><span data-i18n="sl.pfling">Fling</span> <output id="pflingV"></output></label><input id="pfling" type="range" min="0" max="3" step="0.1"></div>
   </div>
   <div class="sliders" id="s-gravity" hidden>
-    <div class="sl"><span class="lbl">Gravity</span><div class="grp" role="group" aria-label="Gravity sign">
-      <button id="g-pull" type="button" data-sign="1" aria-pressed="true">Pull</button>
-      <button id="g-push" type="button" data-sign="-1" aria-pressed="false">Push</button></div></div>
-    <div class="sl"><label for="strength">Strength <output id="strengthV"></output></label><input id="strength" type="range" min="0.05" max="0.9" step="0.01"></div>
-    <div class="sl"><label for="reach">Reach <output id="reachV"></output></label><input id="reach" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><span class="lbl" data-i18n="lbl.gravity">Gravity</span><div class="grp" role="group" aria-label="Gravity sign" data-i18n-attr="aria-label=a11y.gravity-sign">
+      <button id="g-pull" type="button" data-sign="1" aria-pressed="true" data-i18n="grav.pull">Pull</button>
+      <button id="g-push" type="button" data-sign="-1" aria-pressed="false" data-i18n="grav.push">Push</button></div></div>
+    <div class="sl"><label for="strength"><span data-i18n="sl.strength">Strength</span> <output id="strengthV"></output></label><input id="strength" type="range" min="0.05" max="0.9" step="0.01"></div>
+    <div class="sl"><label for="reach"><span data-i18n="sl.reach">Reach</span> <output id="reachV"></output></label><input id="reach" type="range" min="0.3" max="3" step="0.05"></div>
   </div>
   <div class="sliders" id="s-moon" hidden>
-    <div class="sl"><label for="moonReach">Ball size <output id="moonReachV"></output></label><input id="moonReach" type="range" min="0.3" max="3" step="0.05"></div>
-    <div class="sl"><label for="moonStrength">Pull <output id="moonStrengthV"></output></label><input id="moonStrength" type="range" min="0.2" max="3" step="0.05"></div>
+    <div class="sl"><label for="moonReach"><span data-i18n="sl.moonReach">Ball size</span> <output id="moonReachV"></output></label><input id="moonReach" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="moonStrength"><span data-i18n="sl.moonStrength">Pull</span> <output id="moonStrengthV"></output></label><input id="moonStrength" type="range" min="0.2" max="3" step="0.05"></div>
   </div>
   <div class="sliders" id="s-mask" hidden>
-    <div class="sl" style="grid-column:1/-1"><span class="lbl">Island</span><div class="grp" role="group" aria-label="Island sense">
-      <button id="mi-protect" type="button" data-minv="0" aria-pressed="true">Protects</button>
-      <button id="mi-chaos" type="button" data-minv="1" aria-pressed="false">Window into chaos</button></div></div>
-    <div class="sl"><label for="maskFeather">Feather <output id="maskFeatherV"></output></label><input id="maskFeather" type="range" min="0" max="0.3" step="0.005"></div>
-    <div class="sl"><span class="lbl">Show through</span><div class="grp" role="group" aria-label="Reality window">
-      <button id="mw-off" type="button" data-mwin="0" aria-pressed="true">Off</button>
-      <button id="mw-on" type="button" data-mwin="1" aria-pressed="false">On</button></div></div>
-    <div class="sl"><label for="maskSpec">Window spectrum <output id="maskSpecV"></output></label><input id="maskSpec" type="range" min="-1" max="1" step="0.02"></div>
-    <div class="sl" style="grid-column:1/-1"><span class="note" style="margin:0"><b>Protects</b> freezes the warp inside the disc &mdash; an island of normalcy. <b>Window into chaos</b> inverts that: place one and the slab holds still everywhere <i>except</i> inside these discs. <b>Show through</b> renders the disc at its own light, so the window can look out on a different reality (0 = daylight).</span></div>
+    <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.island">Island</span><div class="grp" role="group" aria-label="Island sense" data-i18n-attr="aria-label=a11y.island-sense">
+      <button id="mi-protect" type="button" data-minv="0" aria-pressed="true" data-i18n="mask.sense.protect">Protects</button>
+      <button id="mi-chaos" type="button" data-minv="1" aria-pressed="false" data-i18n="mask.sense.chaos">Window into chaos</button></div></div>
+    <div class="sl"><label for="maskFeather"><span data-i18n="sl.maskFeather">Feather</span> <output id="maskFeatherV"></output></label><input id="maskFeather" type="range" min="0" max="0.3" step="0.005"></div>
+    <div class="sl"><span class="lbl" data-i18n="lbl.show-through">Show through</span><div class="grp" role="group" aria-label="Reality window" data-i18n-attr="aria-label=a11y.reality-window">
+      <button id="mw-off" type="button" data-mwin="0" aria-pressed="true" data-i18n="mask.win.off">Off</button>
+      <button id="mw-on" type="button" data-mwin="1" aria-pressed="false" data-i18n="mask.win.on">On</button></div></div>
+    <div class="sl"><label for="maskSpec"><span data-i18n="sl.maskSpec">Window spectrum</span> <output id="maskSpecV"></output></label><input id="maskSpec" type="range" min="-1" max="1" step="0.02"></div>
+    <div class="sl" style="grid-column:1/-1"><span style="margin:0" data-i18n-html="help.protects"><b>Protects</b> freezes the warp inside the disc &mdash; an island of normalcy. <b>Window into chaos</b> inverts that: place one and the slab holds still everywhere <i>except</i> inside these discs. <b>Show through</b> renders the disc at its own light, so the window can look out on a different reality (0 = daylight).</span></div>
   </div>
   <div class="sliders" id="s-chip" hidden>
-    <div class="sl"><label for="chipsize">Chip size <output id="chipsizeV"></output></label><input id="chipsize" type="range" min="0.2" max="2.5" step="0.05"></div>
+    <div class="sl"><label for="chipsize"><span data-i18n="sl.chipsize">Chip size</span> <output id="chipsizeV"></output></label><input id="chipsize" type="range" min="0.2" max="2.5" step="0.05"></div>
   </div>
   <div class="sliders" id="s-magnet" hidden>
-    <div class="sl"><span class="lbl">Magnet</span><div class="grp" role="group" aria-label="Magnet mode">
-      <button id="m-align" type="button" data-mag="1" aria-pressed="true">Align</button>
-      <button id="m-scatter" type="button" data-mag="-1" aria-pressed="false">Scatter</button>
-      <button id="m-hover" type="button" aria-pressed="false">Hover traces</button></div></div>
-    <div class="sl"><label for="mstrength">Strength <output id="mstrengthV"></output></label><input id="mstrength" type="range" min="0.1" max="1.5" step="0.05"></div>
-    <div class="sl"><label for="mreach">Reach <output id="mreachV"></output></label><input id="mreach" type="range" min="0.3" max="3" step="0.05"></div>
-    <div class="sl"><label for="mheight">Height <output id="mheightV"></output></label><input id="mheight" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><span class="lbl" data-i18n="lbl.magnet">Magnet</span><div class="grp" role="group" aria-label="Magnet mode" data-i18n-attr="aria-label=a11y.magnet-mode">
+      <button id="m-align" type="button" data-mag="1" aria-pressed="true" data-i18n="mag.align">Align</button>
+      <button id="m-scatter" type="button" data-mag="-1" aria-pressed="false" data-i18n="mag.scatter">Scatter</button>
+      <button id="m-hover" type="button" aria-pressed="false" data-i18n="mag.hover">Hover traces</button></div></div>
+    <div class="sl"><label for="mstrength"><span data-i18n="sl.mstrength">Strength</span> <output id="mstrengthV"></output></label><input id="mstrength" type="range" min="0.1" max="1.5" step="0.05"></div>
+    <div class="sl"><label for="mreach"><span data-i18n="sl.mreach">Reach</span> <output id="mreachV"></output></label><input id="mreach" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="mheight"><span data-i18n="sl.mheight">Height</span> <output id="mheightV"></output></label><input id="mheight" type="range" min="0.3" max="3" step="0.05"></div>
   </div>
   </div><!-- /stage -->
 
   <div class="rail">
-  <details class="sec" open><summary>Layers</summary><div class="body">
+  <details class="sec" open><summary data-i18n="sec.layers">Layers</summary><div class="body">
     <div class="layers" id="layers"></div>
   </div></details>
-  <details class="sec"><summary>Colour</summary><div class="body">
+  <details class="sec"><summary data-i18n="sec.colour">Colour</summary><div class="body">
     <div class="grp">
-      <button id="colour-toggle" type="button" aria-pressed="false">Show colour editor</button>
-      <button id="colour-fromfam" type="button">Palette from family</button></div>
+      <button id="colour-toggle" type="button" aria-pressed="false" data-i18n="btn.colour-toggle">Show colour editor</button>
+      <button id="colour-fromfam" type="button" data-i18n="btn.colour-fromfam">Palette from family</button></div>
     <div id="colour-panel" hidden></div>
   </div></details>
-  <details class="sec"><summary>Tiles &amp; floor</summary><div class="body">
-  <div class="grp" role="group" aria-label="Tiles"><span class="lbl">Tiles</span>
-    <button id="laytiles" type="button" aria-pressed="false">Lay tiles</button>
-    <button id="p-square" type="button" data-pat="square" aria-pressed="true">Square</button>
-    <button id="p-rect" type="button" data-pat="rect" aria-pressed="false">Rectangle</button>
-    <button id="p-subway" type="button" data-pat="subway" aria-pressed="false">Subway</button>
-    <button id="p-hex" type="button" data-pat="hex" aria-pressed="false">Hexagon</button>
-    <button id="p-cairo" type="button" data-pat="cairo" aria-pressed="false">Cairo</button>
-    <button id="p-diagonal" type="button" data-pat="diagonal" aria-pressed="false">Diagonal</button>
-    <button id="p-herringbone" type="button" data-pat="herringbone" aria-pressed="false">Herringbone</button>
-    <button id="p-basketweave" type="button" data-pat="basketweave" aria-pressed="false">Basketweave</button>
-    <button id="p-triangle" type="button" data-pat="triangle" aria-pressed="false">Triangle</button>
-    <button id="p-rhombus" type="button" data-pat="rhombus" aria-pressed="false">Rhombus</button>
-    <button id="p-octagon" type="button" data-pat="octagon" aria-pressed="false">Octagon</button>
+  <details class="sec"><summary data-i18n="sec.tiles-and-floor">Tiles &amp; floor</summary><div class="body">
+  <div class="grp" role="group" aria-label="Tiles" data-i18n-attr="aria-label=a11y.tiles"><span class="lbl" data-i18n="lbl.tiles">Tiles</span>
+    <button id="laytiles" type="button" aria-pressed="false" data-i18n="btn.laytiles">Lay tiles</button>
+    <button id="p-square" type="button" data-pat="square" aria-pressed="true" data-i18n="tile.pat.square">Square</button>
+    <button id="p-rect" type="button" data-pat="rect" aria-pressed="false" data-i18n="tile.pat.rect">Rectangle</button>
+    <button id="p-subway" type="button" data-pat="subway" aria-pressed="false" data-i18n="tile.pat.subway">Subway</button>
+    <button id="p-hex" type="button" data-pat="hex" aria-pressed="false" data-i18n="tile.pat.hex">Hexagon</button>
+    <button id="p-cairo" type="button" data-pat="cairo" aria-pressed="false" data-i18n="tile.pat.cairo">Cairo</button>
+    <button id="p-diagonal" type="button" data-pat="diagonal" aria-pressed="false" data-i18n="tile.pat.diagonal">Diagonal</button>
+    <button id="p-herringbone" type="button" data-pat="herringbone" aria-pressed="false" data-i18n="tile.pat.herringbone">Herringbone</button>
+    <button id="p-basketweave" type="button" data-pat="basketweave" aria-pressed="false" data-i18n="tile.pat.basketweave">Basketweave</button>
+    <button id="p-triangle" type="button" data-pat="triangle" aria-pressed="false" data-i18n="tile.pat.triangle">Triangle</button>
+    <button id="p-rhombus" type="button" data-pat="rhombus" aria-pressed="false" data-i18n="tile.pat.rhombus">Rhombus</button>
+    <button id="p-octagon" type="button" data-pat="octagon" aria-pressed="false" data-i18n="tile.pat.octagon">Octagon</button>
   </div>
   <div class="sliders" id="s-tiles">
-    <div class="sl"><label for="tsize">Tile size <output id="tsizeV"></output></label><input id="tsize" type="range" min="2" max="36" step="1"></div>
-    <div class="sl"><label for="tgrout">Grout <output id="tgroutV"></output></label><input id="tgrout" type="range" min="0.03125" max="0.5" step="0.03125"></div>
-    <div class="sl"><label for="tkerf">Kerf <output id="tkerfV"></output></label><input id="tkerf" type="range" min="0" max="0.375" step="0.03125"></div>
-    <div class="sl"><label for="tedge">Edge</label>
-      <div class="grp"><button id="e-square" type="button" data-edge="square" aria-pressed="true">Square</button>
-        <button id="e-bevel" type="button" data-edge="bevel" aria-pressed="false">Bevel</button>
-        <button id="e-pillow" type="button" data-edge="pillow" aria-pressed="false">Pillow</button>
-        <button id="e-tumbled" type="button" data-edge="tumbled" aria-pressed="false">Tumbled</button></div></div>
+    <div class="sl"><label for="tsize"><span data-i18n="sl.tsize">Tile size</span> <output id="tsizeV"></output></label><input id="tsize" type="range" min="2" max="36" step="1"></div>
+    <div class="sl"><label for="tgrout"><span data-i18n="sl.tgrout">Grout</span> <output id="tgroutV"></output></label><input id="tgrout" type="range" min="0.03125" max="0.5" step="0.03125"></div>
+    <div class="sl"><label for="tkerf"><span data-i18n="sl.tkerf">Kerf</span> <output id="tkerfV"></output></label><input id="tkerf" type="range" min="0" max="0.375" step="0.03125"></div>
+    <div class="sl"><label for="tedge" data-i18n="sl.tedge">Edge</label>
+      <div class="grp"><button id="e-square" type="button" data-edge="square" aria-pressed="true" data-i18n="tile.edge.square">Square</button>
+        <button id="e-bevel" type="button" data-edge="bevel" aria-pressed="false" data-i18n="tile.edge.bevel">Bevel</button>
+        <button id="e-pillow" type="button" data-edge="pillow" aria-pressed="false" data-i18n="tile.edge.pillow">Pillow</button>
+        <button id="e-tumbled" type="button" data-edge="tumbled" aria-pressed="false" data-i18n="tile.edge.tumbled">Tumbled</button></div></div>
   </div>
-  <div class="grp" role="group" aria-label="Tile options"><span class="lbl">Layout</span>
-    <button id="t-inorder" type="button" data-lay="order" aria-pressed="true">In order</button>
-    <button id="t-shuffle" type="button" data-lay="shuffle" aria-pressed="false">Shuffled</button>
-    <span class="lbl" style="margin-left:8px">Units</span>
-    <button id="u-in" type="button" data-unit="in" aria-pressed="true">inches</button>
-    <button id="u-mm" type="button" data-unit="mm" aria-pressed="false">mm</button>
-    <button id="t-joints" type="button" aria-pressed="true">Show hairline joints</button>
+  <div class="grp" role="group" aria-label="Tile options" data-i18n-attr="aria-label=a11y.tile-options"><span class="lbl" data-i18n="lbl.layout">Layout</span>
+    <button id="t-inorder" type="button" data-lay="order" aria-pressed="true" data-i18n="tool.inorder">In order</button>
+    <button id="t-shuffle" type="button" data-lay="shuffle" aria-pressed="false" data-i18n="tool.shuffle">Shuffled</button>
+    <span class="lbl" style="margin-left:8px" data-i18n="lbl.units">Units</span>
+    <button id="u-in" type="button" data-unit="in" aria-pressed="true" data-i18n="unit.in">inches</button>
+    <button id="u-mm" type="button" data-unit="mm" aria-pressed="false" data-i18n="unit.mm">mm</button>
+    <button id="t-joints" type="button" aria-pressed="true" data-i18n="tool.joints">Show hairline joints</button>
   </div>
-  <p class="note"><b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor.
+  <p data-i18n-html="note.lay-tiles"><b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor.
     Grout is the gap between tiles; kerf is what the saw takes, so the veins drift a little across each joint.
     In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab.
     Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.</p>
   </div></details>
   <div id="ground" class="rail">
-    <details class="sec" open><summary>Coat &amp; light</summary><div class="body">
+    <details class="sec" open><summary data-i18n="sec.coat-and-light">Coat &amp; light</summary><div class="body">
     <div class="sliders" id="g-coat">
-      <div class="sl"><label for="subsurface">Subsurface <output id="subsurfaceV"></output></label><input id="subsurface" type="range" min="0" max="2" step="0.02"></div>
-      <div class="sl"><label for="specular">Specular / polish <output id="specularV"></output></label><input id="specular" type="range" min="0" max="1" step="0.02"></div>
-      <div class="sl"><label for="lightAngle">Light angle <output id="lightAngleV"></output></label><input id="lightAngle" type="range" min="-180" max="180" step="1"></div>
-      <div class="sl"><label for="lightTemp">Light temperature <output id="lightTempV"></output></label><input id="lightTemp" type="range" min="-1" max="1" step="0.02"></div>
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">Spectrum: 0 = daylight; sweep to light up only the artifacts whose emission you authored near that value (Black light = −1). Spotlight makes the light a beam — drag it with the Light tool.</span></div>
-      <div class="sl"><label for="lightSpectrum">Light spectrum <output id="lightSpectrumV"></output></label><input id="lightSpectrum" type="range" min="-1" max="1" step="0.02"></div>
-      <div class="sl"><span class="lbl">Spotlight</span><div class="grp"><button id="spot-toggle" type="button" aria-pressed="false">Beam</button></div></div>
-      <div class="sl"><label for="spotR">Beam size <output id="spotRV"></output></label><input id="spotR" type="range" min="0.05" max="0.6" step="0.01"></div>
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">Back light: light from behind. Each bucket occludes by its own transmittance (veins nearly opaque, specks semi, the matrix glows), folded deepest → top. Tint it with Light temperature.</span></div>
-      <div class="sl"><label for="backlight">Back light <output id="backlightV"></output></label><input id="backlight" type="range" min="0" max="2" step="0.02"></div>
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">Lens: an ideal glass relief on the very top. Flat and perfect, so head-on it does almost nothing — it refracts what lies beneath as it steepens, and it's built to pair with a back light.</span></div>
-      <div class="sl"><label for="lens">Lens <output id="lensV"></output></label><input id="lens" type="range" min="0" max="1" step="0.02"></div>
-      <div class="sl"><label for="lensPitch">Lens grooves <output id="lensPitchV"></output></label><input id="lensPitch" type="range" min="2" max="40" step="1"></div>
-      <div class="sl" style="grid-column:1/-1"><span class="lbl">Lens type</span><div class="grp" role="group" aria-label="Lens type"><button data-lens="fresnel" type="button">Fresnel</button><button data-lens="reeded" type="button">Reeded</button><button data-lens="water" type="button">Water</button></div></div>
+      <div class="sl"><label for="subsurface"><span data-i18n="sl.subsurface">Subsurface</span> <output id="subsurfaceV"></output></label><input id="subsurface" type="range" min="0" max="2" step="0.02"></div>
+      <div class="sl"><label for="specular"><span data-i18n="sl.specular">Specular / polish</span> <output id="specularV"></output></label><input id="specular" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="lightAngle"><span data-i18n="sl.lightAngle">Light angle</span> <output id="lightAngleV"></output></label><input id="lightAngle" type="range" min="-180" max="180" step="1"></div>
+      <div class="sl"><label for="lightTemp"><span data-i18n="sl.lightTemp">Light temperature</span> <output id="lightTempV"></output></label><input id="lightTemp" type="range" min="-1" max="1" step="0.02"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.spectrum-0-daylight-sweep-to">Spectrum: 0 = daylight; sweep to light up only the artifacts whose emission you authored near that value (Black light = −1). Spotlight makes the light a beam — drag it with the Light tool.</span></div>
+      <div class="sl"><label for="lightSpectrum"><span data-i18n="sl.lightSpectrum">Light spectrum</span> <output id="lightSpectrumV"></output></label><input id="lightSpectrum" type="range" min="-1" max="1" step="0.02"></div>
+      <div class="sl"><span class="lbl" data-i18n="lbl.spotlight">Spotlight</span><div class="grp"><button id="spot-toggle" type="button" aria-pressed="false" data-i18n="btn.spot-toggle">Beam</button></div></div>
+      <div class="sl"><label for="spotR"><span data-i18n="sl.spotR">Beam size</span> <output id="spotRV"></output></label><input id="spotR" type="range" min="0.05" max="0.6" step="0.01"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.back-light-light-from-behind">Back light: light from behind. Each bucket occludes by its own transmittance (veins nearly opaque, specks semi, the matrix glows), folded deepest → top. Tint it with Light temperature.</span></div>
+      <div class="sl"><label for="backlight"><span data-i18n="sl.backlight">Back light</span> <output id="backlightV"></output></label><input id="backlight" type="range" min="0" max="2" step="0.02"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.lens-an-ideal-glass-relief">Lens: an ideal glass relief on the very top. Flat and perfect, so head-on it does almost nothing — it refracts what lies beneath as it steepens, and it's built to pair with a back light.</span></div>
+      <div class="sl"><label for="lens"><span data-i18n="sl.lens">Lens</span> <output id="lensV"></output></label><input id="lens" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="lensPitch"><span data-i18n="sl.lensPitch">Lens grooves</span> <output id="lensPitchV"></output></label><input id="lensPitch" type="range" min="2" max="40" step="1"></div>
+      <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.lens-type">Lens type</span><div class="grp" role="group" aria-label="Lens type" data-i18n-attr="aria-label=a11y.lens-type"><button data-lens="fresnel" type="button" data-i18n="lens.fresnel">Fresnel</button><button data-lens="reeded" type="button" data-i18n="lens.reeded">Reeded</button><button data-lens="water" type="button" data-i18n="lens.water">Water</button></div></div>
     </div>
     </div></details>
-    <details class="sec"><summary>Clouds &amp; warp</summary><div class="body">
+    <details class="sec"><summary data-i18n="sec.clouds-and-warp">Clouds &amp; warp</summary><div class="body">
     <div class="sliders" id="g-clouds">
-      <div class="sl"><label for="cloudStrength">Clouds <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
-      <div class="sl"><label for="cloudScale">Cloud scale <output id="cloudScaleV"></output></label><input id="cloudScale" type="range" min="0.4" max="3" step="0.05"></div>
-      <div class="sl"><label for="warp">Warp <output id="warpV"></output></label><input id="warp" type="range" min="0" max="1" step="0.02"></div>
-      <div class="sl"><label for="warpDepth">Deep drift <output id="warpDepthV"></output></label><input id="warpDepth" type="range" min="0" max="1.5" step="0.05"></div>
-      <div class="sl"><label for="cloudX">Cloud X <output id="cloudXV"></output></label><input id="cloudX" type="range" min="-2" max="2" step="0.02"></div>
-      <div class="sl"><label for="cloudY">Cloud Y <output id="cloudYV"></output></label><input id="cloudY" type="range" min="-2" max="2" step="0.02"></div>
-      <div class="sl"><span class="lbl">Warp holds</span><div class="grp"><button id="warp-holdmajor" type="button" aria-pressed="false">Major veins stable</button></div></div>
+      <div class="sl"><label for="cloudStrength"><span data-i18n="sl.cloudStrength">Clouds</span> <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="cloudScale"><span data-i18n="sl.cloudScale">Cloud scale</span> <output id="cloudScaleV"></output></label><input id="cloudScale" type="range" min="0.4" max="3" step="0.05"></div>
+      <div class="sl"><label for="warp"><span data-i18n="sl.warp">Warp</span> <output id="warpV"></output></label><input id="warp" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="warpDepth"><span data-i18n="sl.warpDepth">Deep drift</span> <output id="warpDepthV"></output></label><input id="warpDepth" type="range" min="0" max="1.5" step="0.05"></div>
+      <div class="sl"><label for="cloudX"><span data-i18n="sl.cloudX">Cloud X</span> <output id="cloudXV"></output></label><input id="cloudX" type="range" min="-2" max="2" step="0.02"></div>
+      <div class="sl"><label for="cloudY"><span data-i18n="sl.cloudY">Cloud Y</span> <output id="cloudYV"></output></label><input id="cloudY" type="range" min="-2" max="2" step="0.02"></div>
+      <div class="sl"><span class="lbl" data-i18n="lbl.warp-holds">Warp holds</span><div class="grp"><button id="warp-holdmajor" type="button" aria-pressed="false" data-i18n="btn.warp-holdmajor">Major veins stable</button></div></div>
     </div>
     </div></details>
-    <details class="sec"><summary>Banding</summary><div class="body">
+    <details class="sec"><summary data-i18n="sec.banding">Banding</summary><div class="body">
     <div class="sliders" id="g-bands">
-      <div class="sl"><label for="bandStrength">Banding <output id="bandStrengthV"></output></label><input id="bandStrength" type="range" min="0" max="1" step="0.02"></div>
-      <div class="sl"><label for="bandFreq">Bands <output id="bandFreqV"></output></label><input id="bandFreq" type="range" min="2" max="20" step="1"></div>
-      <div class="sl"><label for="bandAngle">Angle <output id="bandAngleV"></output></label><input id="bandAngle" type="range" min="-90" max="90" step="1"></div>
-      <div class="sl"><label for="bandWave">Waviness <output id="bandWaveV"></output></label><input id="bandWave" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="bandStrength"><span data-i18n="sl.bandStrength">Banding</span> <output id="bandStrengthV"></output></label><input id="bandStrength" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="bandFreq"><span data-i18n="sl.bandFreq">Bands</span> <output id="bandFreqV"></output></label><input id="bandFreq" type="range" min="2" max="20" step="1"></div>
+      <div class="sl"><label for="bandAngle"><span data-i18n="sl.bandAngle">Angle</span> <output id="bandAngleV"></output></label><input id="bandAngle" type="range" min="-90" max="90" step="1"></div>
+      <div class="sl"><label for="bandWave"><span data-i18n="sl.bandWave">Waviness</span> <output id="bandWaveV"></output></label><input id="bandWave" type="range" min="0" max="1" step="0.02"></div>
     </div>
     </div></details>
-    <details class="sec"><summary>Breccia</summary><div class="body">
+    <details class="sec"><summary data-i18n="sec.breccia">Breccia</summary><div class="body">
     <div class="sliders" id="g-breccia">
-      <div class="sl"><label for="brecStrength">Breccia <output id="brecStrengthV"></output></label><input id="brecStrength" type="range" min="0" max="1" step="0.02"></div>
-      <div class="sl"><label for="brecClasts">Clasts <output id="brecClastsV"></output></label><input id="brecClasts" type="range" min="6" max="90" step="1"></div>
-      <div class="sl"><label for="brecSeam">Matrix <output id="brecSeamV"></output></label><input id="brecSeam" type="range" min="0.3" max="2.5" step="0.05"></div>
+      <div class="sl"><label for="brecStrength"><span data-i18n="sl.brecStrength">Breccia</span> <output id="brecStrengthV"></output></label><input id="brecStrength" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="brecClasts"><span data-i18n="sl.brecClasts">Clasts</span> <output id="brecClastsV"></output></label><input id="brecClasts" type="range" min="6" max="90" step="1"></div>
+      <div class="sl"><label for="brecSeam"><span data-i18n="sl.brecSeam">Matrix</span> <output id="brecSeamV"></output></label><input id="brecSeam" type="range" min="0.3" max="2.5" step="0.05"></div>
     </div>
     </div></details>
-    <details class="sec"><summary>Drusy</summary><div class="body">
+    <details class="sec"><summary data-i18n="sec.drusy">Drusy</summary><div class="body">
     <div class="sliders" id="g-drusy">
-      <div class="sl"><label for="drusyDensity">Drusy <output id="drusyDensityV"></output></label><input id="drusyDensity" type="range" min="0" max="1" step="0.02"></div>
-      <div class="sl"><label for="drusySize">Crystal size <output id="drusySizeV"></output></label><input id="drusySize" type="range" min="0.4" max="2.5" step="0.05"></div>
-      <div class="sl"><label for="drusyBright">Sparkle <output id="drusyBrightV"></output></label><input id="drusyBright" type="range" min="0.3" max="1.5" step="0.05"></div>
-      <div class="sl"><label for="drusyGroups">Drusy colours <output id="drusyGroupsV"></output></label><input id="drusyGroups" type="range" min="1" max="5" step="1"></div>
-      <div class="sl"><label for="drusySubs">Drusy variants <output id="drusySubsV"></output></label><input id="drusySubs" type="range" min="1" max="4" step="1"></div>
+      <div class="sl"><label for="drusyDensity"><span data-i18n="sl.drusyDensity">Drusy</span> <output id="drusyDensityV"></output></label><input id="drusyDensity" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="drusySize"><span data-i18n="sl.drusySize">Crystal size</span> <output id="drusySizeV"></output></label><input id="drusySize" type="range" min="0.4" max="2.5" step="0.05"></div>
+      <div class="sl"><label for="drusyBright"><span data-i18n="sl.drusyBright">Sparkle</span> <output id="drusyBrightV"></output></label><input id="drusyBright" type="range" min="0.3" max="1.5" step="0.05"></div>
+      <div class="sl"><label for="drusyGroups"><span data-i18n="sl.drusyGroups">Drusy colours</span> <output id="drusyGroupsV"></output></label><input id="drusyGroups" type="range" min="1" max="5" step="1"></div>
+      <div class="sl"><label for="drusySubs"><span data-i18n="sl.drusySubs">Drusy variants</span> <output id="drusySubsV"></output></label><input id="drusySubs" type="range" min="1" max="4" step="1"></div>
     </div>
     </div></details>
-    <details class="sec"><summary>Fog &amp; resin</summary><div class="body">
+    <details class="sec"><summary data-i18n="sec.fog-and-resin">Fog &amp; resin</summary><div class="body">
     <div class="sliders" id="g-fog">
-      <div class="sl"><label for="fogHaze">Fog / resin <output id="fogHazeV"></output></label><input id="fogHaze" type="range" min="0" max="0.06" step="0.005"></div>
-      <div class="sl"><label for="fogSize">Fog size <output id="fogSizeV"></output></label><input id="fogSize" type="range" min="0.3" max="2.5" step="0.05"></div>
-      <div class="sl"><label for="fogDensity">Fog density <output id="fogDensityV"></output></label><input id="fogDensity" type="range" min="0.2" max="2.5" step="0.05"></div>
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">To sculpt the haze: select the Fog layer, then use Gravity (push clears a window, pull pools) or Magnet.</span></div>
+      <div class="sl"><label for="fogHaze"><span data-i18n="sl.fogHaze">Fog / resin</span> <output id="fogHazeV"></output></label><input id="fogHaze" type="range" min="0" max="0.06" step="0.005"></div>
+      <div class="sl"><label for="fogSize"><span data-i18n="sl.fogSize">Fog size</span> <output id="fogSizeV"></output></label><input id="fogSize" type="range" min="0.3" max="2.5" step="0.05"></div>
+      <div class="sl"><label for="fogDensity"><span data-i18n="sl.fogDensity">Fog density</span> <output id="fogDensityV"></output></label><input id="fogDensity" type="range" min="0.2" max="2.5" step="0.05"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.to-sculpt-the-haze-select">To sculpt the haze: select the Fog layer, then use Gravity (push clears a window, pull pools) or Magnet.</span></div>
     </div>
     </div></details>
-    <details class="sec" id="g-granite" hidden><summary>Granite ground</summary><div class="body">
+    <details class="sec" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
     <div class="sliders">
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0">Specks / size / reseed act on the ACTIVE granite layer. Add more with "+ Granite layer" — each its own field + colour.</span></div>
-      <div class="sl"><label for="gspecks">Specks <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
-      <div class="sl"><label for="gsize">Speck size <output id="gsizeV"></output></label><input id="gsize" type="range" min="0.4" max="2" step="0.05"></div>
-      <div class="sl"><span class="lbl">Scatter</span><div class="grp"><button id="granite-reseed" type="button">Reseed</button></div></div>
-      <div class="sl"><label for="speckGroups">Speck colours <output id="speckGroupsV"></output></label><input id="speckGroups" type="range" min="1" max="5" step="1"></div>
-      <div class="sl"><label for="speckSubs">Speck variants <output id="speckSubsV"></output></label><input id="speckSubs" type="range" min="1" max="4" step="1"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.specks-size-reseed-act-on">Specks / size / reseed act on the ACTIVE granite layer. Add more with "+ Granite layer" — each its own field + colour.</span></div>
+      <div class="sl"><label for="gspecks"><span data-i18n="sl.gspecks">Specks</span> <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
+      <div class="sl"><label for="gsize"><span data-i18n="sl.gsize">Speck size</span> <output id="gsizeV"></output></label><input id="gsize" type="range" min="0.4" max="2" step="0.05"></div>
+      <div class="sl"><span class="lbl" data-i18n="lbl.scatter">Scatter</span><div class="grp"><button id="granite-reseed" type="button" data-i18n="btn.granite-reseed">Reseed</button></div></div>
+      <div class="sl"><label for="speckGroups"><span data-i18n="sl.speckGroups">Speck colours</span> <output id="speckGroupsV"></output></label><input id="speckGroups" type="range" min="1" max="5" step="1"></div>
+      <div class="sl"><label for="speckSubs"><span data-i18n="sl.speckSubs">Speck variants</span> <output id="speckSubsV"></output></label><input id="speckSubs" type="range" min="1" max="4" step="1"></div>
     </div>
     </div></details>
   </div><!-- /#ground -->
-  <details class="sec"><summary>File</summary><div class="body">
-    <div class="grp" role="group" aria-label="File">
-      <button id="save" type="button">Save</button>
-      <button id="load" type="button">Load</button>
-      <button id="export" type="button">Export</button>
-      <select id="expres" aria-label="Export width" title="Export width (px)"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option></select>
+  <details class="sec"><summary data-i18n="sec.file">File</summary><div class="body">
+    <div class="grp" role="group" aria-label="File" data-i18n-attr="aria-label=a11y.file">
+      <button id="save" type="button" data-i18n="btn.save">Save</button>
+      <button id="load" type="button" data-i18n="btn.load">Load</button>
+      <button id="export" type="button" data-i18n="btn.export">Export</button>
+      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option></select>
       <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
   </div></details>
-  <details class="sec"><summary>How the tools read</summary><div class="body">
-  <p class="note" id="fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
-  <p class="note"><b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw
+  <details class="sec"><summary data-i18n="sec.how-the-tools-read">How the tools read</summary><div class="body">
+  <p class="note" id="fwd" data-i18n="btn.fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
+  <p data-i18n-html="note.each-line-keeps-what-it"><b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw
     it, so changing them shapes the next line only. This generates the base structure; the colours here are
     only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor
     vein grown while zoomed in comes out shorter, at the scale you are working.</p>
-  <p class="note"><b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity
+  <p data-i18n-html="note.granite"><b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity
     moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space.
     A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside
     of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only
     specks already down are moved, so what you draw first is older rock.</p>
-  <p class="note"><b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the
+  <p data-i18n-html="note.magnet"><b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the
     magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it
     combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With
     Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims
     the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab.
     The Angle view colours every speck by the way it points, so alignment shows as a single colour.</p>
-  <p class="note"><b>Identity</b> shows what an animation would read: each line in its own colour, brightening
+  <p data-i18n-html="note.identity"><b>Identity</b> shows what an animation would read: each line in its own colour, brightening
     along its length in the direction you drew it; web cracks brighten toward the line that spread them.
     Nothing had to be traced &mdash; the line was known when it was made.</p>
-  <p class="note">The three families are starting points set by eye, not yet measured from the harvested stones.</p>
+  <p class="note" data-i18n="ui.the-three-families-are-starting">The three families are starting points set by eye, not yet measured from the harvested stones.</p>
   </div></details>
   </div><!-- /rail -->
   </div><!-- /work -->
 </div>
+<script id="sa-i18n">
+// Stone Author i18n. English is the source of truth and ships inline; every user-facing string in the
+// studio resolves through T(). A pack may be registered inline (SA_I18N.register) or fetched lazily from
+// i18n/<lang>.json, so adding a language never means editing this block. Counts go through the pack as
+// {one:.., other:..} and are selected with Intl.PluralRules, because "mark" + (n>1?"s":"") is an English
+// rule and Polish, Russian and Arabic each need a different number of forms.
+window.SA_I18N = (() => {
+  const PACKS = { en: {
+  "a11y.black-light-only-the-uv": "Black light — only the UV palette glows",
+  "a11y.choose-the-interface-language": "Choose the interface language",
+  "a11y.edit": "Edit",
+  "a11y.export-width": "Export width",
+  "a11y.export-width-px": "Export width (px)",
+  "a11y.family": "Family",
+  "a11y.file": "File",
+  "a11y.gravity-sign": "Gravity sign",
+  "a11y.island-sense": "Island sense",
+  "a11y.lens-type": "Lens type",
+  "a11y.magnet-mode": "Magnet mode",
+  "a11y.pen": "Pen",
+  "a11y.reality-window": "Reality window",
+  "a11y.stone-slab-draw-on-it": "Stone slab. Draw on it to author veins, cracks and pours; tap a vein with the branch tool to grow a minor vein.",
+  "a11y.tile-options": "Tile options",
+  "a11y.tiles": "Tiles",
+  "a11y.tool": "Tool",
+  "a11y.vein-variant": "Vein variant",
+  "a11y.view": "View",
+  "a11y.zoom": "Zoom",
+  "a11y.zoom-in": "Zoom in",
+  "a11y.zoom-out": "Zoom out",
+  "app.sub": "You draw where the lines go. The family decides what they are.",
+  "app.title": "Stone author",
+  "btn.clear": "Clear",
+  "btn.colour-fromfam": "Palette from family",
+  "btn.colour-toggle": "Show colour editor",
+  "btn.export": "Export",
+  "btn.fwd": "Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.",
+  "btn.granite-reseed": "Reseed",
+  "btn.guides": "Guides",
+  "btn.laytiles": "Lay tiles",
+  "btn.load": "Load",
+  "btn.pen-pressure": "Pressure",
+  "btn.pen-tilt": "Tilt",
+  "btn.penlive": "hold the pen over the slab to read it",
+  "btn.reroll": "Reroll last",
+  "btn.save": "Save",
+  "btn.spot-toggle": "Beam",
+  "btn.undo": "Undo",
+  "btn.uv-toggle": "Black light",
+  "btn.warp-holdmajor": "Major veins stable",
+  "btn.zfit": "Fit",
+  "fam.calacatta": "Calacatta",
+  "fam.carrara": "Carrara",
+  "fam.granite": "Granite",
+  "fam.marquina": "Nero Marquina",
+  "grav.pull": "Pull",
+  "grav.push": "Push",
+  "help.protects": "<b>Protects</b> freezes the warp inside the disc &mdash; an island of normalcy. <b>Window into chaos</b> inverts that: place one and the slab holds still everywhere <i>except</i> inside these discs. <b>Show through</b> renders the disc at its own light, so the window can look out on a different reality (0 = daylight).",
+  "hint.and-it-looks-out-on": ", and it looks out on ",
+  "hint.and-shows": ", and shows ",
+  "hint.black-light-spectrum-1-only-artifacts": "Black light (spectrum −1). Only artifacts whose emission activates near the light value glow; the rest goes dark. Author with the Selected swatch; sweep the Spectrum slider to reach other sets.",
+  "hint.colour-editor-unavailable": "Colour editor unavailable.",
+  "hint.confirm-delete-layer": {
+    "one": "Delete \"{name}\" and its {n} mark? Tap × again — this can't be undone.",
+    "other": "Delete \"{name}\" and its {n} marks? Tap × again — this can't be undone."
+  },
+  "hint.could-not-read-that-file": "Could not read that file.",
+  "hint.daylight": "daylight",
+  "hint.declined": "declined",
+  "hint.deleted-layer": "Deleted {name}.",
+  "hint.deleted-layer-marks": {
+    "one": "Deleted {name} and {n} mark.",
+    "other": "Deleted {name} and {n} marks."
+  },
+  "hint.deselected": "{what} deselected.",
+  "hint.drag-the-moon-across-the-slab": "Drag the moon across the slab — it drags what it passes into its wake, hard in the middle, fading at the edge.",
+  "hint.entered-folder": "Entered \"{name}\" — light at {light}, its layers selected.",
+  "hint.export-failed-msg": "Export failed: {err}",
+  "hint.exported-files": {
+    "one": "Exported {n} file.",
+    "other": "Exported {n} files."
+  },
+  "hint.exporting-encode": {
+    "one": "Exporting… encoding {n} image in parallel…",
+    "other": "Exporting… encoding {n} images in parallel…"
+  },
+  "hint.exporting-render": "Exporting… rendering {w}px…",
+  "hint.gravity-moves-specks-switch-to-granite": "Gravity moves specks. Switch to Granite, or pour some first.",
+  "hint.hover-traces-on-move-the-pen": "Hover traces on: move the pen or mouse just above the slab to work lightly; each pause keeps the trace.",
+  "hint.island-placed-it-freezes-the-warp": "Island placed — it freezes the warp here (an island of normalcy)",
+  "hint.loaded": "Loaded.",
+  "hint.n-selected-editor": {
+    "one": "{n} selected — colour or adjust it in the editor / Selected bar.",
+    "other": "{n} selected — colour or adjust them in the editor / Selected bar."
+  },
+  "hint.n-selected-tools": {
+    "one": "{n} selected — tools + effects act on it; its colour show in the editor.",
+    "other": "{n} selected — tools + effects act on them; their colours show in the editor."
+  },
+  "hint.pressure-is-on-for-your-next": "Pressure is on for your next lines: press harder for a heavier vein or more paint, lighter to thin it out.",
+  "hint.protects-the-next-island-freezes-the": "Protects: the next island freezes the warp inside it, the rest of the slab warps as set.",
+  "hint.reseeded-layer": "Reseeded {name} — new scatter, same density and size.",
+  "hint.save-cancelled": "Save cancelled.",
+  "hint.save-is-unavailable-here-this-device": "Save is unavailable here; this device remembers your work automatically.",
+  "hint.saved-stone-json": "Saved stone.json.",
+  "hint.saved-stone-json-this-device-also": "Saved stone.json. This device also remembers your work automatically.",
+  "hint.select-something-first-the-box-on": "Select something first (the ▢ box on a row, or tap a vein with Tune).",
+  "hint.select-something-to-hide-first-a": "Select something to hide first (a vein/web/seam with Tune, or a layer row).",
+  "hint.select-the-layers-for-the-folder": "Select the layers for the folder first (their ▢ boxes), then + folder.",
+  "hint.show-through-off-the-next-island": "Show through off: the next island only shapes the warp, no show-through.",
+  "hint.show-through-on-the-next-island": "Show through on: the next island renders the slab again at its Window spectrum and feathers it in through the disc — 0 is daylight, so under a UV/psyker light that reads as a window of normal stone. Paint an island (drag to size it).",
+  "hint.spotlight-on-only-artifacts-inside-the": "Spotlight on: only artifacts inside the beam (and at its spectrum value) glow. Drag it with the Light tool; Beam sets its size.",
+  "hint.switch-show-through-on-to-also": ". Switch Show through on to also see another light through it.",
+  "hint.switch-show-through-on-to-give": ". Switch Show through on to give it its own light.",
+  "hint.tagged-layers": {
+    "one": "Tagged {n} layer at {light}.",
+    "other": "Tagged {n} layers at {light}."
+  },
+  "hint.tap-a-vein-web-crack-or": "Tap a vein, web crack or seam to select it — then colour or adjust just that one.",
+  "hint.tap-on-a-tile-to-chip": "Tap on a tile to chip its nearest edge.",
+  "hint.tap-on-a-vein-to-grow": "Tap on a vein to grow a minor vein off it.",
+  "hint.that-file-is-not-a-stone": "That file is not a stone source.",
+  "hint.that-input-sent-no-pressure-so": "That input sent no pressure, so the line used its normal gauge.",
+  "hint.that-input-sent-no-tilt-so": "That input sent no tilt, so the line kept its normal edge.",
+  "hint.the-magnet-turns-specks-switch-to": "The magnet turns specks. Switch to Granite, or pour some first.",
+  "hint.this-device-remembers-your-work-automatically": "This device remembers your work automatically; a file download is blocked here.",
+  "hint.through-the-disc": " through the disc.",
+  "hint.tilt-is-on-for-your-next": "Tilt is on for your next veins: hold the pen as you normally do for a crisp edge, lean it further over to soften and spread it.",
+  "hint.tuning-vein-full": "Tuning vein {id} — see “Per-item” in the colour editor; it follows {bucket} until you change it.",
+  "hint.turn-lay-tiles-on-first-then": "Turn Lay tiles on first, then tap a tile edge to chip it.",
+  "hint.window-into-chaos-placed-the-slab": "Window into chaos placed — the slab now holds still everywhere EXCEPT inside this disc",
+  "hint.window-into-chaos-the-next-island": "Window into chaos: the next island INVERTS the mask — once one exists the warp acts only inside these discs and the rest of the slab holds still. A Protects island dropped inside one is a calm eye in the storm.",
+  "lay.banding": "Banding",
+  "lay.base-ground": "Base / ground",
+  "lay.breccia-clasts": "Breccia clasts",
+  "lay.clouds-mottling": "Clouds / mottling",
+  "lay.colour-per-layer": "Colour (per layer)",
+  "lay.drusy-colours": "Drusy colours",
+  "lay.drusy-sparkle": "Drusy sparkle",
+  "lay.effects-per-layer": "Effects (per layer)",
+  "lay.fog-resin-core": "Fog / resin core",
+  "lay.fracture-web": "Fracture web",
+  "lay.major-veins": "Major veins",
+  "lay.micro-specks": "Micro / specks",
+  "lay.minor-veins": "Minor veins",
+  "lay.per-item-tap-a-vein-with": "Per-item (tap a vein with Tune)",
+  "lay.seam": "Seam ",
+  "lay.selected": "Selected",
+  "lay.speck-colours": "Speck colours",
+  "lay.stylolite-seam": "Stylolite seam",
+  "lay.stylolites": "Stylolites",
+  "lay.vein": "Vein ",
+  "lay.vein-halo": "Vein halo",
+  "lay.web": "Web ",
+  "lbl.edit": "Edit",
+  "lbl.family": "Family",
+  "lbl.gravity": "Gravity",
+  "lbl.island": "Island",
+  "lbl.language": "Language",
+  "lbl.layout": "Layout",
+  "lbl.lens-type": "Lens type",
+  "lbl.magnet": "Magnet",
+  "lbl.pen": "Pen",
+  "lbl.scatter": "Scatter",
+  "lbl.show-through": "Show through",
+  "lbl.spotlight": "Spotlight",
+  "lbl.tiles": "Tiles",
+  "lbl.tool": "Tool",
+  "lbl.units": "Units",
+  "lbl.variant": "Variant",
+  "lbl.view": "View",
+  "lbl.warp-holds": "Warp holds",
+  "lbl.zoom": "Zoom",
+  "lens.fresnel": "Fresnel",
+  "lens.reeded": "Reeded",
+  "lens.water": "Water",
+  "mag.align": "Align",
+  "mag.hover": "Hover traces",
+  "mag.scatter": "Scatter",
+  "mask.sense.chaos": "Window into chaos",
+  "mask.sense.protect": "Protects",
+  "mask.win.off": "Off",
+  "mask.win.on": "On",
+  "note.each-line-keeps-what-it": "<b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw it, so changing them shapes the next line only. This generates the base structure; the colours here are only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor vein grown while zoomed in comes out shorter, at the scale you are working.",
+  "note.granite": "<b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space. A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only specks already down are moved, so what you draw first is older rock.",
+  "note.identity": "<b>Identity</b> shows what an animation would read: each line in its own colour, brightening along its length in the direction you drew it; web cracks brighten toward the line that spread them. Nothing had to be traced &mdash; the line was known when it was made.",
+  "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. Grout is the gap between tiles; kerf is what the saw takes, so the veins drift a little across each joint. In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
+  "note.magnet": "<b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab. The Angle view colours every speck by the way it points, so alignment shows as a single colour.",
+  "sec.banding": "Banding",
+  "sec.breccia": "Breccia",
+  "sec.clouds-and-warp": "Clouds &amp; warp",
+  "sec.coat-and-light": "Coat &amp; light",
+  "sec.colour": "Colour",
+  "sec.drusy": "Drusy",
+  "sec.file": "File",
+  "sec.fog-and-resin": "Fog &amp; resin",
+  "sec.granite-ground": "Granite ground",
+  "sec.how-the-tools-read": "How the tools read",
+  "sec.layers": "Layers",
+  "sec.tiles-and-floor": "Tiles &amp; floor",
+  "sl.backlight": "Back light",
+  "sl.bandAngle": "Angle",
+  "sl.bandFreq": "Bands",
+  "sl.bandStrength": "Banding",
+  "sl.bandWave": "Waviness",
+  "sl.blen": "Minor length",
+  "sl.branches": "Minor veins",
+  "sl.breaks": "Breaks",
+  "sl.brecClasts": "Clasts",
+  "sl.brecSeam": "Matrix",
+  "sl.brecStrength": "Breccia",
+  "sl.chipsize": "Chip size",
+  "sl.cloudScale": "Cloud scale",
+  "sl.cloudStrength": "Clouds",
+  "sl.cloudX": "Cloud X",
+  "sl.cloudY": "Cloud Y",
+  "sl.defl": "Deflection",
+  "sl.density": "Density",
+  "sl.drusyBright": "Sparkle",
+  "sl.drusyDensity": "Drusy",
+  "sl.drusyGroups": "Drusy colours",
+  "sl.drusySize": "Crystal size",
+  "sl.drusySubs": "Drusy variants",
+  "sl.fogDensity": "Fog density",
+  "sl.fogHaze": "Fog / resin",
+  "sl.fogSize": "Fog size",
+  "sl.fold": "Fold",
+  "sl.gauge": "Gauge",
+  "sl.gauge2": "Gauge",
+  "sl.gsize": "Speck size",
+  "sl.gspecks": "Specks",
+  "sl.lens": "Lens",
+  "sl.lensPitch": "Lens grooves",
+  "sl.lightAngle": "Light angle",
+  "sl.lightSpectrum": "Light spectrum",
+  "sl.lightTemp": "Light temperature",
+  "sl.maskFeather": "Feather",
+  "sl.maskSpec": "Window spectrum",
+  "sl.mheight": "Height",
+  "sl.moonReach": "Ball size",
+  "sl.moonStrength": "Pull",
+  "sl.mreach": "Reach",
+  "sl.mstrength": "Strength",
+  "sl.pfling": "Fling",
+  "sl.prate": "Pour",
+  "sl.pwidth": "Width",
+  "sl.reach": "Reach",
+  "sl.rough": "Roughness",
+  "sl.speckGroups": "Speck colours",
+  "sl.speckSubs": "Speck variants",
+  "sl.specular": "Specular / polish",
+  "sl.spotR": "Beam size",
+  "sl.spread": "Spread",
+  "sl.strength": "Strength",
+  "sl.stretch": "Stretch",
+  "sl.stylAmp": "Tooth height",
+  "sl.stylTooth": "Teeth",
+  "sl.stylWidth": "Seam width",
+  "sl.subsurface": "Subsurface",
+  "sl.tedge": "Edge",
+  "sl.tgrout": "Grout",
+  "sl.tkerf": "Kerf",
+  "sl.tsize": "Tile size",
+  "sl.varAmt": "Variant amount",
+  "sl.warp": "Warp",
+  "sl.warpDepth": "Deep drift",
+  "tile.edge.bevel": "Bevel",
+  "tile.edge.pillow": "Pillow",
+  "tile.edge.square": "Square",
+  "tile.edge.tumbled": "Tumbled",
+  "tile.pat.basketweave": "Basketweave",
+  "tile.pat.cairo": "Cairo",
+  "tile.pat.diagonal": "Diagonal",
+  "tile.pat.herringbone": "Herringbone",
+  "tile.pat.hex": "Hexagon",
+  "tile.pat.octagon": "Octagon",
+  "tile.pat.rect": "Rectangle",
+  "tile.pat.rhombus": "Rhombus",
+  "tile.pat.square": "Square",
+  "tile.pat.subway": "Subway",
+  "tile.pat.triangle": "Triangle",
+  "tip.back-light-how-much-light-passes": "Back light: how much light passes where these layers cover (0 opaque → 1 clear)",
+  "tip.back-light-how-much-these-layers": "Back light: how much these layers scatter the light passing through",
+  "tip.clear-colour-back-to-the-bucket": "Clear colour — back to the bucket",
+  "tip.colour-the-selected-layers": "Colour the selected layers",
+  "tip.delete-the-folder-its-layers-keep": "Delete the folder (its layers keep their tokens)",
+  "tip.delete-this-layer-and-everything-drawn": "Delete this layer — and everything drawn into it",
+  "tip.double-tap-to-rename": "Double-tap to rename",
+  "tip.emission-colour-for-this-folder": "Emission colour for this folder",
+  "tip.give-every-layer-here-this-emission": "Give every layer here this emission at this spectrum, at once",
+  "tip.hide-the-renderer-ignores-it-and": "Hide — the renderer ignores it and it can\\'t be clicked; recover it from the Hidden list",
+  "tip.select-effects-and-the-force-tools": "Select — effects and the force tools act on the selected layers",
+  "tip.selected-layers-follow-warp": "Selected layers follow warp",
+  "tip.selected-layers-hold-still": "Selected layers hold still",
+  "tip.set-the-light-to-this-spectrum": "Set the light to this spectrum and select these layers (the editor filters to them)",
+  "tip.show-or-hide": "Show or hide",
+  "tip.solo-this-layer": "Solo this layer",
+  "tip.tap-again-to-delete-no-undo": "Tap × again to delete — no undo",
+  "tip.tap-make-active-double-tap-rename": "Tap = make active · double-tap = rename",
+  "tip.un-hide-render-it-again": "Un-hide — render it again",
+  "tip.w-lit-this-layer-follows-warp": "W lit = this layer follows warp; dim = held still",
+  "tool.branch": "Branch",
+  "tool.chip": "Chip",
+  "tool.cloud": "Cloud",
+  "tool.gravity": "Gravity",
+  "tool.inorder": "In order",
+  "tool.joints": "Show hairline joints",
+  "tool.light": "Light",
+  "tool.magnet": "Magnet",
+  "tool.mask": "Mask",
+  "tool.moon": "Moon",
+  "tool.move": "Move",
+  "tool.pour": "Pour",
+  "tool.shuffle": "Shuffled",
+  "tool.styl": "Stylolite",
+  "tool.tune": "Tune",
+  "tool.vein": "Vein",
+  "tool.web": "Web",
+  "ui.back-light-light-from-behind": "Back light: light from behind. Each bucket occludes by its own transmittance (veins nearly opaque, specks semi, the matrix glows), folded deepest → top. Tint it with Light temperature.",
+  "ui.colour-editor-unavailable": "Colour editor unavailable",
+  "ui.daylight": "daylight",
+  "ui.enter": "enter",
+  "ui.folder-from-selected-layers": "+ folder from selected layers",
+  "ui.folders-spectrum-workspaces": "Folders · spectrum workspaces",
+  "ui.hidden-not-rendered-not-selectable": "Hidden · not rendered, not selectable",
+  "ui.hide": "hide",
+  "ui.hold": "hold",
+  "ui.lens-an-ideal-glass-relief": "Lens: an ideal glass relief on the very top. Flat and perfect, so head-on it does almost nothing — it refracts what lies beneath as it steepens, and it's built to pair with a back light.",
+  "ui.no-colour": "no colour",
+  "ui.pass": "pass ",
+  "ui.scatter": "scatter ",
+  "ui.selected": "Selected ▸",
+  "ui.show": "show",
+  "ui.specks-size-reseed-act-on": "Specks / size / reseed act on the ACTIVE granite layer. Add more with \"+ Granite layer\" — each its own field + colour.",
+  "ui.spectrum-0-daylight-sweep-to": "Spectrum: 0 = daylight; sweep to light up only the artifacts whose emission you authored near that value (Black light = −1). Spotlight makes the light a beam — drag it with the Light tool.",
+  "ui.tag": "tag",
+  "ui.the-three-families-are-starting": "The three families are starting points set by eye, not yet measured from the harvested stones.",
+  "ui.to-sculpt-the-haze-select": "To sculpt the haze: select the Fog layer, then use Gravity (push clears a window, pull pools) or Magnet.",
+  "ui.warp": "warp",
+  "unit.in": "inches",
+  "unit.mm": "mm",
+  "vein.variant.boudinage": "Boudinage",
+  "vein.variant.dendritic": "Dendritic",
+  "vein.variant.echelon": "En-echelon",
+  "vein.variant.halo": "Halo",
+  "vein.variant.natural": "Natural",
+  "vein.variant.sinuous": "Sinuous",
+  "view.angle": "Angle",
+  "view.identity": "Identity",
+  "view.stone": "Stone"
+} };
+  const NAMES = { en: 'English' };
+  const KEY = 'sa.lang';
+  let LANG = 'en';
+  const _pr = {}, missing = new Set(), listeners = new Set();
+  const pluralOf = (lang, n) => (_pr[lang] || (_pr[lang] = new Intl.PluralRules(lang))).select(n);
+  const raw = (key, lang) => { const p = PACKS[lang]; return p && key in p ? p[key] : undefined; };
+
+  function T(key, vars) {
+    let v = raw(key, LANG);
+    if (v === undefined) v = raw(key, 'en');
+    if (v === undefined) {
+      if (!missing.has(key)) { missing.add(key); console.warn('[i18n] missing key:', key); }
+      return key;                                   // the key itself, so a gap is visible, never blank
+    }
+    if (v && typeof v === 'object') {               // plural forms, chosen for the ACTIVE language
+      const n = Number(vars && vars.n);
+      v = v[pluralOf(LANG, n)] !== undefined ? v[pluralOf(LANG, n)] : (v.other !== undefined ? v.other : v.one);
+    }
+    return vars ? String(v).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m)) : v;
+  }
+
+  function apply(root) {
+    root = root || document;
+    for (const el of root.querySelectorAll('[data-i18n]')) el.textContent = T(el.dataset.i18n);
+    for (const el of root.querySelectorAll('[data-i18n-html]')) el.innerHTML = T(el.dataset.i18nHtml);
+    for (const el of root.querySelectorAll('[data-i18n-attr]'))
+      for (const pair of el.dataset.i18nAttr.split(';')) {
+        const i = pair.indexOf('='); if (i < 0) continue;
+        el.setAttribute(pair.slice(0, i).trim(), T(pair.slice(i + 1).trim()));
+      }
+    if (root === document) { document.documentElement.lang = LANG; document.title = T('app.title'); }
+  }
+
+  function register(lang, obj, label) {
+    PACKS[lang] = Object.assign(PACKS[lang] || {}, obj);
+    if (label) NAMES[lang] = label;
+    if (lang === LANG) { apply(); listeners.forEach(f => f(LANG)); }
+    return PACKS[lang];
+  }
+
+  async function load(lang) {                       // a pack that is not inline may live beside the page
+    if (PACKS[lang]) return true;
+    try { const r = await fetch('i18n/' + lang + '.json'); if (!r.ok) return false;
+          register(lang, await r.json()); return true; } catch (e) { return false; }
+  }
+
+  async function setLang(lang) {
+    if (!PACKS[lang]) await load(lang);
+    LANG = PACKS[lang] ? lang : 'en';
+    try { localStorage.setItem(KEY, LANG); } catch (e) {}
+    apply(); listeners.forEach(f => f(LANG));
+    return LANG;
+  }
+
+  function pick() {                                 // ?lang= wins, then a remembered choice, then the browser
+    const q = new URLSearchParams(location.search).get('lang');
+    let stored = null; try { stored = localStorage.getItem(KEY); } catch (e) {}
+    for (const c of [q, stored, ...(navigator.languages || [navigator.language || 'en'])]) {
+      if (!c) continue;
+      const short = String(c).toLowerCase().split('-')[0];
+      if (PACKS[c]) return c;
+      if (PACKS[short]) return short;
+    }
+    return 'en';
+  }
+
+  return { T, apply, register, load, setLang, onChange: f => listeners.add(f),
+           get lang() { return LANG; }, get languages() { return Object.keys(PACKS); },
+           nameOf: l => NAMES[l] || l, get missing() { return [...missing]; },
+           keys: () => Object.keys(PACKS.en), _init: () => { LANG = pick(); apply(); } };
+})();
+SA_I18N._init();   // the studio markup above is already parsed, so this paints the first frame translated
+</script>
 <!-- vendored token-theme-kit (CC0 1.0, Chris King) @65b401a -->
 <script id="ttk-vendor">
 /*! token-theme-kit @65b401a - Chris King - CC0 1.0 (public domain) - https://github.com/kingchddg901/token-theme-kit */
@@ -476,6 +904,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
 </script>
 <script>
 (() => {
+  const TR = SA_I18N.T;                                    // every user-facing string resolves through this
   const cv = document.getElementById('field'), ctx = cv.getContext('2d');
   const ssC = document.createElement('canvas');            // subsurface scratch: the feature high-pass, warmed, added back as internal glow
   const lensC = document.createElement('canvas');          // lens scratch: a downscaled snapshot the top-coat refracts per-pixel, then upscales back
@@ -504,9 +933,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // family switch - colour is decoupled, as designed; a "From family" button re-adopts a palette on demand.
   const rgbHex = (r, g, b) => '#' + [r, g, b].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join('');
   const COLOUR_TOKENS = [
-    { key: 'ground', label: 'Base / ground' }, { key: 'major', label: 'Major veins' }, { key: 'minor', label: 'Minor veins' },
-    { key: 'web', label: 'Fracture web' }, { key: 'micro', label: 'Micro / specks' }, { key: 'styl', label: 'Stylolite seam' },
-    { key: 'drusy', label: 'Drusy sparkle' }, { key: 'halo', label: 'Vein halo' },
+    { key: 'ground', label: TR('lay.base-ground') }, { key: 'major', label: TR('lay.major-veins') }, { key: 'minor', label: TR('lay.minor-veins') },
+    { key: 'web', label: TR('lay.fracture-web') }, { key: 'micro', label: TR('lay.micro-specks') }, { key: 'styl', label: TR('lay.stylolite-seam') },
+    { key: 'drusy', label: TR('lay.drusy-sparkle') }, { key: 'halo', label: TR('lay.vein-halo') },
   ];
   // COL = RESOLVED values the renderer paints from. OVR = the overrides the editor edits and we
   // persist. perItem = id -> layer bucket, for per-id (per-item) colour tokens that inherit their
@@ -593,11 +1022,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // adds web and the ids/t-maps). Order is paint order, back to front. A rendered element's layer:
   //   ground fill -> base | web crack -> web | speck -> micro | vein line -> L.major ? major : minor
   const LAYERS = [
-    { key: 'base', label: 'Base / ground' },
-    { key: 'web', label: 'Fracture web' },
-    { key: 'micro', label: 'Micro / specks' },
-    { key: 'minor', label: 'Minor veins' },
-    { key: 'major', label: 'Major veins' },
+    { key: 'base', label: TR('lay.base-ground') },
+    { key: 'web', label: TR('lay.fracture-web') },
+    { key: 'micro', label: TR('lay.micro-specks') },
+    { key: 'minor', label: TR('lay.minor-veins') },
+    { key: 'major', label: TR('lay.major-veins') },
   ];
   // LIVE layer controls (preview art-direction over the canonical set). Each render layer flattens into
   // a consumer BUCKET (what VA/dashboard export by key); today it is 1:1, but this shape lets step 3 add
@@ -608,17 +1037,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // flattens into on export; today mostly 1:1, but step 3 adds primitives as new render layers sharing a
   // bucket (clouds -> base). Consumers ALWAYS read by bucket, so visibility/opacity here are preview-only.
   const layers = [
-    { key: 'base',   label: 'Base / ground',    bucket: 'base',  on: true, op: 1, warp: 1 },
-    { key: 'breccia', label: 'Breccia clasts',  bucket: 'base',  on: true, op: 1, warp: 1 },
-    { key: 'clouds', label: 'Clouds / mottling', bucket: 'base', on: true, op: 1, warp: 1 },
-    { key: 'bands',  label: 'Banding',          bucket: 'base',  on: true, op: 1, warp: 1 },
-    { key: 'fog',    label: 'Fog / resin core', bucket: 'base',  on: true, op: 1, warp: 1, field: 'fog', haze: 0, size: 1, density: 1, seed: 770511 },
-    { key: 'web',    label: 'Fracture web',     bucket: 'web',   on: true, op: 1, warp: 1 },
-    { key: 'micro',  label: 'Micro / specks',   bucket: 'micro', on: true, op: 1, warp: 1, field: 'specks', density: 1, size: 1, seed: 7070 },
-    { key: 'drusy',  label: 'Drusy sparkle',    bucket: 'micro', on: true, op: 1, warp: 1 },
-    { key: 'styl',   label: 'Stylolites',       bucket: 'minor', on: true, op: 1, warp: 1 },
-    { key: 'minor',  label: 'Minor veins',      bucket: 'minor', on: true, op: 1, warp: 1 },
-    { key: 'major',  label: 'Major veins',      bucket: 'major', on: true, op: 1, warp: 1 },
+    { key: 'base',   label: TR('lay.base-ground'),    bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'breccia', label: TR('lay.breccia-clasts'),  bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'clouds', label: TR('lay.clouds-mottling'), bucket: 'base', on: true, op: 1, warp: 1 },
+    { key: 'bands',  label: TR('lay.banding'),          bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'fog',    label: TR('lay.fog-resin-core'), bucket: 'base',  on: true, op: 1, warp: 1, field: 'fog', haze: 0, size: 1, density: 1, seed: 770511 },
+    { key: 'web',    label: TR('lay.fracture-web'),     bucket: 'web',   on: true, op: 1, warp: 1 },
+    { key: 'micro',  label: TR('lay.micro-specks'),   bucket: 'micro', on: true, op: 1, warp: 1, field: 'specks', density: 1, size: 1, seed: 7070 },
+    { key: 'drusy',  label: TR('lay.drusy-sparkle'),    bucket: 'micro', on: true, op: 1, warp: 1 },
+    { key: 'styl',   label: TR('lay.stylolites'),       bucket: 'minor', on: true, op: 1, warp: 1 },
+    { key: 'minor',  label: TR('lay.minor-veins'),      bucket: 'minor', on: true, op: 1, warp: 1 },
+    { key: 'major',  label: TR('lay.major-veins'),      bucket: 'major', on: true, op: 1, warp: 1 },
   ];
   // Back-light optical declaration per layer: transmit = how much light passes where the layer covers
   // (0 opaque → 1 clear), scatter = how much it diffuses the light through it. Defaults per identity; the
@@ -2839,7 +3268,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (tool === 'light') { setLight(f); gesture = { type: 'lightdrag' }; redraw(false); return; }
     if (tool === 'branch') {
       const hit = nearestLine(f[0], f[1]);
-      if (!hit || hit.d * Wc * V.z > 26) { gesture = null; hint('Tap on a vein to grow a minor vein off it.'); return; }
+      if (!hit || hit.d * Wc * V.z > 26) { gesture = null; hint(TR('hint.tap-on-a-vein-to-grow')); return; }
       gesture = { type: 'branch', hit, e0: [ex, ey], samples: [[hit.L.pts[hit.i][0], hit.L.pts[hit.i][1], now(), pen(e), leanOf(e), azOf(e)]], moved: false,
                   rest: e.pointerType === 'pen' ? restLean() : null };
       live = gesture; redraw(false); return;
@@ -2889,12 +3318,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (g.type === 'draw' && tool === 'gravity') {
       commit(pathLen(g.samples) < 0.01 ? { id, kind: 'gravity', seed, at: [g.samples[0][0], g.samples[0][1]], tgt: sculptTarget() }
                                         : { id, kind: 'gravity', seed, samples: g.samples, tgt: sculptTarget() });
-      if (!FAM[fam].groundSpecks && !marks.some(m => m.kind === 'pour')) hint('Gravity moves specks. Switch to Granite, or pour some first.');
+      if (!FAM[fam].groundSpecks && !marks.some(m => m.kind === 'pour')) hint(TR('hint.gravity-moves-specks-switch-to-granite'));
     } else if (g.type === 'draw' && tool === 'chip') {
       const f = toFrame(...g.e0 || [0, 0]);
       const hit = whichTile(f[0], f[1]);
       if (hit) commit({ id, kind: 'chip', seed, tileKey: hit.key, edge: hit.edge });
-      else hint(layTiles ? 'Tap on a tile to chip its nearest edge.' : 'Turn Lay tiles on first, then tap a tile edge to chip it.');
+      else hint(layTiles ? TR('hint.tap-on-a-tile-to-chip') : TR('hint.turn-lay-tiles-on-first-then'));
     } else if (g.type === 'draw' && tool === 'tune') {
       nextId--;                                          // Tune makes no mark — it SELECTS an artifact (vein / web spread / seam)
       const f = toFrame(...g.e0 || [0, 0]);
@@ -2908,26 +3337,26 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (pick) {                                        // toggle it in the selection (id stays internal)
         if (selected.has(pick.key)) selected.delete(pick.key); else selected.add(pick.key);
         registerSelectedColours(); if (ed) ed.values = { ...OVR }; syncLayerUI(); redraw(false);
-        hint(selected.size ? selected.size + ' selected — colour or adjust them in the editor / Selected bar.' : (pick.what + ' deselected.'));
-      } else hint('Tap a vein, web crack or seam to select it — then colour or adjust just that one.');
+        hint(selected.size ? TR('hint.n-selected-editor', { n: selected.size }) : TR('hint.deselected', { what: pick.what }));
+      } else hint(TR('hint.tap-a-vein-web-crack-or'));
     } else if (g.type === 'draw' && tool === 'magnet') {
       commit({ id, kind: 'magnet', seed, samples: g.samples, tgt: sculptTarget() });
-      if (!geo.specks.length) hint('The magnet turns specks. Switch to Granite, or pour some first.');
+      if (!geo.specks.length) hint(TR('hint.the-magnet-turns-specks-switch-to'));
     } else if (g.type === 'draw' && tool === 'moon') {
-      if (pathLen(g.samples) < 0.02) { nextId--; hint('Drag the moon across the slab — it drags what it passes into its wake, hard in the middle, fading at the edge.'); }
+      if (pathLen(g.samples) < 0.02) { nextId--; hint(TR('hint.drag-the-moon-across-the-slab')); }
       else commit({ id, kind: 'moon', seed, samples: g.samples });
     } else if (g.type === 'draw' && tool === 'mask') {
       const c = g.samples[0], last = g.samples[g.samples.length - 1], dr = Math.hypot(last[0] - c[0], last[1] - c[1]);
       commit({ id, kind: 'mask', at: [c[0], c[1]], r: dr < 0.02 ? 0.08 : dr });   // tap = default disc, drag = sized disc; feather/window from the panel
       const sp = NEXT.maskSpec === 0 ? 'daylight' : 'a light of ' + (+NEXT.maskSpec).toFixed(2);
       hint(NEXT.maskInvert
-        ? 'Window into chaos placed — the slab now holds still everywhere EXCEPT inside this disc' + (NEXT.maskWin ? ', and it looks out on ' + sp + '.' : '. Switch Show through on to give it its own light.')
-        : 'Island placed — it freezes the warp here (an island of normalcy)' + (NEXT.maskWin ? ', and shows ' + sp + ' through the disc.' : '. Switch Show through on to also see another light through it.'));
+        ? TR('hint.window-into-chaos-placed-the-slab') + (NEXT.maskWin ? TR('hint.and-it-looks-out-on') + sp + '.' : TR('hint.switch-show-through-on-to-give'))
+        : TR('hint.island-placed-it-freezes-the-warp') + (NEXT.maskWin ? TR('hint.and-shows') + sp + TR('hint.through-the-disc') : TR('hint.switch-show-through-on-to-also')));
     } else if (g.type === 'draw') {
       if (tool !== 'pour' && pathLen(g.samples) < 0.02) { nextId--; redraw(false); return; }
       commit({ id, kind: tool, seed, samples: g.samples, rest: g.rest });
-      if (NEXT.pressure && tool !== 'web' && !pressureReal(g.samples)) hint('That input sent no pressure, so the line used its normal gauge.');
-      else if (NEXT.tilt && (tool === 'vein') && !tiltReal(g.samples)) hint('That input sent no tilt, so the line kept its normal edge.');
+      if (NEXT.pressure && tool !== 'web' && !pressureReal(g.samples)) hint(TR('hint.that-input-sent-no-pressure-so'));
+      else if (NEXT.tilt && (tool === 'vein') && !tiltReal(g.samples)) hint(TR('hint.that-input-sent-no-tilt-so'));
     } else if (g.type === 'branch') {
       const L = g.hit.L, t = L.cum[g.hit.i] / L.total;
       if (g.moved) commit({ id, kind: 'branch', seed, parent: L.id, at: t, samples: g.samples, zoom: V.z, rest: g.rest });
@@ -2965,10 +3394,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // the adapter writes them back and recolour() resolves them into COL, which the renderer paints from.
   function setupColour() {
     const t = document.getElementById('colour-toggle');
-    if (!window.TTK) { if (t) { t.disabled = true; t.textContent = 'Colour editor unavailable'; } return; }
+    if (!window.TTK) { if (t) { t.disabled = true; t.textContent = TR('ui.colour-editor-unavailable'); } return; }
     kit = TTK.createThemeKit({ prefix: '--stone-' });
-    kit.registerTokenGroup({ id: 'colour', label: 'Colour (per layer)', tokens: COLOUR_TOKENS.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: CARRARA_COL[tk.key] })) });
-    kit.registerTokenGroup({ id: 'effects', label: 'Effects (per layer)', tokens: FX_LAYERS.flatMap(k => {
+    kit.registerTokenGroup({ id: 'colour', label: TR('lay.colour-per-layer'), tokens: COLOUR_TOKENS.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: CARRARA_COL[tk.key] })) });
+    kit.registerTokenGroup({ id: 'effects', label: TR('lay.effects-per-layer'), tokens: FX_LAYERS.flatMap(k => {
       const lbl = (COLOUR_TOKENS.find(t => t.key === k) || {}).label || k;
       return [
         { key: k + 'Blend', label: lbl + ' — blend', type: 'select', default: 'normal', options: BLENDS.map(b => ({ value: b, label: b })) },
@@ -2986,7 +3415,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // change it. Re-registering the group rebuilds the editor; resetting the token returns it to the layer.
   function registerPerItem() {
     if (!kit) return;
-    kit.registerTokenGroup({ id: 'peritem', label: 'Per-item (tap a vein with Tune)', tokens: Object.keys(perItem).map(id => ({ key: 'id:' + id, label: 'Vein ' + id, type: 'color', inherit: perItem[id] })) });
+    kit.registerTokenGroup({ id: 'peritem', label: TR('lay.per-item-tap-a-vein-with'), tokens: Object.keys(perItem).map(id => ({ key: 'id:' + id, label: TR('lay.vein') + id, type: 'color', inherit: perItem[id] })) });
   }
   // A per-layer colour token, FULLY DERIVED from the layer — key from its key, label from its label, type
   // bound to colour, and inherit from WHERE it lives (its bucket). Nothing is hand-authored: adding a layer
@@ -3025,11 +3454,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const key of selected) {
       if (key.startsWith('lay:')) { const L = layAt(key.slice(4)); if (L) { toks.push(layToken(L)); toks.push(...adjTokens('lay:' + L.key, L.label)); } }
       else if (key.startsWith('id:')) { const id = key.slice(3);
-        if (id[0] === 'W') { toks.push({ key, label: 'Web ' + id, type: 'color', inherit: 'web' }); toks.push(...adjTokens('id:' + id, 'Web ' + id)); }
-        else if (id[0] === 'S') { toks.push({ key, label: 'Seam ' + id, type: 'color', inherit: 'styl' }); toks.push(...adjTokens('id:' + id, 'Seam ' + id)); }
-        else { const L = geo.byId.get(id); toks.push({ key, label: 'Vein ' + id, type: 'color', inherit: (L && !L.major) ? 'minor' : 'major' }); toks.push(...adjTokens('id:' + id, 'Vein ' + id)); } }
+        if (id[0] === 'W') { toks.push({ key, label: TR('lay.web') + id, type: 'color', inherit: 'web' }); toks.push(...adjTokens('id:' + id, 'Web ' + id)); }
+        else if (id[0] === 'S') { toks.push({ key, label: TR('lay.seam') + id, type: 'color', inherit: 'styl' }); toks.push(...adjTokens('id:' + id, 'Seam ' + id)); }
+        else { const L = geo.byId.get(id); toks.push({ key, label: TR('lay.vein') + id, type: 'color', inherit: (L && !L.major) ? 'minor' : 'major' }); toks.push(...adjTokens('id:' + id, 'Vein ' + id)); } }
     }
-    kit.registerTokenGroup({ id: 'selectedcolours', label: 'Selected', tokens: toks });
+    kit.registerTokenGroup({ id: 'selectedcolours', label: TR('lay.selected'), tokens: toks });
   }
   // Speck colour groups: split the micro layer into up to 5 colour groups (feldspar / quartz / mica …).
   // Each group is a token inheriting `micro`; a speck's group is stable (from its birth-position hash).
@@ -3045,14 +3474,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   function registerSpeckGroups() {
     if (!kit) return;
-    kit.registerTokenGroup({ id: 'speckgroups', label: 'Speck colours', tokens: groupTokens('micro:', G.speckGroups, G.speckSubs, 'Speck', 'micro') });
-    kit.registerTokenGroup({ id: 'drusygroups', label: 'Drusy colours', tokens: groupTokens('drusy:', G.drusyGroups, G.drusySubs, 'Drusy', 'drusy') });
+    kit.registerTokenGroup({ id: 'speckgroups', label: TR('lay.speck-colours'), tokens: groupTokens('micro:', G.speckGroups, G.speckSubs, 'Speck', 'micro') });
+    kit.registerTokenGroup({ id: 'drusygroups', label: TR('lay.drusy-colours'), tokens: groupTokens('drusy:', G.drusyGroups, G.drusySubs, 'Drusy', 'drusy') });
   }
   function tuneId(id, bucket) {
-    if (!kit) { hint('Colour editor unavailable.'); return; }
+    if (!kit) { hint(TR('hint.colour-editor-unavailable')); return; }
     perItem[id] = bucket; registerPerItem(); recolour();
     const p = document.getElementById('colour-panel'); if (p.hidden) document.getElementById('colour-toggle').click();
-    hint('Tuning vein ' + id + ' — see “Per-item” in the colour editor; it follows ' + bucket + ' until you change it.');
+    hint(TR('hint.tuning-vein-full', { id: id, bucket: bucket }));
     redraw(false);
   }
   function mountEditor() {                                 // (re)create the element so its inputs reflect COL after a load / family palette
@@ -3076,17 +3505,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         (!isGroundLayer(L)
             ? '<span class="mv"><button type="button" data-act="up" title="Move up — renders over the layer above"' + (canUp ? '' : ' disabled') + '>▲</button><button type="button" data-act="down" title="Move down — renders under the layer below"' + (canDown ? '' : ' disabled') + '>▼</button></span>'
             : '<span class="mv-sp"></span>')                  // base body + the 3 ground setters can't be reordered
-        + '<button type="button" class="sel" data-act="sel" aria-pressed="' + selected.has('lay:' + L.key) + '" title="Select — effects and the force tools act on the selected layers"></button>'
-        + '<button type="button" class="eye" data-act="eye" aria-pressed="' + L.on + '" title="Show or hide"></button>'
-        + '<span class="nm" data-act="active" title="Tap = make active · double-tap = rename"><span class="tag">' + tagOf[L.key] + '</span>' + L.label + '</span>'
-        + '<button type="button" class="solo" data-act="solo" aria-pressed="' + (soloLay === L.key) + '" title="Solo this layer">S</button>'
-        + '<button type="button" class="warp" data-act="warp" aria-pressed="' + (L.warp > 0) + '" title="W lit = this layer follows warp; dim = held still">W</button>'
+        + '<button type="button" class="sel" data-act="sel" aria-pressed="' + selected.has('lay:' + L.key) + '" title="' + TR('tip.select-effects-and-the-force-tools') + '"></button>'
+        + '<button type="button" class="eye" data-act="eye" aria-pressed="' + L.on + '" title="' + TR('tip.show-or-hide') + '"></button>'
+        + '<span class="nm" data-act="active" title="' + TR('tip.tap-make-active-double-tap-rename') + '"><span class="tag">' + tagOf[L.key] + '</span>' + L.label + '</span>'
+        + '<button type="button" class="solo" data-act="solo" aria-pressed="' + (soloLay === L.key) + '" title="' + TR('tip.solo-this-layer') + '">S</button>'
+        + '<button type="button" class="warp" data-act="warp" aria-pressed="' + (L.warp > 0) + '" title="' + TR('tip.w-lit-this-layer-follows-warp') + '">W</button>'
         + '<input type="range" min="0" max="1" step="0.01" value="' + L.op + '" data-act="op" aria-label="' + L.label + ' opacity">'
         + '<output>' + Math.round(L.op * 100) + '</output>'
         + (L.key.includes('#')
             ? '<button type="button" class="del" data-act="del" title="Delete this layer — and everything drawn into it">×</button>'
             : '<span class="del-sp"></span>');                // the five bucket defaults are permanent
-      row.querySelector('[data-act=sel]').addEventListener('click', e => { const sk = 'lay:' + L.key; if (selected.has(sk)) selected.delete(sk); else selected.add(sk); e.currentTarget.setAttribute('aria-pressed', selected.has(sk)); row.classList.toggle('sel-on', selected.has(sk)); registerSelectedColours(); if (ed) ed.values = { ...OVR }; hint(selected.size ? selected.size + ' selected — tools + effects act on them; their colours show in the editor.' : null); });
+      row.querySelector('[data-act=sel]').addEventListener('click', e => { const sk = 'lay:' + L.key; if (selected.has(sk)) selected.delete(sk); else selected.add(sk); e.currentTarget.setAttribute('aria-pressed', selected.has(sk)); row.classList.toggle('sel-on', selected.has(sk)); registerSelectedColours(); if (ed) ed.values = { ...OVR }; hint(selected.size ? TR('hint.n-selected-tools', { n: selected.size }) : null); });
       row.querySelector('[data-act=eye]').addEventListener('click', () => { L.on = !L.on; if (soloLay === L.key && !L.on) soloLay = null; relayer(); });
       { const up = row.querySelector('[data-act=up]'), dn = row.querySelector('[data-act=down]');
         if (up) up.addEventListener('click', () => moveLayer(L.key, +1));
@@ -3106,11 +3535,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const db = row.querySelector('[data-act=del]');
       if (db) db.addEventListener('click', () => {             // empty layer deletes at once; a non-empty one arms, and the second tap deletes (no bulk undo)
         const n = marks.filter(m => m.layer === L.key).length;
-        if (!n) { deleteLayer(L.key); hint('Deleted ' + L.label + '.'); return; }
-        if (db.dataset.armed) { clearTimeout(+db.dataset.t); const r = deleteLayer(L.key); hint('Deleted ' + L.label + ' and ' + r + ' mark' + (r > 1 ? 's' : '') + '.'); return; }
-        db.dataset.armed = '1'; db.classList.add('arm'); db.title = 'Tap × again to delete — no undo';
-        hint('Delete "' + L.label + '" and its ' + n + ' mark' + (n > 1 ? 's' : '') + '? Tap × again — this can\'t be undone.');
-        db.dataset.t = setTimeout(() => { db.dataset.armed = ''; db.classList.remove('arm'); db.title = 'Delete this layer — and everything drawn into it'; }, 3500);
+        if (!n) { deleteLayer(L.key); hint(TR('hint.deleted-layer', { name: L.label })); return; }
+        if (db.dataset.armed) { clearTimeout(+db.dataset.t); const r = deleteLayer(L.key); hint(TR('hint.deleted-layer-marks', { name: L.label, n: r })); return; }
+        db.dataset.armed = '1'; db.classList.add('arm'); db.title = TR('tip.tap-again-to-delete-no-undo');
+        hint(TR('hint.confirm-delete-layer', { name: L.label, n: n }));
+        db.dataset.t = setTimeout(() => { db.dataset.armed = ''; db.classList.remove('arm'); db.title = TR('tip.delete-this-layer-and-everything-drawn'); }, 3500);
       });
       layEl.appendChild(row);
     }
@@ -3119,18 +3548,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     layEl.appendChild(add);
     // apply to the selection: colour and warp bake onto the selected layers
     const sa = document.createElement('div'); sa.className = 'selact';
-    sa.innerHTML = '<span class="lbl">Selected ▸</span>'
-      + '<input type="color" data-act="selcol" title="Colour the selected layers" value="#8a8de0">'
-      + '<button type="button" data-act="uncol" title="Clear colour — back to the bucket">no colour</button>'
-      + '<button type="button" data-act="wfollow" title="Selected layers follow warp">warp</button>'
-      + '<button type="button" data-act="whold" title="Selected layers hold still">hold</button>'
-      + '<button type="button" data-act="hide" title="Hide — the renderer ignores it and it can\'t be clicked; recover it from the Hidden list">hide</button>'
-      + '<label class="lbl" title="Back light: how much light passes where these layers cover (0 opaque → 1 clear)">pass <input type="range" data-act="sltrans" min="0" max="1" step="0.02" style="width:64px;vertical-align:middle"></label>'
-      + '<label class="lbl" title="Back light: how much these layers scatter the light passing through">scatter <input type="range" data-act="slscat" min="0" max="1" step="0.02" style="width:64px;vertical-align:middle"></label>';
-    const applySel = (fn, rebuild) => { if (!selected.size) { hint('Select something first (the ▢ box on a row, or tap a vein with Tune).'); return; } for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) fn(L); } redraw(rebuild); };   // warp = layers only
+    sa.innerHTML = '<span class="lbl">' + TR('ui.selected') + '</span>'
+      + '<input type="color" data-act="selcol" title="' + TR('tip.colour-the-selected-layers') + '" value="#8a8de0">'
+      + '<button type="button" data-act="uncol" title="' + TR('tip.clear-colour-back-to-the-bucket') + '">' + TR('ui.no-colour') + '</button>'
+      + '<button type="button" data-act="wfollow" title="' + TR('tip.selected-layers-follow-warp') + '">' + TR('ui.warp') + '</button>'
+      + '<button type="button" data-act="whold" title="' + TR('tip.selected-layers-hold-still') + '">' + TR('ui.hold') + '</button>'
+      + '<button type="button" data-act="hide" title="' + TR('tip.hide-the-renderer-ignores-it-and') + '">' + TR('ui.hide') + '</button>'
+      + '<label class="lbl" title="' + TR('tip.back-light-how-much-light-passes') + '">' + TR('ui.pass') + '<input type="range" data-act="sltrans" min="0" max="1" step="0.02" style="width:64px;vertical-align:middle"></label>'
+      + '<label class="lbl" title="' + TR('tip.back-light-how-much-these-layers') + '">' + TR('ui.scatter') + '<input type="range" data-act="slscat" min="0" max="1" step="0.02" style="width:64px;vertical-align:middle"></label>';
+    const applySel = (fn, rebuild) => { if (!selected.size) { hint(TR('hint.select-something-first-the-box-on')); return; } for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) fn(L); } redraw(rebuild); };   // warp = layers only
     // colour bakes onto each selected key's flat token (OVR[key], key already 'lay:<layer>' or 'id:<vein>');
     // render reads them, the kit resolves them for the editor, ed.values re-syncs so an open editor won't clobber.
-    const colourSel = fn => { if (!selected.size) { hint('Select something first (the ▢ box on a row, or tap a vein with Tune).'); return; } for (const k of selected) fn(k); if (!uvMode) { recolour(); if (ed) ed.values = { ...OVR }; } saveLocal(); redraw(false); };   // in black light the swatch authors the UV palette
+    const colourSel = fn => { if (!selected.size) { hint(TR('hint.select-something-first-the-box-on')); return; } for (const k of selected) fn(k); if (!uvMode) { recolour(); if (ed) ed.values = { ...OVR }; } saveLocal(); redraw(false); };   // in black light the swatch authors the UV palette
     sa.querySelector('[data-act=selcol]').addEventListener('input', e => colourSel(k => {   // author the emission at the CURRENT light value (add or update that entry)
       if (!uvMode) { OVR[k] = e.target.value; return; }
       const arr = OVR_uv[k] || (OVR_uv[k] = []); const en = arr.find(x => Math.abs(x.v - lightSpectrum) <= SPX_TOL);
@@ -3149,19 +3578,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     sa.querySelector('[data-act=whold]').addEventListener('click', () => { applySel(L => L.warp = 0, true); syncLayerUI(); });
     const markOfKey = k => { const id = k.slice(3); if (id[0] === 'W' || id[0] === 'S') return +id.slice(1); const L = geo.byId.get(id); return L ? L.mark : null; };   // any artifact key → its mark
     sa.querySelector('[data-act=hide]').addEventListener('click', () => {   // 7th dimension: tag selected artifacts (by mark) "don't render"; layers just take the eye
-      if (!selected.size) { hint('Select something to hide first (a vein/web/seam with Tune, or a layer row).'); return; }
+      if (!selected.size) { hint(TR('hint.select-something-to-hide-first-a')); return; }
       for (const k of selected) { if (k.startsWith('id:')) { const m = markOfKey(k); if (m != null) hidden.add(m); } else if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) L.on = false; } }
       selected.clear(); registerSelectedColours(); buildLayerUI(); saveLocal(); redraw(false);
     });
     layEl.appendChild(sa);
     if (hidden.size) {                                     // the Hidden list — the only way back for an artifact you can no longer click
       const hp = document.createElement('div'); hp.className = 'hidden-panel';
-      hp.innerHTML = '<span class="lbl">Hidden · not rendered, not selectable</span>';
+      hp.innerHTML = '<span class="lbl">' + TR('ui.hidden-not-rendered-not-selectable') + '</span>';
       const nameOf = m => { const mk = marks.find(x => x.id === m), k = mk ? mk.kind : '?'; return ({ vein: 'Vein', branch: 'Minor vein', web: 'Web', styl: 'Seam' }[k] || (k[0].toUpperCase() + k.slice(1))) + ' #' + m; };
       for (const m of hidden) {
         const it = document.createElement('div'); it.className = 'hidden-item';
         it.innerHTML = '<span>' + nameOf(m) + '</span>';
-        const b = document.createElement('button'); b.type = 'button'; b.textContent = 'show'; b.title = 'Un-hide — render it again';
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = TR('ui.show'); b.title = TR('tip.un-hide-render-it-again');
         b.addEventListener('click', () => { hidden.delete(m); buildLayerUI(); saveLocal(); redraw(false); });
         it.appendChild(b); hp.appendChild(it);
       }
@@ -3174,27 +3603,27 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // to the selection). Pure author-side organisation — members keep their own tokens; deleting a folder frees nothing.
   function buildFolderUI() {
     const fp = document.createElement('div'); fp.className = 'hidden-panel';
-    fp.innerHTML = '<span class="lbl">Folders · spectrum workspaces</span>';
+    fp.innerHTML = '<span class="lbl">' + TR('ui.folders-spectrum-workspaces') + '</span>';
     folders.forEach((F, fi) => {
       const it = document.createElement('div'); it.className = 'hidden-item';
-      const nm = document.createElement('span'); nm.style.cursor = 'pointer'; nm.title = 'Double-tap to rename';
+      const nm = document.createElement('span'); nm.style.cursor = 'pointer'; nm.title = TR('tip.double-tap-to-rename');
       nm.textContent = F.name + ' · ' + (F.v === 0 ? 'daylight' : '@' + (+F.v).toFixed(2)) + ' · ' + F.members.length;
       nm.addEventListener('dblclick', () => { const inp = document.createElement('input'); inp.className = 'nm-edit'; inp.value = F.name; nm.replaceWith(inp); inp.focus(); inp.select(); const done = () => { const v = inp.value.trim(); if (v) F.name = v; buildLayerUI(); saveLocal(); }; inp.addEventListener('blur', done); inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); else if (e.key === 'Escape') buildLayerUI(); }); });
       const grp = document.createElement('span'); grp.className = 'grp';
-      const col = document.createElement('input'); col.type = 'color'; col.value = F.c; col.title = 'Emission colour for this folder'; col.style.cssText = 'width:26px;height:22px;padding:0;border:none;background:none';
+      const col = document.createElement('input'); col.type = 'color'; col.value = F.c; col.title = TR('tip.emission-colour-for-this-folder'); col.style.cssText = 'width:26px;height:22px;padding:0;border:none;background:none';
       col.addEventListener('input', () => { F.c = col.value; saveLocal(); });
-      const ent = document.createElement('button'); ent.type = 'button'; ent.textContent = 'enter'; ent.title = 'Set the light to this spectrum and select these layers (the editor filters to them)';
-      ent.addEventListener('click', () => { setSpectrum(F.v); selected.clear(); for (const k of F.members) if (layAt(k)) selected.add('lay:' + k); registerSelectedColours(); if (ed) ed.values = { ...OVR }; buildLayerUI(); redraw(false); hint('Entered "' + F.name + '" — light at ' + (F.v === 0 ? 'daylight' : F.v) + ', its layers selected.'); });
-      const tag = document.createElement('button'); tag.type = 'button'; tag.textContent = 'tag'; tag.title = 'Give every layer here this emission at this spectrum, at once';
-      tag.addEventListener('click', () => { for (const k of F.members) { const key = 'lay:' + k, arr = OVR_uv[key] || (OVR_uv[key] = []), en = arr.find(x => Math.abs(x.v - F.v) <= SPX_TOL); if (en) en.c = F.c; else arr.push({ v: F.v, c: F.c }); } saveLocal(); redraw(false); hint('Tagged ' + F.members.length + ' layers at ' + (F.v === 0 ? 'daylight' : F.v) + '.'); });
-      const del = document.createElement('button'); del.type = 'button'; del.textContent = '×'; del.title = 'Delete the folder (its layers keep their tokens)';
+      const ent = document.createElement('button'); ent.type = 'button'; ent.textContent = TR('ui.enter'); ent.title = TR('tip.set-the-light-to-this-spectrum');
+      ent.addEventListener('click', () => { setSpectrum(F.v); selected.clear(); for (const k of F.members) if (layAt(k)) selected.add('lay:' + k); registerSelectedColours(); if (ed) ed.values = { ...OVR }; buildLayerUI(); redraw(false); hint(TR('hint.entered-folder', { name: F.name, light: F.v === 0 ? TR('hint.daylight') : F.v })); });
+      const tag = document.createElement('button'); tag.type = 'button'; tag.textContent = TR('ui.tag'); tag.title = TR('tip.give-every-layer-here-this-emission');
+      tag.addEventListener('click', () => { for (const k of F.members) { const key = 'lay:' + k, arr = OVR_uv[key] || (OVR_uv[key] = []), en = arr.find(x => Math.abs(x.v - F.v) <= SPX_TOL); if (en) en.c = F.c; else arr.push({ v: F.v, c: F.c }); } saveLocal(); redraw(false); hint(TR('hint.tagged-layers', { n: F.members.length, light: F.v === 0 ? TR('hint.daylight') : F.v })); });
+      const del = document.createElement('button'); del.type = 'button'; del.textContent = '×'; del.title = TR('tip.delete-the-folder-its-layers-keep');
       del.addEventListener('click', () => { folders.splice(fi, 1); buildLayerUI(); saveLocal(); });
       grp.append(col, ent, tag, del); it.append(nm, grp); fp.appendChild(it);
     });
-    const addF = document.createElement('button'); addF.type = 'button'; addF.textContent = '+ folder from selected layers'; addF.style.cssText = 'font-size:12px; margin-top:2px; color:var(--dim)';
+    const addF = document.createElement('button'); addF.type = 'button'; addF.textContent = TR('ui.folder-from-selected-layers'); addF.style.cssText = 'font-size:12px; margin-top:2px; color:var(--dim)';
     addF.addEventListener('click', () => {
       const mem = [...selected].filter(k => k.startsWith('lay:')).map(k => k.slice(4));
-      if (!mem.length) { hint('Select the layers for the folder first (their ▢ boxes), then + folder.'); return; }
+      if (!mem.length) { hint(TR('hint.select-the-layers-for-the-folder')); return; }
       folders.push({ name: 'Folder ' + (folders.length + 1), v: lightSpectrum, c: '#33ff88', members: mem });
       buildLayerUI(); saveLocal();
     });
@@ -3237,7 +3666,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     uvMode = false; lightSpectrum = 0; spotOn = false;                       // a loaded slab opens in daylight, light off
     { const ub = document.getElementById('uv-toggle'); if (ub) ub.setAttribute('aria-pressed', 'false');
       const so = document.getElementById('spot-toggle'); if (so) so.setAttribute('aria-pressed', 'false');
-      const sp = document.getElementById('lightSpectrum'); if (sp) { sp.value = 0; document.getElementById('lightSpectrumV').textContent = 'daylight'; } }
+      const sp = document.getElementById('lightSpectrum'); if (sp) { sp.value = 0; document.getElementById('lightSpectrumV').textContent = TR('ui.daylight'); } }
     const reset = (dst, def, src) => { for (const k in dst) delete dst[k]; Object.assign(dst, JSON.parse(JSON.stringify(def))); if (src) Object.assign(dst, JSON.parse(JSON.stringify(src))); };
     reset(G, G0, o.G); reset(T, T0, o.T); reset(NEXT, NEXT0, o.NEXT);   // HARD reset to defaults, THEN apply the slab — a load never inherits the previous slab's non-saved keys
     cloudSig = bandSig = brecSig = ''; last = null;                     // invalidate the render caches so nothing survives a load
@@ -3424,14 +3853,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   let exporting = false;
   async function exportAll(W) {
-    if (exporting) return; exporting = true; hint('Exporting… rendering ' + W + 'px…');
+    if (exporting) return; exporting = true; hint(TR('hint.exporting-render', { w: W }));
     try {
       const te = new TextEncoder(), oW = Math.min(W, 2048), oOrder = ['base', 'web', 'micro', 'minor', 'major'];
       const idt = expIdT(W);
       const canv = [expCompleted(W), expBaseMask(W), expCoverage('major', W), expCoverage('minor', W), expCoverage('micro', W), expCoverage('web', W), idt.ids, idt.t,
                     expCompleted(oW), ...oOrder.map(b => expBucket(b, oW))];   // render everything first (fast, GPU)
       const names = ['render.png', 'masks/base.png', 'masks/major.png', 'masks/minor.png', 'masks/micro.png', 'masks/web.png', 'rich/vein-ids.png', 'rich/vein-t.png'];
-      hint('Exporting… encoding ' + canv.length + ' images in parallel…');
+      hint(TR('hint.exporting-encode', { n: canv.length }));
       const bytes = await encodePNGs(canv);                          // the slow part, parallelised across cores + off the main thread
       const files = [];
       for (let i = 0; i < names.length; i++) files.push({ name: names[i], data: bytes[i] });
@@ -3444,8 +3873,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const dl = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
       if (dl) await dl.save({ filename: 'stone-export.zip', data: zip });
       else download('stone-export.zip', zip);
-      hint('Exported ' + files.length + ' files.');
-    } catch (e) { hint('Export failed: ' + (e && e.message || e)); }
+      hint(TR('hint.exported-files', { n: files.length }));
+    } catch (e) { hint(TR('hint.export-failed-msg', { err: (e && e.message || e) })); }
     exporting = false;
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
@@ -3458,8 +3887,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
   for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
   for (const b of document.querySelectorAll('[data-var]')) b.addEventListener('click', () => { NEXT.variant = b.dataset.var; press('[data-var]', b); });   // variant applies to the NEXT line
-  for (const b of document.querySelectorAll('[data-mwin]')) b.addEventListener('click', () => { NEXT.maskWin = +b.dataset.mwin; press('[data-mwin]', b); hint(NEXT.maskWin ? 'Show through on: the next island renders the slab again at its Window spectrum and feathers it in through the disc — 0 is daylight, so under a UV/psyker light that reads as a window of normal stone. Paint an island (drag to size it).' : 'Show through off: the next island only shapes the warp, no show-through.'); });
-  for (const b of document.querySelectorAll('[data-minv]')) b.addEventListener('click', () => { NEXT.maskInvert = +b.dataset.minv; press('[data-minv]', b); redraw(false); hint(NEXT.maskInvert ? 'Window into chaos: the next island INVERTS the mask — once one exists the warp acts only inside these discs and the rest of the slab holds still. A Protects island dropped inside one is a calm eye in the storm.' : 'Protects: the next island freezes the warp inside it, the rest of the slab warps as set.'); });
+  for (const b of document.querySelectorAll('[data-mwin]')) b.addEventListener('click', () => { NEXT.maskWin = +b.dataset.mwin; press('[data-mwin]', b); hint(NEXT.maskWin ? TR('hint.show-through-on-the-next-island') : TR('hint.show-through-off-the-next-island')); });
+  for (const b of document.querySelectorAll('[data-minv]')) b.addEventListener('click', () => { NEXT.maskInvert = +b.dataset.minv; press('[data-minv]', b); redraw(false); hint(NEXT.maskInvert ? TR('hint.window-into-chaos-the-next-island') : TR('hint.protects-the-next-island-freezes-the')); });
   for (const b of document.querySelectorAll('[data-lens]')) b.addEventListener('click', () => { G.lensType = b.dataset.lens; press('[data-lens]', b); redraw(true); });   // lens profile — whole slab, at once
   document.getElementById('colour-toggle').addEventListener('click', () => { const p = document.getElementById('colour-panel'), b = document.getElementById('colour-toggle'), show = p.hidden; p.hidden = !show; b.setAttribute('aria-pressed', show); b.textContent = show ? 'Hide colour editor' : 'Show colour editor'; });
   document.getElementById('colour-fromfam').addEventListener('click', () => { seedColours(fam); recolour(); mountEditor(); redraw(true); });   // adopt the current family's palette
@@ -3467,7 +3896,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const mh = document.getElementById('m-hover');
   mh.addEventListener('click', () => {
     hoverMag = !hoverMag; mh.setAttribute('aria-pressed', hoverMag); if (!hoverMag) commitHover();
-    hint(hoverMag ? 'Hover traces on: move the pen or mouse just above the slab to work lightly; each pause keeps the trace.' : null);
+    hint(hoverMag ? TR('hint.hover-traces-on-move-the-pen') : null);
   });
   const gb = document.getElementById('guides');
   gb.addEventListener('click', () => { guidesOn = !guidesOn; gb.setAttribute('aria-pressed', guidesOn); redraw(false); });
@@ -3483,7 +3912,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   { const gs = document.getElementById('gspecks'), gz = document.getElementById('gsize');
     gs.addEventListener('input', () => { const L = layAt(activeLayer.micro); if (L) { L.density = +gs.value; document.getElementById('gspecksV').textContent = (+gs.value).toFixed(2) + '×'; redraw(true); } });
     gz.addEventListener('input', () => { const L = layAt(activeLayer.micro); if (L) { L.size = +gz.value; document.getElementById('gsizeV').textContent = (+gz.value).toFixed(2) + '×'; redraw(true); } });
-    document.getElementById('granite-reseed').addEventListener('click', () => { const L = layAt(activeLayer.micro); if (L) { L.seed = (Math.random() * 2147483647) | 0; redraw(true); hint('Reseeded ' + L.label + ' — new scatter, same density and size.'); } }); }
+    document.getElementById('granite-reseed').addEventListener('click', () => { const L = layAt(activeLayer.micro); if (L) { L.seed = (Math.random() * 2147483647) | 0; redraw(true); hint(TR('hint.reseeded-layer', { name: L.label })); } }); }
   // Fog haze/size/density act on the ACTIVE fog plane (each plane has its own), like granite.
   { const fh = document.getElementById('fogHaze'), fz = document.getElementById('fogSize'), fd = document.getElementById('fogDensity'), af = () => layAt(activeLayer.fog);
     if (fh) fh.addEventListener('input', () => { const L = af(); if (L) { L.haze = +fh.value; document.getElementById('fogHazeV').textContent = Math.round(L.haze * 100) + '%'; redraw(true); } });
@@ -3498,13 +3927,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   document.getElementById('uv-toggle').addEventListener('click', () => {   // Black light = jump the light to the UV end (−1), or back to daylight
     setSpectrum(lightSpectrum !== 0 ? 0 : -1);
-    hint(uvMode ? 'Black light (spectrum −1). Only artifacts whose emission activates near the light value glow; the rest goes dark. Author with the Selected swatch; sweep the Spectrum slider to reach other sets.' : null);
+    hint(uvMode ? TR('hint.black-light-spectrum-1-only-artifacts') : null);
     saveLocal(); redraw(false);
   });
   { const sp = document.getElementById('lightSpectrum');   // the continuous spectrum dial: sweep it and different sets light up
     if (sp) sp.addEventListener('input', () => { setSpectrum(+sp.value); saveLocal(); redraw(false); }); }
   { const so = document.getElementById('spot-toggle');     // SPOTLIGHT: the light becomes a movable beam (drag it with the Light tool)
-    if (so) so.addEventListener('click', () => { spotOn = !spotOn; so.setAttribute('aria-pressed', spotOn); hint(spotOn ? 'Spotlight on: only artifacts inside the beam (and at its spectrum value) glow. Drag it with the Light tool; Beam sets its size.' : null); saveLocal(); redraw(false); }); }
+    if (so) so.addEventListener('click', () => { spotOn = !spotOn; so.setAttribute('aria-pressed', spotOn); hint(spotOn ? TR('hint.spotlight-on-only-artifacts-inside-the') : null); saveLocal(); redraw(false); }); }
   for (const id of Object.keys(NEXT)) {
     const el = document.getElementById(id);
     if (!el) continue;
@@ -3512,15 +3941,27 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     el.value = NEXT[id]; show();
     el.addEventListener('input', () => { NEXT[id] = +el.value; show(); });   // the next line only
   }
+  { const sel = document.getElementById('lang');   // LANGUAGE: the list builds itself from the registered packs,
+    const fill = () => {                           // so adding one never means touching this block
+      sel.textContent = '';
+      for (const l of SA_I18N.languages) { const o = document.createElement('option'); o.value = l; o.textContent = SA_I18N.nameOf(l); sel.appendChild(o); }
+      sel.value = SA_I18N.lang;
+    };
+    fill();
+    sel.addEventListener('change', () => SA_I18N.setLang(sel.value));
+    // The panels the studio GENERATES (layers, folders, the colour editor) hold no markup to re-label,
+    // so they are rebuilt rather than patched.
+    SA_I18N.onChange(() => { fill(); buildLayerUI(); syncUI(); });
+  }
   const pp = document.getElementById('pen-pressure');
   pp.addEventListener('click', () => {
     NEXT.pressure = !NEXT.pressure; pp.setAttribute('aria-pressed', NEXT.pressure);
-    hint(NEXT.pressure ? 'Pressure is on for your next lines: press harder for a heavier vein or more paint, lighter to thin it out.' : null);
+    hint(NEXT.pressure ? TR('hint.pressure-is-on-for-your-next') : null);
   });
   const pt = document.getElementById('pen-tilt');
   pt.addEventListener('click', () => {
     NEXT.tilt = !NEXT.tilt; pt.setAttribute('aria-pressed', NEXT.tilt);
-    hint(NEXT.tilt ? 'Tilt is on for your next veins: hold the pen as you normally do for a crisp edge, lean it further over to soften and spread it.' : null);
+    hint(NEXT.tilt ? TR('hint.tilt-is-on-for-your-next') : null);
   });
   const penlive = document.getElementById('penlive');
   cv.addEventListener('pointermove', e => {                     // hover included: a live check that tilt is real
@@ -3555,12 +3996,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const text = JSON.stringify(serialize());
     let dl = null; try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (_) { /* no runtime */ }
     if (dl) {                                            // published artifact: the granted download flow
-      try { await dl.save({ filename: 'stone.json', data: text }); hint('Saved stone.json.'); }
-      catch (e) { hint(e && e.code === 'declined' ? 'Save cancelled.' : 'Save is unavailable here; this device remembers your work automatically.'); }
+      try { await dl.save({ filename: 'stone.json', data: text }); hint(TR('hint.saved-stone-json')); }
+      catch (e) { hint(e && e.code === TR('hint.declined') ? TR('hint.save-cancelled') : TR('hint.save-is-unavailable-here-this-device')); }
     } else if (download('stone.json', text)) {           // local file: an ordinary download
-      hint('Saved stone.json. This device also remembers your work automatically.');
+      hint(TR('hint.saved-stone-json-this-device-also'));
     } else {
-      hint('This device remembers your work automatically; a file download is blocked here.');
+      hint(TR('hint.this-device-remembers-your-work-automatically'));
     }
   });
   document.getElementById('export').addEventListener('click', () => exportAll(+document.getElementById('expres').value));
@@ -3568,7 +4009,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   document.getElementById('loadfile').addEventListener('change', e => {
     const f = e.target.files[0]; if (!f) return;
     const r = new FileReader();
-    r.onload = () => { try { if (!deserialize(JSON.parse(r.result))) hint('That file is not a stone source.'); else hint('Loaded.'); } catch (_) { hint('Could not read that file.'); } };
+    r.onload = () => { try { if (!deserialize(JSON.parse(r.result))) hint(TR('hint.that-file-is-not-a-stone')); else hint(TR('hint.loaded')); } catch (_) { hint(TR('hint.could-not-read-that-file')); } };
     r.readAsText(f); e.target.value = '';
   });
   document.getElementById('zin').addEventListener('click', () => zoomAt(Wc / 2, Hc / 2, 1.5));
