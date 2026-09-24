@@ -64,6 +64,7 @@ Character only (structure + preview colours). Fields:
 | Tune | — | no mark; tap an artifact to toggle it into `selected` (`id:` keys). |
 | Cloud | — | drag pans `G.cloudX/Y` (cloud + warp field origin). |
 | Moon | `moon` → `applyMoon` | drag a ball; forward-warps geometry into its wake. Applied in `warpGeo`, not baked. |
+| Mask | `mask` → `gatherMasks`/`warpMaskAt` | tap or drag a **protected island** the warp holds still (an island of normalcy). With the reality-window toggle on, the island also **shows daylight through** it (baked into the live view and every export). `p:{maskFeather, maskWin}`. |
 | Light | — | drag sets `G.lightX/Y/lightAngle` (shared light + spotlight beam). |
 | Move | — | pan the viewport. Two-finger pinch always zooms. |
 
@@ -98,6 +99,8 @@ Snapshot onto every mark as `p: {...NEXT}`. Defaults / range / effect:
 | `mstrength`/`mreach`/`mheight` | 0.6/1/1 | 0.1–1.5 / 0.3–3 / 0.3–3 | magnet intensity / radius / fan sharpness |
 | `moonReach` | 1 | 0.3–3 | moon ball radius |
 | `moonStrength` | 1 | 0.2–3 | moon drag multiplier — **unclamped in `applyMoon`** (a Save/Load can exceed the slider) |
+| `maskFeather` | 0.06 | — | Mask disc edge softness (feathered `r`→`r+feather`) |
+| `maskWin` | 0 | 0/1 | reality window off / on (`FMT`: `off` / `daylight`) — on = the island shows daylight through |
 
 **Variants:** `natural` (plain); `sinuous` (low-freq wobble, `varAmt`); `dendritic` (×2.2 minors, each throws sub-branches); `echelon` (route diced into 3–6 offset segments — **returns before spawning any family minors**, so `branches` is a no-op); `boudinage` (rhythmic width pinch/swell, orthogonal per-mark); `halo` (wide soft low-alpha shoulder, `L.gauge*6*F.soft`).
 
@@ -114,14 +117,15 @@ Snapshot onto every mark as `p: {...NEXT}`. Defaults / range / effect:
 - **`buildDrusy`** — index-deterministic crystal pockets (density only appends).
 - **`buildBreccia` / `buildClouds` / `buildBands` / `buildFog`** — base-bucket canvas modulators (Voronoi clasts / fBm mottle / directional bands / uniform haze). Clouds double as the **warp field**.
 - **`warpGeo` + `applyMoon`** — global cloud-fBm domain warp (`G.warp`, per-generation `warpDepth`) + local moon drag; anchor pass re-pins roots (bond `1/(1+d)²` — trunk planted, deep tips loose).
+- **`gatherMasks` + `warpMaskAt`** — **protected islands**: a feathered disc where `warpMaskAt` returns a 0→1 multiplier (0 inside `r`, smoothstepping to 1 across `feather`), and **both** warps (global field *and* every moon) scale their per-point displacement by it — so a region holds normal while the rest distorts. Discs come from `G.warpMask` (programmatic / legacy) **and** every Mask mark; the anchor pass is deliberately *not* masked (freezes the field warp, not the root bond).
 
 ## 6. Slab settings — `G` (~L487)
 
 Full table with defaults/ranges is in [`final-render.md`] and the source; key groups:
 
 - **Coat/light:** `subsurface` (0–2), `specular` (0–1), `lightAngle` (±180), `lightTemp` (±1), `lightX/lightY` (Light-tool only), `spotR` (0.05–0.6), `backlight` (0–2), `lens` (0–1), `lensPitch` (2–40), `lensType` (fresnel/reeded/water).
-- **Body:** `cloudStrength`/`cloudScale`/`cloudX`/`cloudY`, `warp`/`warpDepth`, `bandStrength`/`bandFreq`/`bandAngle`/`bandWave`, `brecStrength`/`brecClasts`/`brecSeam`, `drusyDensity`/`drusySize`/`drusyBright`/`drusyGroups`/`drusySubs`, `fogHaze`(0–0.06)/`fogSize`/`fogDensity`, `speckGroups`/`speckSubs`.
-- Granite `gspecks`/`gsize`/reseed are **not** `G` — they write the active micro layer's `density/size/seed`.
+- **Body:** `cloudStrength`/`cloudScale`/`cloudX`/`cloudY`, `warp`/`warpDepth`, `warpMask` (the programmatic protected-island list, `[]` by default), `bandStrength`/`bandFreq`/`bandAngle`/`bandWave`, `brecStrength`/`brecClasts`/`brecSeam`, `drusyDensity`/`drusySize`/`drusyBright`/`drusyGroups`/`drusySubs`, `speckGroups`/`speckSubs`.
+- Granite `gspecks`/`gsize`/reseed **and** the fog `fogHaze`(0–0.06)/`fogSize`/`fogDensity` are **not** `G` — they write the active micro / fog **plane** (`density`/`size`/`seed`, `haze`/`size`/`density`). Old saves that stored them on `G` migrate onto the plane on load, then the `G` keys are deleted.
 
 ## 7. Colour / tokens / adjustment set
 
@@ -131,7 +135,7 @@ Full table with defaults/ranges is in [`final-render.md`] and the source; key gr
 
 ## 8. Coat / lighting / spectrum / back light / lens
 
-Order in `draw()`: ground → (backlit **xor** daylight content) → uv bloom → subsurface → specular → **lens (always last)** → guides.
+Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat` (uv bloom → subsurface → specular → **lens, the last coat pass**) → **reality windows** (`applyWindowsScreen`) → guides. `applyCoat` is shared with `renderFull`, so exports run the same coat.
 
 - **Subsurface** — feature high-pass, warm-tinted (`#ffcf8f`), added `lighter`; >1 adds passes.
 - **Specular** — radial `screen` hotspot toward `lightAngle` + masked feature glint, tinted `lightRGB()`.
@@ -139,6 +143,7 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → uv bloom �
 - **Spectrum engine** — `lightSpectrum` scalar; `emit(id,layer,x,y)` returns `c` when `|lightSpectrum−v| ≤ SPX_TOL` (0.12) and (if `spotOn`) inside `spotR`; else `UV_DARK`. `beamPts` gates whole strokes. Black light = preset −1. Folders = spectrum workspaces.
 - **Back light** (`paintBacklit`) — per-layer optical fold: base bucket = glowing body; each layer occludes toward its `transmit` and diffuses by its `scatter` (blur of the **whole** accumulator); emission composed through; scatter/bloom. Defaults `BL_T` (veins .05 … matrix 1).
 - **Lens** — ideal glass relief (fresnel/reeded/water), per-pixel refraction at ≤640px, brighten-only caustic; runs on `cv` **after** everything (incl. back light).
+- **Reality window** — a Mask island with its window on shows a *different light through* its disc: `renderSlabTo` re-renders the whole slab at the island's `show` spectrum (daylight for a tool mask; any spectrum for a `G.warpMask` entry), `compositeWindow` feathers that alt render in through the disc, and `applyWindows` / `applyWindowsScreen` run it onto every finished render — the live view **and** every export (end of `renderFull` / `renderTiled` / `renderTiledParallel`). So *daylight through a UV/psyker view* is authored in the tool, not hand-composited after.
 
 ## 9. Layers / selection / hide / folders
 
@@ -150,9 +155,10 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → uv bloom �
 ## 10. Export / serialize
 
 - **`exportAll(W)`** → one store-zip: `render.png` (`expCompleted`), `masks/{base,major,minor,micro,web}.png`, `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, `slab.ora` (capped `min(W,2048)`).
-- **✓ Gap fixed:** `expCompleted` now delegates to `renderFull(W)`, so `render.png` (and the `.ora` merged image) bake the full pipeline — coat tier, back light, lens. The coverage masks stay geometry-only by design.
-- **`serialize()`** persists: `v, fam, tool, view, layTiles, guidesOn, G, T, NEXT, nextId, layers[{key,label,bucket,on,op,warp,field,density,size,seed,transmit,scatter}], soloLay, activeLayer, OVR, OVR_uv, perItem, hidden[], folders[], marks[]`. Not persisted: `selected`, `COL` (derived), `uvMode/lightSpectrum/spotOn` (reset on load), `layerSeq` (rederived).
-- **`deserialize`** migrations: retired family→carrara, retired tool→vein, drop `knot` marks, `gspecks/gsize`→micro layer, `COL`→`OVR`, `OVR_uv` normalized to lists, folder defaults, always opens in daylight.
+- **✓ Gap fixed:** `expCompleted` now delegates to `renderTiled(W)` (which is verified pixel-equal to `renderFull` but tiled so a huge export stays memory-bounded; back light falls back to `renderFull`), so `render.png` (and the `.ora` merged image) bake the full pipeline — coat tier, back light, lens. The coverage masks stay geometry-only by design.
+- **`serialize()`** persists: `v(=1), fam, tool, view, layTiles, guidesOn, G, T, NEXT, nextId, layers[{key,label,bucket,on,op,warp,field,density,size,seed,haze,transmit,scatter}], soloLay, activeLayer, OVR, OVR_uv, perItem, hidden[], folders[], marks[]`. Not persisted: `selected`, `COL` (derived), `uvMode/lightSpectrum/spotOn` (reset on load), `layerSeq` (rederived).
+- **`deserialize` — deterministic load.** A load is a **pure function of the slab**: it hard-resets `G`/`T`/`NEXT` to the captured pristine defaults `G0`/`T0`/`NEXT0` **before** applying the saved values (a key absent from the save falls to its default, never a leftover from a previous slab or a dirtied session), and **invalidates the render caches** — cloud/band/breccia signatures + the incremental-build cache (`last = null`). The harness renders each hero twice from a fresh `deserialize` to gate on exactly this (see [`gallery.md`](gallery.md)).
+- **`deserialize` migrations:** retired family→carrara, retired tool→vein, drop `knot` marks, `gspecks/gsize`→micro plane, `fogHaze/fogSize/fogDensity`→fog plane, `COL`→`OVR`, `OVR_uv` normalized to lists (`v54` plain colour → `[{v:-1,c}]`, `v55` single `{v,c}` → `[it]`), folder defaults, always opens in daylight.
 
 ## 11. Pathological probes
 

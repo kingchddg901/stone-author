@@ -56,7 +56,8 @@ path that taking one small want seriously actually produced.
 ### `app/` — the authoring tools (self-contained HTML, open in any browser)
 - **`stone-author.html`** — the main tool. Draw where the lines go; the family (Carrara,
   Calacatta, Nero Marquina, Granite) decides what they are. Tools: Vein, Branch, Web,
-  Pour, Gravity, Magnet, Chip, Tune, Cloud, Moon, Move. Pen pressure and tilt (opt-in). **Lay tiles**
+  Stylolite, Pour, Gravity, Magnet, Chip, Tune, Cloud, Moon, Mask (protected islands / reality
+  windows), Light, Move. Pen pressure and tilt (opt-in). **Lay tiles**
   cuts the authored slab into a repeating pattern on a floor — 15 patterns (square, rectangle,
   subway, hexagon, Cairo, diagonal, herringbone, basketweave, triangle, rhombus, octagon,
   penny, fish scale, arabesque lantern, French/Versailles), with grout, kerf, edge finish,
@@ -73,6 +74,19 @@ path that taking one small want seriously actually produced.
 
 Each app is one file with everything inline. No build step; no server needed to open one.
 
+### `gallery/` — the public showcase
+A static page (`index.html`, no build) — **"African St Laurent, Warped"**: one authored marble idea
+shown three ways (pristine → subtly wrong → screaming). Three heroes (`img/*.png`) from two slabs
+(`slabs/before.json`, `slabs/warped.json`); `reference.json` is the render recipe + reference hashes.
+CC0. See [`docs/gallery.md`](docs/gallery.md).
+
+### `harness/` — the determinism harness
+A Playwright harness that renders each gallery hero from its slab under headless Chromium and gates on
+**self-determinism** (byte-identical twice from a fresh load). `inject.mjs` adds a render hook to a
+throwaway copy of the app (the shipped file stays clean); `render.mjs` runs the gate (`--write`
+regenerates the gallery PNGs); `.github/workflows/gallery.yml` runs it in CI. See
+[`docs/gallery.md`](docs/gallery.md).
+
 ### `tools/` — the Python pipeline
 - **`stone_generate.py`** — generate stone as independent layers (L1 layering, L2 fractures,
   L3 crystals, L4 pour). `python tools/stone_generate.py --self-test`. Its output masks are
@@ -87,10 +101,16 @@ Each app is one file with everything inline. No build step; no server needed to 
   the panel generator (ES modules need a server: `python tools/serve-studio.py`).
 
 ### `docs/`
-- **`architecture.md`** — what the whole system is, how the parts fit, and how it came to be
-  (the origin story). Start here.
+- **`architecture.md`** — what the whole system is and how the parts fit (the *code* documentation;
+  the origin story is this README). Start here.
+- **`functions.md`** — the function reference for `app/stone-author.html`, grouped by subsystem.
+- **`capabilities.md`** — the verified inventory of what an authored slab can use (tools, settings,
+  coat/spectrum/back-light/lens, layers, export), from a four-way code read.
+- **`final-render.md`** — the offline render pipeline (`renderFull`/`renderTiled`, workers, encoders)
+  and roadmap, plus the CPU/GPU split.
 - **`colour-layer.md`** — the colour engine: character vs colour, the vendored token-theme-kit as
-  editor + resolver, the canvas colour menu, the per-id plan.
+  editor + resolver, the adjustment set, the per-id / speck-group colour, the canvas colour menu.
+- **`gallery.md`** — the gallery showcase, the render recipe, and the determinism harness/CI.
 - **`stone-generator.md`** — every rule in the Python/panel generator, each traced to a measurement
   or a defect. Read before changing that generator.
 
@@ -119,16 +139,29 @@ be committed. The harvested corpus stays local.
 ## Status
 
 Extracted from `ha-dashboard-builder` (2026). The authoring app has, so far: save-the-source +
-autosave, first-class layer control (many layers per bucket), the marble primitives batch, per-line
-vein variants, the export step, and a colour layer via the vendored token-theme-kit — per-layer *and*
-per-artifact colour, selected by clicking, with a full render-time **adjustment set** (blur · hue ·
-saturation · brightness · contrast · weight) that resolves artifact → layer → bucket. Granite is now
-**field-per-layer**: every **+ Granite layer** is its own speck field with its own density, size, seed,
-colour and adjustments — the "Pollock engine". **Stone Author is now stone-only**: the early Wood family
-and Knot tool were removed once the stone system outgrew them — wood (author a tree by its rings, then
-"mill" boards as geometry) and metal are envisioned as their own future systems that reuse this producer/
-consumer spine. Next up is the **coat tier** (specular polish, subsurface, tile-edge light) and a WebGPU
-render pipeline — see the roadmap in [`docs/architecture.md`](docs/architecture.md).
+autosave, first-class layer control (many layers per bucket, reorderable stack), the marble primitives
+batch (clouds, banding, breccia, drusy, stylolites, **fog / resin core**), per-line vein variants, the
+export step (one zip: masks + rich id/t maps + `.ora` + SVG + source), and a colour layer via the
+vendored token-theme-kit — per-layer *and* per-artifact colour, selected by clicking, with a full
+render-time **adjustment set** (blur · hue · saturation · brightness · contrast · weight) that resolves
+artifact → layer → bucket. Granite is **field-per-layer**: every **+ Granite layer** is its own speck
+field with its own density, size, seed, colour and adjustments — the "Pollock engine".
+
+Since then it has grown a **coat tier** (subsurface glow, specular top-coat + feature glint, one movable
+light with warm↔cool temperature, tile-edge relight); a condition-agnostic **spectrum engine**
+(`lightSpectrum` + per-artifact emission colours — black light, reactive spotlight, any spectrum); a
+**layer-aware back light** (each layer declares its transmittance + scatter); a **lens top-coat** (ideal
+glass relief — fresnel / reeded / water — as real per-pixel refraction); **warp** (a global cloud-driven
+field, the local **moon** brush, **protected-island masks**, and **reality windows** that show daylight
+through under another light); and a **deterministic load** (`deserialize` is a pure function of the slab).
+The offline render bakes the whole pipeline (`renderFull` / tiled), and a **gallery** + Playwright
+**determinism harness** ([`docs/gallery.md`](docs/gallery.md)) show it off and gate it in CI.
+
+**Stone Author is stone-only**: the early Wood family and Knot tool were removed once the stone system
+outgrew them — wood (author a tree by its rings, then "mill" boards as geometry) and metal are envisioned
+as their own future systems that reuse this producer/consumer spine. Next up is a **WebGPU render
+pipeline** and **layered PSD/PSB export** (one file-layer per authoring layer) — see the roadmap in
+[`docs/architecture.md`](docs/architecture.md) and [`docs/final-render.md`](docs/final-render.md).
 
 **Licence.** `token-theme-kit` is MIT (© 2026 Chris King); its notice ships with the vendored copy.
 `stone-author`'s own licence is **TBD** — not yet chosen, so treat it as all-rights-reserved until

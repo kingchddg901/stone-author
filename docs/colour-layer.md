@@ -1,6 +1,7 @@
 # The colour layer
 
-How Stone Author colours a slab. Written after step 4 (artifact **v22**).
+How Stone Author colours a slab. Written at the colour layer's first cut (artifact **v22**) and kept
+current since (see Status, below).
 
 ## The split: character vs colour
 
@@ -58,13 +59,20 @@ Per render layer:
 Effects are wired for the structural layers (`major, minor, web, micro, styl, drusy`) via
 `fxOn`/`fxOff` around each paint, and skipped in the identity/angle views.
 
-## The canvas colour menu (for later)
+## The canvas colour menu
 
-Canvas gives essentially the CSS palette as per-layer state, plus pixel-level control. Not yet
-exposed, cheap to add: **gradients** (linear/radial/conic fills), **filters**
-(`ctx.filter`: blur / brightness / contrast / saturate / hue-rotate), and blend/glow on the
-base-bucket layers. Each maps to a kit control type. The one thing canvas loses from CSS is the
-cascade — replaced by the token **resolver**.
+Canvas gives essentially the CSS palette as per-layer state, plus pixel-level control.
+
+**Filters shipped — the adjustment set.** `ctx.filter` (blur / hue-rotate / saturate / brightness /
+contrast) is now a live, per-target **adjustment set**: `blur` 0–8, `hue` ±180, `sat`/`bright`/`contrast`
+0–2, plus a `weight` line-width multiplier 0–2, each a `<key>:<name>` number token that resolves up the
+granularity **artifact → layer → bucket → default** (`adjOf`) and composes into one `ctx.filter` string
+(`filterOf`). So the same set tunes a whole layer or a single vein, and a vein stores only what it
+overrides. See [`architecture.md`](architecture.md) and [`capabilities.md`](capabilities.md#7-colour--tokens--adjustment-set).
+
+Still cheap to add: **gradients** (linear/radial/conic fills) and blend/glow on the base-bucket layers.
+Each maps to a kit control type. The one thing canvas loses from CSS is the cascade — replaced by the
+token **resolver**.
 
 ## Per-id colour (done)
 
@@ -93,6 +101,10 @@ purpose, so that is additive.
 
 ## Status
 
-Steps 1–4 done: save/load source · layer control · primitives + vein variants · colour layer
-(colour + blend + glow). Artifact **v22**. The base compositing stack is
-`base → breccia → clouds → bands → web → micro → drusy → styl → minor → major`.
+The colour layer (colour + blend + glow via the vendored kit) shipped at artifact **v22**; since then
+colour gained **per-id** overrides (Tune), **speck / drusy colour groups**, the **adjustment set**
+(filters + weight, above), and — as a further colour dimension — **spectrum emission** (`OVR_uv`, a list of
+`{v,c}` per artifact). The base compositing stack now carries **fog**:
+`base → breccia → clouds → bands → fog → web → micro → drusy → styl → minor → major` (the canonical
+`DEFAULT_LAYER_ORDER`; render order is the live `layers[]` order, so kinds can interleave — see
+[`architecture.md`](architecture.md#render-layers-vs-consumer-buckets)).

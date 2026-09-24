@@ -45,7 +45,8 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
 - **Tools** — Vein, Branch, **Stylolite**, Web, Pour, Gravity, Magnet, Chip, **Tune** (tap a
   vein to colour just that one), **Cloud** (drag to move the cloud/warp field), **Moon** (drag a local
   warp brush across the slab), **Mask** (tap/drag a protected island the warp holds still — optionally a
-  reality window that shows daylight through), Move.
+  reality window that shows daylight through), **Light** (drag to aim the one shared light / spotlight beam),
+  Move.
 - **Slab primitives** (per family, seeded, greyscale) — **clouds/mottling**, **banding**,
   **breccia clasts**, **drusy sparkle**, and a **fog / resin core** (a flat, untinted grayscale haze of
   sparse soft particles, rendered deep under the veins to read as sub-surface depth — the milky
@@ -76,9 +77,27 @@ photograph), `stone_harvest.py` (rip a corpus), and measurement/verification hel
 generator's every rule is traced to a measurement or a defect in `stone-generator.md` — read it
 before changing the generator.
 
+### `gallery/` — the public showcase
+
+`index.html` is a static showcase page (no build) — **"African St Laurent, Warped"**, one authored
+marble idea shown three ways (pristine → subtly wrong → screaming). Three *heroes* (`img/*.png`, 1600×1000)
+from **two slabs** (`slabs/before.json`, `slabs/warped.json`); `reference.json` is the render recipe +
+reference hashes. Dedicated to the public domain under CC0. Full detail in [`gallery.md`](gallery.md).
+
+### `harness/` — the determinism harness
+
+`inject.mjs` splices a `window.__sa` render hook into a *throwaway* copy of the app
+(`harness/dist/stone-author.hooked.html`; the shipped artifact stays clean); `render.mjs` renders each
+gallery hero from its slab under headless Chromium and gates on **self-determinism** — byte-identical
+twice from a fresh `deserialize`. `package.json` holds the scripts, `.github/workflows/gallery.yml` runs
+it in CI. Full detail in [`gallery.md`](gallery.md).
+
 ### `docs/`
 
-`stone-generator.md` (the generator), `colour-layer.md` (the colour engine), and this file.
+[`functions.md`](functions.md) (the function reference), [`capabilities.md`](capabilities.md) (the
+verified capability inventory), [`final-render.md`](final-render.md) (the offline render pipeline &
+roadmap), [`colour-layer.md`](colour-layer.md) (the colour engine), [`gallery.md`](gallery.md) (the
+gallery + determinism harness), `stone-generator.md` (the Python/panel generator), and this file.
 
 ---
 
@@ -265,6 +284,21 @@ re-rolling it: more pour appends specks, higher drusy density adds crystals (the
 cloud scale morphs the field continuously. Counts use an exact-quantile Poisson so a higher rate
 never yields *fewer* — the naïve samplers aren't monotone, and it showed.
 
+**A load is a pure function of the slab, too.** `deserialize` **hard-resets `G`/`T`/`NEXT` to the pristine
+defaults captured at boot (`G0`/`T0`/`NEXT0`) before applying the saved values**, and invalidates the
+render caches (the cloud/band/breccia signatures and the incremental-build cache). So a key absent from a
+save falls to its default rather than inheriting a leftover from whatever was loaded before — loading the
+*same* slab always renders the *same* picture, regardless of the session's prior state. Without this, a
+partial or older slab loaded into a dirtied session rendered differently.
+
+**How far that determinism reaches.** The [harness](gallery.md) gates the core of it: each hero renders
+**byte-identical twice from a fresh `deserialize`** (one Chromium process). Observed more broadly, within a
+**fixed Chromium build** the render is byte-identical across a reload and a process restart too — a pure
+function of the slab *there*. Across **different** Chromium builds the raw bytes differ — sub-pixel canvas
+anti-aliasing isn't specified to the bit and varies between builds; the **picture is identical, the bytes
+aren't**, which is below what a shared image is for. So the CI gates on self-determinism (hard) and
+deliberately does *not* gate on a cross-build byte match.
+
 ### Vector to raster
 
 Authoring is **vector** (a vein is a route → core + shoulder; specks and clouds are fields);
@@ -313,7 +347,10 @@ afterward) · the **fog / resin-core** layer (a flat untinted grayscale haze, de
 depth; movable particles for the magnet to sculpt) · the **layer system, first slice** (multiple user
 layers per bucket for major / minor / web, an active layer marks file into, per-layer eye / opacity /
 warp, saved and restored) · **layer selection** (select layers; the **force tools**, a **colour** swatch,
-and **warp** follow/hold all scope to the selection and bake onto those layers).
+and **warp** follow/hold all scope to the selection and bake onto those layers) · a **deterministic load**
+(`deserialize` hard-resets to pristine defaults + invalidates the render caches, so a load is a pure
+function of the slab) · the **gallery** (a CC0 showcase, three heroes from two slabs) and the
+**determinism harness** (a Playwright self-determinism gate in CI — see [`gallery.md`](gallery.md)).
 
 **Next:** per-id beyond veins (clasts / seams) · the remaining canvas colour menu (gradients,
 filters) · per-pixel displacement of the base fields under warp · targeted per-item reroll · a bake

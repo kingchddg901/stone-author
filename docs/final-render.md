@@ -11,9 +11,16 @@ The single-frame constraint is the whole leverage. There is no 16.7 ms budget, n
 
 Every backend consumes the same semantic document (stable artifact ids, families per mark, layers, colour tokens, observation/spectrum state, procedural recipes). No renderer is ever the source of truth. A higher-quality backend may **reveal more** (sharper refraction, real caustics, subsurface, metallic sheen) but must **not become compositionally different** — the invariant is *compositional* identity, not pixel identity. The seam is already renderer-agnostic: values, not CSS vars; `geo` is plain data; the coverage/field renders are resolution-parametric.
 
+## Proven: the slab is the master (gallery + harness)
+
+The invariant isn't just asserted — it's gated in CI. The [gallery](gallery.md) renders three heroes from two `.json` slabs; the Playwright [harness](gallery.md) injects a headless render hook, renders each hero **twice from a fresh `deserialize`**, and asserts the two raw-pixel hashes are identical — a **self-determinism gate**. What it establishes, and its exact limit:
+
+- **The render is a pure function of the slab within a fixed browser build** — the harness gates the core case (byte-identical twice from a fresh `deserialize`); observed more broadly it holds across a reload and a process restart too. This leans on the `deserialize` **hard-reset**: a load resets `G`/`T`/`NEXT` to their pristine defaults (`G0`/`T0`/`NEXT0`) *before* applying the slab and invalidates the cloud/band/breccia + incremental caches, so the result never inherits a previous slab or a dirtied session. The offline `renderFull`/`renderTiled` path (no pan/zoom, whole slab, resolution-parametric) is what makes a hero reproducible at any size.
+- **Cross-build byte identity is deliberately *not* required.** Sub-pixel canvas anti-aliasing varies between Chromium builds — the *picture* is identical, the *bytes* aren't, which is below what a shared image is for. So the CI gates on self-determinism (hard) and does not gate on a cross-build reference match; the committed `pixelSHA256` is a recorded reference, not a pass/fail bar. This is the practical face of *compositional identity, not pixel identity*: the same slab is the same picture everywhere, exact to the bit only within one build.
+
 ## Known gap — FIXED
 
-`expCompleted(W)` used to stop at `paintStoneContent`, so `render.png` (and the `.ora` merged image) were missing everything from v49 on — no coat tier, back light, or lens. **Fixed:** `expCompleted` now delegates to `renderFull(W)` (below), which runs the complete pipeline. Exports carry the coat; the coverage masks stay geometry-only by design.
+`expCompleted(W)` used to stop at `paintStoneContent`, so `render.png` (and the `.ora` merged image) were missing everything from v49 on — no coat tier, back light, or lens. **Fixed:** `expCompleted` now delegates to `renderTiled(W)` (rung 2 below — pixel-equal to `renderFull` but tiled so a huge export stays memory-bounded), which runs the complete pipeline. Exports carry the coat; the coverage masks stay geometry-only by design.
 
 ## Build order
 

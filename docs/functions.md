@@ -168,8 +168,11 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   marks, so they stack. *(1441)*
 - `gatherMasks()` — the **protected-island** set, unioned from two sources: `G.warpMask` (programmatic / legacy
   discs) and every **Mask mark** the tool places (`{kind:'mask', at, r, p:{maskFeather, maskWin}}`). Returns
-  `{x, y, r, feather, show}` discs — `show` is the reality-window light (a spectrum, or `null` for freeze-only,
-  set from `maskWin`). `warpGeo` caches this in `_wmask` before it warps; the render reads it live for windows.
+  `{x, y, r, feather, show}` discs — `show` is the reality-window light: a spectrum value, or `null` for
+  freeze-only. A **tool** mask sets `show = 0` (daylight) when its `maskWin` is on, else `null`; a
+  `G.warpMask` entry may carry **any** spectrum (`'show' in e ? e.show : null`), so the programmatic path can
+  show an arbitrary light through, not just daylight. `warpGeo` caches the set in `_wmask` before it warps;
+  the render reads it live for windows.
 - `warpMaskAt(x, y)` — **freeze** lookup over the cached `_wmask`: a 0–1 multiplier, **0 inside `r`**,
   smoothstepping to **1 across `feather`**, **1 everywhere else** (empty ⇒ 1). Both warps multiply their
   per-point displacement by it — the global field **and** every moon — so a region holds **normal** while the
@@ -366,9 +369,20 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 
 ## The source — save, load, restore
 
-- `serialize()` — the stone source: `{v, fam, tool, view, layTiles, G, T, NEXT, layers, soloLay, COL,
-  marks}`. *(2112)*
-- `deserialize(o)` — restore a source (guards `v`), reseed colour, re-mount the editor, redraw. *(2118)*
+- `serialize()` — the stone source: `{v:1, fam, tool, view, layTiles, guidesOn, G, T, NEXT, nextId,
+  layers[{key,label,bucket,on,op,warp,field,density,size,seed,haze,transmit,scatter}], soloLay,
+  activeLayer, OVR, OVR_uv, perItem, hidden[], folders[], marks[]}`. It persists **`OVR`, not `COL`** —
+  `COL` is derived (`recolour()`), so only the overrides travel; the resolved values rebuild on load. *(3155)*
+- `deserialize(o)` — restore a source (guards `v === 1`), then rebuild. It is written so that **a load is a
+  pure function of the slab**, not of whatever was loaded before: it **hard-resets `G`/`T`/`NEXT` to their
+  captured pristine defaults `G0`/`T0`/`NEXT0` *before* applying the saved values** (a key absent from the
+  save falls to its default, never a leftover), and **invalidates the render caches** — the
+  cloud/band/breccia signatures (`cloudSig = bandSig = brecSig = ''`) and the incremental-build cache
+  (`last = null`) — so nothing survives a load. Then `clearUserLayers` (drop the previous slab's `#` layers,
+  reset `activeLayer`), reset the default granite + fog planes, re-create + reorder saved layers, run the
+  migrations, clear + reload `OVR`/`OVR_uv`/`perItem`/`hidden`/`folders`, reseed + `recolour`, re-mount the
+  editor, and redraw. Always opens in daylight (`lightSpectrum = 0`, uv/spot off). The harness renders each
+  hero twice from a fresh `deserialize` precisely to exercise this determinism. *(3162)*
 - `writeLocal()` / `saveLocal()` / `tryLoadLocal()` — autosave (debounced + flush on hide), and
   restore on load. *(2132/2133/2138)*
 - `syncUI()` — push all state into the controls after a load. *(2143)*
