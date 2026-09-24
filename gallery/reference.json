@@ -1,0 +1,39 @@
+{
+  "note": "Render recipe + reference hashes for the gallery heroes. pixelSHA256 = SHA-256 over the raw RGBA getImageData of the final 1600x1000 canvas — the CROSS-SYSTEM determinism reference a CI render must reproduce (JPEG/PNG file bytes are encoder-specific; raw pixels are not). fileSHA256 = the committed PNG's SHA-256 (same-encoder integrity). 'before' is a pure slab render (deserialize + renderFull, daylight); 'daylight' and 'psyker' apply the extra steps below.",
+  "width": 1600,
+  "height": 1000,
+  "burn": {
+    "center": [0.385, 0.185],
+    "multiply": { "r": 70, "stops": [[0, "rgba(14,9,7,1)"], [0.45, "rgba(55,34,20,1)"], [0.8, "rgba(150,110,80,1)"], [1, "rgba(255,255,255,1)"]] },
+    "lighter": { "r0": 34, "r1": 82, "stops": [[0, "rgba(158,86,28,0)"], [0.45, "rgba(158,86,28,0.55)"], [1, "rgba(158,86,28,0)"]] }
+  },
+  "psykerPalette": {
+    "spectrum": -1,
+    "OVR_uv": { "lay:major": "#35c8ff", "lay:major#6": "#9affe6", "lay:micro#7": "#ff36c0", "lay:micro#8": "#46ff9c", "lay:micro#9": "#a94dff", "lay:micro": "#ff7a2a", "lay:web": "#2affd0" },
+    "minorDark": true
+  },
+  "heroes": [
+    {
+      "name": "before", "slab": "slabs/before.json", "image": "img/before.png",
+      "spectrum": 0, "moonStrength": null, "mask": null, "palette": false, "burn": false,
+      "pixelSHA256": "f7129cc5211b8b191525df39e99db1ba34d9e0403364067032f6531c33cc28fb",
+      "fileSHA256": "800bd910b1f228c583b09dae372060ad53d3b768bc4a0e1c981ea83988ba58dd"
+    },
+    {
+      "name": "daylight", "slab": "slabs/warped.json", "image": "img/daylight.png",
+      "spectrum": 0, "moonStrength": 0.03225,
+      "mask": { "at": [0.385, 0.185], "r": 0.1, "feather": 0.075, "window": false },
+      "palette": false, "burn": true,
+      "pixelSHA256": "0d853ac4884d65ee7f2a56c819c436c8e5bc50cc4b4e2ac597f9594760b76dd5",
+      "fileSHA256": "1720e680324680a7bd322985c9f2bbe5a989dba2550e72a33f60a93e0d04526a"
+    },
+    {
+      "name": "psyker", "slab": "slabs/warped.json", "image": "img/psyker.png",
+      "spectrum": -1, "moonStrength": 2.15,
+      "mask": { "at": [0.385, 0.185], "r": 0.1, "feather": 0.075, "window": true },
+      "palette": "psyker", "burn": true,
+      "pixelSHA256": "af01f9b07e92955a018e800fc1e17356c37c31821996fb4efcdb0f1f8650a3b8",
+      "fileSHA256": "b81ec45c153c33ff44904ae151eb9214128e6113b1ba90c04beced9d4dfdf761"
+    }
+  ]
+}
