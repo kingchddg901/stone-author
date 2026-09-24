@@ -163,6 +163,7 @@ as their own future systems that reuse this producer/consumer spine. Next up is 
 pipeline** and **layered PSD/PSB export** (one file-layer per authoring layer) — see the roadmap in
 [`docs/architecture.md`](docs/architecture.md) and [`docs/final-render.md`](docs/final-render.md).
 
-**Licence.** `token-theme-kit` is MIT (© 2026 Chris King); its notice ships with the vendored copy.
-`stone-author`'s own licence is **TBD** — not yet chosen, so treat it as all-rights-reserved until
-one is added.
+**Licence.** [CC0 1.0 Universal](LICENSE) — public domain. To the extent possible under law, Chris King
+has waived all copyright and related rights to `stone-author`, including the gallery slabs and renders.
+**No attribution required** — use it, fork it, print it, sell it. The vendored `token-theme-kit` is CC0
+as well, so there is no notice you are obliged to keep. (Credit is welcome, never owed.)

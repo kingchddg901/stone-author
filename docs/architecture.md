@@ -307,7 +307,7 @@ rendering is **raster** (drawn 3× supersampled, downsampled). The same source r
 
 ### The colour engine (token-theme-kit)
 
-Vendored into the artifact (bundled ~16 KB, MIT notice kept), used as **editor + resolver** — not
+Vendored into the artifact (bundled ~16 KB; CC0, so no notice is required), used as **editor + resolver** — not
 for CSS. Two token groups (*Colour*, *Effects*) feed its self-building editor; its resolver hands
 back **values** the canvas paints with (`fillStyle`, `globalCompositeOperation`, canvas shadow).
 That value seam is renderer-agnostic on purpose: a WebGPU pass reads the same values into shader
@@ -370,8 +370,10 @@ new token. New renderer (WebGPU) → same resolved values behind it.
 
 ## Licensing
 
-`token-theme-kit` is **MIT** (© 2026 Chris King) — its notice ships with the vendored copy.
-`stone-author`'s own licence is **not yet chosen**; until one is added, treat it as
-all-rights-reserved. Reference photographs used by the rip pipeline are other people's product
+`stone-author` is **[CC0 1.0 Universal](../LICENSE)** — public domain. To the extent possible under
+law, Chris King has waived all copyright and related rights to the code, the gallery slabs and the
+renders; **no attribution is required**. The vendored `token-theme-kit` is CC0 as well (it was MIT
+until 2026-09-24 — copies obtained under MIT remain valid under MIT's terms), so there is no notice a
+consumer is obliged to keep. Reference photographs used by the rip pipeline are other people's product
 photography and never enter the repo — only code, synthetic output, and stone from the author's
 own material is committed.

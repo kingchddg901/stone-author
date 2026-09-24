@@ -28,8 +28,8 @@ spectrum the distortion it was always carrying is exposed. Committed PNGs live i
 **1600 × 1000** (the slab keeps its 8×5 ratio); the page notes the same slabs re-render up to ~168 MP.
 Each slab re-loads into Stone Author (Load → the `.json`) and re-renders at any size.
 
-The page is dedicated to the public domain under **CC0 1.0**. (This is the *gallery output*, not the
-studio itself — `stone-author`'s own licence is still TBD; see [`architecture.md`](architecture.md#licensing).)
+The page is dedicated to the public domain under **CC0 1.0** — as is the whole repo, studio included;
+see [`architecture.md`](architecture.md#licensing).
 
 ## The recipe — `gallery/reference.json`
 
