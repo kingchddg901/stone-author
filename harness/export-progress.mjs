@@ -115,11 +115,13 @@ const tiled = await page.evaluate(async () => {
     const obs = new MutationObserver(() => { const t = stat.textContent; if (t && seen[seen.length - 1] !== t) seen.push(t); });
     obs.observe(stat, { childList: true, characterData: true, subtree: true });
     btn.click();
+    // This is the SECOND export on this page, which is the only way to see a clock that never resets.
+    const clockAtStart = document.getElementById('expclock').textContent;
     const t0 = Date.now();
     while (Date.now() - t0 < 60000) { await new Promise(r => setTimeout(r, 40)); if (!btn.disabled) break; }
     obs.disconnect();
     document.getElementById('expwhat').value = 'all';
-    return { seen, finalLine: stat.textContent };
+    return { seen, finalLine: stat.textContent, clockAtStart };
   } finally { HTMLAnchorElement.prototype.click = realClick; }
 });
 const tileLines = tiled.seen.filter(t => /\d+ of \d+/.test(t) && !/1 of 1/.test(t));
@@ -168,6 +170,9 @@ checks.push(['with per-stage timings', m.ms ? `render ${m.ms.render}ms encode ${
              !!(m.ms && Number.isFinite(m.ms.render) && Number.isFinite(m.ms.encode) && Number.isFinite(m.ms.total)) && m.tiles >= 1]);
 checks.push(['render-only counts its tiles', tileLines.length + ' tile lines', tileLines.length >= 3]);
 checks.push(['render-only reports a time', tiled.finalLine, /\d+:\d\d$/.test(tiled.finalLine)]);
+// The clock froze with the previous export's finished time still on it; expStat only starts the timer
+// when it is unset, so a second export used to count on from the first one's start.
+checks.push(['the clock restarts each export', tiled.clockAtStart, tiled.clockAtStart === '0:00']);
 
 // --- and it must FAIL loudly rather than wait for ever -------------------------------------------
 // An encode that cannot happen used to leave a promise unsettled: the worker's onmessage is async, so a

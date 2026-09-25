@@ -4397,6 +4397,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const c = document.getElementById('expclock'); if (c) c.textContent = expT0 ? expElapsed(Date.now() - expT0) : '';
   }
   const expFreeze = () => { clearInterval(expTick); expTick = null; };   // leave the line and its time on screen
+  // ...but the NEXT export must start from zero. expStat only starts the clock when expT0 is unset, and
+  // freezing deliberately leaves the finished time on screen -- so without this the second export of a
+  // session counts up from the first one's start. Invisible to any test that reloads between runs.
+  const expReset = () => { expFreeze(); expT0 = 0; };
   function expStat(msg, frac) {
     const w = document.getElementById('expprog'); if (!w) return;
     w.hidden = msg == null;
@@ -4423,6 +4427,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // or scope mid-export, watch nothing happen, and reasonably conclude the app ignored you.
     const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
     btn.disabled = selW.disabled = selWhat.disabled = true;
+    expReset();
     hint(TR('hint.exporting-render', { w: W }));
     try {
       if (only) {
