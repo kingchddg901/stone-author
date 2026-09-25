@@ -891,9 +891,16 @@ window.SA_I18N = (() => {
     return PACKS[lang];
   }
 
+  // Where the packs are, relative to the page. "Beside the page" is the deployed layout, but in the
+  // repository the app sits in app/ and the packs at the root, so a plain 'i18n/' resolves to
+  // app/i18n/ and finds nothing — which is exactly how the studio would be opened to test it.
+  // Discovered once, from whichever actually answers.
+  let I18N_BASE = 'i18n/';
+  const I18N_TRY = ['i18n/', '../i18n/'];
+
   async function load(lang) {                       // a pack that is not inline may live beside the page
     if (PACKS[lang]) return true;
-    try { const r = await fetch('i18n/' + lang + '.json'); if (!r.ok) return false;
+    try { const r = await fetch(I18N_BASE + lang + '.json'); if (!r.ok) return false;
           register(lang, await r.json()); return true; } catch (e) { return false; }
   }
 
@@ -935,10 +942,13 @@ window.SA_I18N = (() => {
   // painted in English — so nobody waits on the network to see the studio, and a reader whose language we
   // have repaints into it a moment later. Adding a language still means touching only the i18n folder.
   async function catalogue() {
-    try {
-      const r = await fetch('i18n/_index.json');
-      if (r.ok) INDEX = await r.json();
-    } catch (e) { /* offline or single-file build: the inline packs are all there is */ }
+    for (const base of I18N_TRY) {
+      try {
+        const r = await fetch(base + '_index.json');
+        if (!r.ok) continue;
+        INDEX = await r.json(); I18N_BASE = base; break;
+      } catch (e) { /* file:// blocks fetch outright, and a single-file build has no folder at all */ }
+    }
     listeners.forEach(f => f(LANG));            // the language menu rebuilds itself from this
     const want = pick();
     if (want !== LANG) await setLang(want);
