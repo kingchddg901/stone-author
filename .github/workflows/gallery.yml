@@ -12,6 +12,10 @@ name: browser harness
 # be held disabled. Added after a big export was found to report itself only through a hint that removes
 # itself after 2.6 s, leaving minutes of work looking like a hung page.
 #
+# SPECTRUM BLEND — an artifact's emission stops are a gradient, and one stop is not. Guards the half that
+# could change slabs people already own: every committed OVR_uv entry has a single stop, and a single stop
+# must not interpolate.
+#
 # PEN CALIBRATION — hands the calibrator a synthetic pen of known rate, pressure, tilt and speed and
 # requires it to report those numbers back. Added after the calibrator measured a 480 Hz pen as 3333 Hz,
 # which no test could see because nothing here had ever been given a pen whose answers were known.
@@ -52,3 +56,5 @@ jobs:
         run: node harness/calibration.mjs
       - name: Check an export says it is working for as long as it works
         run: node harness/export-progress.mjs
+      - name: Emission stops blend, and a single stop does not
+        run: node harness/spectrum.mjs

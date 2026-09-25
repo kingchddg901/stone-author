@@ -1086,7 +1086,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.25.7';
+  const BUILD = '2026.09.25.8';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1129,15 +1129,34 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // stuff falls to UV_DARK (invisible on the black ground), UV-coloured artifacts glow (bloom). The palette saves with the slab.
   let uvMode = false, lightSpectrum = 0, spotOn = false; const OVR_uv = {}, UV_DARK = '#0a0a0e', SPX_TOL = 0.12;
   // SPECTRUM: the light sits at a scalar value (lightSpectrum; 0 = daylight, e.g. −1 = UV). Each OVR_uv entry is
-  // {v, c} — the artifact lights with colour c only when the light's value is within SPX_TOL of its activation value
+  // {v, c} — the artifact lights with colour c when the light's value is within SPX_TOL of its activation value
   // v. With the SPOTLIGHT on it must also fall inside the beam (spotR around G.lightX,lightY). uvMode = a light is on.
+  //
+  // BETWEEN two of an artifact's own stops the colour now BLENDS rather than going dark: the light sitting at
+  // -1.5 with stops at -1 and -2 gives their midpoint. Whatever the stops number, the light lies between
+  // exactly two of them, so this is always one two-colour mix and costs the same at ten stops as at two.
+  // Outside the span the old rule stands, which is what makes it free: an artifact with a SINGLE stop has
+  // nothing to interpolate and renders exactly as it did, so no existing slab moves.
+  const mixHexAt = (a, b, t) => {
+    const A = hexRGB(a), B = hexRGB(b);
+    return rgbHex(A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t);
+  };
   const emit = (id, layer, x, y) => {
     const arr = (id != null && OVR_uv['id:' + id]) || OVR_uv['lay:' + layer];   // a LIST of {v,c} — an artifact can glow in several spectra
-    if (!arr) return null;
-    const en = arr.find(e => Math.abs(lightSpectrum - e.v) <= SPX_TOL);         // spectral: the entry whose value the light matches
-    if (!en) return null;
+    if (!arr || !arr.length) return null;
     if (spotOn && x != null && Math.hypot(x - G.lightX, y - G.lightY) > G.spotR) return null;   // spatial: inside the beam
-    return en.c;
+    let lo = null, hi = null;                                                  // the two stops the light sits between
+    for (const e of arr) {
+      if (e.v <= lightSpectrum && (!lo || e.v > lo.v)) lo = e;
+      if (e.v >= lightSpectrum && (!hi || e.v < hi.v)) hi = e;
+    }
+    if (lo && hi) {
+      if (lo === hi) return lo.c;                                              // sitting exactly on a stop
+      const span = hi.v - lo.v;
+      return span > 0 ? mixHexAt(lo.c, hi.c, (lightSpectrum - lo.v) / span) : lo.c;
+    }
+    const en = arr.find(e => Math.abs(lightSpectrum - e.v) <= SPX_TOL);        // past the ends: the old rule
+    return en ? en.c : null;
   };
   const beamPts = pts => !spotOn || pts.some(p => Math.hypot(p[0] - G.lightX, p[1] - G.lightY) <= G.spotR);   // does a line/edge touch the beam?
   const hidden = new Set();   // 7th dimension: MARKS tagged "don't render" (one mark = one vein/web/seam, whatever its sub-lines) — skipped by the renderer AND the hit-test, recovered only from the Hidden list
@@ -2989,7 +3008,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // file). Each worker runs on an OffscreenCanvas, renders whole tiles, and transfers ImageBitmaps back. The
   // cloud/band/breccia modulators are built once on the main thread and posted as bitmaps (ensure* is stubbed).
   function renderCoreSrc() {
-    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent };
+    // hexRGB/rgbHex/mixHexAt travel with them: emit blends between spectrum stops and cannot be serialised
+    // without them. (This core has no live caller — renderTiledParallel measured a no-op — but a serialised
+    // copy that references a function it does not carry is a trap for whoever revives it.)
+    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, hexRGB, rgbHex, mixHexAt, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent };
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
     s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;

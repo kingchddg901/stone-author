@@ -99,6 +99,24 @@ large-registry test already locks scale, so the count is not the wall. Chris exp
 **expand again for a WebGPU render pipeline** — the value-resolution seam is renderer-agnostic on
 purpose, so that is additive.
 
+## Emission stops are a gradient
+
+`OVR_uv` holds a **list** of `{v, c}` per artifact, and `emit()` used to return a colour only where the
+light sat within `SPX_TOL` of one of them — between two stops, nothing. It now **blends between the two
+stops the light lies between**: cyan at −1 and magenta at −2 make −1.5 their midpoint.
+
+The property that keeps this cheap is that a light value always lies between *exactly two* stops, so the
+blend is one two-colour mix no matter how large the palette. Ten stops cost what two cost, which means a
+slab can carry a whole spectral sequence and the renderer never pays for the ones it isn't between.
+
+**Outside the span, the old rule stands** — and that is what makes the change free rather than risky.
+Every `OVR_uv` entry in every committed slab holds a single stop, and a single stop has nothing to
+interpolate, so no existing slab renders differently. The gradient appears only once someone authors a
+second stop, which is opt-in by construction. `harness/spectrum.mjs` gates exactly that: it checks the
+blend, and it checks that **a single stop still refuses to interpolate**, because that is the half that
+could quietly change stone somebody already owns. Stops are resolved by value, not by authoring order, and
+the gate checks that too.
+
 ## Status
 
 The colour layer (colour + blend + glow via the vendored kit) shipped at artifact **v22**; since then
