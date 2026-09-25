@@ -70,23 +70,36 @@ wrong** — every one of them has a real use for it, and the uses are more inter
 |---|---|
 | vein edge softness | **throws the shade the other way.** Today lean only *softens*, symmetrically. Signed, the soft shoulder goes to the side you lean toward and the other edge stays crisp — which is how a chisel or a broad nib actually behaves. The `halo → shoulder → main` paint order already has the shoulder to offset. |
 | Moon's asymmetric field | which side the body passed on. |
-| magnet | **flips the polarity of alignment.** With one caveat below. |
+| magnet | **combs across the stroke instead of along it** — a 90° turn of the alignment axis, not a polarity. See below: it only works if the sign is applied after the angle doubling. |
 
-The magnet caveat is worth stating precisely, because the obvious reading does not work. Its comb term
-uses **doubled angles**:
+The magnet is worth doing carefully, because **where the `×−1` lands decides whether it does anything at
+all.** The field is built in *doubled-angle* space:
 
 ```js
-c2 = Math.cos(2 * Math.atan2(ay, ax)),  s2 = Math.sin(2 * Math.atan2(ay, ax))
+c2 = Math.cos(2 * Math.atan2(ay, ax))     // ax, ay = the axis direction
+s2 = Math.sin(2 * Math.atan2(ay, ax))
+vx = (1 − comb) * fan * Math.cos(2 * ra) + comb * c2
+da = Math.atan2(vy, vx) / 2 − sp.ang      // halved again to recover an axis
 ```
 
-Doubling is what makes a speck *axial* — "a speck has no front", so θ and θ+180° are the same thing.
-Which means negating the tilt axis, `(ax, ay) → (−ax, −ay)`, is a **mathematical no-op**: it shifts the
-angle by π, and doubled that is 2π. So a sign cannot flip the magnet's *axis*.
+Doubling is what makes a speck *axial* — "a speck has no front", so θ and θ+180° are the same thing. Two
+different negations follow, and they are not the same operation:
 
-But the magnet already has a `×−1` that does flip its behaviour — `sign = M.mag`, the Align/Scatter
-toggle, where positive rotates specks toward the field and negative randomises them. **That** is the
-polarity a signed tilt could drive: lean one way to comb the specks into order, the other way to break the
-order up, instead of reaching for a button. Same idea, different term.
+| negate | effect |
+|---|---|
+| `(ax, ay)` — the direction **before** doubling | **nothing.** It shifts the angle by π, and doubled that is 2π. Inverting the stroke's read direction this way is a genuine no-op. |
+| `(c2, s2)` — the axial vector **after** doubling | **a 90° rotation.** `atan2(−s2, −c2) / 2 = θ + π/2`. The comb turns to lie *across* the stroke instead of along it. |
+
+So the sign has to be applied to the axial vector, not to the direction it was built from. Applied there
+it is not a polarity at all — it is **comb along the path versus comb across it**, which is the useful
+control and the one a mouse user would actually want.
+
+Negating the **whole** field `(vx, vy)`, fan term included, goes further: the pole's radial starburst
+becomes its perpendicular, so specks lie tangent to circles around the pole rather than radiating from it.
+A swirl instead of a sunburst. Worth trying once the channel exists.
+
+(Not to be confused with `sign = M.mag`, the existing Align/Scatter toggle, which is a separate `×−1`
+deciding whether specks rotate toward the field or are randomised.)
 
 So the reason to keep tilt structured is not that some tools cannot use the sign. It is that **azimuth
 carries strictly more than the sign does** — a bearing is not recoverable from ±1 — and different tools
