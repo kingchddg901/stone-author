@@ -44,7 +44,17 @@ for (const m of markup.matchAll(/data-i18n(?:-html)?="([^"]+)"/g)) asked.add(m[1
 for (const m of markup.matchAll(/data-i18n-attr="([^"]+)"/g))
   for (const pair of m[1].split(';')) { const j = pair.indexOf('='); if (j > 0) asked.add(pair.slice(j + 1).trim()); }
 for (const m of js.matchAll(/(?<![\w.])TR\('([^']+)'/g)) asked.add(m[1]);
-for (const k of asked) if (!enKeys.has(k)) fail.push(`key used but not in the English pack: ${k}`);
+// A key built by concatenation — TR('cal.phase.' + ph) — reaches here as its literal prefix. That is not
+// a missing key, but it is not nothing either: the prefix must have at least one entry, or every lookup
+// through it renders the key name. Check the family instead of the literal.
+for (const k of asked) {
+  if (enKeys.has(k)) continue;
+  if (k.endsWith('.')) {
+    if (![...enKeys].some(e => e.startsWith(k))) fail.push(`dynamic key prefix "${k}…" matches no entry in the English pack`);
+    continue;
+  }
+  fail.push(`key used but not in the English pack: ${k}`);
+}
 
 // ---- 3 + 4. every other pack matches English, key for key and placeholder for placeholder --------
 const holes = v => new Set([...String(v).matchAll(/\{(\w+)\}/g)].map(m => m[1]));

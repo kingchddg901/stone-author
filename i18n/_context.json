@@ -96,6 +96,15 @@
  "app.title": {
   "where": "in the studio header"
  },
+ "btn.cal-cancel": {
+  "where": "button in the Calibrate the pen section, shown only while calibrating"
+ },
+ "btn.cal-clear": {
+  "where": "button in the Calibrate the pen section"
+ },
+ "btn.cal-start": {
+  "where": "button in the Calibrate the pen section"
+ },
  "btn.clear": {
   "where": "in the \"Edit\" group/panel"
  },
@@ -173,6 +182,58 @@
  },
  "btn.zfit": {
   "where": "in the \"Zoom\" group/panel"
+ },
+ "cal.cancelled": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.done": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.forgotten": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.none": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.phase.hard": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.phase.laid": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.phase.light": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.phase.natural": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.phase.quick": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.progress": {
+  "placeholders": {
+   "done": "how many strokes of this phase are finished",
+   "total": "how many strokes this phase asks for"
+  },
+  "where": "status line inside the Calibrate the pen section"
+ },
+ "cal.row.lean": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.row.pressure": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.row.rate": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.row.speed": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.saved": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
+ },
+ "cal.too-short": {
+  "where": "status or hint line for the pen calibration, in the right-hand rail"
  },
  "fam.calacatta": {
   "where": "in the \"Family\" group/panel"
@@ -753,6 +814,9 @@
  "mask.win.on": {
   "where": "in the \"Reality window\" group/panel"
  },
+ "note.calibrate": {
+  "where": "explanatory paragraph inside the Calibrate the pen section"
+ },
  "note.each-line-keeps-what-it": {
   "terms": [
    "family",
@@ -805,6 +869,9 @@
   "terms": [
    "breccia"
   ],
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "sec.calibrate": {
   "where": "title of a collapsible section in the right-hand rail"
  },
  "sec.clouds-and-warp": {

@@ -357,6 +357,16 @@
     </div>
     </div></details>
   </div><!-- /#ground -->
+  <details class="sec" id="calib"><summary data-i18n="sec.calibrate">Calibrate the pen</summary><div class="body">
+    <p class="note" data-i18n-html="note.calibrate">Twenty short strokes teach the studio <i>your</i> hand: the pressure you actually use, how you normally hold the pen, and what counts as fast for you. Nothing is drawn on the slab while you calibrate, and nothing leaves this device.</p>
+    <div class="grp">
+      <button id="cal-start" type="button" data-i18n="btn.cal-start">Start</button>
+      <button id="cal-cancel" type="button" hidden data-i18n="btn.cal-cancel">Cancel</button>
+      <button id="cal-clear" type="button" data-i18n="btn.cal-clear">Forget</button>
+    </div>
+    <p class="stat" id="cal-step"></p>
+    <dl class="stats" id="cal-out"></dl>
+  </div></details>
   <details class="sec"><summary data-i18n="sec.file">File</summary><div class="body">
     <div class="grp" role="group" aria-label="File" data-i18n-attr="aria-label=a11y.file">
       <button id="save" type="button" data-i18n="btn.save">Save</button>
@@ -422,6 +432,9 @@ window.SA_I18N = (() => {
   "a11y.zoom-out": "Zoom out",
   "app.sub": "You draw where the lines go. The family decides what they are.",
   "app.title": "Stone author",
+  "btn.cal-cancel": "Cancel",
+  "btn.cal-clear": "Forget",
+  "btn.cal-start": "Start",
   "btn.clear": "Clear",
   "btn.colour-fromfam": "Palette from family",
   "btn.colour-toggle": "Show colour editor",
@@ -441,6 +454,22 @@ window.SA_I18N = (() => {
   "btn.uv-toggle": "Black light",
   "btn.warp-holdmajor": "Major veins stable",
   "btn.zfit": "Fit",
+  "cal.cancelled": "Calibration cancelled.",
+  "cal.done": "Calibrated. The studio knows your hand on this device now.",
+  "cal.forgotten": "Calibration forgotten for this device.",
+  "cal.none": "Not calibrated on this device yet.",
+  "cal.phase.hard": "Four more, pressing as hard as is comfortable.",
+  "cal.phase.laid": "Four with the pen laid right over.",
+  "cal.phase.light": "Four more, as light as still draws.",
+  "cal.phase.natural": "Draw four lines the way you normally would.",
+  "cal.phase.quick": "Four quick flicks, and that is the lot.",
+  "cal.progress": "{done} of {total}",
+  "cal.row.lean": "Grip / laid over",
+  "cal.row.pressure": "Pressure light / normal / hard",
+  "cal.row.rate": "Report rate",
+  "cal.row.speed": "Speed normal / quick",
+  "cal.saved": "Saved for this device.",
+  "cal.too-short": "Too short to measure — draw right across the slab.",
   "fam.calacatta": "Calacatta",
   "fam.carrara": "Carrara",
   "fam.granite": "Granite",
@@ -574,6 +603,7 @@ window.SA_I18N = (() => {
   "mask.sense.protect": "Protects",
   "mask.win.off": "Off",
   "mask.win.on": "On",
+  "note.calibrate": "Twenty short strokes teach the studio <i>your</i> hand: the pressure you actually use, how you normally hold the pen, and what counts as fast for you. Nothing is drawn on the slab while you calibrate, and nothing leaves this device.",
   "note.each-line-keeps-what-it": "<b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw it, so changing them shapes the next line only. This generates the base structure; the colours here are only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor vein grown while zoomed in comes out shorter, at the scale you are working.",
   "note.granite": "<b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space. A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only specks already down are moved, so what you draw first is older rock.",
   "note.identity": "<b>Identity</b> shows what an animation would read: each line in its own colour, brightening along its length in the direction you drew it; web cracks brighten toward the line that spread them. Nothing had to be traced &mdash; the line was known when it was made.",
@@ -581,6 +611,7 @@ window.SA_I18N = (() => {
   "note.magnet": "<b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab. The Angle view colours every speck by the way it points, so alignment shows as a single colour.",
   "sec.banding": "Banding",
   "sec.breccia": "Breccia",
+  "sec.calibrate": "Calibrate the pen",
   "sec.clouds-and-warp": "Clouds &amp; warp",
   "sec.coat-and-light": "Coat &amp; light",
   "sec.colour": "Colour",
@@ -3740,6 +3771,154 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
     stoneReady = false; buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
   }
+  // ---- CALIBRATION ---------------------------------------------------------------------------------
+  // Every normalisation the channels need is a property of a HAND and a DEVICE, never a constant. Measured
+  // rather than assumed: a real hand spends 90% of a stroke in the bottom TENTH of the pressure sensor, and
+  // the same pen reports 60 Hz with 597 pressure levels in one browser and 480 Hz with 3143 in another. A
+  // constant tuned in either is wrong in the other. So ask once, explicitly, and keep it per device.
+  const CAL_KEY = 'stone-author:calib:v1';
+  const CAL_PHASES = ['natural', 'hard', 'light', 'laid', 'quick'];   // 4 strokes each = 20
+  const CAL_PER = 4;
+  let cal = null;                              // the run in progress
+  let calProfile = null;                       // what we know about this hand on this device
+  const srt = a => a.slice().sort((x, y) => x - y);
+  const pct = (a, f) => a.length ? srt(a)[Math.min(a.length - 1, Math.round(f * (a.length - 1)))] : null;
+  const mid = a => pct(a, 0.5);
+  // Coarse on purpose: a phone profile and a desktop profile must not overwrite each other, but a browser
+  // point release should not orphan one either.
+  function calSig() {
+    const ua = navigator.userAgent || '', m = /Chrome\/(\d+)/.exec(ua);
+    const fam = /wv\)/.test(ua) ? 'webview' : m ? 'chrome' + m[1] : /Firefox/.test(ua) ? 'firefox'
+              : /Safari/.test(ua) ? 'safari' : 'other';
+    return fam + ':' + (navigator.maxTouchPoints || 0) + ':' + (screen && screen.width || 0);
+  }
+  function calLoad() {
+    try { const all = JSON.parse(localStorage.getItem(CAL_KEY) || '{}'); calProfile = all[calSig()] || null; }
+    catch (_) { calProfile = null; }
+    calShow();
+  }
+  function calSave(p) {
+    calProfile = p;
+    try {
+      const all = JSON.parse(localStorage.getItem(CAL_KEY) || '{}');
+      all[calSig()] = p; localStorage.setItem(CAL_KEY, JSON.stringify(all));
+    } catch (_) { /* blocked; the profile still applies for this session */ }
+    // Deliberately NOT synced to the artifact store like the slab is: a profile describes this hand on
+    // THIS device and browser, and the measurements show those differ by 8x. Syncing it would carry a
+    // phone's calibration onto a desktop and be worse than having none.
+    calShow();
+  }
+  function calShow() {
+    const out = document.getElementById('cal-out'); if (!out) return;
+    out.textContent = '';
+    if (!calProfile) { document.getElementById('cal-step').textContent = cal ? '' : TR('cal.none'); return; }
+    const p = calProfile, row = (k, v) => {
+      const d = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd');
+      dt.textContent = k; dd.textContent = v; d.append(dt, dd); out.appendChild(d);
+    };
+    row(TR('cal.row.pressure'), p.press.lo.toFixed(3) + ' / ' + p.press.mid.toFixed(3) + ' / ' + p.press.hi.toFixed(3));
+    row(TR('cal.row.lean'), Math.round(p.lean.rest * 90) + '° / ' + Math.round(p.lean.max * 90) + '°');
+    row(TR('cal.row.speed'), p.speed.natural.toFixed(3) + ' / ' + p.speed.quick.toFixed(3));
+    row(TR('cal.row.rate'), Math.round(p.dev.rate) + ' Hz' + (p.dev.coalesced ? ' ×' + p.dev.coalesced : ''));
+    if (!cal) document.getElementById('cal-step').textContent = TR('cal.saved');
+  }
+
+  function calBegin() {
+    cal = { phase: 0, stroke: 0, cur: null, bag: {} };
+    for (const k of CAL_PHASES) cal.bag[k] = { press: [], lean: [], speed: [], dt: [], co: 0 };
+    document.getElementById('cal-start').hidden = true;
+    document.getElementById('cal-cancel').hidden = false;
+    document.getElementById('cal-out').textContent = '';
+    cv.addEventListener('pointerdown', calDown, true);
+    cv.addEventListener('pointermove', calMove, true);
+    cv.addEventListener('pointerup', calUp, true);
+    cv.addEventListener('pointercancel', calUp, true);
+    calStep();
+  }
+  function calEnd(msg) {
+    cv.removeEventListener('pointerdown', calDown, true);
+    cv.removeEventListener('pointermove', calMove, true);
+    cv.removeEventListener('pointerup', calUp, true);
+    cv.removeEventListener('pointercancel', calUp, true);
+    cal = null;
+    document.getElementById('cal-start').hidden = false;
+    document.getElementById('cal-cancel').hidden = true;
+    document.getElementById('cal-step').textContent = msg || '';
+    redraw(false);
+  }
+  function calStep() {
+    const ph = CAL_PHASES[cal.phase];
+    document.getElementById('cal-step').textContent =
+      TR('cal.phase.' + ph) + '  ' + TR('cal.progress', { done: cal.stroke, total: CAL_PER });
+    hint(TR('cal.phase.' + ph));
+  }
+  // Capture phase + stopPropagation: the studio must not author stone while we are measuring the hand.
+  function calDown(e) {
+    e.stopPropagation(); e.preventDefault();
+    cal.cur = { t0: now(), pts: [], press: [], lean: [], dt: [], last: null };
+    calAdd(e);
+  }
+  function calMove(e) {
+    if (!cal.cur) return;
+    e.stopPropagation(); e.preventDefault();
+    const co = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
+    if (co && co.length > 1) { cal.bag[CAL_PHASES[cal.phase]].co += co.length; for (const c of co) calAdd(c); }
+    else calAdd(e);
+  }
+  function calAdd(e) {
+    const c = cal.cur; if (!c) return;
+    const b = cv.getBoundingClientRect();
+    const x = (e.clientX - b.left) / b.width, y = (e.clientY - b.top) / b.height, t = now();
+    if (e.pointerType === 'pen' && e.pressure != null) c.press.push(e.pressure);
+    const ln = leanOf(e); if (ln != null) c.lean.push(ln);
+    if (c.last) { c.dt.push(t - c.last.t); c.pts.push(Math.hypot(x - c.last.x, y - c.last.y)); }
+    c.last = { x, y, t };
+  }
+  function calUp(e) {
+    if (!cal.cur) return;
+    e.stopPropagation(); e.preventDefault();
+    const c = cal.cur, dur = now() - c.t0, dist = c.pts.reduce((a, d) => a + d, 0);
+    cal.cur = null;
+    if (dist < 0.05) { hint(TR('cal.too-short')); return; }      // a tap is not a stroke; do not count it
+    const bag = cal.bag[CAL_PHASES[cal.phase]];
+    for (const v of c.press) bag.press.push(v);
+    for (const v of c.lean) bag.lean.push(v);
+    for (const v of c.dt) if (v > 0 && v < 0.2) bag.dt.push(v);
+    if (dur > 0) bag.speed.push(dist / dur);
+    cal.stroke++;
+    if (cal.stroke >= CAL_PER) { cal.stroke = 0; cal.phase++; }
+    if (cal.phase >= CAL_PHASES.length) calFinish(); else calStep();
+  }
+  function calFinish() {
+    const B = cal.bag, all = k => CAL_PHASES.reduce((a, p) => a.concat(B[p][k]), []);
+    const dts = all('dt'), co = CAL_PHASES.reduce((a, p) => a + B[p].co, 0);
+    const p = {
+      v: 1, at: Date.now(), sig: calSig(),
+      // robust percentiles, never min/max: a hand trying to hold pressure steady still swings 39-111%
+      press: { lo: mid(B.light.press) || 0, mid: mid(B.natural.press) || 0, hi: pct(B.hard.press, 0.9) || 1 },
+      lean:  { rest: mid(B.natural.lean) || 0, max: pct(B.laid.lean, 0.9) || 1 },
+      speed: { natural: mid(B.natural.speed) || 0, quick: mid(B.quick.speed) || 0 },
+      dev:   { rate: dts.length ? 1 / mid(dts) : 0, coalesced: co > all('press').length ? 1 : 0,
+               levels: new Set(all('press')).size, ua: navigator.userAgent },
+      n: all('press').length,
+    };
+    calSave(p);
+    calEnd(TR('cal.saved'));
+    hint(TR('cal.done'));
+  }
+  { const s = document.getElementById('cal-start'), c = document.getElementById('cal-cancel'),
+          f = document.getElementById('cal-clear');
+    if (s) s.addEventListener('click', calBegin);
+    if (c) c.addEventListener('click', () => calEnd(TR('cal.cancelled')));
+    if (f) f.addEventListener('click', () => {
+      try { const all = JSON.parse(localStorage.getItem(CAL_KEY) || '{}'); delete all[calSig()];
+            localStorage.setItem(CAL_KEY, JSON.stringify(all)); } catch (_) {}
+      calProfile = null; document.getElementById('cal-out').textContent = '';
+      document.getElementById('cal-step').textContent = TR('cal.forgotten');
+    });
+    calLoad();
+  }
+
   // AUTOSAVE, in two places on purpose.
   //
   // localStorage is the fast path: synchronous, always there, and the only option when this file is
