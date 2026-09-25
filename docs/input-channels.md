@@ -123,219 +123,87 @@ under the pole get a meaningful kick and the rim barely moves. The result is a s
 already there, rather than disorder.
 
 **The better model, and Chris's: sweep the target instead of jittering the speck.** Keep rotating specks
-*toward* a field axis exactly as Align does, but let that axis **turn along the path** — a fairly quick
-walk through the full 0–360°. Then:
+*toward* a field axis exactly as Align does, but let that axis **turn** — the magnet is a bar that spins
+while you move it. Then:
 
 - specks at different points along the stroke are combed to genuinely different angles, so the *ensemble*
   is disordered while each individual speck stays crisply oriented — which is what real rock looks like,
   grains pointing every way but each one definite;
 - **Scatter stops being a separate mode.** It becomes Align with a rotating target, and the rate of
   rotation is the control. Rate 0 is Align. One mechanism, one parameter, no `if/else`;
-- a **rotational range** falls out as the natural knob — how far the sweep spans. A few degrees gives a
-  loose, natural-looking grain; a full turn gives complete disorder;
+- the **spin rate** is the knob, and it is the only one: slow rotation reads as a loose natural grain,
+  faster as disorder;
 - the **sweep direction** (clockwise or anticlockwise) is exactly what the signed tilt channel is for;
 - and it is **deterministic**, which removes mechanism 3 below — there is no random stream left to key to
   a sample index.
 
-**Per length or per time?** Chris: *a simple d/t*. That settles it, because speed as the angular rate is
-not a third option — it **is** the per-length one:
+#### Scatter is a rotating magnet
+
+The tidy way to say it, and the one that makes everything else fall out:
+
+> **Align is angular velocity zero. Scatter is angular velocity non-zero.**
+
+Not "a rotational range applied along the path" — that is what it looks like in code, not what is
+happening. The magnet is physically spinning while you move it, and `0–359` is not a noise range, it is
+the bar completing a turn. One mechanism, one parameter, and the invariant the specks have always had
+survives untouched: **the magnet may rotate a shape; it never translates one.**
+
+**ω is a property of the tool, not of your hand.** A real spinning magnet does not spin faster because you
+sweep it faster. So the field orientation advances with **time**:
 
 ```
-dθ/dt = k·v = k·(ds/dt)   ⟹   dθ = k·ds   ⟹   θ = k·s
+θ(t) = ω·t
 ```
 
-Drive the sweep at a rate proportional to speed and integrate it over time, and the axis angle comes out
-proportional to **arc length**. The two candidates collapse into one, and it is the right one on three
-counts:
+#### Why a slow pass scatters and a fast one does not
 
-- **The pattern belongs to the path, not to the hand.** Draw the same path slowly or quickly and you get
-  the same scatter. Reproducible, and it keeps the swept target deterministic.
-- **Dwell does the physically correct thing.** At `v → 0` the axis stops advancing, so standing still
-  drives one angle *harder* rather than winding through others — which is exactly what holding a bar
-  magnet over filings does. It aligns them hard along one axis; it does not swirl them. My earlier note
-  arguing for the time-based version had this backwards.
-- **The channels stop overlapping.** Dwell already controls alignment *strength* through
-  `w = min(1, str · dt · 30 · …)`. Under per-length, dwell owns strength and travel owns angle — one
-  quantity each, composing cleanly, instead of both fighting over the same knob.
-
-So: **θ = k · s**, with `k` the rotational range per unit length, and the sign of `k` taken from the signed
-tilt channel.
-
-#### Sampling is per second, so don't compute the speed
-
-Pointer events arrive on a **time** schedule, not a distance one — the repo's own tuning note measured
-Chris's S Pen at **60 Hz**. So `d/t` is well defined per sample, and the question "does that give a
-meaningful speed" is the right one to ask. Two answers, pulling opposite ways:
-
-**You don't need the speed.** `θ = k·s` is a running sum of segment lengths:
-
-```js
-theta += k * Math.hypot(p[i][0] - p[i-1][0], p[i][1] - p[i-1][1]);
-```
-
-No division, no `dt`. Computing `v = ds/dt` and then multiplying by `dt` again is the same number with
-timestamp jitter added and removed for nothing — and event timestamps are the noisiest thing in the
-record. `applyMagnet` already clamps `dt` to `[0, 0.05]` precisely because it is unreliable. Accumulate
-distance directly.
-
-**But 60 Hz does bite, on the angular step.** The *pattern* is speed-independent; its *sampling* is not.
-At 60 Hz a brisk drag of one slab width in half a second moves ≈0.033 slab units between samples. If `k`
-is set to a full turn per quarter width — a plausible "quick walk" — that is
+The disorder is not per-speck randomness. It is a **phase difference between neighbours**. Two specks a
+distance `d` apart along the path are encountered `Δt = d/v` apart, during which the bar has turned:
 
 ```
-0.033 / 0.25 × 360° ≈ 48° of sweep per sample
+Δθ = ω·d / v
 ```
 
-— about seven discrete orientation bands rather than a smooth sweep.
+Which is rotation *per unit distance* `k = ω/v` — and it is **inversely** proportional to speed:
 
-**Which is not a bug.** It was called an artifact here first, and Chris was right to reject that: *why
-would that be smooth, it's fast as heck.* A flick **should** land as a handful of coarse steps; a long
-slow stroke over the same path takes many more samples across the same distance and comes out smooth. So
-speed does not change the angular envelope — the path fixes that — it changes the **granularity**, and
-chunky-when-fast is the honest result. Do not subdivide it away.
-
-#### Reopened: sweeping by time, which is cleaner still
-
-Chris: *sweep by time, per sample — that falls out clean, does it not?* It does, and cleaner than the
-length version, because samples arrive on a time schedule:
-
-```js
-theta += k * dt;        // one multiply. no hypot, no division, nothing.
-```
-
-This was first written up as a *trap* — that a literal per-sample step makes the sweep a property of the
-hardware, since a 240 Hz stylus would wind four times faster than a 60 Hz one. Chris: **it is just a
-calibration.** Right, and the numbers are clean — 6°/sample at 60 Hz is 360°/s, so 120 Hz wants 3°/sample
-for the same rate. Calibrate the per-sample step from the device rate and per-sample *is* per-time.
-
-That reframing is better than the original, because it exposes a trade that "just use `dt`" hides:
-
-| | per-sample, calibrated | raw `dt` |
+| pass | Δθ between neighbours | result |
 |---|---|---|
-| timestamp jitter | **immune** — the step is a constant | **inherits it** — and timestamps are the noisiest thing in the record, which is why `applyMagnet` clamps `dt` to `[0, 0.05]` |
-| dropped or coalesced samples | **under-advances** — the sweep silently falls behind the gesture | **correct** — the gap is in the timestamp |
-| cost | one add | one multiply |
+| **slow** | large — the bar turns a long way between one speck's encounter and the next | neighbouring shapes end up at unrelated angles: **disorder** |
+| **fast** | small — the bar crosses a neighbourhood before turning much | **broad patches of common orientation** |
+| **dwell** | one population sees a changing field repeatedly | depends on the accumulation model — a swirl, or a last-field bias. Worth *observing* rather than specifying |
 
-So neither pure form is right: a constant is smooth but lies when the rate wobbles; raw `dt` is honest but
-noisy. The synthesis is to **calibrate per stroke** — take the *median* `dt` across the stroke's samples
-and use that as the constant:
+Each shape still holds a perfectly definite orientation throughout. The **population** loses alignment
+because its members met different phases of the same rotating field. Apparent randomness, emerging from
+`position × trajectory × spin rate × encounter duration`, with no RNG anywhere.
 
-```js
-const step = k * med(dts);      // one calibrated constant per stroke
-```
+#### Calibration, and the rate to avoid
 
-Median because a few stalls should not move it, which is the same reason `restLean()` already uses `med()`
-for the grip baseline. That gets the smoothness of a constant, the device-independence of `dt`, and
-robustness against the frame the browser dropped — and it costs one pass over the samples that the stroke
-is already being walked for.
+Per-sample step is `ω` divided by the device rate, so one rotation per second is **6°/sample at 60 Hz,
+3° at 120 Hz, 1.5° at 240 Hz**. Because the tracking weight `w` also carries `dt`, both scale together
+and the physics comes out the same on any hardware — device independence in the model, not just the
+bookkeeping.
 
-A long stall is then the one case left over, and it should probably be treated as what it is — the user
-stopped — rather than as a very slow sample.
+One rate to stay away from: the field is **axial**, so a speck responds to the axis mod 180° and the alias
+period is **half a turn, not a whole one**. Any multiple of 180°/sample reads as a bar standing perfectly
+still. 6°/sample is 30 samples per axial cycle, nowhere near it; keeping the step under ~30° keeps the
+whole family out of reach.
 
-**What it changes.** Time and length are not variations on one idea, they are different instruments:
+#### How this was settled, since the reasoning went wrong twice
 
-| | θ = k·s (length) | θ = k·t (time) |
-|---|---|---|
-| what fixes the pattern | **the path** — the hand only sets graininess | **the gesture** — same path, wildly different results |
-| fast flick | full angular range, coarsely stepped | long, gently turning comb |
-| slow drag | full angular range, smooth | winds through many turns over a short path |
-| **dwell** | no angular change — combs one angle **harder** | winds **in place**: a local swirl |
+Recorded because the wrong turns are instructive. Two earlier passes concluded the sweep should advance by
+**arc length** (`θ = k·s`), once from algebra and once from a lag argument. Both rested on an unexamined
+assumption — that the spin rate rides on travel speed. It does not: a spinning bar has its own clock. With
+`ω` fixed, `k = ω/v` *emerges* and is speed-dependent, which is the entire effect.
 
-The dwell row is the decision. Under length, dwell owns strength alone and travel owns angle — the clean
-separation argued for above. Under time, dwell does both: it drives harder *and* spins the target, which
-is a grind-it-in-place gesture. For a **magnet** that is wrong physics (a bar magnet held still does not
-rotate). For a **scatter** control it is arguably exactly right, and it matches the original phrasing —
-*a fairly quick walk through 0–359* is a rate over time, not over distance.
+Chris proposed sweeping by time early and was argued out of it. He was right.
 
-#### Resolved: the specks lag the field, so length is right after all
+The per-speck **lag** analysis from that detour is still true — `sp.ang += da*w` is a first-order approach
+and `w` carries `dt`, so a speck does trail the field. But it answers *where one speck ends up*, whereas
+scatter is a question about *how much neighbours differ*. It is a secondary effect, not the mechanism.
 
-Chris's physical model, which settles the argument by making it unnecessary:
-
-> *a rare earth magnet over iron shapes on posts — that is what the micro acts like*
-
-Shapes on posts can **rotate but not translate**. Sweep the magnet slowly and they swing round to follow
-it. Sweep it fast and they are yanked partway and left wherever they happened to be. So what decides
-alignment is not the sweep rate by itself — it is **whether the field changes faster than a speck can
-track it.**
-
-And that lag is already implemented. The alignment step is a first-order approach toward the target:
-
-```js
-sp.ang += da * w        // w = min(1, str · dt · 30 · exp(−ρ²/(R²·0.5)))
-```
-
-`w` *is* the tracking rate, and it carries `dt` — so a fast pass gives each speck a small nudge, a slow
-pass a large one. Today that only means "weaker alignment to the same angle", because the target does not
-move. **Give the target a sweep and the lag starts doing real work**, and the speed-dependence Chris
-describes falls out of the existing machinery rather than needing to be built into the sweep rate:
-
-| gesture | what happens | Chris's words |
-|---|---|---|
-| **slow** | many samples per unit length, each with a large `w` — specks track the turning target closely and settle on the local angle | a combed gradient; alignment |
-| **medium** | specks are pulled partway toward a target that has already moved on | genuine scatter — *yanked partway and left at random angles* |
-| **fast** | few samples, each a tiny nudge toward a rapidly spinning target; the nudges largely cancel and specks keep the orientation they had | *fast and far — wide area, little disturbance* |
-
-So the sweep should advance by **arc length**, `θ = k·s`, and the speed behaviour is the lag's job. That
-retires the length-vs-time question: time-based sweeping would have built the speed-dependence in *twice*,
-once in the sweep and once in `w`.
-
-It also matches the other two things Chris said the gesture should mean — **how far you go is the area
-affected** (distance covers swath, which it already does), and **how fast you go reads as the sweep**, via
-the lag rather than directly.
-
-**One prediction here is mine, not the model's, and should be measured**: that the fast case *cancels* to
-"little disturbance" rather than settling into some weak average orientation. Averaging a spinning axial
-target ought to cancel, but "ought to" is not a measurement — and it is cheap to check, since the magnet
-is the one tool already using every channel.
-
-#### The spinning bar — and the one rate that must be avoided
-
-Chris: *the magnet in scatter is a spinning bar.* It is a good model, and it is the same law wearing
-better clothes. A bar spinning at a rate that rides on travel speed gives `dθ/dt = k·v`, which integrates
-to `θ = k·s` — the arc-length sweep, arrived at physically instead of algebraically. It also explains the
-three regimes without the lag having to be argued for: a slowly turning bar is one the shapes can follow,
-a fast one drags them partway, a very fast one averages to nothing.
-
-**The rate is one rotation per second**, with the per-sample step calibrated from the device: 6°/sample at
-60 Hz, 3° at 120 Hz, 1.5° at 240 Hz — all of which are 360°/s.
-
-That calibration buys more than consistency, and this is the reason to do it: **`w` carries `dt` too.**
-The tracking rate and the sweep step scale together, so a speck's lag behind the bar comes out the same at
-any sample rate. The *physics* becomes device-independent, not merely the bookkeeping.
-
-```
-60 Hz :  w ≈ 0.30/sample,  target moves 6°/sample   ⟶  lag ≈ 20°
-240 Hz:  w ≈ 0.075/sample, target moves 1.5°/sample ⟶  lag ≈ 20°
-```
-
-(An aliasing caveat, now moot at these numbers but worth recording: since the field is **axial**, a speck
-responds to the axis mod 180°, so the alias period is **half a turn, not a whole one** — any multiple of
-180°/sample would read as a bar standing still. 6°/sample is 30 samples per axial cycle, nowhere near it.
-Keep the step under ~30° and the whole family stays out of reach.)
-
-**But 360°/s probably will not scatter.** At default strength a centre speck's lag settles at roughly
-`r/w = 6/0.3 ≈ 20°` — it *tracks* the bar, trailing at a fixed offset. That is a combed gradient rotated
-20°, which is a lovely effect and is not disorder. For specks to be genuinely left behind, the lag wants
-to approach the axial half-period:
-
-```
-r / w ≳ 90°   ⟹   r ≳ 27°/sample   ⟹   ≈ 4–5 rotations/second
-```
-
-Still inside the Nyquist-safe band at 60 Hz, which is a fortunate coincidence: the usable range runs from
-0 up to ~30°/sample, and **scatter lives near the top of it** while alignment lives at the bottom. One
-control really does span both, exactly as the folded-together model wants.
-
-A textural consequence falls out too, from `w`'s `exp(−ρ²/(R²·0.5))` falloff: rim specks have a smaller
-`w`, so they lag more than centre ones at the same spin. A moderate rate should give an **aligned core
-with a scattered halo** rather than a uniform result. Worth looking at before deciding it is a defect —
-it may be the most useful setting on the dial.
-
-Which is also the honest answer to the coarse-stepping above. A fast flick stepping ~48° per sample is
-*not* an artifact to subdivide away — but it is uncomfortably close to the band where the step stops
-reading as rotation, and past 90° it starts reading as a *slower* rotation in the wrong direction. That is
-the real reason to bound `k`: not smoothness, but keeping the sampled motion on the correct side of
-Nyquist.
+And the gaussian kick is now clearly wrong for a reason better than "it preserves the mean": it was
+**simulating the appearance of disorder instead of the thing that causes it.** Ask what physically
+happened and the special case collapses into one parameter on the mechanism that was already there.
 
 #### While we are here: the pen's samples are being thrown away
 
