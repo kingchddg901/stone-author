@@ -247,10 +247,46 @@ is a grind-it-in-place gesture. For a **magnet** that is wrong physics (a bar ma
 rotate). For a **scatter** control it is arguably exactly right, and it matches the original phrasing —
 *a fairly quick walk through 0–359* is a rate over time, not over distance.
 
-Since Scatter is being folded into Align as one rate, the choice decides both. Recommendation: **θ = k·dt**
-— cheapest, device-independent once calibrated per stroke (above), and
-grind-in-place is a gesture worth having. The cost is giving up "the same path always scatters the same
-way", and that is Chris's call to make rather than mine.
+#### Resolved: the specks lag the field, so length is right after all
+
+Chris's physical model, which settles the argument by making it unnecessary:
+
+> *a rare earth magnet over iron shapes on posts — that is what the micro acts like*
+
+Shapes on posts can **rotate but not translate**. Sweep the magnet slowly and they swing round to follow
+it. Sweep it fast and they are yanked partway and left wherever they happened to be. So what decides
+alignment is not the sweep rate by itself — it is **whether the field changes faster than a speck can
+track it.**
+
+And that lag is already implemented. The alignment step is a first-order approach toward the target:
+
+```js
+sp.ang += da * w        // w = min(1, str · dt · 30 · exp(−ρ²/(R²·0.5)))
+```
+
+`w` *is* the tracking rate, and it carries `dt` — so a fast pass gives each speck a small nudge, a slow
+pass a large one. Today that only means "weaker alignment to the same angle", because the target does not
+move. **Give the target a sweep and the lag starts doing real work**, and the speed-dependence Chris
+describes falls out of the existing machinery rather than needing to be built into the sweep rate:
+
+| gesture | what happens | Chris's words |
+|---|---|---|
+| **slow** | many samples per unit length, each with a large `w` — specks track the turning target closely and settle on the local angle | a combed gradient; alignment |
+| **medium** | specks are pulled partway toward a target that has already moved on | genuine scatter — *yanked partway and left at random angles* |
+| **fast** | few samples, each a tiny nudge toward a rapidly spinning target; the nudges largely cancel and specks keep the orientation they had | *fast and far — wide area, little disturbance* |
+
+So the sweep should advance by **arc length**, `θ = k·s`, and the speed behaviour is the lag's job. That
+retires the length-vs-time question: time-based sweeping would have built the speed-dependence in *twice*,
+once in the sweep and once in `w`.
+
+It also matches the other two things Chris said the gesture should mean — **how far you go is the area
+affected** (distance covers swath, which it already does), and **how fast you go reads as the sweep**, via
+the lag rather than directly.
+
+**One prediction here is mine, not the model's, and should be measured**: that the fast case *cancels* to
+"little disturbance" rather than settling into some weak average orientation. Averaging a spinning axial
+target ought to cancel, but "ought to" is not a measurement — and it is cheap to check, since the magnet
+is the one tool already using every channel.
 
 #### While we are here: the pen's samples are being thrown away
 
