@@ -492,6 +492,7 @@ window.SA_I18N = (() => {
   "hint.pressure-is-on-for-your-next": "Pressure is on for your next lines: press harder for a heavier vein or more paint, lighter to thin it out.",
   "hint.protects-the-next-island-freezes-the": "Protects: the next island freezes the warp inside it, the rest of the slab warps as set.",
   "hint.reseeded-layer": "Reseeded {name} — new scatter, same density and size.",
+  "hint.restored-newer-work": "Picked up newer work you saved on another device.",
   "hint.save-cancelled": "Save cancelled.",
   "hint.save-is-unavailable-here-this-device": "Save is unavailable here; this device remembers your work automatically.",
   "hint.saved-stone-json": "Saved stone.json.",
@@ -708,6 +709,20 @@ window.SA_I18N = (() => {
   "tool.tune": "Tune",
   "tool.vein": "Vein",
   "tool.web": "Web",
+  "toolhint.branch": "Tap a vein on the side you want a minor vein to grow, or drag out from it to route one. Zoom in for shorter minors.",
+  "toolhint.chip": "Tap a tile edge to knock a corner off it. Chip size sets how big a bite it takes — Lay tiles has to be on first.",
+  "toolhint.cloud": "Drag to move the cloud field. The mottle and the warp move together, so you can place where the stone flows. Cloud X / Y set it precisely.",
+  "toolhint.gravity": "Tap for a point of gravity, or drag to lay a line of it. Pull gathers specks, push clears them; they bunch but never touch.",
+  "toolhint.light": "Drag to move the light. It lights the polish sheen (Specular) and the tile edges — one light for both. Light angle sets it precisely.",
+  "toolhint.magnet": "Drag to comb the specks like iron filings. The pen’s angle is the magnet: upright fans them out from the tip, laid over combs them along its lean. Slow passes align harder.",
+  "toolhint.mask": "Tap for an island, or drag to size one. It freezes the warp inside — an island of normalcy. Turn the reality window on and it shows daylight through, so under a UV/psyker light it stays a window of normal stone.",
+  "toolhint.moon": "Drag a moon across the slab. Like gravity, but it drags what it passes into its wake — a powerful local warp, hardest under the ball, fading at its edge. Ball size and pull set the reach and force; passes stack.",
+  "toolhint.move": "Drag to move around. Pinch, or use + and −, to zoom.",
+  "toolhint.pour": "Draw a line and lift. Specks pour along it: slow pools, fast thins, sharp bends fling drops.",
+  "toolhint.styl": "Draw a line. It becomes a stylolite — a toothy pressure-dissolution seam of interlocking columns, dark on light stone and pale on dark.",
+  "toolhint.tune": "Tap a vein, web crack or stylolite seam to tune just that one (a crack picks its whole spread). Its colour follows its layer until you change it here; reset it to follow again.",
+  "toolhint.vein": "Draw a line. The family roughens it, swells and breaks it, and grows its minor veins.",
+  "toolhint.web": "Draw a line. A crack runs along it and a web of cells spreads from it and thins out.",
   "ui.back-light-light-from-behind": "Back light: light from behind. Each bucket occludes by its own transmittance (veins nearly opaque, specks semi, the matrix glows), folded deepest → top. Tint it with Light temperature.",
   "ui.colour-editor-unavailable": "Colour editor unavailable",
   "ui.daylight": "daylight",
@@ -3164,24 +3179,27 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
 
   // ---- input
   const hintEl = document.getElementById('hint');
+  // Every tool explains itself on the hint line. KEYS, not prose: these are user-facing
+  // strings and they belong in the pack with all the others, where the gate can see them.
   const HINTS = {
-    vein: 'Draw a line. The family roughens it, swells and breaks it, and grows its minor veins.',
-    branch: 'Tap a vein on the side you want a minor vein to grow, or drag out from it to route one. Zoom in for shorter minors.',
-    web: 'Draw a line. A crack runs along it and a web of cells spreads from it and thins out.',
-    pour: 'Draw a line and lift. Specks pour along it: slow pools, fast thins, sharp bends fling drops.',
-    gravity: 'Tap for a point of gravity, or drag to lay a line of it. Pull gathers specks, push clears them; they bunch but never touch.',
-    magnet: 'Drag to comb the specks like iron filings. The pen\u2019s angle is the magnet: upright fans them out from the tip, laid over combs them along its lean. Slow passes align harder.',
-    styl: 'Draw a line. It becomes a stylolite — a toothy pressure-dissolution seam of interlocking columns, dark on light stone and pale on dark.',
-    tune: 'Tap a vein, web crack or stylolite seam to tune just that one (a crack picks its whole spread). Its colour follows its layer until you change it here; reset it to follow again.',
-    cloud: 'Drag to move the cloud field. The mottle and the warp move together, so you can place where the stone flows. Cloud X / Y set it precisely.',
-    moon: 'Drag a moon across the slab. Like gravity, but it drags what it passes into its wake — a powerful local warp, hardest under the ball, fading at its edge. Ball size and pull set the reach and force; passes stack.',
-    mask: 'Tap for an island, or drag to size one. It freezes the warp inside — an island of normalcy. Turn the reality window on and it shows daylight through, so under a UV/psyker light it stays a window of normal stone.',
-    light: 'Drag to move the light. It lights the polish sheen (Specular) and the tile edges — one light for both. Light angle sets it precisely.',
-    move: 'Drag to move around. Pinch, or use + and −, to zoom.',
+    vein: 'toolhint.vein',
+    branch: 'toolhint.branch',
+    web: 'toolhint.web',
+    pour: 'toolhint.pour',
+    gravity: 'toolhint.gravity',
+    magnet: 'toolhint.magnet',
+    styl: 'toolhint.styl',
+    tune: 'toolhint.tune',
+    cloud: 'toolhint.cloud',
+    moon: 'toolhint.moon',
+    mask: 'toolhint.mask',
+    light: 'toolhint.light',
+    move: 'toolhint.move',
+    chip: 'toolhint.chip',
   };
   let flashT = 0;
   function hint(msg) {
-    hintEl.textContent = msg || HINTS[tool];
+    hintEl.textContent = msg || (HINTS[tool] ? TR(HINTS[tool]) : '');
     hintEl.classList.toggle('flash', !!msg);
     clearTimeout(flashT);
     if (msg) flashT = setTimeout(() => hint(), 2600);
@@ -3722,18 +3740,72 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
     stoneReady = false; buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
   }
+  // AUTOSAVE, in two places on purpose.
+  //
+  // localStorage is the fast path: synchronous, always there, and the only option when this file is
+  // opened on its own. But it is per-browser, so it cannot follow you between devices — and the Claude
+  // Android app's webview DISCARDS it when the artifact is closed, silently, which makes a lost slab
+  // look exactly like a first visit. So when the studio is running as an artifact the slab is also
+  // written to the artifact's own store, under the viewer's PRIVATE path: work in progress on a
+  // publicly-linked artifact stays the author's, and a visitor gets their own space rather than
+  // treading on it.
+  //
+  // Both records carry a timestamp and the newer one wins, which is what makes phone-to-desktop work.
   const STORE_KEY = 'stone-author:autosave:v1';
-  let saveTimer = 0;
-  function writeLocal() { try { localStorage.setItem(STORE_KEY, JSON.stringify(serialize())); } catch (_) { /* private mode / blocked */ } }
-  function saveLocal() { clearTimeout(saveTimer); saveTimer = setTimeout(writeLocal, 400); }  // debounced during use
-  // and flush immediately when the page is hidden or closed, so nothing is lost even if the
-  // debounce or a paused rAF hasn't fired.
-  document.addEventListener('visibilitychange', () => { if (document.hidden) writeLocal(); });
+  let saveTimer = 0, cloudTimer = 0, cloudDoc = null, cloudAt = 0;
+  const wrap = () => ({ t: Date.now(), slab: serialize() });
+  const unwrap = o => (o && o.slab ? o : { t: 0, slab: o });     // older autosaves stored the bare slab
+
+  function writeLocal() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(wrap())); } catch (_) { /* private mode / blocked */ }
+  }
+  function writeCloud() {
+    if (!cloudDoc) return;
+    const rec = wrap(); cloudAt = rec.t;
+    cloudDoc.set(rec).catch(() => { /* offline or refused; localStorage still holds it */ });
+  }
+  function saveLocal() {
+    clearTimeout(saveTimer); saveTimer = setTimeout(writeLocal, 400);        // cheap, so debounce short
+    clearTimeout(cloudTimer); cloudTimer = setTimeout(writeCloud, 2500);     // a round trip, so longer
+  }
+  // Flush when the page is hidden or closed, so nothing is lost even if a debounce or a paused rAF has
+  // not fired. visibilitychange is the one that matters for the cloud write: it fires while the page is
+  // still alive, whereas pagehide cannot wait on anything asynchronous.
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { writeLocal(); writeCloud(); } });
   window.addEventListener('pagehide', writeLocal);
+
+  let localAt = 0;                                   // when the restored local copy was written
   function tryLoadLocal() {
-    try { const s = localStorage.getItem(STORE_KEY); if (s) return deserialize(JSON.parse(s)); } catch (_) { /* ignore */ }
+    try {
+      const s = localStorage.getItem(STORE_KEY);
+      if (s) { const r = unwrap(JSON.parse(s)); if (deserialize(r.slab)) { localAt = r.t || 0; return true; } }
+    } catch (_) { /* ignore */ }
     return false;
   }
+
+  // Resolve the store in the background — the page must paint from localStorage first, not wait on a
+  // network. If what is stored remotely is newer than what we restored, take it and say so.
+  (async () => {
+    if (!(window.claude && typeof window.claude.use === 'function')) return;
+    try {
+      const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+      if (!db || !user) return;
+      const id = await user.id();
+      if (!id) return;                                    // not signed in, or a visitor we cannot scope to
+      cloudDoc = db.doc('data/users/' + id + '/autosave');
+      const got = await cloudDoc.get();
+      const rec = got && got.data ? unwrap(got.data) : null;
+      if (rec && rec.slab && (rec.t || 0) > localAt && deserialize(rec.slab)) {
+        cloudAt = rec.t; writeLocal();
+        // Deferred: deserialize restores the tool, and the tool announces itself on the next frame,
+        // which would bury this. Replacing what is on screen has to be SAID — a canvas that silently
+        // becomes a different slab is alarming, not helpful.
+        setTimeout(() => hint(TR('hint.restored-newer-work')), 80);
+      } else if (marks.length) {
+        writeCloud();                                     // seed the store from what is already here
+      }
+    } catch (_) { cloudDoc = null; }
+  })();
   // Push the whole of the state into the controls - after a load, every control must match.
   function syncUI() {
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };

@@ -68,6 +68,35 @@ for (const file of packs) {
   }
 }
 
+// ---- 2b. prose sitting in the JS that never reaches a pack ----------------------------------------
+// The markup check above cannot see a user-facing string that lives in a JS table. Exactly that happened:
+// a `HINTS` object held fourteen tool descriptions, every one of them on screen, none of them routed,
+// and the gate said OK. So walk the studio's own script for literals that read like prose and are not
+// keys. Comments are skipped, since an apostrophe in one would otherwise open a phantom string.
+{
+  const src2 = js;
+  const lits = [];
+  for (let k = 0; k < src2.length; k++) {
+    const c = src2[k];
+    if (c === '/' && src2[k + 1] === '/') { k = src2.indexOf('\n', k); if (k < 0) break; continue; }
+    if (c === '/' && src2[k + 1] === '*') { k = src2.indexOf('*/', k) + 1; if (k < 1) break; continue; }
+    if (c !== "'" && c !== '"') continue;
+    let e = k + 1;
+    for (; e < src2.length; e++) { if (src2[e] === '\\') { e++; continue; } if (src2[e] === c) break; }
+    lits.push(src2.slice(k + 1, e)); k = e;
+  }
+  const PROSE = /^(?=.*[a-z]{3})[^<>{}]*$/;             // sentence-ish, not markup and not a template
+  for (const t of lits) {
+    if (t.length < 34) continue;                        // short labels are caught by other checks
+    if ((t.match(/ /g) || []).length < 5) continue;      // needs to read like a sentence
+    if (!PROSE.test(t)) continue;
+    if (/^[a-z0-9.\-_/]+$/.test(t)) continue;           // a key or a path
+    if (/^\d/.test(t)) continue;                        // a CSS font shorthand — '11px "IBM Plex Mono", …'
+    if (enKeys.has(t)) continue;                        // it IS a key
+    fail.push(`prose literal in the studio script, not routed through a pack: ${JSON.stringify(t.slice(0, 62))}…`);
+  }
+}
+
 // ---- 4b. the source English is BRITISH ------------------------------------------------------------
 // Measured, not assumed: the user-facing prose runs 25 "colour" to 0 "color". A stray American spelling
 // is therefore an inconsistency a reader notices, and it is cheapest to catch before it is translated

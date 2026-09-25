@@ -361,6 +361,9 @@
   ],
   "where": "transient hint line under the tool palette"
  },
+ "hint.restored-newer-work": {
+  "where": "transient hint line under the tool palette"
+ },
  "hint.save-cancelled": {
   "where": "transient hint line under the tool palette"
  },
@@ -1363,6 +1366,48 @@
    "web"
   ],
   "where": "in the \"Tool\" group/panel"
+ },
+ "toolhint.branch": {
+  "where": "the hint line under the tool palette, shown while the branch tool is selected"
+ },
+ "toolhint.chip": {
+  "where": "the hint line under the tool palette, shown while the chip tool is selected"
+ },
+ "toolhint.cloud": {
+  "where": "the hint line under the tool palette, shown while the cloud tool is selected"
+ },
+ "toolhint.gravity": {
+  "where": "the hint line under the tool palette, shown while the gravity tool is selected"
+ },
+ "toolhint.light": {
+  "where": "the hint line under the tool palette, shown while the light tool is selected"
+ },
+ "toolhint.magnet": {
+  "where": "the hint line under the tool palette, shown while the magnet tool is selected"
+ },
+ "toolhint.mask": {
+  "where": "the hint line under the tool palette, shown while the mask tool is selected"
+ },
+ "toolhint.moon": {
+  "where": "the hint line under the tool palette, shown while the moon tool is selected"
+ },
+ "toolhint.move": {
+  "where": "the hint line under the tool palette, shown while the move tool is selected"
+ },
+ "toolhint.pour": {
+  "where": "the hint line under the tool palette, shown while the pour tool is selected"
+ },
+ "toolhint.styl": {
+  "where": "the hint line under the tool palette, shown while the styl tool is selected"
+ },
+ "toolhint.tune": {
+  "where": "the hint line under the tool palette, shown while the tune tool is selected"
+ },
+ "toolhint.vein": {
+  "where": "the hint line under the tool palette, shown while the vein tool is selected"
+ },
+ "toolhint.web": {
+  "where": "the hint line under the tool palette, shown while the web tool is selected"
  },
  "ui.back-light-light-from-behind": {
   "terms": [
