@@ -4396,6 +4396,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function expClock() {
     const c = document.getElementById('expclock'); if (c) c.textContent = expT0 ? expElapsed(Date.now() - expT0) : '';
   }
+  // Canvas drawing is DEFERRED: the calls return long before the rasteriser has done anything, and the
+  // work only lands when something reads the pixels -- which, in an export, is toBlob. Without this the
+  // masks appear to render in milliseconds and their real cost is charged to the encode stage instead.
+  // Measured on a phone at 16384: the kit's fourteen images "rendered" in the time render-only took for
+  // one, while its encode ran 97 s longer than render-only's. Reading one pixel back synchronises.
+  const flushCanvas = c => { try { c.getContext('2d').getImageData(c.width - 1, c.height - 1, 1, 1); } catch (_) {} };
   const expFreeze = () => { clearInterval(expTick); expTick = null; };   // leave the line and its time on screen
   // ...but the NEXT export must start from zero. expStat only starts the clock when expT0 is unset, and
   // freezing deliberately leaves the finished time on screen -- so without this the second export of a
@@ -4442,6 +4448,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           expStat(TR('exp.tiles', { done, total, px: W }), 0.9 * done / total);
           await breathe();                                 // let the line land before the next tile blocks
         });
+        flushCanvas(c);
         const msRender = Date.now() - tR;
         expStat(TR('exp.encoding'), null); await breathe();   // one call; it cannot count itself
         const tE = Date.now();
@@ -4493,6 +4500,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
             await breathe();
           }));
         }
+        for (const c of group) flushCanvas(c);               // charge the rasterising to render, not encode
         msRender += Date.now() - tR;
         const tE = Date.now();
         for (const b of await encodePNGs(group)) bytes.push(b);    // still parallel within the pair
