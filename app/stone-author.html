@@ -20,6 +20,10 @@
   .sub { margin: 2px 0 0; color: var(--dim); font-size: 13px; }
   /* Two panes: the slab stays put on the left while the rail on the right scrolls. */
   .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+  /* Which build am I looking at? A clone, the raw file from GitHub and the hosted copy are
+     indistinguishable on screen otherwise, which makes a cross-browser test impossible to trust. */
+  .build { font: 11px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
+           margin-inline-start: 8px; vertical-align: 2px; user-select: all; }
   .work { display: grid; gap: 20px; align-items: start; }
   @media (min-width: 1080px) { .work { grid-template-columns: minmax(0, 1fr) minmax(330px, 430px); } }
   .stage { display: grid; gap: 9px; min-width: 0; }
@@ -129,7 +133,7 @@
 <div class="wrap">
   <div class="head">
     <div>
-      <h1 data-i18n="app.title">Stone author</h1>
+      <h1 data-i18n="app.title">Stone author</h1><span class="build" id="build"></span>
       <p class="sub" data-i18n="app.sub">You draw where the lines go. The family decides what they are.</p>
     </div>
     <div class="grp" role="group" aria-label="Family" data-i18n-attr="aria-label=a11y.family"><span class="lbl" data-i18n="lbl.family">Family</span>
@@ -1073,6 +1077,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const blurC = document.createElement('canvas');          // back-light blur scratch: scatter (a layer diffusing the light through it)
   const H = 0.625;                                     // frame height, in frame widths
   // THE SLAB IS 8 x 5 FT: his 5 ft slab, sized to this 16:10 frame. Metric is one multiply away.
+  // Shown beside the title. A clone, the raw file from GitHub and the hosted copy look identical on
+  // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
+  // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
+  // does, because a version marker that lags is worse than none: it states something untrue.
+  const BUILD = '2026.09.25.1';
+  { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
+
   const SLAB_FT = 8, FT_MM = 304.8;                    // frame width in feet; feet to mm
   const FAM = {
     carrara:   { ground: '#e6e6e4', vein: '#6c727b', web: '#979ca4', speck: '#8a8f97', gauge: 0.0045, rough: 0.26,

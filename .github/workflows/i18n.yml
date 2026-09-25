@@ -12,12 +12,14 @@ on:
       - 'app/stone-author.html'
       - 'i18n/**'
       - 'tools/check-i18n.mjs'
+      - 'tools/check-build.mjs'
       - '.github/workflows/i18n.yml'
   pull_request:
     paths:
       - 'app/stone-author.html'
       - 'i18n/**'
       - 'tools/check-i18n.mjs'
+      - 'tools/check-build.mjs'
       - '.github/workflows/i18n.yml'
   workflow_dispatch:
 
@@ -26,8 +28,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2      # check-build.mjs compares this commit against the one before it
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - name: Check every user-facing string is routed and every pack matches English
         run: node tools/check-i18n.mjs
+      - name: The build marker must move when the app does
+        run: node tools/check-build.mjs
