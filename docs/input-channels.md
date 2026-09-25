@@ -186,18 +186,48 @@ is set to a full turn per quarter width — a plausible "quick walk" — that is
 0.033 / 0.25 × 360° ≈ 48° of sweep per sample
 ```
 
-which is not a sweep, it is about seven discrete orientation bands. The faster the stroke the coarser it
-gets, so the artifact appears exactly where the effect is meant to be strongest.
+— about seven discrete orientation bands rather than a smooth sweep.
 
-The fix is to subdivide by arc length rather than consume samples as given, choosing the step from the
-angular budget:
+**Which is not a bug.** It was called an artifact here first, and Chris was right to reject that: *why
+would that be smooth, it's fast as heck.* A flick **should** land as a handful of coarse steps; a long
+slow stroke over the same path takes many more samples across the same distance and comes out smooth. So
+speed does not change the angular envelope — the path fixes that — it changes the **granularity**, and
+chunky-when-fast is the honest result. Do not subdivide it away.
 
+#### Reopened: sweeping by time, which is cleaner still
+
+Chris: *sweep by time, per sample — that falls out clean, does it not?* It does, and cleaner than the
+length version, because samples arrive on a time schedule:
+
+```js
+theta += k * dt;        // one multiply. no hypot, no division, nothing.
 ```
-step = maxΔθ / k          // e.g. maxΔθ = 5°
-```
 
-`resample(P, step)` already does exactly this, and is already in the file — it is the function `applyMoon`
-misuses. Here it is the right tool, because the magnet genuinely wants even *spatial* steps.
+**One trap, and it is a real one.** "Per sample" and "per time" are only the same thing at a fixed rate.
+If the step is literally *per sample* — `theta += delta` once per event — the sweep rate becomes a
+property of the **hardware**: a 240 Hz stylus winds four times faster than a 60 Hz one for the identical
+gesture, and the same slab drawn on two devices comes out different. Use `dt`, clamped as `applyMagnet`
+already clamps it. Then it is device-independent and just as cheap.
+
+**What it changes.** Time and length are not variations on one idea, they are different instruments:
+
+| | θ = k·s (length) | θ = k·t (time) |
+|---|---|---|
+| what fixes the pattern | **the path** — the hand only sets graininess | **the gesture** — same path, wildly different results |
+| fast flick | full angular range, coarsely stepped | long, gently turning comb |
+| slow drag | full angular range, smooth | winds through many turns over a short path |
+| **dwell** | no angular change — combs one angle **harder** | winds **in place**: a local swirl |
+
+The dwell row is the decision. Under length, dwell owns strength alone and travel owns angle — the clean
+separation argued for above. Under time, dwell does both: it drives harder *and* spins the target, which
+is a grind-it-in-place gesture. For a **magnet** that is wrong physics (a bar magnet held still does not
+rotate). For a **scatter** control it is arguably exactly right, and it matches the original phrasing —
+*a fairly quick walk through 0–359* is a rate over time, not over distance.
+
+Since Scatter is being folded into Align as one rate, the choice decides both. Recommendation: **θ = k·dt**
+— it is the cheapest, it is device-independent once `dt` is used rather than a sample count, and
+grind-in-place is a gesture worth having. The cost is giving up "the same path always scatters the same
+way", and that is Chris's call to make rather than mine.
 
 #### While we are here: the pen's samples are being thrown away
 
