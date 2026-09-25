@@ -56,6 +56,12 @@
  "a11y.reality-window": {
   "where": "accessibility label (aria-label), not visible on screen"
  },
+ "a11y.slab-name": {
+  "where": "label on the text box that names the slab, in the File section"
+ },
+ "a11y.slab-name-ph": {
+  "where": "placeholder in the slab-name box; the name every file falls back to when the box is empty"
+ },
  "a11y.stone-slab-draw-on-it": {
   "terms": [
    "slab",
@@ -557,9 +563,15 @@
   "where": "transient hint line under the tool palette"
  },
  "hint.saved-stone-json": {
+  "placeholders": {
+   "name": "the file that was written, e.g. carrara-hero.json"
+  },
   "where": "transient hint line under the tool palette"
  },
  "hint.saved-stone-json-this-device-also": {
+  "placeholders": {
+   "name": "the file that was written, e.g. carrara-hero.json"
+  },
   "where": "transient hint line under the tool palette"
  },
  "hint.select-something-first-the-box-on": {

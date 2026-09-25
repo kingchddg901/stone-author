@@ -394,6 +394,7 @@
       <button id="export" type="button" data-i18n="btn.export">Export</button>
       <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option></select>
       <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select>
+      <input id="slabname" type="text" maxlength="80" placeholder="stone" aria-label="Slab name" data-i18n-attr="aria-label=a11y.slab-name;placeholder=a11y.slab-name-ph">
       <span class="stat" id="expcap"></span>
       <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
     <div class="expprog" id="expprog" hidden><div class="expbar" id="expbar"><i id="expfill"></i></div><div class="exprow"><span class="stat" id="expstat"></span><span class="stat" id="expclock"></span></div></div>
@@ -454,6 +455,8 @@ window.SA_I18N = (() => {
   "a11y.magnet-mode": "Magnet mode",
   "a11y.pen": "Pen",
   "a11y.reality-window": "Reality window",
+  "a11y.slab-name": "Slab name",
+  "a11y.slab-name-ph": "stone",
   "a11y.stone-slab-draw-on-it": "Stone slab. Draw on it to author veins, cracks and pours; tap a vein with the branch tool to grow a minor vein.",
   "a11y.tile-options": "Tile options",
   "a11y.tiles": "Tiles",
@@ -577,8 +580,8 @@ window.SA_I18N = (() => {
   "hint.restored-newer-work": "Picked up newer work you saved on another device.",
   "hint.save-cancelled": "Save cancelled.",
   "hint.save-is-unavailable-here-this-device": "Save is unavailable here; this device remembers your work automatically.",
-  "hint.saved-stone-json": "Saved stone.json.",
-  "hint.saved-stone-json-this-device-also": "Saved stone.json. This device also remembers your work automatically.",
+  "hint.saved-stone-json": "Saved {name}.",
+  "hint.saved-stone-json-this-device-also": "Saved {name}. This device also remembers your work automatically.",
   "hint.select-something-first-the-box-on": "Select something first (the ▢ box on a row, or tap a vein with Tune).",
   "hint.select-something-to-hide-first-a": "Select something to hide first (a vein/web/seam with Tune, or a layer row).",
   "hint.select-the-layers-for-the-folder": "Select the layers for the folder first (their ▢ boxes), then + folder.",
@@ -2908,7 +2911,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // renderer outright. So 900 MB is the ceiling whatever the machine claims, and deviceMemory (coarse,
     // and capped at 8) is only ever used to reduce it.
     const budget = Math.min((opts.budgetMB || 900) * 1e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / 8);
-    const eh0 = Math.max(64, Math.min(Math.floor(budget / (live * FW * 4)), Math.floor(CANVAS_AREA_CAP / FW)));
+    let eh0 = Math.max(64, Math.min(Math.floor(budget / (live * FW * 4)), Math.floor(CANVAS_AREA_CAP / FW)));
+    // CANVAS_AREA_CAP is Blink's figure. Gecko and WebKit have their own, and a canvas past any of them
+    // reports the size asked for and then hands back dead pixels rather than throwing — so prove the band
+    // can actually hold a written pixel, halving until one does, instead of trusting one engine's number.
+    while (eh0 > 64 && !canvasFits(FW, eh0, 1)) eh0 = Math.floor(eh0 / 2);
     // The tiled path's own bleed is 12 * W/Wc, which is 1365 rows at 65535 — more padding than payload.
     // Measured at 2048, quadrupling bleed moved the difference from an untiled render only 22.3% → 19.7%.
     const bleed = Math.max(8, Math.min(Math.ceil(12 * (W / (Wc || 360))), 256, Math.floor(eh0 / 4)));
@@ -3876,8 +3883,30 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
 
   // ---- THE SOURCE: marks + family + settings. Everything bakes from this; save it, restore it.
+  // The slab's name. It travels IN the slab, so a loaded one brings its name with it and everything
+  // exported afterwards is named accordingly. A slab saved before this existed simply has none, and
+  // falls back to 'stone' — the name every file used to have.
+  let slabName = '';
+  const SLAB_FALLBACK = 'stone';
+  // Strips what Windows forbids in a filename, plus control characters, without this source needing a
+  // single escape sequence of its own. charCodeAt(92) is the backslash; writing it literally is how the
+  // previous version of this line ended up with a NUL in it.
+  function fileStem() {
+    const reserved = '<>:"/|?*';
+    let out = '';
+    for (const ch of String(slabName || '')) {
+      const code = ch.charCodeAt(0);
+      if (code < 32 || code === 127) continue;
+      if (code === 92 || reserved.includes(ch)) continue;
+      out += ch;
+    }
+    while (out.length && (out.endsWith('.') || out.endsWith(' '))) out = out.slice(0, -1);
+    return out.trim().slice(0, 80) || SLAB_FALLBACK;
+  }
+  const expName = (W, ext) => `${fileStem()}-${W}.${ext}`;
+
   function serialize() {
-    return { v: 1, fam, tool, view, layTiles, guidesOn,
+    return { v: 1, name: slabName, fam, tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
              layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed, haze: L.haze, transmit: L.transmit, scatter: L.scatter })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden], folders: folders.map(F => ({ name: F.name, v: F.v, c: F.c, members: [...F.members] })),
@@ -3885,6 +3914,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   function deserialize(o) {
     if (!o || o.v !== 1 || !Array.isArray(o.marks)) return false;
+    slabName = typeof o.name === 'string' ? o.name : '';   // absent on a slab saved before names existed
+    { const el = document.getElementById('slabname'); if (el) el.value = slabName; }
     fam = FAM[o.fam] ? o.fam : 'carrara';                 // a retired family (e.g. wood) falls back to Carrara
     tool = document.querySelector('[data-tool="' + o.tool + '"]') ? o.tool : 'vein';   // a retired tool (e.g. knot) falls back to Vein
     view = o.view; layTiles = !!o.layTiles; guidesOn = o.guidesOn !== false;
@@ -4627,7 +4658,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         expStat(TR('exp.saving'), 0.7); await breathe();
         const blob = new Blob([png], { type: 'image/png' });
         const d = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
-        if (d) await d.save({ filename: 'stone-render.png', data: blob }); else download('stone-render.png', blob);
+        const fn = expName(W, 'png');
+        if (d) await d.save({ filename: fn, data: blob }); else download(fn, blob);
         expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1); expFreeze();
         hint(TR('hint.exported-render', { px: W }));
         return;
@@ -4689,8 +4721,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const zip = zipStore(files);
       expStat(TR('exp.saving'), (makers.length + 1) / steps); await breathe();
       const dl = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
-      if (dl) await dl.save({ filename: 'stone-export.zip', data: zip });
-      else download('stone-export.zip', zip);
+      const fn = expName(W, 'zip');
+      if (dl) await dl.save({ filename: fn, data: zip });
+      else download(fn, zip);
       hint(TR('hint.exported-files', { n: files.length }));
       expStat(TR('exp.done-kit', { n: files.length, px: W, t: expElapsed(Date.now() - expT0) }), 1); expFreeze();
     } catch (e) {
@@ -4818,10 +4851,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const text = JSON.stringify(serialize());
     let dl = null; try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (_) { /* no runtime */ }
     if (dl) {                                            // published artifact: the granted download flow
-      try { await dl.save({ filename: 'stone.json', data: text }); hint(TR('hint.saved-stone-json')); }
+      try { await dl.save({ filename: fileStem() + '.json', data: text }); hint(TR('hint.saved-stone-json', { name: fileStem() + '.json' })); }
       catch (e) { hint(e && e.code === TR('hint.declined') ? TR('hint.save-cancelled') : TR('hint.save-is-unavailable-here-this-device')); }
-    } else if (download('stone.json', text)) {           // local file: an ordinary download
-      hint(TR('hint.saved-stone-json-this-device-also'));
+    } else if (download(fileStem() + '.json', text)) {   // local file: an ordinary download
+      hint(TR('hint.saved-stone-json-this-device-also', { name: fileStem() + '.json' }));
     } else {
       hint(TR('hint.this-device-remembers-your-work-automatically'));
     }
@@ -4867,7 +4900,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
 
   function applyTiers() {
     const wrap = document.getElementById('tiers'), sel = document.getElementById('expres');
-    const what = document.getElementById('expwhat'), mob = isMobile();
+    // Bands become an IDAT stream through CompressionStream: Chrome/Edge 80, Firefox 113, Safari 16.4.
+    // Without it this path cannot work at all, so the tier is withheld rather than offered and broken.
+    const what = document.getElementById('expwhat'), mob = isMobile() || typeof CompressionStream !== 'function';
     wrap.hidden = mob;                                     // not warned about here — simply not offered
     if (mob) { tierLarge = tierExtreme = false; }
     document.getElementById('tier-large').checked = tierLarge;
@@ -4935,7 +4970,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       });
       expStat(TR('exp.saving'), 0.96); await breathe();
       const d = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
-      if (d) await d.save({ filename: 'stone-render.png', data: r.blob }); else download('stone-render.png', r.blob);
+      const fn = expName(W, 'png');
+      if (d) await d.save({ filename: fn, data: r.blob }); else download(fn, r.blob);
       expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1); expFreeze();
       hint(TR('hint.exported-render', { px: W }));
     } catch (e) {
@@ -4959,6 +4995,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (o.what && has(what, o.what)) what.value = o.what;
     } catch (_) { /* storage blocked; the defaults in the markup stand */ }
     applyTiers();                                          // re-settle the scope menu for the restored width
+  { const el = document.getElementById('slabname');       // the name rides in the slab, so it is saved with it
+    if (el) el.addEventListener('input', () => { slabName = el.value; saveLocal(); }); }
     const save = () => { try { localStorage.setItem(EXPOPT_KEY, JSON.stringify({ w: +w.value, what: what.value })); } catch (_) {} };
     w.addEventListener('change', save); what.addEventListener('change', save);
   }
