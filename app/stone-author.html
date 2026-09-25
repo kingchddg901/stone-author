@@ -4383,8 +4383,28 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
     showGround(); syncLayerUI(); syncGranite(); syncFog(); hint();
   }
+  // Revoking a blob URL while the browser is still writing the file CANCELS the download, and the old
+  // one-second timer was set when an export was a few megabytes. At 800 MB the write is nowhere near
+  // done in a second, so the failure appears only at the sizes that take the longest to produce. The
+  // delay now scales with the payload, and a pagehide sweep means nothing is leaked if the tab goes
+  // first. The anchor is also put IN the document: a detached one is clicked fine by Chromium and was
+  // historically ignored by Gecko.
+  const liveURLs = new Set();
+  addEventListener('pagehide', () => { for (const u of liveURLs) { try { URL.revokeObjectURL(u); } catch (_) {} } liveURLs.clear(); });
   function download(name, text) {                       // works from a local file; inert in the artifact sandbox
-    try { const b = text instanceof Blob ? text : new Blob([text], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); return true; } catch (_) { return false; }
+    try {
+      const b = text instanceof Blob ? text : new Blob([text], { type: 'application/json' });
+      const url = URL.createObjectURL(b);
+      liveURLs.add(url);
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      const ms = Math.max(60000, Math.ceil(b.size / 1e6) * 200);   // ~200 ms per MB, never under a minute
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} liveURLs.delete(url); }, ms);
+      return true;
+    } catch (_) { return false; }
   }
 
   // ---- EXPORT: two levels + the rich set + .ora + SVG + source, all in one zip ------------------
