@@ -68,6 +68,28 @@ for (const file of packs) {
   }
 }
 
+// ---- 4b. the source English is BRITISH ------------------------------------------------------------
+// Measured, not assumed: the user-facing prose runs 25 "colour" to 0 "color". A stray American spelling
+// is therefore an inconsistency a reader notices, and it is cheapest to catch before it is translated
+// 18 times. Deliberately NOT on this list: "artifact", which the studio uses throughout as the rendering
+// term of art, and "-ize" endings, which are valid British (Oxford) spelling.
+const AMERICANISMS = [
+  [/\bcolors?\b/i, 'colour'], [/\bcolou?rize\b/i, 'colourise'], [/\bgray(s|ish)?\b/i, 'grey'],
+  [/\bcenters?\b/i, 'centre'], [/\bcentered\b/i, 'centred'], [/\bfibers?\b/i, 'fibre'],
+  [/\bneighbou?r\b/i, 'neighbour'], [/\bbehaviors?\b/i, 'behaviour'], [/\bcatalogs?\b/i, 'catalogue'],
+  [/\banalyze[ds]?\b/i, 'analyse'], [/\bmodeling\b/i, 'modelling'], [/\bmodeled\b/i, 'modelled'],
+  [/\btraveling\b/i, 'travelling'], [/\bdefense\b/i, 'defence'], [/\bgeologic\b/i, 'geological'],
+  [/\bmeters?\b/i, 'metre'], [/\bliters?\b/i, 'litre'], [/\bjewelry\b/i, 'jewellery'],
+];
+for (const [k, v] of Object.entries(EN)) {
+  for (const form of (v && typeof v === 'object') ? Object.values(v) : [v]) {
+    for (const [re, want] of AMERICANISMS) {
+      const hit = re.exec(String(form));
+      if (hit) fail.push(`${k}: American spelling "${hit[0]}" — this UI is British English, use "${want}"`);
+    }
+  }
+}
+
 // ---- 5. translator context: every key explained, every placeholder named, no stale entries ---------
 // These words are mostly ordinary English carrying a domain meaning (gauge, family, ground, matrix,
 // island, warp, moon, web), so a translator without context picks the wrong sense and the result reads
