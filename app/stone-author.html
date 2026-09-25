@@ -99,6 +99,12 @@
   .lay output { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
                 text-align: right; font-variant-numeric: tabular-nums; }
   .lay input[type=range] { width: 100%; accent-color: #8a8de0; }
+
+  /* ANDROID EDGE GESTURE: the system back swipe owns roughly 24dp of each screen edge and takes the
+     touch before the page sees it — no touch-action or preventDefault can refuse it. The wrap already
+     pads 16px, so inset the drawing surface another 16 to clear the strip: a stroke that starts near
+     the edge is then a stroke, not a navigation. Costs 32px of width on a phone and nothing above. */
+  @media (max-width: 700px) { #field { max-width: min(calc(100% - 32px), calc(56vh * 1.6)); } }
 </style>
 <div class="wrap">
   <div class="head">

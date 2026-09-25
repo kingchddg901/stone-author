@@ -45,6 +45,12 @@
   button[aria-pressed="true"] { background: #33365a; border-color: #6b6ea0; }
   #dumpOut { width: 100%; min-height: 160px; background: #111219; color: var(--text); border: 1px solid var(--line);
              border-radius: 6px; font: 11px "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+
+  /* ANDROID EDGE GESTURE: the system back swipe owns roughly 24dp of each screen edge and takes the
+     touch before the page sees it — no touch-action or preventDefault can refuse it. The wrap already
+     pads 16px, so inset the drawing surface another 16 to clear the strip: a stroke that starts near
+     the edge is then a stroke, not a navigation. Costs 32px of width on a phone and nothing above. */
+  @media (max-width: 700px) { #pad { width: calc(100% - 32px); margin-inline: auto; } }
 </style>
 <div class="wrap">
   <div>

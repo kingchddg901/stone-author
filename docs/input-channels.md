@@ -278,6 +278,38 @@ from the same gesture, and the same person changing grip changes the tool. That 
 normalisation" noted above, now measured rather than inferred — and folding it into the shared adapter
 fixes it as a side-effect.
 
+#### Measured on the phone — and it refutes the coalescing hypothesis
+
+A 53-second capture from Chris's **Galaxy S23 Ultra (Android 16, WebView)**, 3,537 events, 59 strokes:
+
+| | measured |
+|---|---|
+| `pointermove` | 1,690 events — median interval **16.6 ms → 60.2 Hz** |
+| `pointerrawupdate` | 1,705 events — **also 60.2 Hz**, offered but no finer |
+| **coalesced** | **24 events in the whole capture** (0.7%) |
+| pressure (pen down) | 0.000–**0.613**, median **0.089**, p90 0.298, 597 distinct values |
+| lean | 1.0–70.9°, median 41°, 540 distinct values |
+| hover | **52% of all events** |
+
+**The section below was wrong, and this is the correction.** I supposed the studio was discarding a
+120–240 Hz pen by not calling `getCoalescedEvents()`. The probe *does* call it, on the actual device, and
+recovered **24 events out of 3,537** — 0.7%, not a multiple. `pointerrawupdate` is offered and returns the
+same 60.2 Hz. On this hardware in this webview the pen genuinely reports at vsync, and coalescing is
+nearly free of content. Worth re-checking in Chrome and Samsung Internet, but the "free fidelity" claim
+does not survive its first measurement.
+
+**What the capture does confirm, with better evidence than the granite sheet:**
+
+- **Pressure needs normalising.** Even when deliberately exercising it — press light, then hard, as the
+  probe asks — the median is **0.089** and p90 is **0.298**. The top third of the range is reachable but
+  rare and 1.0 never arrives at all, so mapping raw 0..1 onto the effect spends most of its resolution on
+  pressures nobody applies. 597 distinct values means the sensor has plenty to give; the mapping is what
+  wastes it.
+- **Tilt is the strong channel.** 1–71°, median 41°, 540 distinct values — swung across most of its range
+  in ordinary use.
+- **Hover is abundant.** Over half of all events. Learning the rest grip from hover, proposed above on
+  principle, has plenty of data to learn from in practice.
+
 #### While we are here: the pen's samples are being thrown away
 
 `getCoalescedEvents()` appears **nowhere** in the studio. Browsers coalesce pointer moves down to roughly
