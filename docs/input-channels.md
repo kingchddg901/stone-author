@@ -288,6 +288,34 @@ the lag rather than directly.
 target ought to cancel, but "ought to" is not a measurement — and it is cheap to check, since the magnet
 is the one tool already using every channel.
 
+#### The spinning bar — and the one rate that must be avoided
+
+Chris: *the magnet in scatter is a spinning bar.* It is a good model, and it is the same law wearing
+better clothes. A bar spinning at a rate that rides on travel speed gives `dθ/dt = k·v`, which integrates
+to `θ = k·s` — the arc-length sweep, arrived at physically instead of algebraically. It also explains the
+three regimes without the lag having to be argued for: a slowly turning bar is one the shapes can follow,
+a fast one drags them partway, a very fast one averages to nothing.
+
+**But not "one rotation per sample".** That is precisely the frequency the simulation cannot see. Sampled
+once per full turn, the target sits at the identical angle every sample, so a bar spinning flat out reads
+as a bar standing perfectly still — and the specks align to it beautifully. The wagon-wheel effect, and it
+produces the exact opposite of the intent.
+
+It is worse than the 360° figure suggests, because the field is **axial**: a speck responds to the axis
+mod 180°, so the alias period is **half a turn, not a whole one**. Every multiple of 180° per sample
+aliases to a static bar. Nyquist puts the hard ceiling at 90°/sample just to register that the axis is
+turning at all, and well below that to look like rotation rather than jitter.
+
+Chris's earlier figure is safely clear of it: **6°/sample is 30 samples per axial cycle**, smooth and
+unambiguous. As a rule, keep the per-sample step **under about 30°** and the aliasing family is nowhere
+near.
+
+Which is also the honest answer to the coarse-stepping above. A fast flick stepping ~48° per sample is
+*not* an artifact to subdivide away — but it is uncomfortably close to the band where the step stops
+reading as rotation, and past 90° it starts reading as a *slower* rotation in the wrong direction. That is
+the real reason to bound `k`: not smoothness, but keeping the sampled motion on the correct side of
+Nyquist.
+
 #### While we are here: the pen's samples are being thrown away
 
 `getCoalescedEvents()` appears **nowhere** in the studio. Browsers coalesce pointer moves down to roughly
