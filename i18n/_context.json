@@ -99,6 +99,29 @@
  "app.title": {
   "where": "in the studio header"
  },
+ "big.confirm": {
+  "placeholders": {
+   "gpx": "the pixel count in gigapixels, e.g. 2.684",
+   "h": "the export height in pixels, grouped, e.g. 40,959",
+   "w": "the export width in pixels, grouped, e.g. 65,535"
+  },
+  "where": "the confirmation shown when starting the very largest render"
+ },
+ "big.extreme": {
+  "where": "label on the second toggle, which unlocks the single largest export width"
+ },
+ "big.large": {
+  "where": "label on the toggle that unlocks the export widths above 16384, in the File section"
+ },
+ "big.note": {
+  "placeholders": {
+   "px": "the width above which the export streams in bands, 16384"
+  },
+  "where": "standing note beside the Large render toggle once it is on"
+ },
+ "big.warn": {
+  "where": "the warning shown, and confirmed, when Large render is switched on"
+ },
  "btn.cal-cancel": {
   "where": "button in the Calibrate the pen section, shown only while calibrating"
  },
@@ -107,6 +130,9 @@
  },
  "btn.cal-start": {
   "where": "button in the Calibrate the pen section"
+ },
+ "btn.cancel": {
+  "where": "the cancel button on both large-render dialogues"
  },
  "btn.clear": {
   "where": "in the \"Edit\" group/panel"
@@ -170,6 +196,12 @@
  },
  "btn.spot-toggle": {
   "where": "under the \"coat-and-light\" section"
+ },
+ "btn.start-giant": {
+  "where": "the accept button on the giant render confirmation"
+ },
+ "btn.understood": {
+  "where": "the accept button on the Large render warning"
  },
  "btn.undo": {
   "where": "in the \"Edit\" group/panel"

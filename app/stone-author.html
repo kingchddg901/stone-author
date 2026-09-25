@@ -71,6 +71,13 @@
   @keyframes expsweep { from { background-position: 130% 0; } to { background-position: -130% 0; } }
   @media (prefers-reduced-motion: reduce) { .expbar.busy { animation: none; background: var(--on-line); opacity: .5; } }
   .stat.bad { color: var(--warn); }
+  .tiers { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 10px; }
+  .tgl { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); cursor: pointer; }
+  .tgl input { accent-color: var(--warn); }
+  #bigdlg { max-width: 46ch; border: 1px solid var(--warn); border-radius: 8px; background: var(--ground); color: var(--text); }
+  #bigdlg::backdrop { background: rgba(0, 0, 0, .6); }
+  #bigdlg .note { max-width: none; margin-bottom: 12px; white-space: pre-line; }
+  button.warn { border-color: var(--warn); color: var(--warn); }
   .note b { color: var(--text); font-weight: 500; }
   .layers { display: grid; gap: 5px; width: 100%; }
   .lay { display: grid; grid-template-columns: 16px 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch 18px;
@@ -385,11 +392,20 @@
       <button id="save" type="button" data-i18n="btn.save">Save</button>
       <button id="load" type="button" data-i18n="btn.load">Load</button>
       <button id="export" type="button" data-i18n="btn.export">Export</button>
-      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option></select>
+      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option></select>
       <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select>
       <span class="stat" id="expcap"></span>
       <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
     <div class="expprog" id="expprog" hidden><div class="expbar" id="expbar"><i id="expfill"></i></div><div class="exprow"><span class="stat" id="expstat"></span><span class="stat" id="expclock"></span></div></div>
+    <div class="tiers" id="tiers" hidden>
+      <label class="tgl"><input type="checkbox" id="tier-large"><span data-i18n="big.large">Large render</span></label>
+      <label class="tgl" id="tier-extreme-row" hidden><input type="checkbox" id="tier-extreme"><span data-i18n="big.extreme">Extreme</span></label>
+      <span class="stat" id="tier-note"></span>
+    </div>
+    <dialog id="bigdlg"><form method="dialog">
+      <p class="note" id="bigdlg-text"></p>
+      <div class="grp"><button value="cancel" data-i18n="btn.cancel">Cancel</button><button value="go" id="bigdlg-go" class="warn" data-i18n="btn.start-giant">Start giant render</button></div>
+    </form></dialog>
   </div></details>
   <details class="sec"><summary data-i18n="sec.how-the-tools-read">How the tools read</summary><div class="body">
   <p class="note" id="fwd" data-i18n="btn.fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
@@ -449,9 +465,15 @@ window.SA_I18N = (() => {
   "a11y.zoom-out": "Zoom out",
   "app.sub": "You draw where the lines go. The family decides what they are.",
   "app.title": "Stone author",
+  "big.confirm": "Start {w} × {h} render?\n\n{gpx} gigapixels. This may run for several minutes and produce a file approaching or exceeding 1 GB. Other software may need tens of gigabytes to open it.",
+  "big.extreme": "Extreme",
+  "big.large": "Large render",
+  "big.note": "Above {px}px the export streams the picture in bands. It cannot resume — do not close the tab.",
+  "big.warn": "This is not fast. It is not guaranteed to be stable. It will eat storage.\n\nIt cannot resume: closing the tab or navigating away loses the whole render.\n\nDo not run this on a mobile device. Close anything you are not using.",
   "btn.cal-cancel": "Cancel",
   "btn.cal-clear": "Forget",
   "btn.cal-start": "Start",
+  "btn.cancel": "Cancel",
   "btn.clear": "Clear",
   "btn.colour-fromfam": "Palette from family",
   "btn.colour-toggle": "Show colour editor",
@@ -467,6 +489,8 @@ window.SA_I18N = (() => {
   "btn.reroll": "Reroll last",
   "btn.save": "Save",
   "btn.spot-toggle": "Beam",
+  "btn.start-giant": "Start giant render",
+  "btn.understood": "I understand",
   "btn.undo": "Undo",
   "btn.uv-toggle": "Black light",
   "btn.warp-holdmajor": "Major veins stable",
@@ -4391,7 +4415,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const ihdr = new Uint8Array(13), dv = new DataView(ihdr.buffer);
     dv.setUint32(0, p.FW); dv.setUint32(4, p.FH); ihdr[8] = 8; ihdr[9] = 6;   // 8-bit RGBA
     const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', ihdr)];
-    if (meta) parts.push(pngTextChunk('stone-author', meta));
+    const metaStr = typeof meta === 'function' ? meta({ msRender: tRender, bands: p.strips, bytes }) : meta;
+    if (metaStr) parts.push(pngTextChunk('stone-author', metaStr));
     parts.push(...idats, pngChunk('IEND', new Uint8Array(0)));
     return { blob: new Blob(parts, { type: 'image/png' }), plan: p, msRender: tRender, bytes };
   }
@@ -4801,19 +4826,139 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       hint(TR('hint.this-device-remembers-your-work-automatically'));
     }
   });
-  document.getElementById('export').addEventListener('click', () =>
-    exportAll(+document.getElementById('expres').value, document.getElementById('expwhat').value === 'render'));
+  // ---- LARGE RENDER TIERS -------------------------------------------------------------------------
+  // Above 16384 the export stops using a canvas and streams bands (renderStreamedPNG). That is slower,
+  // holds ~900 MB while it works, makes a file measured in hundreds of megabytes, and CANNOT RESUME —
+  // close the tab and the whole thing is gone. So it is off by default, never offered on a phone, and
+  // the top size is armed separately and disarms itself the moment a render starts.
+  const TIER_KEY = 'stone-author:tiers:v1', STRIP_FROM = 16384;
+  const isMobile = () => (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean')
+    ? navigator.userAgentData.mobile
+    : /Mobi|Android|iPhone|iPod/i.test(navigator.userAgent || '');
+  let tierLarge = false, tierExtreme = false;
+  try { tierLarge = JSON.parse(localStorage.getItem(TIER_KEY) || '{}').large === true; } catch (_) {}
+
+  // Deliberately does NOT wait on the dialog's `close` event. Measured in an embedded Chromium: the
+  // dialog opens, closes and sets returnValue correctly, and neither `onclose` nor
+  // addEventListener('close') ever fires — so a promise waiting on it hangs for ever and the toggle
+  // silently does nothing. Resolve from the buttons, and watch `open` as the backstop, which also covers
+  // Escape and a backdrop dismissal.
+  function bigDialog(text, goLabel) {
+    const d = document.getElementById('bigdlg');
+    if (!d || !d.showModal) return Promise.resolve(confirm(text));   // no <dialog>: the browser's own
+    document.getElementById('bigdlg-text').textContent = text;
+    const go = document.getElementById('bigdlg-go'), no = d.querySelector('[value=cancel]');
+    go.textContent = goLabel;
+    return new Promise(res => {
+      let done = false, poll = 0;
+      const finish = v => {
+        if (done) return;
+        done = true; clearInterval(poll);
+        go.removeEventListener('click', yes); no.removeEventListener('click', nope);
+        try { if (d.open) d.close(); } catch (_) {}
+        res(v);
+      };
+      const yes = () => finish(true), nope = () => finish(false);
+      go.addEventListener('click', yes); no.addEventListener('click', nope);
+      poll = setInterval(() => { if (!d.open) finish(d.returnValue === 'go'); }, 120);
+      d.showModal();
+    });
+  }
+
+  function applyTiers() {
+    const wrap = document.getElementById('tiers'), sel = document.getElementById('expres');
+    const what = document.getElementById('expwhat'), mob = isMobile();
+    wrap.hidden = mob;                                     // not warned about here — simply not offered
+    if (mob) { tierLarge = tierExtreme = false; }
+    document.getElementById('tier-large').checked = tierLarge;
+    document.getElementById('tier-extreme-row').hidden = !tierLarge;
+    document.getElementById('tier-extreme').checked = tierExtreme;
+    for (const o of sel.options) {
+      const t = o.dataset.tier;
+      if (!t) continue;                                    // plain canvas sizes: the ceiling probe owns those
+      o.disabled = o.hidden = t === 'large' ? !tierLarge : !tierExtreme;
+    }
+    if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) {
+      const ok = [...sel.options].filter(o => !o.disabled);
+      sel.value = ok.length ? ok[ok.length - 1].value : '1024';   // the highest still on offer
+    }
+    // The kit at these sizes would be eight full-size images; only the render is on the table.
+    const streamed = +sel.value > STRIP_FROM;
+    if (streamed) what.value = 'render';
+    what.disabled = streamed;
+    document.getElementById('tier-note').textContent = tierLarge ? TR('big.note', { px: STRIP_FROM }) : '';
+  }
+
+  // The element is captured BEFORE the await: Event.target is only valid while the event is being
+  // dispatched, and awaiting the dialogue outlives that — e.target is null by the time it resolves.
+  document.getElementById('tier-large').addEventListener('change', async e => {
+    const box = document.getElementById('tier-large');
+    if (box.checked && !(await bigDialog(TR('big.warn'), TR('btn.understood')))) { box.checked = false; return; }
+    tierLarge = box.checked;
+    if (!tierLarge) tierExtreme = false;
+    try { localStorage.setItem(TIER_KEY, JSON.stringify({ large: tierLarge })); } catch (_) {}
+    applyTiers();
+  });
+  document.getElementById('tier-extreme').addEventListener('change', () => {
+    tierExtreme = document.getElementById('tier-extreme').checked;   // deliberately NOT persisted
+    applyTiers();
+  });
+  document.getElementById('expres').addEventListener('change', applyTiers);
+
+  document.getElementById('export').addEventListener('click', async () => {
+    const W = +document.getElementById('expres').value;
+    if (W <= STRIP_FROM) return exportAll(W, document.getElementById('expwhat').value === 'render');
+    const h = Math.round(W * H);
+    if (W >= 65535 && !(await bigDialog(
+          TR('big.confirm', { w: W.toLocaleString(), h: h.toLocaleString(), gpx: (W * h / 1e9).toFixed(3) }),
+          TR('btn.start-giant')))) return;
+    tierExtreme = false; applyTiers();                     // disarm on LAUNCH, not on success
+    exportStreamed(W);
+  });
+
+  // Render-only, streamed in bands. Shares the progress line, the clock and the failure handling with
+  // the ordinary export; what differs is that nothing the size of the picture is ever allocated.
+  async function exportStreamed(W) {
+    if (exporting) return; exporting = true;
+    const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
+    btn.disabled = selW.disabled = true;
+    expReset();
+    hint(TR('hint.exporting-render', { w: W }));
+    try {
+      expStat(TR('exp.preparing'), null); await breathe();
+      const r = await renderStreamedPNG(W, m => expMeta({
+        scope: 'render', streamed: true, w: W, h: Math.round(W * H),
+        bands: m.bands, bytes: m.bytes, ms: { render: m.msRender, total: Date.now() - expT0 },
+      }), async (y, FH, pl) => {
+        expStat(TR('exp.strip', { done: Math.ceil(y / pl.stripH), total: pl.strips, px: W }), 0.92 * y / FH);
+        await breathe();
+      });
+      expStat(TR('exp.saving'), 0.96); await breathe();
+      const d = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
+      if (d) await d.save({ filename: 'stone-render.png', data: r.blob }); else download('stone-render.png', r.blob);
+      expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1); expFreeze();
+      hint(TR('hint.exported-render', { px: W }));
+    } catch (e) {
+      const msg = TR('hint.export-failed-msg', { err: (e && e.message || e) });
+      hint(msg); expStat(msg, -1);
+    } finally { btn.disabled = selW.disabled = false; exporting = false; applyTiers(); }
+  }
+  applyTiers();
   // Remember what you last chose. Per viewer, per device: a reload used to drop you back on Everything at
   // 2048 without saying so, which reads as the app overriding you. The width is still clamped by the
   // ceiling probe when the File section opens, so a remembered size this device cannot manage is corrected.
   { const EXPOPT_KEY = 'stone-author:expopts:v1';
     const w = document.getElementById('expres'), what = document.getElementById('expwhat');
-    const has = (sel, v) => [...sel.options].some(o => o.value === String(v));
+    // An OFFERED option only: the tier gate runs before this, and a width it just withdrew must not be
+    // restored behind its back. Arming Extreme, picking 65535 and reloading used to come back with 65535
+    // still selected and no tier to justify it.
+    const has = (sel, v) => [...sel.options].some(o => o.value === String(v) && !o.disabled);
     try {
       const o = JSON.parse(localStorage.getItem(EXPOPT_KEY) || '{}');
       if (o.w != null && has(w, o.w)) w.value = String(o.w);
       if (o.what && has(what, o.what)) what.value = o.what;
     } catch (_) { /* storage blocked; the defaults in the markup stand */ }
+    applyTiers();                                          // re-settle the scope menu for the restored width
     const save = () => { try { localStorage.setItem(EXPOPT_KEY, JSON.stringify({ w: +w.value, what: what.value })); } catch (_) {} };
     w.addEventListener('change', save); what.addEventListener('change', save);
   }
