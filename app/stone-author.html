@@ -493,11 +493,13 @@ window.SA_I18N = (() => {
   "exp.done-render": "Saved the render · {px}px · {t}",
   "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
+  "exp.err.side-cap": "This browser cannot make an image wider than {px} pixels, whatever the memory.",
   "exp.packing": "Packing the archive…",
   "exp.preparing": "Preparing…",
   "exp.prog": "Rendering {done} of {total} · {px}px",
   "exp.prog-tiles": "Image {img} of {imgs} · tile {done} of {total} · {px}px",
   "exp.saving": "Saving the file…",
+  "exp.strip": "Rendering band {done} of {total} · {px}px",
   "exp.tiles": "Rendering tile {done} of {total} · {px}px",
   "exp.too-big": "This device cannot allocate a canvas that large. Open the studio on a desktop for this size.",
   "fam.calacatta": "Calacatta",
@@ -2757,7 +2759,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // render and export. renderSlabTo paints the current geometry once more at the island's `show` spectrum;
   // compositeWindow feathers that alt render in through the disc. So an island of normalcy — daylight stone seen
   // through a UV/psyker view — is authored in SA, not hand-composited afterwards.
-  function renderSlabTo(w, h, tf, coatScale, spec) {
+  // `tile` is {ox, oy, fw, fh} when this render covers only PART of the finished slab — a strip. Without
+  // it applyCoat computes every global gradient against the piece rather than the whole, and each piece
+  // restarts them. Nothing needed it until the slab grew past what one canvas can hold.
+  function renderSlabTo(w, h, tf, coatScale, spec, tile) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const cx = c.getContext('2d'), svG = g2d, svS = lightSpectrum, svU = uvMode;
     lightSpectrum = spec; uvMode = spec !== 0;
@@ -2766,12 +2771,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, w, h); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, w, h); cx.globalAlpha = 1; } }
     cx.setTransform(tf[0], tf[1], tf[2], tf[3], tf[4], tf[5]); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
     paintStoneContent(false, false);
-    applyCoat(c, cx, coatScale, { ident: false, uvMode, backlit: false });
+    applyCoat(c, cx, coatScale, { ident: false, uvMode, backlit: false, tiled: !!tile }, tile);
     g2d = svG; lightSpectrum = svS; uvMode = svU;
     return c;
   }
-  function compositeWindow(target, win, w, h, tf, coatScale, cx, cy, kr) {
-    const alt = renderSlabTo(w, h, tf, coatScale, win.show);
+  function compositeWindow(target, win, w, h, tf, coatScale, cx, cy, kr, tile) {
+    const alt = renderSlabTo(w, h, tf, coatScale, win.show, tile);
     const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h;
     const tc = tmp.getContext('2d'); tc.drawImage(alt, 0, 0);
     tc.globalCompositeOperation = 'destination-in';                    // keep only the feathered disc of the alt render
@@ -2859,6 +2864,50 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const p = tiledPlan(W, tilePx, bleedPx);
     for (const j of p.jobs) j();
     return p.finish();
+  }
+
+  // ---- STRIPS: the slab in full-width bands, for a render too large to hold ---------------------------
+  // Chromium caps a canvas at 2^28 px, which at 16:10 is a width of 20,724, and at 65,535 per side
+  // absolutely. Past the area cap a canvas still reports the width you asked for and hands back DEAD
+  // PIXELS — no throw, no clamp — which is why canvasFits writes a marker and reads it back.
+  //
+  // A band of the finished slab is always far under the area cap, and PNG is a stream of scanlines, so an
+  // image of any size can be written without the whole thing ever existing. Same machinery as a tile:
+  // paintStoneContent under a slab-space transform, applyCoat told where the band sits, windows composited
+  // with the same offset. Rendered with bleed above and below, of which the middle is kept.
+  const CANVAS_AREA_CAP = 2 ** 28, CANVAS_SIDE_CAP = 65535;
+  function stripPlan(W, opts) {
+    opts = opts || {};
+    const FW = W, FH = Math.round(W * H);
+    const live = gatherMasks().filter(m => m.show != null).length ? 2 : 1;   // strip + the window's alt render
+    // Measured on a 16 GB desktop: a peak near 940 MB completed 65535 repeatedly; near 1.5 GB killed the
+    // renderer outright. So 900 MB is the ceiling whatever the machine claims, and deviceMemory (coarse,
+    // and capped at 8) is only ever used to reduce it.
+    const budget = Math.min((opts.budgetMB || 900) * 1e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / 8);
+    const eh0 = Math.max(64, Math.min(Math.floor(budget / (live * FW * 4)), Math.floor(CANVAS_AREA_CAP / FW)));
+    // The tiled path's own bleed is 12 * W/Wc, which is 1365 rows at 65535 — more padding than payload.
+    // Measured at 2048, quadrupling bleed moved the difference from an untiled render only 22.3% → 19.7%.
+    const bleed = Math.max(8, Math.min(Math.ceil(12 * (W / (Wc || 360))), 256, Math.floor(eh0 / 4)));
+    const stripH = Math.max(1, Math.min(opts.stripH || (eh0 - 2 * bleed), FH));
+    return { FW, FH, stripH, bleed, live, strips: Math.ceil(FH / stripH),
+             peakMB: Math.round(live * FW * (stripH + 2 * bleed) * 4 / 1e6) };
+  }
+  function renderStrip(W, y0, h, bleed, wins) {
+    const finalW = W, finalH = Math.round(W * H), bs = W / (Wc || 360), prevG = g2d;
+    const ey0 = y0 - bleed, eh = h + 2 * bleed;
+    const c = document.createElement('canvas'); c.width = finalW; c.height = eh;
+    const cx = c.getContext('2d');
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;
+    if (uvMode) { cx.fillStyle = UV_DARK; cx.fillRect(0, 0, finalW, eh); }
+    else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, finalW, eh); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, finalW, eh); cx.globalAlpha = 1; } }
+    const tile = { ox: 0, oy: ey0, fw: finalW, fh: finalH };
+    cx.setTransform(finalW, 0, 0, finalW, 0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
+    paintStoneContent(false, false);
+    applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true }, tile);
+    g2d = prevG;
+    for (const win of wins)
+      compositeWindow(cx, win, finalW, eh, [finalW, 0, 0, finalW, 0, -ey0], bs, win.x * finalW, win.y * finalW - ey0, finalW, tile);
+    return c;                                              // caller keeps rows [bleed, bleed + h)
   }
   // Same plan, same order, a yield between tiles so the caller can say where it has got to.
   async function renderTiledStepped(W, onTile) {
@@ -4281,17 +4330,70 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // to the renderer actually made something faster, rather than feeling that it did. PNG-standard and
   // strippable, and every viewer ignores it. NOTE: it records the browser's user-agent string, because on
   // a phone the device IS the measurement -- strip the chunk before sharing a render if that matters.
-  function pngText(u8, keyword, text) {
+  function pngChunk(type, data) {
+    const out = new Uint8Array(12 + data.length), dv = new DataView(out.buffer);
+    dv.setUint32(0, data.length);
+    out.set(new TextEncoder().encode(type), 4); out.set(data, 8);
+    dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+    return out;
+  }
+  function pngTextChunk(keyword, text) {
     const te = new TextEncoder(), kw = te.encode(keyword), tx = te.encode(text);
-    const dataLen = kw.length + 1 + tx.length;
-    const chunk = new Uint8Array(12 + dataLen), dv = new DataView(chunk.buffer);
-    dv.setUint32(0, dataLen);
-    chunk.set(te.encode('tEXt'), 4); chunk.set(kw, 8); chunk[8 + kw.length] = 0; chunk.set(tx, 9 + kw.length);
-    dv.setUint32(8 + dataLen, crc32(chunk.subarray(4, 8 + dataLen)));
+    const d = new Uint8Array(kw.length + 1 + tx.length);
+    d.set(kw, 0); d[kw.length] = 0; d.set(tx, kw.length + 1);
+    return pngChunk('tEXt', d);
+  }
+  function pngText(u8, keyword, text) {
+    const chunk = pngTextChunk(keyword, text);
     const at = 8 + 8 + 13 + 4;                             // signature + IHDR (length+type+13 bytes+crc)
     const out = new Uint8Array(u8.length + chunk.length);
     out.set(u8.subarray(0, at), 0); out.set(chunk, at); out.set(u8.subarray(at), at + chunk.length);
     return out;
+  }
+  // A PNG assembled from STRIPS, for a render larger than a canvas can be. Nothing the size of the final
+  // image is ever allocated: each band is rendered, its rows are filtered (type 0) and pushed through
+  // CompressionStream('deflate') — which emits exactly the zlib stream IDAT wants — and the chunks are
+  // framed here. See renderStrip for why a band can be painted correctly in isolation.
+  async function renderStreamedPNG(W, meta, onStrip) {
+    const p = stripPlan(W);
+    if (W > CANVAS_SIDE_CAP) throw new Error(TR('exp.err.side-cap', { px: CANVAS_SIDE_CAP }));
+    const wins = gatherMasks().filter(m => m.show != null);
+    const cs = new CompressionStream('deflate');
+    const writer = cs.writable.getWriter(), reader = cs.readable.getReader();
+    const idats = []; let pend = [], plen = 0;
+    const flushIdat = () => { if (!plen) return; const b = new Uint8Array(plen); let o = 0;
+      for (const q of pend) { b.set(q, o); o += q.length; } idats.push(pngChunk('IDAT', b)); pend = []; plen = 0; };
+    const pump = (async () => { for (;;) { const { done, value } = await reader.read(); if (done) break;
+      pend.push(value); plen += value.length; if (plen > (16 << 20)) flushIdat(); } })();
+    const rowLen = p.FW * 4 + 1;
+    let y = 0, bytes = 0, tRender = 0;
+    while (y < p.FH) {
+      const h = Math.min(p.stripH, p.FH - y), t0 = Date.now();
+      const near = wins.filter(w => {                      // skip a window this band cannot see
+        const cy = w.y * p.FW, rad = (w.r + w.feather) * p.FW;
+        return cy + rad >= y - p.bleed && cy - rad <= y + h + p.bleed;
+      });
+      const c = renderStrip(W, y, h, p.bleed, near);
+      const px = c.getContext('2d').getImageData(0, p.bleed, p.FW, h).data;   // crop the bleed
+      const buf = new Uint8Array(h * rowLen);
+      for (let r = 0; r < h; r++) { buf[r * rowLen] = 0; buf.set(px.subarray(r * p.FW * 4, (r + 1) * p.FW * 4), r * rowLen + 1); }
+      c.width = 1; c.height = 1;
+      tRender += Date.now() - t0;
+      y += h; bytes += buf.length;
+      await writer.write(buf);
+      if (onStrip) await onStrip(y, p.FH, p);
+    }
+    await writer.close(); await pump; flushIdat();
+    // A band written twice overshoots and one skipped falls short; either would be invisible to every
+    // decoder, so refuse rather than hand back an image that looks fine and is not.
+    const want = p.FH * rowLen;
+    if (bytes !== want) throw new Error(`streamed ${bytes} scanline bytes, expected ${want}`);
+    const ihdr = new Uint8Array(13), dv = new DataView(ihdr.buffer);
+    dv.setUint32(0, p.FW); dv.setUint32(4, p.FH); ihdr[8] = 8; ihdr[9] = 6;   // 8-bit RGBA
+    const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', ihdr)];
+    if (meta) parts.push(pngTextChunk('stone-author', meta));
+    parts.push(...idats, pngChunk('IEND', new Uint8Array(0)));
+    return { blob: new Blob(parts, { type: 'image/png' }), plan: p, msRender: tRender, bytes };
   }
   const expMeta = o => JSON.stringify(Object.assign({
     tool: 'stone-author', at: new Date().toISOString(),

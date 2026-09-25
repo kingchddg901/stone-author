@@ -277,6 +277,12 @@
   },
   "where": "failure message in the hint line when an export cannot encode an image at the chosen width"
  },
+ "exp.err.side-cap": {
+  "placeholders": {
+   "px": "the browser’s maximum canvas side in pixels, 65535"
+  },
+  "where": "failure message when an export width is past the browser’s hard per-side canvas limit"
+ },
  "exp.packing": {
   "where": "progress line under the File section buttons, once every image is rendered"
  },
@@ -303,6 +309,14 @@
  },
  "exp.saving": {
   "where": "progress line under the File section buttons, as the archive is handed to the browser"
+ },
+ "exp.strip": {
+  "placeholders": {
+   "done": "which band is finished, counting from 1",
+   "px": "the export width in pixels",
+   "total": "how many bands the picture is divided into"
+  },
+  "where": "progress line under the File section buttons, during a render too large to hold in one canvas"
  },
  "exp.tiles": {
   "placeholders": {

@@ -17,6 +17,8 @@ const hook = `
     // the export's own builders, so the harness can time them against each other. renderTiled paints the
     // whole slab's content once PER TILE; renderFull paints it once but needs the entire canvas at once.
     renderTiled, expBaseMask, expCoverage, expIdT,
+    // the strip path: a render larger than a canvas can be, assembled as a PNG stream
+    renderStreamedPNG, stripPlan, renderStrip,
     render: () => { size(); build(); stoneReady = false; draw(); },
     get G() { return G; }, get OVR_uv() { return OVR_uv; },
     get marks() { return marks; }, set marks(v) { marks = v; },

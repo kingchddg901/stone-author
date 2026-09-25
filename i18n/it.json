@@ -68,11 +68,13 @@
  "exp.done-render": "Render salvato · {px}px · {t}",
  "exp.encoding": "Codifica del PNG…",
  "exp.err.encode": "Questo dispositivo non è riuscito a codificare un'immagine da {px}px.",
+ "exp.err.side-cap": "Questo browser non può creare un'immagine più larga di {px} pixel, quale che sia la memoria.",
  "exp.packing": "Creazione dell'archivio…",
  "exp.preparing": "Preparazione…",
  "exp.prog": "Render di {done} su {total} · {px}px",
  "exp.prog-tiles": "Immagine {img} di {imgs} · riquadro {done} di {total} · {px}px",
  "exp.saving": "Salvataggio del file…",
+ "exp.strip": "Render della banda {done} di {total} · {px}px",
  "exp.tiles": "Render del riquadro {done} di {total} · {px}px",
  "exp.too-big": "Questo dispositivo non riesce ad allocare un canvas così grande. Apri lo studio su un computer per questa misura.",
  "fam.calacatta": "Calacatta",
@@ -87,8 +89,8 @@
  "hint.black-light-spectrum-1-only-artifacts": "Luce di Wood (spettro −1). Brillano solo gli artifact la cui emissione si attiva vicino al valore della luce; il resto resta al buio. Crea con il campione Selezionati; scorri il cursore Spettro per raggiungere gli altri insiemi.",
  "hint.colour-editor-unavailable": "Editor dei colori non disponibile.",
  "hint.confirm-delete-layer": {
-  "one": "Eliminare \"{name}\" e il suo {n} segno? Tocca di nuovo × — non si può annullare.",
   "many": "Eliminare \"{name}\" e i suoi {n} segni? Tocca di nuovo × — non si può annullare.",
+  "one": "Eliminare \"{name}\" e il suo {n} segno? Tocca di nuovo × — non si può annullare.",
   "other": "Eliminare \"{name}\" e i suoi {n} segni? Tocca di nuovo × — non si può annullare."
  },
  "hint.could-not-read-that-file": "Impossibile leggere quel file.",
@@ -96,8 +98,8 @@
  "hint.declined": "rifiutato",
  "hint.deleted-layer": "Eliminato {name}.",
  "hint.deleted-layer-marks": {
-  "one": "Eliminato {name} e {n} segno.",
   "many": "Eliminato {name} e {n} segni.",
+  "one": "Eliminato {name} e {n} segno.",
   "other": "Eliminato {name} e {n} segni."
  },
  "hint.deselected": "{what} deselezionato.",
@@ -105,8 +107,8 @@
  "hint.entered-folder": "Sei entrato in \"{name}\" — luce a {light}, i suoi livelli selezionati.",
  "hint.export-failed-msg": "Esportazione non riuscita: {err}",
  "hint.exported-files": {
-  "one": "Esportato {n} file.",
   "many": "Esportati {n} file.",
+  "one": "Esportato {n} file.",
   "other": "Esportati {n} file."
  },
  "hint.exported-render": "Render salvato a {px}px.",
@@ -116,13 +118,13 @@
  "hint.island-placed-it-freezes-the-warp": "Isola collocata — congela qui la distorsione (un'isola di normalità)",
  "hint.loaded": "Caricato.",
  "hint.n-selected-editor": {
-  "one": "{n} selezionato — coloralo o regolalo nell'editor / barra Selezionati.",
   "many": "{n} selezionati — colorali o regolali nell'editor / barra Selezionati.",
+  "one": "{n} selezionato — coloralo o regolalo nell'editor / barra Selezionati.",
   "other": "{n} selezionati — colorali o regolali nell'editor / barra Selezionati."
  },
  "hint.n-selected-tools": {
-  "one": "{n} selezionato — strumenti ed effetti agiscono su di esso; il suo colore appare nell'editor.",
   "many": "{n} selezionati — strumenti ed effetti agiscono su di essi; i loro colori appaiono nell'editor.",
+  "one": "{n} selezionato — strumenti ed effetti agiscono su di esso; il suo colore appare nell'editor.",
   "other": "{n} selezionati — strumenti ed effetti agiscono su di essi; i loro colori appaiono nell'editor."
  },
  "hint.pressure-is-on-for-your-next": "La pressione è attiva per le prossime linee: premi più forte per una vena più carica o più colore, più leggero per assottigliarla.",
@@ -142,8 +144,8 @@
  "hint.switch-show-through-on-to-also": ". Attiva Mostra attraverso per vedere anche un'altra luce attraverso di essa.",
  "hint.switch-show-through-on-to-give": ". Attiva Mostra attraverso per darle una luce propria.",
  "hint.tagged-layers": {
-  "one": "Etichettato {n} livello a {light}.",
   "many": "Etichettati {n} livelli a {light}.",
+  "one": "Etichettato {n} livello a {light}.",
   "other": "Etichettati {n} livelli a {light}."
  },
  "hint.tap-a-vein-web-crack-or": "Tocca una vena, una frattura del reticolo o una sutura per selezionarla — poi colora o regola solo quella.",
