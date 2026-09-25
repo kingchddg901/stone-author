@@ -101,6 +101,46 @@ A swirl instead of a sunburst. Worth trying once the channel exists.
 (Not to be confused with `sign = M.mag`, the existing Align/Scatter toggle, which is a separate `×−1`
 deciding whether specks rotate toward the field or are randomised.)
 
+### Scatter does not scatter — it blurs
+
+A tool-model note rather than a channel one, but it lands here because the fix uses the signed channel and
+the same doubled-angle machinery.
+
+Scatter is the `else` arm of the alignment step:
+
+```js
+if (sign > 0) { /* rotate toward the field axis */ }
+else sp.ang += g() * 1.4 * w;          // g = a gaussian stream
+```
+
+That is a **zero-mean random walk on each speck's own current angle**. Its expected change is zero, so the
+ensemble's *mean* orientation is preserved exactly — and mean orientation is what alignment IS. The
+variance grows, the alignment stays. It does not randomise the field, it **blurs** it, which is why
+scattering an aligned patch still reads as aligned.
+
+The falloff makes it worse: `w = min(1, str · dt · 30 · exp(−ρ² / (R²·0.5)))`, so only specks directly
+under the pole get a meaningful kick and the rim barely moves. The result is a soft smudge of whatever was
+already there, rather than disorder.
+
+**The better model, and Chris's: sweep the target instead of jittering the speck.** Keep rotating specks
+*toward* a field axis exactly as Align does, but let that axis **turn along the path** — a fairly quick
+walk through the full 0–360°. Then:
+
+- specks at different points along the stroke are combed to genuinely different angles, so the *ensemble*
+  is disordered while each individual speck stays crisply oriented — which is what real rock looks like,
+  grains pointing every way but each one definite;
+- **Scatter stops being a separate mode.** It becomes Align with a rotating target, and the rate of
+  rotation is the control. Rate 0 is Align. One mechanism, one parameter, no `if/else`;
+- a **rotational range** falls out as the natural knob — how far the sweep spans. A few degrees gives a
+  loose, natural-looking grain; a full turn gives complete disorder;
+- the **sweep direction** (clockwise or anticlockwise) is exactly what the signed tilt channel is for;
+- and it is **deterministic**, which removes mechanism 3 below — there is no random stream left to key to
+  a sample index.
+
+Worth deciding whether the sweep advances per unit **length** along the path or per unit **time**. Length
+makes a slow, careful pass and a quick flick produce the same pattern; time makes dwell wind the axis
+further, which is more consistent with how the rest of the magnet already treats time.
+
 ### Dragging the magnet left-to-right already differs from right-to-left
 
 Observed by Chris, and it is real — the same path drawn in opposite directions gives visibly different
@@ -132,7 +172,7 @@ is barely a direction at all. That is **accidental**, not modelled. It only bite
 **3. The scatter stream is keyed to sample index.** `sub(m.seed, 60, i)` draws its randomness from the
 sample's position in the stroke, so reversing the stroke gives the same physical location a different
 draw. Irrelevant under Align, which never uses `g`; under **Scatter** it changes the result outright. Also
-accidental.
+accidental — and it disappears entirely under the swept-target model above, which has no random stream.
 
 So the direction-dependence should be *kept* — and its accidental half fixed, so that what survives is the
 part that means something. Seed the heading from the stroke's first real motion rather than from `+X`, and
