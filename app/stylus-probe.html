@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Stylus Probe</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -366,16 +367,41 @@
                          deg(r.alt), deg(r.az), r6(r.lean)]),
     });
   };
-  $('save').addEventListener('click', () => {
+  // Published as an artifact the sandbox makes <a download> inert, so route through the downloads
+  // capability when this page is running as one, and fall back to the anchor everywhere else. One file
+  // works both ways; nothing here assumes which.
+  let dl;                                         // undefined = not asked yet, null = unavailable here
+  async function saveFile(filename, blob) {
+    if (dl === undefined) {
+      dl = null;
+      if (window.claude && typeof window.claude.use === 'function') {
+        try { dl = await window.claude.use('downloads'); } catch (_) { dl = null; }
+      }
+    }
+    if (dl) { await dl.save({ filename, data: blob }); return 'capability'; }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    return 'anchor';
+  }
+  $('save').addEventListener('click', async () => {
     const n = ev.length;
     if (!n) { $('stillOut').textContent = 'Nothing held yet — draw on the pad first.'; return; }
+    const name = `stylus-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+    $('stillOut').textContent = 'Preparing the capture…';
     try {
-      const url = URL.createObjectURL(new Blob([asJson()], { type: 'application/json' }));
-      const a = document.createElement('a');
-      a.href = url; a.download = `stylus-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
-      a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
-      $('stillOut').textContent = `Saved ${n.toLocaleString()} events. Hand over the file, not a paste.`;
-    } catch (_) { $('stillOut').textContent = 'A download is blocked here — open this page from a file or a server, or fall back to Copy CSV.'; }
+      const how = await saveFile(name, new Blob([asJson()], { type: 'application/json' }));
+      $('stillOut').textContent = `Saved ${n.toLocaleString()} events`
+        + (how === 'anchor' ? ' — check your downloads.' : '.') + ' Hand over the file, not a paste.';
+    } catch (err) {
+      const code = err && err.code;                // never auto-retry; each of these wants a human choice
+      $('stillOut').textContent =
+        code === 'declined' ? 'Save cancelled — nothing was written.'
+        : code === 'too_large' ? 'That capture is too big to save here. Shorten Hold, gather again, and retry.'
+        : code === 'rate_limited' ? 'A save is already waiting on you — answer that one first.'
+        : 'Saving is not available in this view; use Copy CSV instead.';
+    }
   });
 })();
 </script>
