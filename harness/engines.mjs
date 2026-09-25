@@ -41,7 +41,10 @@ const STREAM_W = 2048;          // small enough for three engines
 const STREAM_H = 256;           // and a band height forced low, so the MULTI-band path is what gets tested:
 const MIN_BANDS = 4;            // at any width a container can afford, the planner would otherwise use one
 const DIFF_BAR = 48;            // mean channel difference that means something broke, not that AA differs
-const DIFF_WARN = 8;            // above this, say so — it is worth a human looking at the map
+// Measured, not chosen: two runs on two commits put Gecko at 7.919 and WebKit at 8.547, identical to three
+// decimals both times. 12 sits above both with headroom, so a warning now means something CHANGED. It
+// started at 8, which fired on every WebKit run — a gate that always warns is a gate nobody reads.
+const DIFF_WARN = 12;
 const ENGINES = [['chromium', chromium], ['firefox', firefox], ['webkit', webkit]];
 
 // The engine's own limits, measured rather than assumed: a canvas past a cap does not throw, it reports the

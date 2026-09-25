@@ -137,9 +137,34 @@ What **fails** the job: an engine that will not launch, a render that is not det
 engine, a flat render, a streamed PNG that does not decode to the size it declares, fewer bands than the
 forced band height should produce (which would mean the easy single-band path was tested instead), and a
 mean difference past **48/255** — a catastrophe detector, not a fidelity bar. What is **reported but not
-gated**: the difference itself, flagged above 8/255 for a human. Cross-engine byte identity was never the
-claim; the picture is. There is no measured baseline yet for what Gecko and WebKit legitimately differ by
-at this width, and a bar nobody measured is worse than no bar.
+gated**: the difference itself. Cross-engine byte identity was never the claim; the picture is.
+
+### The measured baseline
+
+Two runs, on two different commits of the app, 2026-09-25:
+
+| | largest side | 20724×2048 | 65535×512 | self-determinism | render hash | mean vs Blink | max | pixels >1 |
+|---|---|---|---|---|---|---|---|---|
+| Blink | 65535 | ok | ok | PASS | `a2c4f56bf380e073` | 0 (itself) | 0 | 0% |
+| Gecko | **32767** | ok | **NO** | PASS | `af0e35ef95465dc1` | **7.919** | 84 | 89.03% |
+| WebKit | **32767** | ok | **NO** | PASS | `dc9ba3c5ae37e4ef` | **8.547** | 195.7 | 70.47% |
+
+Every figure repeated exactly, to three decimals and to the byte, across both runs. All three streamed a
+five-band PNG that decoded at the size it declared, so the large-render path itself is portable.
+
+The two differences are the same size and **nothing like each other**, which is what the map and the ×8
+image exist to show:
+
+- **Gecko** disagrees in the *bloom*: concentric ring banding around every glow and a broad diffuse wash,
+  with the veins reading dead black — they agree exactly. Gradient and blur quantisation, nothing
+  structural.
+- **WebKit** disagrees at every *edge*: each vein rim and chip outline lit white, and in the render itself
+  the debris chips come out blocky with contour banding in the glows. Small-geometry anti-aliasing — and
+  unlike Gecko's, it is visible to the eye at 1024. How much of that is Playwright's Linux WebKit doing
+  software rasterisation rather than Safari through CoreGraphics is **not** answerable from here.
+
+Because the baseline is now measured rather than guessed, the human-attention line sits at **12/255** —
+above both engines with headroom, so a warning means something changed. The failure bar stays at 48.
 
 Two things this gate cannot reach: real Safari (Apple's own GPU and media stack), and iOS memory
 behaviour. It bounds the risk rather than closing it — the expected WebKit outcome is *smaller bands, or
@@ -170,6 +195,12 @@ Nothing about this worked first time, and each failure was worth more than the g
   PNG writer's own bytes were all verified before CI ever ran it.
 - **A 1024 render costs ~120 ms here and ~13 s in the container.** Software rasterisation on two cores; the
   phase budgets are sized for that, not for a desktop.
+- **The caps it measured changed the app.** Gecko and WebKit clamping a canvas side to 32767 is what
+  retired `CANVAS_SIDE_CAP = 65535` in favour of a measured `sideCap()`
+  ([capabilities.md](capabilities.md)) — and then a desktop Firefox wrote a genuine 65535×40959 file,
+  proving the cap belongs to the *build*, not the engine family. A gate that only ever confirms what you
+  already believed has not earned its runtime; this one produced a number, and the number was half wrong in
+  a way that mattered.
 
 ## What determinism actually holds — and what doesn't
 
