@@ -25,6 +25,8 @@ import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 import { renderHero } from './hero.mjs';
+import { encodePNG } from './png.mjs';
+import { compare } from './compare.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -74,56 +76,6 @@ const probe = async ({ budgetMs }) => {
            side: lo, sideMs, bands: bands.join(' ') };
 };
 
-// The shape of the difference, not just its size: an 8x8 map of mean channel difference, so AA everywhere
-// reads differently from one blown-out region.
-const RAMP = ' .,:;ox%#';
-const diff = ({ png }) => {
-  const p = window.__heroPix;
-  const img = new Image();
-  return new Promise((res, rej) => {
-    img.onerror = () => rej(new Error('the reference PNG did not decode in this engine'));
-    img.onload = () => {
-      const c = document.createElement('canvas'); c.width = p.w; c.height = p.h;
-      const cx = c.getContext('2d'); cx.drawImage(img, 0, 0);
-      const b = cx.getImageData(0, 0, p.w, p.h).data, a = p.data;
-      const G = 8, cell = new Float64Array(G * G), cellN = new Float64Array(G * G);
-      let sum = 0, max = 0, over = 0, lum = 0, lum2 = 0, n = p.w * p.h;
-      for (let y = 0; y < p.h; y++) {
-        const gy = Math.min(G - 1, Math.floor(y * G / p.h));
-        for (let x = 0; x < p.w; x++) {
-          const i = (y * p.w + x) * 4;
-          const d = (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2])) / 3;
-          sum += d; if (d > max) max = d; if (d > 1) over++;
-          const g = gy * G + Math.min(G - 1, Math.floor(x * G / p.w)); cell[g] += d; cellN[g]++;
-          const L = (a[i] * 0.299 + a[i + 1] * 0.587 + a[i + 2] * 0.114); lum += L; lum2 += L * L;
-        }
-      }
-      const mean = lum / n, sd = Math.sqrt(Math.max(0, lum2 / n - mean * mean));
-      const rows = [];
-      for (let gy = 0; gy < G; gy++) {
-        let s = '';
-        for (let gx = 0; gx < G; gx++) { const m = cell[gy * G + gx] / (cellN[gy * G + gx] || 1); s += RAMP[Math.min(RAMP.length - 1, Math.round(m))]; }
-        rows.push(s);
-      }
-      // the difference as a picture, amplified 8x: an 8x8 map says how much and roughly where, an image says
-      // WHAT — vein edges, a gradient's bands, one region blown out
-      const vc = document.createElement('canvas'); vc.width = p.w; vc.height = p.h;
-      const vx = vc.getContext('2d'), vi = vx.createImageData(p.w, p.h), vd = vi.data;
-      for (let i = 0; i < n; i++) {
-        const j = i * 4;
-        const d = (Math.abs(a[j] - b[j]) + Math.abs(a[j + 1] - b[j + 1]) + Math.abs(a[j + 2] - b[j + 2])) / 3;
-        const v = Math.min(255, Math.round(d * 8));
-        vd[j] = vd[j + 1] = vd[j + 2] = v; vd[j + 3] = 255;
-      }
-      vx.putImageData(vi, 0, 0);
-      const visual = vc.toDataURL('image/png');
-      vc.width = 1; vc.height = 1;
-      c.width = 1; c.height = 1;
-      res({ mean: +(sum / n).toFixed(3), max: +max.toFixed(1), pctOver1: +(100 * over / n).toFixed(2), sd: +sd.toFixed(2), map: rows, visual });
-    };
-    img.src = png;
-  });
-};
 
 // Does the strip path — the whole large-render tier — actually produce a decodable PNG on this engine?
 const streamed = async ({ w, stripH }) => {
@@ -169,6 +121,7 @@ const watchdog = setTimeout(() => {
   process.exit(1);
 }, 19 * 60e3);
 
+console.log(`hero "${hero.name}" at ${W}px, streamed export at ${STREAM_W}px with a forced ${STREAM_H}px band\n`);
 for (const [name, type] of ENGINES) {
   const row = { name };
   let browser;
@@ -185,39 +138,50 @@ for (const [name, type] of ENGINES) {
     });
     const page = row.page;
 
-    row.caps = await within('caps', PHASE.caps, () => page.evaluate(probe, { budgetMs: PHASE.caps - 30e3 }));
     const a = await within('render x2', PHASE.render, async () => {
-      const first = await renderHero(page, { root, hero, ref, width: W });
+      const first = await renderHero(page, { root, hero, ref, width: W, pixels: true });
       const second = await renderHero(page, { root, hero, ref, width: W });
       row.self = first.hash === second.hash;
       return first;
     });
     row.hash = a.hash.slice(0, 16);
-    // Blink goes first and becomes the reference. It is also diffed against ITSELF, which is the comparison's
-    // own noise floor: a diff that cannot read 0 where the pixels are identical is measuring itself.
+    row.stream = await within('streamed export', PHASE.stream, () => page.evaluate(streamed, { w: STREAM_W, stripH: STREAM_H }));
+    // caps last: it allocates canvases up to 65535x1024, and nothing after it should have to share a process
+    // with whatever that leaves behind
+    row.caps = await within('caps', PHASE.caps, () => page.evaluate(probe, { budgetMs: PHASE.caps - 20e3 }));
+
+    // Blink goes first and becomes the reference. It is also compared against ITSELF, which is the
+    // comparison's own noise floor: one that cannot read 0 where the pixels are identical is measuring itself.
     const isRef = !reference;
     row.against = isRef ? 'itself (the comparison\'s noise floor)' : 'blink';
-    const refPng = isRef ? a.png : reference.png;
-    if (isRef) reference = a;
-    row.diff = await within('diff', PHASE.diff, () => page.evaluate(diff, { png: refPng }));
-    row.stream = await within('streamed export', PHASE.stream, () => page.evaluate(streamed, { w: STREAM_W, stripH: STREAM_H }));
+    const mine = Buffer.from(a.px, 'base64');
+    const theirs = isRef ? mine : reference;
+    if (isRef) reference = mine;
+    row.diff = compare(mine, theirs, a.w, a.h);
     mkdirSync(OUT, { recursive: true });
-    const save = (file, dataURL) => writeFileSync(join(OUT, file), Buffer.from(dataURL.split(',')[1], 'base64'));
-    save(`${name}-${hero.name}-${W}.png`, a.png);
-    save(`${name}-vs-${isRef ? 'itself' : 'blink'}-x8.png`, row.diff.visual);
-    delete row.diff.visual;                                         // written to disk; not wanted in the log
+    writeFileSync(join(OUT, `${name}-${hero.name}-${W}.png`), Buffer.from(a.png.split(',')[1], 'base64'));
+    writeFileSync(join(OUT, `${name}-vs-${isRef ? 'itself' : 'blink'}-x8.png`), encodePNG(a.w, a.h, row.diff.vis));
+    delete row.diff.vis;                                            // written to disk; not wanted in the log
+    report(row);                                                    // as each engine finishes, not at the end
   } catch (e) {
     row.error = e.message;
     console.log(`  FAILED: ${e.message}`);
+    fail++;
   } finally { delete row.page; if (browser) await browser.close().catch(() => {}); }
   results.push(row);
 }
 clearTimeout(watchdog);
 
-console.log(`hero "${hero.name}" at ${W}px, streamed export at ${STREAM_W}px\n`);
-for (const r of results) {
-  console.log(`--- ${r.name} ---`);
-  if (r.error) { console.log(`  LAUNCH/RENDER FAILED: ${r.error}`); fail++; continue; }
+const ran = results.filter(r => !r.error).length;
+if (ran !== ENGINES.length) console.log(`${ran} of ${ENGINES.length} engines completed — an engine that cannot be measured is a failure, not a skip.`);
+console.log(`Renders and x8 difference images: ${OUT}`);
+console.log(fail ? `Engines: ${fail} failure(s).` : `Engines: PASS — all ${ran} render the slab deterministically, and the difference from Blink is recorded above.`);
+process.exit(fail ? 1 : 0);
+
+// Printed as each engine finishes rather than at the end: the first run of this gate lost chromium's and
+// webkit's numbers entirely because a later engine's failure came before the summary.
+function report(r) {
+  console.log(`  --- ${r.name} ---`);
   const c = r.caps;
   console.log(`  caps    CompressionStream ${c.stream ? 'yes' : 'NO'} · dpr ${c.dpr} · largest side ${c.side} (${c.sideMs}ms) · bands ${c.bands}`);
   console.log(`  render  self-determinism ${r.self ? 'PASS' : 'FAIL'} · ${r.hash} · luma sd ${r.diff.sd}`);
@@ -243,9 +207,3 @@ for (const r of results) {
   }
   console.log('');
 }
-
-const ran = results.filter(r => !r.error).length;
-if (ran !== ENGINES.length) console.log(`${ran} of ${ENGINES.length} engines completed — an engine that cannot be measured is a failure, not a skip.`);
-console.log(`Renders and x8 difference images: ${OUT}`);
-console.log(fail ? `Engines: ${fail} failure(s).` : `Engines: PASS — all ${results.length} render the slab deterministically, and the difference from Blink is recorded above.`);
-process.exit(fail ? 1 : 0);

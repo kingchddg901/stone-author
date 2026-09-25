@@ -145,6 +145,32 @@ Two things this gate cannot reach: real Safari (Apple's own GPU and media stack)
 behaviour. It bounds the risk rather than closing it — the expected WebKit outcome is *smaller bands, or
 the tier not offered*, not a corrupt file, because the app decides by measuring rather than by engine name.
 
+**It is deliberately not on every push.** Three browsers and several renders each answer a question about a
+*major render change*, not about every commit that touches the app, so `.github/workflows/engines.yml` runs
+on `workflow_dispatch` — `gh workflow run engines.yml` — and automatically only when the gate's own files
+change, because a gate nobody has run since editing it is not a gate. The three fast browser gates in
+`gallery.yml` still run on every push. Each run keeps the three 1024 renders and their ×8 difference images
+as a run artifact (`engine-renders`, 14 days), uploaded even when the step fails.
+
+### What the first runs cost, and what they taught
+
+Nothing about this worked first time, and each failure was worth more than the gate itself:
+
+- **A silent step is indistinguishable from a hang.** The first run sat for 17 minutes on one step with no
+  output. The gate now announces and times every phase and bounds each one, with a watchdog under the lot
+  and `timeout-minutes` on the job and the step. That instrumentation is what localised everything below.
+- **Firefox cannot start as root when `$HOME` belongs to someone else** — the container's `/github/home` is
+  owned by `pwuser`. Playwright's own launch error names the fix: `HOME: /root` in the workflow env.
+- **The comparison was the slowest thing in the run.** Doing it in the page — decode the reference PNG,
+  loop, build a second canvas, `toDataURL` — cost WebKit more than 45 seconds and cost Chromium its
+  execution context. It moved to Node (`harness/compare.mjs`, `harness/png.mjs`): the page returns its raw
+  RGBA as base64 and Node does the arithmetic and writes the PNG with `zlib`. Node has no canvas to lose, it
+  is an order of magnitude faster, and — the real gain — the comparison can now be **ablated without a
+  browser**, which is how its noise floor, its bruise placement, its blank detector, its size guards and the
+  PNG writer's own bytes were all verified before CI ever ran it.
+- **A 1024 render costs ~120 ms here and ~13 s in the container.** Software rasterisation on two cores; the
+  phase budgets are sized for that, not for a desktop.
+
 ## What determinism actually holds — and what doesn't
 
 The self-determinism gate exercises exactly the property the "slab is the master" claim rests on, and it

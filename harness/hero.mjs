@@ -6,13 +6,15 @@
 // was measuring.
 //
 // `width` defaults to the reference width, so the determinism gate is unchanged; the engine gate passes a
-// small width on purpose (see harness/engines.mjs).
+// small width on purpose (see harness/engines.mjs). `pixels` additionally returns the raw RGBA as base64, so
+// a comparison can be done in Node instead of asking a browser that has just rendered to also decode, loop
+// and re-encode — the engine gate started out doing that in the page and WebKit spent over 45 seconds on it.
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-export async function renderHero(page, { root, hero, ref, width }) {
+export async function renderHero(page, { root, hero, ref, width, pixels }) {
   const slab = JSON.parse(readFileSync(join(root, 'gallery', hero.slab), 'utf8'));
-  return page.evaluate(async ({ slab, h, ref, W }) => {
+  return page.evaluate(async ({ slab, h, ref, W, wantPixels }) => {
     const sa = window.__sa, s = W / 1000;
     sa.deserialize(slab);
     sa.G.warpMask = [];
@@ -36,8 +38,13 @@ export async function renderHero(page, { root, hero, ref, width }) {
     }
     const d = oc.getContext('2d').getImageData(0, 0, oc.width, oc.height).data;
     const buf = await crypto.subtle.digest('SHA-256', d);
-    // kept on the page so a second pass can diff against it without re-rendering
-    window.__heroPix = { w: oc.width, h: oc.height, data: d };
-    return { hash: [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join(''), png: oc.toDataURL('image/png'), w: oc.width, h: oc.height };
-  }, { slab, h: hero, ref, W: width || ref.width });
+    let px = null;
+    if (wantPixels) {                                        // chunked: String.fromCharCode(...d) blows the stack
+      let s = ''; const CH = 0x8000;
+      for (let i = 0; i < d.length; i += CH) s += String.fromCharCode.apply(null, d.subarray(i, i + CH));
+      px = btoa(s);
+    }
+    return { hash: [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join(''),
+             png: oc.toDataURL('image/png'), w: oc.width, h: oc.height, px };
+  }, { slab, h: hero, ref, W: width || ref.width, wantPixels: !!pixels });
 }

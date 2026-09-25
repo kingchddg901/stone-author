@@ -1,0 +1,54 @@
+name: engines
+
+# Blink, Gecko and WebKit on the same slab. Safari cannot be tested from a PC and every browser on iOS is
+# WebKit underneath, so WebKit is the one engine the studio ships to blind; Playwright's WebKit is not Safari
+# (no Apple GPU or media stack) but it is the same rasteriser and the same canvas limits.
+#
+# DELIBERATELY NOT ON EVERY PUSH. It launches three browsers and renders several times in each, and what it
+# answers — does another engine still draw this the same way — is a question about a MAJOR render change, not
+# about every commit that touches the app. So it runs when asked:
+#
+#   gh workflow run engines.yml
+#
+# and automatically only when the gate's own code changes, because a gate nobody has run since editing it is
+# not a gate. The three fast browser gates (gallery.yml) still run on every push.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'harness/engines.mjs'
+      - 'harness/compare.mjs'
+      - 'harness/png.mjs'
+      - 'harness/hero.mjs'
+      - '.github/workflows/engines.yml'
+
+jobs:
+  engines:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30            # three engines; a hung phase must not sit on a runner
+    container:
+      image: mcr.microsoft.com/playwright:v1.48.2-noble
+    env:
+      # Firefox refuses to start as root when $HOME belongs to someone else, which is exactly what the
+      # container's /github/home is. Playwright's own launch error names this fix.
+      HOME: /root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps (browsers are pre-installed in the container)
+        run: npm ci
+      - name: Build the hooked page
+        run: node harness/inject.mjs
+      - name: Render the same hero in Blink, Gecko and WebKit
+        timeout-minutes: 22        # the script bounds each phase; this bounds the script
+        run: node harness/engines.mjs
+      # kept even when the step above fails: a red engine run is exactly when the picture is wanted
+      - name: Keep each engine's 1024 render and its x8 difference image
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-renders
+          path: harness/dist/engines/
+          retention-days: 14
+          if-no-files-found: warn
