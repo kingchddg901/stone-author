@@ -43,6 +43,7 @@ on:
 jobs:
   render:
     runs-on: ubuntu-latest
+    timeout-minutes: 30            # three engines; a hung phase must not sit on a runner
     container:
       image: mcr.microsoft.com/playwright:v1.48.2-noble
     steps:
@@ -58,4 +59,14 @@ jobs:
       - name: Check an export says it is working for as long as it works
         run: node harness/export-progress.mjs
       - name: Render the same hero in Blink, Gecko and WebKit
+        timeout-minutes: 22        # the script bounds each phase; this bounds the script
         run: node harness/engines.mjs
+      # kept even when the step above fails: a red engine run is exactly when the picture is wanted
+      - name: Keep each engine's 1024 render and its x8 difference image
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-renders
+          path: harness/dist/engines/
+          retention-days: 14
+          if-no-files-found: warn
