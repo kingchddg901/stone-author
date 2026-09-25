@@ -291,12 +291,38 @@ A 53-second capture from Chris's **Galaxy S23 Ultra (Android 16, WebView)**, 3,5
 | lean | 1.0–70.9°, median 41°, 540 distinct values |
 | hover | **52% of all events** |
 
-**The section below was wrong, and this is the correction.** I supposed the studio was discarding a
-120–240 Hz pen by not calling `getCoalescedEvents()`. The probe *does* call it, on the actual device, and
-recovered **24 events out of 3,537** — 0.7%, not a multiple. `pointerrawupdate` is offered and returns the
-same 60.2 Hz. On this hardware in this webview the pen genuinely reports at vsync, and coalescing is
-nearly free of content. Worth re-checking in Chrome and Samsung Internet, but the "free fidelity" claim
-does not survive its first measurement.
+On that evidence alone the coalescing idea looked dead: 24 events out of 3,537, and `pointerrawupdate`
+offered but returning the same 60.2 Hz. **Then the same pen was captured in Chrome on the same phone, and
+the webview turns out to be the outlier.** One device is not a population, and a single capture nearly
+retired a real finding:
+
+| same pen, same phone | WebView (Claude app) | **Chrome 153** |
+|---|---|---|
+| `pointermove` | 60.2 Hz | 60.2 Hz |
+| `pointerrawupdate` | **60.2 Hz** — offered, no finer | **476 Hz** |
+| coalesced events | 24 (0.7% of all) | **11,232 (49.5% of all)** |
+| pressure max | 0.613 | **1.000** |
+| pressure distinct values | 597 | **3,143** |
+
+What each listening strategy would actually capture:
+
+| | WebView | Chrome |
+|---|---|---|
+| `pointermove` only — **what the studio does today** | 31.7 /s | 23.3 /s |
+| move + `getCoalescedEvents()` | 32.1 /s (**×1.0**) | 135.3 /s (**×5.8**) |
+| `pointerrawupdate` | 32.0 /s (×1.0) | 89.1 /s (×3.8) |
+
+**So the studio is discarding about five-sixths of the pen in Chrome, and nothing in the webview.** Both
+statements are true and neither generalises. Consume coalesced events: it costs nothing where there is
+nothing to gain, and recovers 5.8× where there is.
+
+And it changes the pressure conclusion from *should* to *must*. The **same pen** tops out at 0.613 in one
+browser and 1.000 in the other, with five times the distinct values. A calibration constant tuned in
+either one would be wrong in the other, so the working range has to be **learned at runtime** — exactly
+like the rest grip, and for exactly the same reason.
+
+One practical note, since the studio's phone surface *is* the webview: opening the artifact in the Claude
+app gets 60 Hz and two-thirds of the pressure range; opening the same artifact URL in Chrome gets the lot.
 
 **What the capture does confirm, with better evidence than the granite sheet:**
 
@@ -310,15 +336,20 @@ does not survive its first measurement.
 - **Hover is abundant.** Over half of all events. Learning the rest grip from hover, proposed above on
   principle, has plenty of data to learn from in practice.
 
-#### While we are here: the pen's samples are being thrown away
+#### The studio does not ask for the extra samples
 
-`getCoalescedEvents()` appears **nowhere** in the studio. Browsers coalesce pointer moves down to roughly
-frame rate and hand back the full-rate history only if asked, so a 120–240 Hz stylus is very likely being
-recorded at ~60. That 60 Hz measurement may be the browser's rate, not the pen's.
+`getCoalescedEvents()` appears **nowhere** in `app/stone-author.html`, and `pointerrawupdate` is not
+listened for either — one sample per `pointermove`, which is vsync. The stylus probe asks for both, which
+is how the table above exists.
 
-This is free fidelity for **every** channel, not just this one — a better speed estimate, a finer tilt
-profile, more of the pressure curve, and a smaller subdivision burden above. Worth measuring before
-building anything that depends on sample density.
+Measured, that is **×5.8 of the pen thrown away in Chrome and nothing in the webview**. Worth doing, and
+cheap: `getCoalescedEvents()` is one call inside the existing `pointermove` handler, it degrades to
+nothing where the browser has nothing extra, and every channel gains at once — a finer speed estimate, a
+denser tilt profile, more of the pressure curve.
+
+Two cautions that come with it. The extra points carry their own timestamps, so anything deriving `dt`
+must read each sample's own rather than assume a frame; and a stroke's sample count stops being a property
+of the gesture, which matters to the per-stroke median `dt` calibration proposed above.
 
 ### Dragging the magnet left-to-right already differs from right-to-left
 
