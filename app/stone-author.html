@@ -1081,7 +1081,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.25.3';
+  const BUILD = '2026.09.25.4';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4457,8 +4457,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // image is ever allocated: each band is rendered, its rows are filtered (type 0) and pushed through
   // CompressionStream('deflate') — which emits exactly the zlib stream IDAT wants — and the chunks are
   // framed here. See renderStrip for why a band can be painted correctly in isolation.
-  async function renderStreamedPNG(W, meta, onStrip) {
-    const p = stripPlan(W);
+  async function renderStreamedPNG(W, meta, onStrip, opts) {
+    const p = stripPlan(W, opts);                          // opts lets a harness force a band height: the
+                                                           // multi-band arithmetic is otherwise unreachable
+                                                           // at any width small enough to test everywhere
     if (W > CANVAS_SIDE_CAP) throw new Error(TR('exp.err.side-cap', { px: CANVAS_SIDE_CAP }));
     const wins = gatherMasks().filter(m => m.show != null);
     const cs = new CompressionStream('deflate');

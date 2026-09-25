@@ -93,12 +93,20 @@ in a throwaway copy:
   `renderFull(W)` → optional burn overlay → hash the raw RGBA. It renders **each hero twice from a fresh
   `deserialize`** and asserts the two hashes are **identical** — the **self-determinism gate**. `--write`
   additionally regenerates `gallery/img/*.png` from the render.
+- **`hero.mjs`** — the hero recipe itself (mask, moon, palette, spectrum, burn), shared by `render.mjs`
+  and `engines.mjs`. It lives on its own because a second copy of it would drift, and the copy that
+  drifted would be the one a gate was measuring.
+- **`engines.mjs`** — the same hero in **Blink, Gecko and WebKit**, in one job. Safari cannot be tested
+  from a PC, and every browser on iOS is WebKit underneath, so WebKit is the one engine the studio ships
+  to blind; Playwright's WebKit is not Safari (no Apple GPU or media stack) but it is the same rasteriser
+  and the same canvas limits. See *[three engines, one job](#three-engines-one-job)* below.
 - **`package.json`** — scripts: `build` (inject only), `verify` (inject + render = the gate), `render`
   (inject + render `--write`). One dev dep: `playwright` pinned to **1.48.2**.
 
 ```bash
 node harness/inject.mjs && node harness/render.mjs            # self-determinism gate
 node harness/inject.mjs && node harness/render.mjs --write     # + regenerate gallery/img/*.png
+node harness/inject.mjs && node harness/engines.mjs            # Blink vs Gecko vs WebKit
 ```
 
 ## CI — `.github/workflows/gallery.yml`
@@ -109,6 +117,33 @@ package files (plus `workflow_dispatch`), the workflow runs inside the pinned
 `node harness/render.mjs`. A non-identical pair fails the job.
 
 ---
+
+## Three engines, one job
+
+`engines.mjs` renders the richest hero — burn pass, mask, reality window — at **1024** in all three
+engines. A small render is the right instrument for this: since the coat is scaled by `COAT_REF` rather
+than by the window ([final-render.md](final-render.md)), a 1024 render is proportionally the same picture
+as a 32768 one, so an engine's rasterisation signature shows up at 1024 in the same proportions for a few
+seconds of CPU. What 1024 cannot show is anything that only exists past a cap, so the caps are measured
+separately, at the band shapes the strip path actually asks for.
+
+Per engine it reports: `CompressionStream` (without it the large tiers are not offered at all), the
+largest single canvas side by bisection, whether `4096×4096`, `20724×2048`, `65535×512` and `65535×1024`
+can each hold a written pixel at the far corner, self-determinism, a streamed multi-band PNG, and the
+difference from Blink as a mean, a max, a percentage and an **8×8 map** — so the *shape* of the difference
+is visible, and anti-aliasing everywhere reads differently from one blown-out region.
+
+What **fails** the job: an engine that will not launch, a render that is not deterministic within that
+engine, a flat render, a streamed PNG that does not decode to the size it declares, fewer bands than the
+forced band height should produce (which would mean the easy single-band path was tested instead), and a
+mean difference past **48/255** — a catastrophe detector, not a fidelity bar. What is **reported but not
+gated**: the difference itself, flagged above 8/255 for a human. Cross-engine byte identity was never the
+claim; the picture is. There is no measured baseline yet for what Gecko and WebKit legitimately differ by
+at this width, and a bar nobody measured is worse than no bar.
+
+Two things this gate cannot reach: real Safari (Apple's own GPU and media stack), and iOS memory
+behaviour. It bounds the risk rather than closing it — the expected WebKit outcome is *smaller bands, or
+the tier not offered*, not a corrupt file, because the app decides by measuring rather than by engine name.
 
 ## What determinism actually holds — and what doesn't
 

@@ -12,6 +12,11 @@ name: browser harness
 # be held disabled. Added after a big export was found to report itself only through a hint that removes
 # itself after 2.6 s, leaving minutes of work looking like a hung page.
 #
+# THREE ENGINES — renders the richest hero at 1024 in Blink, Gecko and WebKit, measures each engine's real
+# canvas limits and band shapes, streams a multi-band PNG, and reports the difference from Blink as an 8x8
+# map. Safari cannot be tested from a PC and every browser on iOS is WebKit underneath, so WebKit was the
+# one engine the studio shipped to blind.
+#
 # PEN CALIBRATION — hands the calibrator a synthetic pen of known rate, pressure, tilt and speed and
 # requires it to report those numbers back. Added after the calibrator measured a 480 Hz pen as 3333 Hz,
 # which no test could see because nothing here had ever been given a pen whose answers were known.
@@ -52,3 +57,5 @@ jobs:
         run: node harness/calibration.mjs
       - name: Check an export says it is working for as long as it works
         run: node harness/export-progress.mjs
+      - name: Render the same hero in Blink, Gecko and WebKit
+        run: node harness/engines.mjs
