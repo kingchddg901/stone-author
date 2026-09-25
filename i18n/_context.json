@@ -910,6 +910,9 @@
   "where": "under the \"clouds-and-warp\" section"
  },
  "sl.defl": {
+  "terms": [
+   "deflection"
+  ],
   "where": "in the \"vein\" group/panel"
  },
  "sl.density": {
