@@ -520,6 +520,7 @@ window.SA_I18N = (() => {
   "cal.saved": "Saved for this device.",
   "cal.too-short": "Too short to measure — draw right across the slab.",
   "exp.ceiling": "this device tops out at {px}px",
+  "exp.ceiling-direct": "up to {px}px here — more behind the tickboxes below",
   "exp.done-kit": "Exported {n} files · {px}px · {t}",
   "exp.done-render": "Saved the render · {px}px · {t}",
   "exp.encoding": "Encoding the PNG…",
@@ -530,6 +531,7 @@ window.SA_I18N = (() => {
   "exp.prog": "Rendering {done} of {total} · {px}px",
   "exp.prog-tiles": "Image {img} of {imgs} · tile {done} of {total} · {px}px",
   "exp.saving": "Saving the file…",
+  "exp.side-cap": "This browser cannot hold a canvas wider than {px}px, which a streamed render at this size needs.",
   "exp.strip": "Rendering band {done} of {total} · {px}px",
   "exp.tiles": "Rendering tile {done} of {total} · {px}px",
   "exp.too-big": "This device cannot allocate a canvas that large. Open the studio on a desktop for this size.",
@@ -1081,7 +1083,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.25.4';
+  const BUILD = '2026.09.25.5';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4044,19 +4046,47 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } catch (_) {}
     return best;
   }
+  // The widest single canvas this BUILD can allocate, measured by bisection and cached per device.
+  //
+  // Not a constant, because it is not a property of an engine: the CI probe measured Gecko and WebKit
+  // clamping a canvas side to 32767 while a desktop Firefox rendered a true 65535 — same engine family,
+  // different answer. A clamped canvas does not throw either; it reports the width asked for and never
+  // writes the far end. So the streamed tier must be offered against a number this browser proved, and
+  // 1x N is cheap to prove: 2 ms in Blink, 9 ms in Gecko.
+  const SIDE_KEY = 'stone-author:sidecap:v1';
+  let sideCapPx = 0;
+  function sideCap() {
+    if (sideCapPx) return sideCapPx;
+    try { const v = +JSON.parse(localStorage.getItem(SIDE_KEY) || '{}')[calSig()]; if (v) return (sideCapPx = v); } catch (_) {}
+    let lo = canvasFits(1024, 1, 1) ? 1024 : 1, hi = CANVAS_SIDE_CAP + 1;
+    while (lo + 1 < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (canvasFits(mid, 1, 1) && canvasFits(1, mid, 1)) lo = mid; else hi = mid;
+    }
+    sideCapPx = lo;
+    try {
+      const all = JSON.parse(localStorage.getItem(SIDE_KEY) || '{}');
+      all[calSig()] = lo; localStorage.setItem(SIDE_KEY, JSON.stringify(all));
+    } catch (_) {}
+    return sideCapPx;
+  }
   let expCap = 0;
   function applyExportCeiling() {
-    if (expCap) return;
-    expCap = exportCeiling();
+    if (!expCap) expCap = exportCeiling();
     const sel = document.getElementById('expres'); if (!sel) return;
     for (const o of sel.options) {
+      if (o.dataset.tier) continue;            // the streamed sizes answer to the side cap, not to this probe
       const over = +o.value > expCap;
       o.disabled = over;
       o.title = over ? TR('exp.too-big') : '';
     }
-    if (+sel.value > expCap) sel.value = String(expCap);
-    const cap = document.getElementById('expcap');
-    if (cap) cap.textContent = TR('exp.ceiling', { px: expCap });
+    // Only ever pull a PLAIN size down. This function used to return early once the probe had run, so it
+    // could never refresh the label; making it re-runnable is what makes the tier skip above load-bearing.
+    // Without it, re-opening the File section after choosing 32768 would disable the tier sizes and quietly
+    // drop the width to the probe's 16384 — an export that looks like the one you asked for and is not.
+    const cur = sel.selectedOptions[0];
+    if (cur && !cur.dataset.tier && +sel.value > expCap) sel.value = String(expCap);
+    applyTiers();                              // the ceiling it prints depends on which tiers are armed
   }
 
   // ---- CALIBRATION ---------------------------------------------------------------------------------
@@ -4461,7 +4491,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const p = stripPlan(W, opts);                          // opts lets a harness force a band height: the
                                                            // multi-band arithmetic is otherwise unreachable
                                                            // at any width small enough to test everywhere
-    if (W > CANVAS_SIDE_CAP) throw new Error(TR('exp.err.side-cap', { px: CANVAS_SIDE_CAP }));
+    if (W > sideCap()) throw new Error(TR('exp.err.side-cap', { px: sideCap() }));   // measured, not assumed
     const wins = gatherMasks().filter(m => m.show != null);
     const cs = new CompressionStream('deflate');
     const writer = cs.writable.getWriter(), reader = cs.readable.getReader();
@@ -4958,10 +4988,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     document.getElementById('tier-large').checked = tierLarge;
     document.getElementById('tier-extreme-row').hidden = !tierLarge;
     document.getElementById('tier-extreme').checked = tierExtreme;
+    const side = mob ? 0 : sideCap();
     for (const o of sel.options) {
       const t = o.dataset.tier;
       if (!t) continue;                                    // plain canvas sizes: the ceiling probe owns those
-      o.disabled = o.hidden = t === 'large' ? !tierLarge : !tierExtreme;
+      const armed = t === 'large' ? tierLarge : tierExtreme;
+      const tooWide = +o.value > side;                     // wider than a canvas this build can hold
+      o.hidden = !armed;
+      o.disabled = !armed || tooWide;
+      o.title = armed && tooWide ? TR('exp.side-cap', { px: side }) : '';
     }
     if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) {
       const ok = [...sel.options].filter(o => !o.disabled);
@@ -4972,6 +5007,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (streamed) what.value = 'render';
     what.disabled = streamed;
     document.getElementById('tier-note').textContent = tierLarge ? TR('big.note', { px: STRIP_FROM }) : '';
+
+    // The ceiling line, which used to state the single-canvas probe's answer whatever the tiers were doing.
+    // On a machine that had just streamed 65535 it read "this device tops out at 16384px" — measured before
+    // the streamed path existed, and never revisited. It now states the largest size actually on offer, and
+    // says plainly when a bigger one is a tickbox away rather than out of reach.
+    const cap = document.getElementById('expcap');
+    if (cap) {
+      const top = Math.max(...[...sel.options].filter(o => !o.disabled).map(o => +o.value));
+      const moreBehindATick = !mob && !tierExtreme && [...sel.options].some(o => o.dataset.tier && +o.value <= side);
+      cap.textContent = TR(moreBehindATick ? 'exp.ceiling-direct' : 'exp.ceiling', { px: top });
+    }
   }
 
   // The element is captured BEFORE the await: Event.target is only valid while the event is being
