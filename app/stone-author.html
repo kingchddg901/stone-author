@@ -3789,23 +3789,31 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Probe UPWARD and stop at the first failure. That is the safety property: we never attempt a size more
   // than one step beyond proven capability, so a device that manages 4096 (64 MiB) is asked for 8192
   // (256 MiB) and never for 640. Probing downward from 16384 would risk taking the tab with it.
-  const EXP_KEY = 'stone-author:expcap:v1';
-  function canvasFits(w, h) {
-    let c = null;
+  const EXP_KEY = 'stone-author:expcap:v2';
+  // How many full-size canvases an export holds at once. The probe MUST match this or it measures the
+  // wrong thing: the first version allocated one, the export held eight, and the dropdown cheerfully
+  // offered a size that needed 5 GiB. exportAll now builds in groups of this size and frees as it goes.
+  const EXP_PEAK = 2;
+  function canvasFits(w, h, n) {
+    const held = [];
     try {
-      c = document.createElement('canvas'); c.width = w; c.height = h;
-      if (c.width !== w || c.height !== h) return false;          // silently clamped
-      const x = c.getContext('2d'); if (!x) return false;
-      x.fillStyle = '#fff'; x.fillRect(w - 2, h - 2, 2, 2);       // the FAR CORNER: a clamped canvas fails here
-      return x.getImageData(w - 1, h - 1, 1, 1).data[0] === 255;
+      for (let k = 0; k < (n || 1); k++) {
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        held.push(c);
+        if (c.width !== w || c.height !== h) return false;        // silently clamped
+        const x = c.getContext('2d'); if (!x) return false;
+        x.fillStyle = '#fff'; x.fillRect(w - 2, h - 2, 2, 2);     // the FAR CORNER: a clamped canvas fails here
+        if (x.getImageData(w - 1, h - 1, 1, 1).data[0] !== 255) return false;
+      }
+      return true;
     } catch (_) { return false; }
-    finally { if (c) { c.width = 1; c.height = 1; } }              // hand the memory back immediately
+    finally { for (const c of held) { c.width = 1; c.height = 1; } }   // hand the memory back immediately
   }
   function exportCeiling() {
     try { const v = +JSON.parse(localStorage.getItem(EXP_KEY) || '{}')[calSig()]; if (v) return v; } catch (_) {}
     let best = 1024;
     for (const w of [2048, 4096, 8192, 16384]) {
-      if (!canvasFits(w, Math.round(w * H))) break;
+      if (!canvasFits(w, Math.round(w * H), EXP_PEAK)) break;     // what the EXPORT needs, not one canvas
       best = w;
     }
     try {
@@ -4247,12 +4255,26 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (exporting) return; exporting = true; hint(TR('hint.exporting-render', { w: W }));
     try {
       const te = new TextEncoder(), oW = Math.min(W, 2048), oOrder = ['base', 'web', 'micro', 'minor', 'major'];
-      const idt = expIdT(W);
-      const canv = [expCompleted(W), expBaseMask(W), expCoverage('major', W), expCoverage('minor', W), expCoverage('micro', W), expCoverage('web', W), idt.ids, idt.t,
-                    expCompleted(oW), ...oOrder.map(b => expBucket(b, oW))];   // render everything first (fast, GPU)
+      // Built in PAIRS and freed as we go. The old "render everything first" batch held EIGHT full-size
+      // canvases alive before encoding any of them: 5 GiB at 16384, which no machine has, and 1.2 GiB at
+      // 8192. It was batched that way to feed the worker pool — the same pool the history records as
+      // "measured a no-op" — so the batch cost 8x the peak memory and bought nothing.
+      let idt = null;
+      const makers = [
+        () => expCompleted(W), () => expBaseMask(W),
+        () => expCoverage('major', W), () => expCoverage('minor', W),
+        () => expCoverage('micro', W), () => expCoverage('web', W),
+        () => { idt = expIdT(W); return idt.ids; }, () => idt.t,   // paired on purpose: one call makes both
+        () => expCompleted(oW), ...oOrder.map(b => () => expBucket(b, oW)),
+      ];
       const names = ['render.png', 'masks/base.png', 'masks/major.png', 'masks/minor.png', 'masks/micro.png', 'masks/web.png', 'rich/vein-ids.png', 'rich/vein-t.png'];
-      hint(TR('hint.exporting-encode', { n: canv.length }));
-      const bytes = await encodePNGs(canv);                          // the slow part, parallelised across cores + off the main thread
+      hint(TR('hint.exporting-encode', { n: makers.length }));
+      const bytes = [];
+      for (let i = 0; i < makers.length; i += EXP_PEAK) {
+        const group = makers.slice(i, i + EXP_PEAK).map(f => f());
+        for (const b of await encodePNGs(group)) bytes.push(b);    // still parallel within the pair
+        for (const c of group) { c.width = 1; c.height = 1; }      // hand it back before building the next
+      }
       const files = [];
       for (let i = 0; i < names.length; i++) files.push({ name: names[i], data: bytes[i] });
       files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(idt.legend)) });
