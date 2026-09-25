@@ -59,7 +59,9 @@ page.on('pageerror', e => console.error('page error:', e.message));
 // domcontentloaded, not load: the page asks Google Fonts for a face it has a fallback for, and there is
 // no reason to make a calibration gate wait on a font — or fail when CI cannot reach the CDN.
 await page.goto(app, { waitUntil: 'domcontentloaded' });
-await page.waitForSelector('#cal-start', { timeout: 15000 });
+// state 'attached', not the default 'visible': the button sits inside a collapsed <details>, which the
+// run below opens itself. Waiting for it to be visible waits for something that never happens.
+await page.waitForSelector('#cal-start', { state: 'attached', timeout: 15000 });
 // Wait for the canvas to actually have a box. Measured immediately after navigation it is 0 x 0, every
 // coordinate becomes 0/0, and the run produces a profile that is wrong rather than a run that fails.
 await page.waitForFunction(() => {
