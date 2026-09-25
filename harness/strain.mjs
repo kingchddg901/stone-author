@@ -46,12 +46,17 @@ const res = await page.evaluate(async ({ slab }) => {
     }
     return { cyan, magenta, warm, h };
   };
+  // The global current moves this slab's veins a mean of 0.035 (max 0.107), so at the default scale of 0.06
+  // the blend is mild and the strict blue test below barely sees it — measured, 165 pixels. The scale is
+  // pinned low here so the stimulus is decisive: this gate is about the mechanism and the ladder, not about
+  // whether the default happens to look strong on one slab.
+  const lit = (extra) => (s) => { s.OVR['major:strain'] = 1; s.OVR['major:strainScale'] = 0.012; extra && extra(s); };
   return {
-    off:      shot(() => {}),                                                        // the default: nothing asked for
-    bucket:   shot(s => { s.OVR['major:strain'] = 1; }),                             // set on the bucket
-    layerOff: shot(s => { s.OVR['major:strain'] = 1; s.OVR['lay:major:strain'] = 0; }),   // layer refuses
-    spxTwo:   shot(s => { s.OVR['major:strain'] = 1; s.OVR['major:strainSpx'] = -2; }),   // reveal the other stop
-    spxMid:   shot(s => { s.OVR['major:strain'] = 1; s.OVR['major:strainSpx'] = -1.5; }), // between the stops
+    off:      shot(() => {}),                                     // the default: nothing asked for
+    bucket:   shot(lit()),                                        // set on the bucket
+    layerOff: shot(lit(s => { s.OVR['lay:major:strain'] = 0; })),  // the layer refuses what the bucket asked for
+    spxTwo:   shot(lit(s => { s.OVR['major:strainSpx'] = -2; })),  // reveal the other stop
+    spxMid:   shot(lit(s => { s.OVR['major:strainSpx'] = -1.5; })),// between the stops: neither colour
   };
 }, { slab });
 await browser.close();
@@ -59,7 +64,7 @@ await browser.close();
 const fail = [];
 const { off, bucket, layerOff, spxTwo, spxMid } = res;
 if (off.cyan !== 0) fail.push(`strain defaults to 0, so an untouched slab must show no emission: got ${off.cyan} lit pixels`);
-if (!(bucket.cyan > 500)) fail.push(`strain 1 on the bucket must light the warped stretches: got ${bucket.cyan}`);
+if (!(bucket.cyan > 1000)) fail.push(`strain 1 on the bucket must light the warped stretches: got ${bucket.cyan}, measured 2834`);
 if (!(bucket.warm < off.warm)) fail.push('lighting stretches must take them out of the daylight colour');
 if (layerOff.h !== off.h) fail.push('a LAYER set to 0 must beat the bucket exactly, pixel for pixel');
 if (!(spxTwo.magenta > 500)) fail.push(`strainSpx -2 must reveal the other stop: got ${spxTwo.magenta} magenta pixels`);
