@@ -161,6 +161,54 @@ counts:
 So: **θ = k · s**, with `k` the rotational range per unit length, and the sign of `k` taken from the signed
 tilt channel.
 
+#### Sampling is per second, so don't compute the speed
+
+Pointer events arrive on a **time** schedule, not a distance one — the repo's own tuning note measured
+Chris's S Pen at **60 Hz**. So `d/t` is well defined per sample, and the question "does that give a
+meaningful speed" is the right one to ask. Two answers, pulling opposite ways:
+
+**You don't need the speed.** `θ = k·s` is a running sum of segment lengths:
+
+```js
+theta += k * Math.hypot(p[i][0] - p[i-1][0], p[i][1] - p[i-1][1]);
+```
+
+No division, no `dt`. Computing `v = ds/dt` and then multiplying by `dt` again is the same number with
+timestamp jitter added and removed for nothing — and event timestamps are the noisiest thing in the
+record. `applyMagnet` already clamps `dt` to `[0, 0.05]` precisely because it is unreliable. Accumulate
+distance directly.
+
+**But 60 Hz does bite, on the angular step.** The *pattern* is speed-independent; its *sampling* is not.
+At 60 Hz a brisk drag of one slab width in half a second moves ≈0.033 slab units between samples. If `k`
+is set to a full turn per quarter width — a plausible "quick walk" — that is
+
+```
+0.033 / 0.25 × 360° ≈ 48° of sweep per sample
+```
+
+which is not a sweep, it is about seven discrete orientation bands. The faster the stroke the coarser it
+gets, so the artifact appears exactly where the effect is meant to be strongest.
+
+The fix is to subdivide by arc length rather than consume samples as given, choosing the step from the
+angular budget:
+
+```
+step = maxΔθ / k          // e.g. maxΔθ = 5°
+```
+
+`resample(P, step)` already does exactly this, and is already in the file — it is the function `applyMoon`
+misuses. Here it is the right tool, because the magnet genuinely wants even *spatial* steps.
+
+#### While we are here: the pen's samples are being thrown away
+
+`getCoalescedEvents()` appears **nowhere** in the studio. Browsers coalesce pointer moves down to roughly
+frame rate and hand back the full-rate history only if asked, so a 120–240 Hz stylus is very likely being
+recorded at ~60. That 60 Hz measurement may be the browser's rate, not the pen's.
+
+This is free fidelity for **every** channel, not just this one — a better speed estimate, a finer tilt
+profile, more of the pressure curve, and a smaller subdivision burden above. Worth measuring before
+building anything that depends on sample density.
+
 ### Dragging the magnet left-to-right already differs from right-to-left
 
 Observed by Chris, and it is real — the same path drawn in opposite directions gives visibly different
