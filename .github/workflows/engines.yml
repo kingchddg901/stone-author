@@ -30,10 +30,6 @@ jobs:
     timeout-minutes: 30            # three engines; a hung phase must not sit on a runner
     container:
       image: mcr.microsoft.com/playwright:v1.48.2-noble
-    env:
-      # Firefox refuses to start as root when $HOME belongs to someone else, which is exactly what the
-      # container's /github/home is. Playwright's own launch error names this fix.
-      HOME: /root
     steps:
       - uses: actions/checkout@v4
       - name: Install deps (browsers are pre-installed in the container)
@@ -42,6 +38,13 @@ jobs:
         run: node harness/inject.mjs
       - name: Render the same hero in Blink, Gecko and WebKit
         timeout-minutes: 22        # the script bounds each phase; this bounds the script
+        env:
+          # Firefox refuses to start as root when $HOME belongs to someone else, which is exactly what the
+          # container's /github/home is; Playwright's own launch error names this fix. Scoped to THIS step
+          # rather than the job, because at job level it also pointed docker and checkout at /root and every
+          # one of those steps logged a permission warning it could do nothing about. A log that warns
+          # routinely is a log nobody reads.
+          HOME: /root
         run: node harness/engines.mjs
       # kept even when the step above fails: a red engine run is exactly when the picture is wanted
       - name: Keep each engine's 1024 render and its x8 difference image

@@ -185,7 +185,9 @@ Nothing about this worked first time, and each failure was worth more than the g
   output. The gate now announces and times every phase and bounds each one, with a watchdog under the lot
   and `timeout-minutes` on the job and the step. That instrumentation is what localised everything below.
 - **Firefox cannot start as root when `$HOME` belongs to someone else** — the container's `/github/home` is
-  owned by `pwuser`. Playwright's own launch error names the fix: `HOME: /root` in the workflow env.
+  owned by `pwuser`. Playwright's own launch error names the fix: `HOME: /root`, scoped to the step that
+  launches the browsers. At job level it also pointed `docker` and `checkout` at `/root`, and each of those
+  steps then logged a permission warning it could do nothing about.
 - **The comparison was the slowest thing in the run.** Doing it in the page — decode the reference PNG,
   loop, build a second canvas, `toDataURL` — cost WebKit more than 45 seconds and cost Chromium its
   execution context. It moved to Node (`harness/compare.mjs`, `harness/png.mjs`): the page returns its raw
