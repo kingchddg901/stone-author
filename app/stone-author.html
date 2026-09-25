@@ -1086,7 +1086,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.25.8';
+  const BUILD = '2026.09.25.9';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1141,22 +1141,26 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const A = hexRGB(a), B = hexRGB(b);
     return rgbHex(A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t);
   };
-  const emit = (id, layer, x, y) => {
-    const arr = (id != null && OVR_uv['id:' + id]) || OVR_uv['lay:' + layer];   // a LIST of {v,c} — an artifact can glow in several spectra
+  const emitAt = (arr, v) => {                                                // what this stop list gives at ANY value
     if (!arr || !arr.length) return null;
-    if (spotOn && x != null && Math.hypot(x - G.lightX, y - G.lightY) > G.spotR) return null;   // spatial: inside the beam
-    let lo = null, hi = null;                                                  // the two stops the light sits between
+    let lo = null, hi = null;                                                  // the two stops the value sits between
     for (const e of arr) {
-      if (e.v <= lightSpectrum && (!lo || e.v > lo.v)) lo = e;
-      if (e.v >= lightSpectrum && (!hi || e.v < hi.v)) hi = e;
+      if (e.v <= v && (!lo || e.v > lo.v)) lo = e;
+      if (e.v >= v && (!hi || e.v < hi.v)) hi = e;
     }
     if (lo && hi) {
       if (lo === hi) return lo.c;                                              // sitting exactly on a stop
       const span = hi.v - lo.v;
-      return span > 0 ? mixHexAt(lo.c, hi.c, (lightSpectrum - lo.v) / span) : lo.c;
+      return span > 0 ? mixHexAt(lo.c, hi.c, (v - lo.v) / span) : lo.c;
     }
-    const en = arr.find(e => Math.abs(lightSpectrum - e.v) <= SPX_TOL);        // past the ends: the old rule
+    const en = arr.find(e => Math.abs(v - e.v) <= SPX_TOL);                    // past the ends: the old rule
     return en ? en.c : null;
+  };
+  const emit = (id, layer, x, y) => {
+    const arr = (id != null && OVR_uv['id:' + id]) || OVR_uv['lay:' + layer];   // a LIST of {v,c} — an artifact can glow in several spectra
+    if (!arr) return null;
+    if (spotOn && x != null && Math.hypot(x - G.lightX, y - G.lightY) > G.spotR) return null;   // spatial: inside the beam
+    return emitAt(arr, lightSpectrum);
   };
   const beamPts = pts => !spotOn || pts.some(p => Math.hypot(p[0] - G.lightX, p[1] - G.lightY) <= G.spotR);   // does a line/edge touch the beam?
   const hidden = new Set();   // 7th dimension: MARKS tagged "don't render" (one mark = one vein/web/seam, whatever its sub-lines) — skipped by the renderer AND the hit-test, recovered only from the Hidden list
@@ -2372,7 +2376,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function warpGeo() {
     _wmask = gatherMasks();                               // the protected islands, unioned + cached, before any warp reads them
     const moons = marks.filter(m => m.kind === 'moon'), hasGlobal = G.warp > 0;
+    for (const L of geo.lines) L._p0 = null;             // no warp, no strain: a line that never moved has none
     if (!hasGlobal && !moons.length) return;             // two warps: the gentle global current, and the powerful local moons
+    // Where everything was BEFORE any force ran. Taken once, here, so strain is the total displacement from
+    // the undisturbed stone however many forces act — the current, each moon, and the anchor re-pin after
+    // them — rather than something each force would have to remember to report.
+    for (const L of geo.lines) { const p = new Float32Array(L.pts.length * 2);
+      for (let i = 0; i < L.pts.length; i++) { p[i * 2] = L.pts[i][0]; p[i * 2 + 1] = L.pts[i][1]; }
+      L._p0 = p; }
     const W = k => { const L = layAt(k); return L ? L.warp : 1; };        // per-layer warp weight (a layer can hold still)
     const depthCache = new Map();
     const depthOf = L => {                                // generation depth: major 0, its branch 1, its branch 2 …
@@ -3011,7 +3022,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // hexRGB/rgbHex/mixHexAt travel with them: emit blends between spectrum stops and cannot be serialised
     // without them. (This core has no live caller — renderTiledParallel measured a no-op — but a serialised
     // copy that references a function it does not carry is a trap for whoever revives it.)
-    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, hexRGB, rgbHex, mixHexAt, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent };
+    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, hexRGB, rgbHex, mixHexAt, emitAt, idxAt, strainColour, adjOf, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent };
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
     s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;
@@ -3234,6 +3245,29 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     g2d.lineJoin = 'round'; g2d.lineCap = 'round';
     fxOff(_fx);
   }
+  // STRAIN GLOW: a stretch that the warp moved takes on the emission colour its own spectrum gives it, in
+  // proportion to how far it went. All three settings resolve artifact -> layer -> bucket like every other
+  // adjustment, so a single vein can answer differently from its layer, and a layer from its bucket.
+  const idxAt = (L, t) => {                               // the sample nearest a normalised position along the line
+    if (!L.cum || !L.total) return 0;
+    const target = t * L.total;
+    let lo = 0, hi = L.cum.length - 1;
+    while (lo + 1 < hi) { const m = (lo + hi) >> 1; if (L.cum[m] <= target) lo = m; else hi = m; }
+    return lo;
+  };
+  function strainColour(L, base, layer, bucket, t) {
+    const amt = adjOf(L.id, layer, bucket, 'strain', 0);
+    if (!(amt > 0) || !L._p0) return base;
+    const arr = OVR_uv['id:' + L.id] || OVR_uv['lay:' + layer];
+    if (!arr || !arr.length) return base;
+    const lit = emitAt(arr, adjOf(L.id, layer, bucket, 'strainSpx', -1));
+    if (!lit) return base;
+    const i = idxAt(L, t), p = L.pts[i];
+    if (!p || i * 2 + 1 >= L._p0.length) return base;
+    const d = Math.hypot(p[0] - L._p0[i * 2], p[1] - L._p0[i * 2 + 1]);
+    const w = Math.min(1, d / adjOf(L.id, layer, bucket, 'strainScale', 0.06)) * amt;
+    return w > 0.002 ? mixHexAt(base, lit, w) : base;
+  }
   function paintVeinLayer(ident, uv, angleView, only) {   // veins for one layer, composited atomically: halo -> shoulder -> main
     if (!layVis(only)) return;
     const F = FAM[fam], halo = COL.halo;
@@ -3243,7 +3277,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const vcol = L => { if (uv) return (beamPts(L.pts) && emit(L.id, L.layer)) || UV_DARK; const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };
     if (!ident && !uv) for (const L of mine) if (L.halo) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(only), true);   // halo: wide pale bleached selvage
     if (!ident && !uv) for (const L of mine) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(only), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }   // shoulder
-    for (const L of mine) { const bk = L.major ? 'major' : 'minor'; const _fx = uv ? null : fxOn(only, vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : vcol(L)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(only))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }   // main (per-item adjustments)
+    for (const L of mine) { const bk = L.major ? 'major' : 'minor'; const _fx = uv ? null : fxOn(only, vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : strainColour(L, vcol(L), only, bk, t)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(only))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }   // main (per-item adjustments)
   }
   function paintStoneContent(ident, angleView) {
     const uv = uvMode && !ident;                                // black-light: only the UV palette paints; the stone body is dark
@@ -3715,8 +3749,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { n: 'blur', min: 0, max: 8, step: 0.1, def: 0 }, { n: 'hue', min: -180, max: 180, step: 1, def: 0 },
     { n: 'sat', min: 0, max: 2, step: 0.05, def: 1 }, { n: 'bright', min: 0, max: 2, step: 0.05, def: 1 },
     { n: 'contrast', min: 0, max: 2, step: 0.05, def: 1 }, { n: 'weight', min: 0.2, max: 3, step: 0.05, def: 1 },
+    // STRAIN: how much a warped stretch takes on its own emission colour. Default 0, so nothing an existing
+    // slab holds changes until it is asked for; strainSpx names WHICH spectrum the warp reveals, and
+    // strainScale the displacement that reads as fully lit.
+    { n: 'strain', min: 0, max: 1, step: 0.05, def: 0 },
+    { n: 'strainSpx', min: -4, max: 4, step: 0.1, def: -1 },
+    { n: 'strainScale', min: 0.005, max: 0.3, step: 0.005, def: 0.06 },
   ];
-  const ADJ_LABEL = { blur: 'blur', hue: 'hue', sat: 'saturation', bright: 'brightness', contrast: 'contrast', weight: 'weight' };
+  const ADJ_LABEL = { blur: 'blur', hue: 'hue', sat: 'saturation', bright: 'brightness', contrast: 'contrast', weight: 'weight',
+                      strain: 'strain glow', strainSpx: 'strain spectrum', strainScale: 'strain scale' };
   const adjTokens = (base, label) => ADJ.map(a => ({ key: base + ':' + a.n, label: label + ' — ' + ADJ_LABEL[a.n], type: 'number', min: a.min, max: a.max, step: a.step, default: a.def }));
   // Resolve one adjustment for an item, walking the granularity: artifact → its layer → its bucket → default.
   const adjOf = (id, layer, bucket, name, def) => { const v = (id != null ? OVR['id:' + id + ':' + name] : undefined) ?? OVR['lay:' + layer + ':' + name] ?? OVR[bucket + ':' + name]; return v !== undefined && v !== '' ? +v : def; };

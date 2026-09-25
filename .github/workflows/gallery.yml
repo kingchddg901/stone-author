@@ -16,6 +16,10 @@ name: browser harness
 # could change slabs people already own: every committed OVR_uv entry has a single stop, and a single stop
 # must not interpolate.
 #
+# STRAIN GLOW — a warped stretch takes on its own emission colour. Gates the LADDER (artifact beats layer
+# beats bucket), which no screenshot shows, and the default: strain is 0 everywhere, so a slab that never
+# asks for it renders exactly as it did before the feature existed.
+#
 # PEN CALIBRATION — hands the calibrator a synthetic pen of known rate, pressure, tilt and speed and
 # requires it to report those numbers back. Added after the calibrator measured a 480 Hz pen as 3333 Hz,
 # which no test could see because nothing here had ever been given a pen whose answers were known.
@@ -58,3 +62,5 @@ jobs:
         run: node harness/export-progress.mjs
       - name: Emission stops blend, and a single stop does not
         run: node harness/spectrum.mjs
+      - name: Strain glow obeys the artifact/layer/bucket ladder, and is silent by default
+        run: node harness/strain.mjs

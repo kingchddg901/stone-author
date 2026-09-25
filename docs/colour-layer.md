@@ -117,6 +117,34 @@ blend, and it checks that **a single stop still refuses to interpolate**, becaus
 could quietly change stone somebody already owns. Stops are resolved by value, not by authoring order, and
 the gate checks that too.
 
+## Strain glow — the warp reveals a spectrum
+
+A stretch of stone that the warp moved takes on the emission colour its own spectrum gives it, in
+proportion to how far it went. Gold vein, dragged by a moon, comes out cyan through the bend and stays gold
+at both untouched ends — and the handover lands exactly where the drag falls off, because the weight is
+computed **per point**, from the position `runs()` already hands the fill.
+
+Three settings, and they are not new machinery: they are three more rows in `ADJ`, so they inherit the
+whole adjustment set's apparatus — the artifact → layer → bucket ladder, the panel that edits them, storage
+in `OVR`, saving with the slab, and the cleanup that drops keys when an artifact dies.
+
+| token | default | what it does |
+|---|---|---|
+| `strain` | **0** | how much of the emission colour a fully strained stretch takes |
+| `strainSpx` | −1 | which spectrum the warp reveals — and with blended stops it need not be a stop at all |
+| `strainScale` | 0.06 | the displacement that reads as fully lit |
+
+`strain` defaulting to 0 is what makes this safe: a slab that never asks for it renders exactly as it did.
+A vein can answer differently from its layer and a layer from its bucket, so one seam can glow while the
+rest of the stone holds its daylight colour.
+
+The displacement itself is measured against a snapshot `warpGeo` takes of every line **before any force
+runs**. That is deliberate: strain is the total displacement from undisturbed stone, so the global current,
+every moon and the anchor re-pin all contribute without any of them having to report anything.
+
+`harness/strain.mjs` gates the part no screenshot shows — that a layer set to 0 beats a bucket set to 1
+*pixel for pixel* — along with the silent default and the spectrum selection.
+
 ## Status
 
 The colour layer (colour + blend + glow via the vendored kit) shipped at artifact **v22**; since then

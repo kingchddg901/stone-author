@@ -20,7 +20,8 @@ const hook = `
     // the strip path: a render larger than a canvas can be, assembled as a PNG stream
     renderStreamedPNG, stripPlan, renderStrip,
     // the spectral resolver, so a gate can ask what an artifact glows at a given light without rendering
-    emit, setSpx: (v) => { lightSpectrum = v; uvMode = v !== 0; },
+    emit, emitAt, setSpx: (v) => { lightSpectrum = v; uvMode = v !== 0; },
+    get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
     render: () => { size(); build(); stoneReady = false; draw(); },
     get G() { return G; }, get OVR_uv() { return OVR_uv; },
     get marks() { return marks; }, set marks(v) { marks = v; },
