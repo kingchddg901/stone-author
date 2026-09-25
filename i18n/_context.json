@@ -291,6 +291,16 @@
   },
   "where": "progress line under the File section buttons, while an export is running"
  },
+ "exp.prog-tiles": {
+  "placeholders": {
+   "done": "which tile of this image is finished, counting from 1",
+   "img": "which image of the export is being built, counting from 1",
+   "imgs": "how many images the export contains",
+   "px": "the export width in pixels, e.g. 16384",
+   "total": "how many tiles this image is divided into"
+  },
+  "where": "progress line under the File section buttons, while an image that renders in tiles is being built"
+ },
  "exp.saving": {
   "where": "progress line under the File section buttons, as the archive is handed to the browser"
  },

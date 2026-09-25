@@ -496,6 +496,7 @@ window.SA_I18N = (() => {
   "exp.packing": "Packing the archive…",
   "exp.preparing": "Preparing…",
   "exp.prog": "Rendering {done} of {total} · {px}px",
+  "exp.prog-tiles": "Image {img} of {imgs} · tile {done} of {total} · {px}px",
   "exp.saving": "Saving the file…",
   "exp.tiles": "Rendering tile {done} of {total} · {px}px",
   "exp.too-big": "This device cannot allocate a canvas that large. Open the studio on a desktop for this size.",
@@ -4457,8 +4458,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // 8192. It was batched that way to feed the worker pool — the same pool the history records as
       // "measured a no-op" — so the batch cost 8x the peak memory and bought nothing.
       let idt = null;
+      // The first maker is the finished slab -- the same work the render-only path does, and by far the
+      // longest step here. It takes the tile reporter so the kit does not sit on "1 of 14" for two
+      // minutes; the rest ignore the argument, because they are single-pass renders.
       const makers = [
-        () => expCompleted(W), () => expBaseMask(W),
+        onTile => renderTiledStepped(W, onTile), () => expBaseMask(W),
         () => expCoverage('major', W), () => expCoverage('minor', W),
         () => expCoverage('micro', W), () => expCoverage('web', W),
         () => { idt = expIdT(W); return idt.ids; }, () => idt.t,   // paired on purpose: one call makes both
@@ -4471,7 +4475,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         expStat(TR('exp.prog', { done: i + 1, total: makers.length, px: W }), i / steps);
         await breathe();                                     // paint the line BEFORE we block on the render
         const tR = Date.now();
-        const group = makers.slice(i, i + EXP_PEAK).map(f => f());
+        const group = [];
+        for (let k = i; k < Math.min(i + EXP_PEAK, makers.length); k++) {
+          let shown = -1;
+          group.push(await makers[k](async (done, total) => {         // only the tiled maker calls this
+            if (done === shown) return;
+            shown = done;
+            expStat(TR('exp.prog-tiles', { img: k + 1, imgs: makers.length, done, total, px: W }), (k + done / total) / steps);
+            await breathe();
+          }));
+        }
         msRender += Date.now() - tR;
         const tE = Date.now();
         for (const b of await encodePNGs(group)) bytes.push(b);    // still parallel within the pair

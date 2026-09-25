@@ -83,6 +83,10 @@ const checks = [
   // the number you compare against after touching the renderer.
   ['it leaves the finished export up', got.finalLine, got.stillShown === true && /\d+:\d\d$/.test(got.finalLine)],
   ['and a wall-clock time with it', got.clock, /^\d+:\d\d$/.test(got.clock)],
+  // The kit's first image is the finished slab -- the same tiled render the render-only path does, and
+  // the longest step by far. Without this it sat on "Rendering 1 of 14" for the whole of it.
+  [`the kit's first image counts tiles too`, got.seen.filter(t => /^Image 1 of /.test(t)).length + ' lines',
+   got.seen.some(t => /^Image 1 of \d+ . tile \d+ of \d+/.test(t))],
 ];
 
 // --- render-only must count TILES, not sit on one step -------------------------------------------
