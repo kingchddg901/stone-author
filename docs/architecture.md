@@ -51,7 +51,7 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
   **Light** (drag to aim the one shared light / spotlight beam),
   Move.
 - **Slab primitives** (per family, seeded, greyscale) — **clouds/mottling**, **banding**,
-  **breccia clasts**, **drusy sparkle**, and a **fog / resin core** (a flat, untinted grayscale haze of
+  **breccia clasts**, **drusy sparkle**, and a **fog / resin core** (a flat, untinted greyscale haze of
   sparse soft particles, rendered deep under the veins to read as sub-surface depth — the milky
   imperfection a fabricator saws off; particles are movable so the magnet can sculpt clear windows and
   pools), on top of the ground and the fracture/speck structure.
@@ -83,7 +83,8 @@ before changing the generator.
 ### `gallery/` — the public showcase
 
 `index.html` is a static showcase page (no build) — **"African St Laurent, Warped"**, one authored
-marble idea shown three ways (pristine → subtly wrong → screaming). Three *heroes* (`img/*.png`, 1600×1000)
+marble idea shown four ways (pristine → subtly wrong → screaming → turned inside out). Four *heroes*
+(`img/*.png`, 1600×1000)
 from **two slabs** (`slabs/before.json`, `slabs/warped.json`); `reference.json` is the render recipe +
 reference hashes. Dedicated to the public domain under CC0. Full detail in [`gallery.md`](gallery.md).
 
@@ -100,7 +101,10 @@ it in CI. Full detail in [`gallery.md`](gallery.md).
 [`functions.md`](functions.md) (the function reference), [`capabilities.md`](capabilities.md) (the
 verified capability inventory), [`final-render.md`](final-render.md) (the offline render pipeline &
 roadmap), [`colour-layer.md`](colour-layer.md) (the colour engine), [`gallery.md`](gallery.md) (the
-gallery + determinism harness), `stone-generator.md` (the Python/panel generator), and this file.
+gallery + determinism harness), [`i18n.md`](i18n.md) (translating the studio), `stone-generator.md` (the
+Python/panel generator), and this file. Design notes, **not yet implemented**:
+[`input-channels.md`](input-channels.md) (one adapter turning a stroke into named channels) and
+[`moon.md`](moon.md) (Moon as a moving-body event).
 
 ---
 
@@ -350,7 +354,7 @@ left unmasked, so it shapes the field warp, not the root bond. A parallel `G.war
 programmatic/legacy discs) · the **reality window** (a mask can *show a different light through* its disc, at
 whatever spectrum that island carries — SA re-renders the slab at it and feathers it in, baked into the live
 view **and** every export, so *daylight seen through a UV/psyker view* is authored in the tool, not composited
-by hand afterward) · the **fog / resin-core** layer (a flat untinted grayscale haze, deep, for sub-surface
+by hand afterward) · the **fog / resin-core** layer (a flat untinted greyscale haze, deep, for sub-surface
 depth; movable particles for the magnet to sculpt) · the **layer system, first slice** (multiple user
 layers per bucket for major / minor / web, an active layer marks file into, per-layer eye / opacity /
 warp, saved and restored) · **layer selection** (select layers; the **force tools**, a **colour** swatch,

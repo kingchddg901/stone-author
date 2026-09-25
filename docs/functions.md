@@ -117,7 +117,7 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
 - `buildBreccia()` / `ensureBreccia()` — a jittered-Voronoi clast mosaic with a contrast matrix
   (opaque base setter). *(524/547)*
 - `buildDrusy()` — crystal-pocket sparkle points, deterministic by index (density appends). *(552)*
-- `buildFog()` — a flat, even grayscale **haze / resin core**: a jittered grid of heavily-overlapping soft
+- `buildFog()` — a flat, even greyscale **haze / resin core**: a jittered grid of heavily-overlapping soft
   particles (reads as a uniform sheet, not clumps), a low fixed grey, never tinted. **Field-per-layer, like
   granite:** it unions every fog **plane** (`L.field==='fog'`), each with its own `haze` / `size` / `density`
   / `seed`, tagging each blob with its layer — so you can stack a deep dense resin core and a light surface
