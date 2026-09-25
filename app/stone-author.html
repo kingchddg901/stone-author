@@ -475,6 +475,9 @@ window.SA_I18N = (() => {
   "big.confirm": "Start {w} × {h} render?\n\n{gpx} gigapixels. This may run for several minutes and produce a file approaching or exceeding 1 GB. Other software may need tens of gigabytes to open it.",
   "big.extreme": "Extreme",
   "big.large": "Large render",
+  "big.mem-rec": "Recommended: {gb} GB of memory — the machine this tier is known to finish on. Below that it is untested, not unsupported.",
+  "big.mem-reported": "This browser reports {gb} GB — a rounded figure, and some browsers cap it.",
+  "big.mem-unknown": "This browser does not say how much memory this machine has.",
   "big.note": "Above {px}px the export streams the picture in bands. It cannot resume — do not close the tab.",
   "big.warn": "This is not fast. It is not guaranteed to be stable. It will eat storage.\n\nIt cannot resume: closing the tab or navigating away loses the whole render.\n\nDo not run this on a mobile device. Close anything you are not using.",
   "btn.cal-cancel": "Cancel",
@@ -1083,7 +1086,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.25.5';
+  const BUILD = '2026.09.25.6';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5006,7 +5009,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const streamed = +sel.value > STRIP_FROM;
     if (streamed) what.value = 'render';
     what.disabled = streamed;
-    document.getElementById('tier-note').textContent = tierLarge ? TR('big.note', { px: STRIP_FROM }) : '';
+    document.getElementById('tier-note').textContent = !tierLarge ? ''
+      : TR('big.note', { px: STRIP_FROM }) + (tierExtreme ? ' ' + memNote() : '');
 
     // The ceiling line, which used to state the single-canvas probe's answer whatever the tiers were doing.
     // On a machine that had just streamed 65535 it read "this device tops out at 16384px" — measured before
@@ -5018,6 +5022,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const moreBehindATick = !mob && !tierExtreme && [...sel.options].some(o => o.dataset.tier && +o.value <= side);
       cap.textContent = TR(moreBehindATick ? 'exp.ceiling-direct' : 'exp.ceiling', { px: top });
     }
+  }
+
+  // Extreme's hardware recommendation. navigator.deviceMemory is rounded and unreliable in both directions:
+  // Gecko and WebKit do not implement it at all, and among Blink builds it varies — the CI Chromium reports
+  // 8 for a 16 GB runner while the desktop one reports 16. So it can hint, and it can never decide. The
+  // recommendation is therefore stated as a recommendation, with whatever the browser actually says placed
+  // beside it rather than turned into a verdict: 16 GB is the machine this tier is known to finish on, not
+  // a boundary anybody has tested.
+  const REC_GB = 16;
+  function memNote() {
+    const dm = navigator.deviceMemory;
+    return TR('big.mem-rec', { gb: REC_GB }) + ' '
+         + (dm === undefined ? TR('big.mem-unknown') : TR('big.mem-reported', { gb: dm }));
   }
 
   // The element is captured BEFORE the await: Event.target is only valid while the event is being
@@ -5041,7 +5058,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (W <= STRIP_FROM) return exportAll(W, document.getElementById('expwhat').value === 'render');
     const h = Math.round(W * H);
     if (W >= 65535 && !(await bigDialog(
-          TR('big.confirm', { w: W.toLocaleString(), h: h.toLocaleString(), gpx: (W * h / 1e9).toFixed(3) }),
+          TR('big.confirm', { w: W.toLocaleString(), h: h.toLocaleString(), gpx: (W * h / 1e9).toFixed(3) })
+            + '\n\n' + memNote(),
           TR('btn.start-giant')))) return;
     tierExtreme = false; applyTiers();                     // disarm on LAUNCH, not on success
     exportStreamed(W);

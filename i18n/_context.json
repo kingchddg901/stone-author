@@ -119,6 +119,21 @@
  "big.large": {
   "where": "label on the toggle that unlocks the export widths above 16384, in the File section"
  },
+ "big.mem-rec": {
+  "placeholders": {
+   "gb": "the recommended memory in gigabytes"
+  },
+  "where": "hardware recommendation for the Extreme export tier, beside its tickbox and in its confirmation dialogue"
+ },
+ "big.mem-reported": {
+  "placeholders": {
+   "gb": "what navigator.deviceMemory reports: rounded, and capped by some browsers"
+  },
+  "where": "follows the recommendation when the browser reports a memory figure"
+ },
+ "big.mem-unknown": {
+  "where": "follows the recommendation when the browser reports no memory figure at all"
+ },
  "big.note": {
   "placeholders": {
    "px": "the width above which the export streams in bands, 16384"
