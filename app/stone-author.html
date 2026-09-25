@@ -3859,7 +3859,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return fam + ':' + (navigator.maxTouchPoints || 0) + ':' + (screen && screen.width || 0);
   }
   function calLoad() {
-    try { const all = JSON.parse(localStorage.getItem(CAL_KEY) || '{}'); calProfile = all[calSig()] || null; }
+    // v1 profiles are not merely old, they are wrong: the report rate was measured against our own
+    // clock and the pressures were medians over the press-and-release ramps. Discard rather than show.
+    try { const all = JSON.parse(localStorage.getItem(CAL_KEY) || '{}'), p = all[calSig()];
+          calProfile = (p && p.v >= 2) ? p : null; }
     catch (_) { calProfile = null; }
     calShow();
   }
@@ -3885,13 +3888,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     row(TR('cal.row.pressure'), p.press.lo.toFixed(3) + ' / ' + p.press.mid.toFixed(3) + ' / ' + p.press.hi.toFixed(3));
     row(TR('cal.row.lean'), Math.round(p.lean.rest * 90) + '° / ' + Math.round(p.lean.max * 90) + '°');
     row(TR('cal.row.speed'), p.speed.natural.toFixed(3) + ' / ' + p.speed.quick.toFixed(3));
-    row(TR('cal.row.rate'), Math.round(p.dev.rate) + ' Hz' + (p.dev.coalesced ? ' ×' + p.dev.coalesced : ''));
+    row(TR('cal.row.rate'), Math.round(p.dev.rate) + ' Hz' + (p.dev.coalesced > 1.05 ? ' ×' + p.dev.coalesced : ''));
     if (!cal) document.getElementById('cal-step').textContent = TR('cal.saved');
   }
 
   function calBegin() {
-    cal = { phase: 0, stroke: 0, cur: null, bag: {} };
-    for (const k of CAL_PHASES) cal.bag[k] = { press: [], lean: [], speed: [], dt: [], co: 0 };
+    cal = { phase: 0, stroke: 0, cur: null, bag: {}, moves: 0, pts: 0 };
+    for (const k of CAL_PHASES) cal.bag[k] = { press: [], all: [], lean: [], speed: [], dt: [] };
     document.getElementById('cal-start').hidden = true;
     document.getElementById('cal-cancel').hidden = false;
     document.getElementById('cal-out').textContent = '';
@@ -3976,23 +3979,34 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (fresh) calCanvas();                            // clear only between PHASES, so you can see all four
     else if (cal) calCount();                          // otherwise just refresh the tally
   }
+  // The PEN's clock, not ours. A pointermove can carry a dozen coalesced events that the hardware
+  // reported milliseconds apart, and we process the whole batch inside one tick — so stamping
+  // performance.now() per event measures how fast this code runs, never how fast the pen reports.
+  // That mistake read an S23 Ultra's 480 Hz pen as 3333 Hz, which is 0.3 ms: the cost of one calSeg.
+  // The ±5 s guard is for the old browsers whose timeStamp is an epoch, not the time origin.
+  function evT(e) {
+    const w = now(), t = (e.timeStamp || 0) / 1000;
+    return (t > 0 && Math.abs(t - w) < 5) ? t : w;
+  }
   // Capture phase + stopPropagation: the studio must not author stone while we are measuring the hand.
   function calDown(e) {
     e.stopPropagation(); e.preventDefault();
-    cal.cur = { t0: now(), pts: [], press: [], lean: [], dt: [], last: null };
+    cal.cur = { t0: evT(e), pts: [], press: [], lean: [], dt: [], last: null };
     calAdd(e);
   }
   function calMove(e) {
     if (!cal.cur) return;
     e.stopPropagation(); e.preventDefault();
+    cal.moves++;                                       // one move event; the batch below may hold a dozen
     const co = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
-    if (co && co.length > 1) { cal.bag[CAL_PHASES[cal.phase]].co += co.length; for (const c of co) calAdd(c); }
+    if (co && co.length > 1) { for (const c of co) calAdd(c); }
     else calAdd(e);
   }
   function calAdd(e) {
     const c = cal.cur; if (!c) return;
+    cal.pts++;
     const b = cv.getBoundingClientRect();
-    const x = (e.clientX - b.left) / b.width, y = (e.clientY - b.top) / b.height, t = now();
+    const x = (e.clientX - b.left) / b.width, y = (e.clientY - b.top) / b.height, t = evT(e);
     const pen = e.pointerType === 'pen' && e.pressure != null ? e.pressure : null;
     if (pen != null) c.press.push(pen);
     const ln = leanOf(e); if (ln != null) c.lean.push(ln);
@@ -4012,11 +4026,27 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function calUp(e) {
     if (!cal.cur) return;
     e.stopPropagation(); e.preventDefault();
-    const c = cal.cur, dur = now() - c.t0, dist = c.pts.reduce((a, d) => a + d, 0);
+    const c = cal.cur, dur = evT(e) - c.t0, dist = c.pts.reduce((a, d) => a + d, 0);
     cal.cur = null;
-    if (dist < 0.05) { hint(TR('cal.too-short')); calStep(false); return; }   // a tap is not a stroke
+    // Written as a negated >= so that NaN is REJECTED: `NaN < 0.05` is false, and a stroke whose length
+    // is not a number is the most degenerate one there is. It happens whenever the canvas has no layout
+    // box while the stroke is drawn — a collapsed pane, a zero-size container, a stroke that starts
+    // before layout settles — because every coordinate is then 0/0. The old form passed it through and
+    // saved a profile whose speed had quietly become 0.
+    if (!(dist >= 0.05)) { hint(TR('cal.too-short')); calStep(false); return; }   // a tap is not a stroke
     const bag = cal.bag[CAL_PHASES[cal.phase]];
-    for (const v of c.press) bag.press.push(v);
+    // Only the SUSTAINED part counts. Measured on a real 480 Hz capture: 44% of a stroke's samples sit
+    // below half its own peak, because pressing down and letting go are ramps, and at that report rate
+    // the ramps outnumber the part of the stroke you would call "how hard I press". A plain median over
+    // the whole stroke therefore reads 1.5x too light, and it drags the light and natural phases
+    // together until they are indistinguishable. The threshold is a fraction of THIS stroke's peak, so
+    // a light stroke is judged against itself; 0.6 is where the estimate stops moving with the
+    // threshold on that capture (0.5 -> 0.466, 0.6 -> 0.475, then it climbs away chasing the peak).
+    // bag.all keeps every sample, since reported resolution is a count of levels, not a level.
+    for (const v of c.press) bag.all.push(v);
+    const pk = c.press.reduce((a, v) => v > a ? v : a, 0);
+    const plateau = pk > 0 ? c.press.filter(v => v >= 0.6 * pk) : [];
+    for (const v of (plateau.length >= 3 ? plateau : c.press)) bag.press.push(v);
     for (const v of c.lean) bag.lean.push(v);
     for (const v of c.dt) if (v > 0 && v < 0.2) bag.dt.push(v);
     if (dur > 0) bag.speed.push(dist / dur);
@@ -4027,16 +4057,23 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   function calFinish() {
     const B = cal.bag, all = k => CAL_PHASES.reduce((a, p) => a.concat(B[p][k]), []);
-    const dts = all('dt'), co = CAL_PHASES.reduce((a, p) => a + B[p].co, 0);
+    const dts = all('dt');
     const p = {
-      v: 1, at: Date.now(), sig: calSig(),
+      v: 2, at: Date.now(), sig: calSig(),
       // robust percentiles, never min/max: a hand trying to hold pressure steady still swings 39-111%
-      press: { lo: mid(B.light.press) || 0, mid: mid(B.natural.press) || 0, hi: pct(B.hard.press, 0.9) || 1 },
+      // All three are now the same statistic over the same kind of sample, so they can be read against
+      // each other. The hard figure was a 90th percentile while the ramps were still in the set — it
+      // needed to be, to reach past them — and that is why it alone looked believable.
+      press: { lo: mid(B.light.press) || 0, mid: mid(B.natural.press) || 0, hi: mid(B.hard.press) || 1 },
       lean:  { rest: mid(B.natural.lean) || 0, max: pct(B.laid.lean, 0.9) || 1 },
       speed: { natural: mid(B.natural.speed) || 0, quick: mid(B.quick.speed) || 0 },
-      dev:   { rate: dts.length ? 1 / mid(dts) : 0, coalesced: co > all('press').length ? 1 : 0,
-               levels: new Set(all('press')).size, ua: navigator.userAgent },
-      n: all('press').length,
+      // How many samples arrive per move event. The old flag compared the coalesced count against every
+      // sample, which is a superset of it, so it could never be true. The ratio is the number that
+      // matters anyway: it is how much of the pen the studio throws away by reading only the move.
+      dev:   { rate: dts.length ? 1 / mid(dts) : 0,
+               coalesced: cal.moves ? Math.round(10 * cal.pts / cal.moves) / 10 : 0,
+               levels: new Set(all('all')).size, ua: navigator.userAgent },
+      n: all('all').length,
     };
     calSave(p);
     calEnd(TR('cal.saved'));
