@@ -157,6 +157,14 @@ through under another light); and a **deterministic load** (`deserialize` is a p
 The offline render bakes the whole pipeline (`renderFull` / tiled), and a **gallery** + Playwright
 **determinism harness** ([`docs/gallery.md`](docs/gallery.md)) show it off and gate it in CI.
 
+A render is not capped by what one canvas can hold. Past 16384 the export **streams the picture in bands**
+straight into a PNG, so the whole image never exists at once: measured in Chrome on a 12-core desktop,
+**65535 × 40959 — 2.68 gigapixels — took 10:56 in a browser tab**, 35 bands, 10.7 GB of scanlines
+compressed into an 841 MB file, and run twice across a build change it came back byte-identical. The
+friction in front of that tier is not decoration: the same slab is **0:14 at 16384 and 3:07 at 32768**,
+because streaming costs roughly three times as much per pixel as the direct path. Full ladder in
+[`docs/capabilities.md`](docs/capabilities.md).
+
 **Stone Author is stone-only**: the early Wood family and Knot tool were removed once the stone system
 outgrew them — wood (author a tree by its rings, then "mill" boards as geometry) and metal are envisioned
 as their own future systems that reuse this producer/consumer spine. Next up is a **WebGPU render

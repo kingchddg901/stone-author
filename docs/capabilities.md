@@ -178,7 +178,36 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat`
 - **An export reports itself tile by tile, and records its own timings.** `renderTiled` is split into a plan (the assembly canvas plus one closure per tile) and two drivers: the synchronous one runs the closures back to back exactly as before; `renderTiledStepped` runs the *same* closures in the *same* order with a yield between them, so a render-only export reports `Rendering tile 7 of 160`. At 16384 that is 16 × 10 tiles over about two minutes — the difference between a job you can watch and one that looks wedged. Stages that cannot count themselves (PNG encoding is a single call) show a moving stripe, and a wall-clock timer runs throughout: elapsed time plus stage name distinguishes *alive* from *wedged* even with no percentage available. The finished line stays on screen with its time, as the record of the last export.
 - **The output carries its own provenance.** A render-only PNG gets a `tEXt` chunk spliced in after IHDR holding scope, dimensions, tile count, byte count, per-stage milliseconds (`render` / `encode` / `total`), mark and line counts, family, spectrum, `devicePixelRatio`, core count and the user-agent. The full kit gets the same as `export.json` inside the archive. This is what makes a later performance change checkable rather than a feeling. **It records the user-agent string**, because on a phone the device *is* the measurement — strip the chunk before sharing a render if that matters. **Baseline, S23 Ultra, whole kit at 16384×10240**, from the export's own `export.json`: `render 70,102 ms`, `encode 57,346 ms`, `toPack 128,585 ms`, 14 images, 234,284,278 bytes of PNG, 241 MB archive, 2:21 on the app's own clock. That is **1.358 G pixels produced** — ≈52 ns/px to render, ≈42 ns/px to encode, ≈9.6 M px/sec end to end. **Encode is 45% of the work**, and it runs on one core, because anything over `ENC_BIG` is routed away from the worker pool; at 8192 three copies of an image is 480 MiB and the pool would be affordable, which is the measured case for raising that threshold rather than for reviving `renderTiledParallel` (that parallelises the 55% half and is recorded here as a no-op).
 
-There is **no instrumented figure for render-only at 16384** yet. It produced a 168,283,951-byte PNG; the “about two minutes” attached to it was a stopwatch that included the download notification appearing, and its author has since disowned it — so any throughput derived from it (an earlier draft of this paragraph quoted ≈1.4 M px/sec) is arithmetic on a guess, not a measurement. What the kit run does bound: the finished slab is one of those eight full-size images, so its render is ≤ 70.1 s and its encode ≤ 57.3 s.
+An earlier draft of this paragraph said there was **no instrumented figure for render-only at 16384**, and
+quoted ≈1.4 M px/sec from a stopwatch that included the download notification appearing — arithmetic on a
+guess, disowned by its author. There is now a measured ladder, from the app's own finish line, one width
+after another on the same slab (666 marks · 70 vein lines · 232 cracks · 8,050 specks), scope **Just the
+render**, Chrome 152 on a 12-core Windows desktop:
+
+| width | pixels | time | throughput | path |
+|---|---|---|---|---|
+| 1024 | 0.66 MP | 0:00 | — | direct |
+| 2048 | 2.6 MP | 0:00 | — | direct |
+| 4096 | 10.5 MP | 0:01 | ~10 MP/s | direct |
+| 8192 | 41.9 MP | 0:03 | ~14 MP/s | direct |
+| 16384 | 167.8 MP | **0:14** | ~12 MP/s | direct |
+| 20480 | 262.1 MP | **0:55** | 4.8 MP/s | streamed |
+| 24576 | 377.5 MP | 1:21 | 4.7 MP/s | streamed |
+| 32768 | 671.1 MP | 3:07 | 3.6 MP/s | streamed |
+| 65535 | 2,684 MP | **10:56** | 4.1 MP/s | streamed |
+
+**The step is at 16384 → 20480: 1.6× the pixels, 3.9× the time.** That is not a curve, it is the move onto
+the strip path, which repaints the slab once per band — the direct export runs at ~12–14 MP/s and the
+streamed one settles at ~4–5 and stays there, so streaming costs roughly **3× per pixel**, flat. (32768 at
+3.6 is low against both its neighbours and reads as machine state, not as a property of that width.) This
+is the measurement behind the friction in front of the large tiers: *"this is not fast"* is not a hedge.
+
+The 65535 run's own `tEXt` chunk: **35 bands**, 10,737,033,219 bytes of scanlines compressed to 841,322,901
+(12.8:1), `render 452,936 ms` of `total 655,393 ms` — so deflate and write are **31%** of the wall clock,
+not a rounding error. Run twice, 74 minutes apart and across a build change, the image data came back
+**byte-identical** (SHA-256 over all 51 IDAT chunks); the two 841 MB files differ only in this chunk, whose
+timestamp and timings happen to be the same length, which is why their byte counts matched and their file
+hashes did not. That is the determinism gate's claim at 2.68 gigapixels, where no CI job can follow it.
 
 The kit run also settles a prediction that was wrong: the kit at 16384 was estimated at ~1.8 GB peak and called unlikely to fit on a phone. It fits — the accumulated PNG bytes came to 234 MB rather than the ~500 MB guessed, putting the real peak near 1.5 GB.
 - **Canvas work is deferred, so the timings had to be forced to be honest.** Draw calls return long before the rasteriser has done anything; the work lands when something reads the pixels, which in an export is `toBlob`. So the masks appeared to render in milliseconds and their real cost was charged to `encode`. Measured on a phone at 16384: the kit's fourteen images "rendered" in 90.2 s while render-only took 91.2 s for **one**, and the kit's encode ran 97 s longer than render-only's — that 97 s was seven full-size images rasterising, mis-filed. `flushCanvas` reads one pixel back before the render clock stops. **It costs ~5%** on a real slab (666 marks, 8192: `toPack` 13.9/14.0 s before, 14.4/15.0 s after) and buys a split that is true.
