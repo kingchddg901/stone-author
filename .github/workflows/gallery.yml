@@ -1,10 +1,16 @@
-name: gallery determinism
+name: browser harness
 
-# Renders every gallery hero from its slab (gallery/reference.json) inside a pinned Playwright/Chromium
-# container and gates on SELF-DETERMINISM: each hero renders byte-identical twice from a fresh load, so the
-# render is a pure function of the slab in this environment. A cross-build REFERENCE match against the
-# committed pixelSHA256 is deliberately NOT gated — sub-pixel canvas AA varies between Chromium builds, so
-# the picture is identical but the bytes are not (that comparison was dropped from harness/render.mjs).
+# The two gates that need a real browser, in one pinned Playwright/Chromium container.
+#
+# GALLERY SELF-DETERMINISM — renders every hero from its slab (gallery/reference.json) twice from a fresh
+# load and requires byte-identical pixels, so the render is a pure function of the slab in this
+# environment. A cross-build REFERENCE match against the committed pixelSHA256 is deliberately NOT gated:
+# sub-pixel canvas AA varies between Chromium builds, so the picture is identical but the bytes are not
+# (that comparison was dropped from harness/render.mjs).
+#
+# PEN CALIBRATION — hands the calibrator a synthetic pen of known rate, pressure, tilt and speed and
+# requires it to report those numbers back. Added after the calibrator measured a 480 Hz pen as 3333 Hz,
+# which no test could see because nothing here had ever been given a pen whose answers were known.
 
 on:
   push:
@@ -38,3 +44,5 @@ jobs:
         run: node harness/inject.mjs
       - name: Render + check determinism
         run: node harness/render.mjs
+      - name: Calibrate a synthetic pen and check the studio recovers it
+        run: node harness/calibration.mjs

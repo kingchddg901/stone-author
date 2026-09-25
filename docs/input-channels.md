@@ -488,6 +488,55 @@ What it should be instead — and it is cheap:
 - **Make it visible and resettable** — one value the user can see and clear if they change grip or device.
   A learned constant the user cannot inspect is a magic number with extra steps.
 
+### The calibrator measured itself, twice over
+
+The pen calibrator shipped with two defects that had the same shape: a statistic computed over the wrong
+set of samples, producing a number that described *the studio* rather than the pen. Both are fixed, and
+`harness/calibration.mjs` now gates them by handing the calibrator a synthetic pen whose rate, sustained
+pressure, tilt and speed are known in advance.
+
+**The report rate was our own redraw cost.** Each sample was stamped with `performance.now()` *as it was
+processed*. A `pointermove` carries a whole coalesced batch that the hardware reported milliseconds apart,
+and the batch is processed inside one tick — so the gaps measured were the cost of one `calSeg`, not the
+interval between reports. A 480 Hz S Pen read as **3333 Hz** (0.3 ms). The tell was that two calibration
+runs which agreed about nothing else printed the *same* figure; running the harness against that build
+reproduces 3333 Hz from a simulated pen on a different machine, which is what a constant does and a
+measurement does not. The fix reads each event's own `timeStamp`, with a ±5 s sanity guard for the old
+browsers whose `timeStamp` is an epoch rather than the time origin. The probe had this right already; the
+calibrator, written later, did not copy it.
+
+**The pressure was mostly ramp.** Measured over the 80 real contacts in
+`test-slabs/stylus-s23ultra-chrome.json`: **44% of a stroke's samples sit below half its own peak**,
+because pressing down and letting go are ramps, and at 480 Hz the ramps outnumber the part of the stroke
+anyone would call "how hard I press". A plain median therefore under-read the sustained level by **1.53×**
+(0.305 against 0.466) — and since it under-reads *every* phase, it dragged "light" and "natural" together
+until they were indistinguishable, which is exactly what the readout showed. Only the "hard" figure looked
+believable, and only because it alone was a 90th percentile, which reached past the ramps. The fix takes
+each stroke's samples above a fraction of *that stroke's* peak, so a light stroke is judged against itself.
+The threshold is 0.6, chosen where the estimate stops moving with it:
+
+| threshold | estimate | kept |
+|---|---|---|
+| none | 0.305 | 100% |
+| 0.5 | 0.466 | 56% |
+| **0.6** | **0.475** | 48% |
+| 0.7 | 0.511 | 36% |
+| 0.8 | 0.525 | 26% |
+
+It never flattens completely — a real stroke has no perfectly flat plateau — so past 0.6 the number is
+chasing the peak rather than describing the hold.
+
+Two smaller things came out of the same work. The profile's `coalesced` field compared the coalesced count
+against every sample, which is a superset of it, so it could never be true: it is now the **ratio** of
+samples to move events, which is the number the adapter work actually needs — it is how much of the pen
+the studio discards by reading only the move. And the "a tap is not a stroke" guard was written
+`dist < 0.05`, which is **false for `NaN`**: a stroke drawn while the canvas has no layout box makes every
+coordinate `0/0`, sailed through the guard, and saved a profile whose speed had quietly become 0. It is
+now `!(dist >= 0.05)`.
+
+Stored profiles are versioned, and v1 profiles are discarded on load rather than shown — they were
+measured against the wrong clock, so they are not merely old.
+
 ## Why the adapter, and not per-tool reads
 
 Three things follow from putting this in one place rather than in each tool:
