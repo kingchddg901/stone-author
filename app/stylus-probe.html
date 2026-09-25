@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Stylus Probe</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -62,18 +63,32 @@
   <button id="reset" type="button">Clear and start again</button>
   <section class="hist" aria-label="Pen history, for debugging">
     <h2>History <span class="tag">debug</span></h2>
-    <p class="note">Everything the pen sends, hover included, over the last 6 seconds. Move events arrive once per
-      screen frame; raw updates arrive as fast as the pen reports; coalesced points are the in-between samples a
-      move event carries. The interval chart plots the finest of those this browser gives.</p>
+    <p class="note">Everything the pen sends, hover included. Move events arrive once per screen frame; raw updates
+      arrive as fast as the pen reports; coalesced points are the in-between samples a move event carries. The
+      interval chart plots the finest of those this browser gives. <b>The charts show the last 6 seconds; the
+      buffer holds much longer</b> &mdash; set how long with Hold, watch the count below, then
+      <b>Download capture</b> for the whole thing. Download a file rather than pasting: a paste gets reflowed and
+      truncated on the way, and the file says for itself which browser and pen made it. Copy CSV is for a quick
+      look, not for handing over.</p>
     <canvas id="histc" aria-label="Charts of update interval, pressure, tilt and lean over the last 6 seconds"></canvas>
     <dl class="stats" id="stats"></dl>
     <div class="brow">
       <button id="still" type="button">Hold still 3 s</button>
       <button id="pause" type="button" aria-pressed="false">Pause</button>
-      <button id="dump" type="button">Copy as text</button>
+      <label for="keep" class="note" style="margin:0">Hold</label>
+      <select id="keep" aria-label="How long to keep events for">
+        <option value="12000">12 s</option>
+        <option value="60000">1 min</option>
+        <option value="120000" selected>2 min</option>
+        <option value="300000">5 min</option>
+        <option value="900000">15 min</option>
+      </select>
+      <button id="save" type="button">Download capture</button>
+      <button id="dump" type="button">Copy CSV</button>
     </div>
+    <p class="live" id="held">held: &mdash;</p>
     <p class="live" id="stillOut"></p>
-    <textarea id="dumpOut" readonly hidden aria-label="The last 6 seconds of pen events as text"></textarea>
+    <textarea id="dumpOut" readonly hidden aria-label="Every held pen event as text"></textarea>
   </section>
   <p class="note">Results are for this browser only. The same pen can report differently in the Claude app,
     Chrome and Samsung Internet, so if pressure comes back missing, open this link in another one and try
@@ -179,7 +194,11 @@
   // TEMPORARY DEBUG: a history of every pen event, so the update rate and the real sensitivity of
   // tilt can be read off the device rather than guessed.
   const pad = document.getElementById('pad'), cv = document.getElementById('histc'), ctx = cv.getContext('2d');
-  const WIN = 6000, KEEP = 12000, $ = id => document.getElementById(id);
+  // WIN is what the charts draw; KEEP is how much is HELD for export, and they are deliberately
+  // different — a readable chart is a few seconds, a useful sample set is minutes. MAXEV is a memory
+  // guard: at a 240 Hz pen with coalesced points, 15 minutes would otherwise be ~200k records.
+  const WIN = 6000, MAXEV = 300000, $ = id => document.getElementById(id);
+  let KEEP = 120000;
   let ev = [], paused = false, still = null;
   const hasRaw = 'onpointerrawupdate' in window;
   // lean exactly as Stone Author reads it: degrees from upright, from tiltX / tiltY
@@ -196,6 +215,7 @@
     ev.push(r);
     if (still) still.push(r);
     const cut = now - KEEP; while (ev.length && ev[0].t < cut) ev.shift();
+    if (ev.length > MAXEV) ev.splice(0, ev.length - MAXEV);
   }
   pad.addEventListener('pointerdown', e => rec('down', e));
   pad.addEventListener('pointerup', e => rec('up', e));
@@ -221,6 +241,14 @@
     const astep = minStep(altd, 'a');
     const hov = ev.filter(r => r.hover && now - r.t < 1500).map(r => r.lean);
     const cur = ev[ev.length - 1];
+    {                                    // how much is HELD, so you can see when a capture is big enough
+      const held = ev.length ? (ev[ev.length - 1].t - ev[0].t) / 1000 : 0;
+      const down = ev.filter(r => !r.hover).length;
+      $('held').textContent = ev.length
+        ? `held: ${ev.length.toLocaleString()} events over ${held.toFixed(1)} s · ${down.toLocaleString()} pen-down`
+          + (ev.length >= MAXEV ? ' · buffer full, oldest dropping' : '')
+        : 'held: —';
+    }
     const cells = [
       ['Move events', `${rate('move')}/s`],
       ['Raw updates', hasRaw ? `${rate('raw')}/s` : 'not offered'],
@@ -297,15 +325,57 @@
       }
     }, 1000);
   });
-  $('dump').addEventListener('click', async () => {
-    const now = performance.now(), rows = ev.filter(r => now - r.t < WIN).slice(-800), t0 = rows.length ? rows[0].t : 0;
+  $('keep').addEventListener('change', e => { KEEP = +e.target.value; });
+
+  // EXPORT takes everything held, not the chart window — that window is for reading, this is for
+  // gathering. t_ms is relative to the first held event so a capture is self-contained.
+  const asCsv = () => {
+    const rows = ev, t0 = rows.length ? rows[0].t : 0;
     const f = (v, d) => v == null || !isFinite(v) ? '' : (+v).toFixed(d);
-    const text = ['t_ms,type,hover,x,y,pressure,tiltX,tiltY,altitude_deg,azimuth_deg,lean_deg']
+    return ['t_ms,type,hover,x,y,pressure,tiltX,tiltY,altitude_deg,azimuth_deg,lean_deg']
       .concat(rows.map(r => [f(r.t - t0, 1), r.type, r.hover ? 1 : 0, f(r.x, 1), f(r.y, 1), f(r.p, 4), r.tx, r.ty,
                              f(r.alt != null ? r.alt * 180 / Math.PI : null, 3), f(r.az != null ? r.az * 180 / Math.PI : null, 3), f(r.lean, 2)].join(','))).join('\n');
+  };
+  $('dump').addEventListener('click', async () => {
+    const text = asCsv(), n = ev.length;
     const box = $('dumpOut'); box.hidden = false; box.value = text; box.focus(); box.select();
-    try { await navigator.clipboard.writeText(text); $('stillOut').textContent = `Copied ${rows.length} events.`; }
-    catch (_) { $('stillOut').textContent = `${rows.length} events are selected in the box below; copy them from there.`; }
+    try { await navigator.clipboard.writeText(text); $('stillOut').textContent = `Copied ${n} events.`; }
+    catch (_) { $('stillOut').textContent = `${n} events are selected in the box below; copy them from there.`; }
+  });
+  // DOWNLOAD is the one to hand over. A pasted capture gets mangled — reflowed, truncated, line
+  // endings rewritten — and a long one is megabytes the clipboard handles badly. The file is JSON and
+  // SELF-DESCRIBING: whoever opens it can see which browser and pen produced it, whether raw updates
+  // and coalescing were available, and how long the buffer was holding, without having to ask.
+  const COLS = ['t_ms', 'type', 'hover', 'x', 'y', 'pressure', 'tiltX', 'tiltY', 'altitude_deg', 'azimuth_deg', 'lean_deg'];
+  const r6 = v => v == null || !isFinite(v) ? null : Math.round(v * 1e4) / 1e4;
+  const asJson = () => {
+    const t0 = ev.length ? ev[0].t : 0, deg = v => v == null ? null : r6(v * 180 / Math.PI);
+    const count = k => ev.filter(r => r.type === k).length;
+    return JSON.stringify({
+      tool: 'stylus-probe', v: 1,
+      captured: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      rawUpdatesOffered: hasRaw,
+      holdMs: KEEP,
+      n: ev.length,
+      durationMs: ev.length ? Math.round(ev[ev.length - 1].t - t0) : 0,
+      byType: { down: count('down'), up: count('up'), move: count('move'), raw: count('raw'), coalesced: count('co') },
+      penDown: ev.filter(r => !r.hover).length,
+      cols: COLS,
+      rows: ev.map(r => [r6(r.t - t0), r.type, r.hover ? 1 : 0, r6(r.x), r6(r.y), r6(r.p), r.tx, r.ty,
+                         deg(r.alt), deg(r.az), r6(r.lean)]),
+    });
+  };
+  $('save').addEventListener('click', () => {
+    const n = ev.length;
+    if (!n) { $('stillOut').textContent = 'Nothing held yet — draw on the pad first.'; return; }
+    try {
+      const url = URL.createObjectURL(new Blob([asJson()], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = `stylus-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+      $('stillOut').textContent = `Saved ${n.toLocaleString()} events. Hand over the file, not a paste.`;
+    } catch (_) { $('stillOut').textContent = 'A download is blocked here — open this page from a file or a server, or fall back to Copy CSV.'; }
   });
 })();
 </script>
