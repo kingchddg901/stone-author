@@ -17,7 +17,7 @@ first tool that needs the whole set.
 | **path** | pointer position | where the gesture went |
 | **speed / dwell** | derived, `v = distance / Δt` | how long the gesture acted on each part of the slab |
 | **pressure** | stylus pressure, or an authored value | how strongly or closely it acted |
-| **tilt** | stylus lean + azimuth, or an authored value | its orientation, and any asymmetry that implies — **normalised against the user's learned rest grip, never raw degrees** (see below) |
+| **tilt** | stylus lean + azimuth, or an authored value | its orientation, and any asymmetry that implies — **normalised against the user's learned rest grip, never raw degrees**, and structured as `amount` / `signed` / `azimuth` so a tool takes only the part it needs (see below) |
 
 Every stroke carries all four. **A tool declares which it consumes** — a vein wants pressure for width and
 lean for edge softness; the magnet wants all four; a chip wants only the path. Unused channels cost
@@ -56,6 +56,56 @@ not an angle. Three consequences the adapter has to carry, not leave to each too
   point of the adapter.
 - **The baseline travels with the mark.** `rest` is already captured once at pointer-down and frozen onto
   the mark, which is what keeps a stored slab's render reproducible. Keep that.
+
+### Signed tilt: which way you leaned
+
+`0..1` throws away **direction**. Lean left and lean right by the same amount and the channel cannot tell
+them apart — even though the information is right there, since a stylus reports lean *and* azimuth, and
+`leanProfile` simply never looks at azimuth.
+
+The tempting fix is to make the channel `-1..+1`. That is right for some consumers and **wrong for
+others**, which is the useful finding:
+
+| consumer | what it wants | a signed channel would… |
+|---|---|---|
+| vein edge softness | **magnitude** — leaning either way should soften equally | break it: one direction becomes *negative* softness, which is meaningless |
+| Moon's asymmetric field | **sign** — which side the body passed on | be exactly right |
+| Magnet axis | **the full 2D direction** — a sign cannot express a compass bearing | be lossy |
+
+So the answer is not to replace the scalar but to let tilt be a small structured channel, and let each tool
+take the part it needs — the same "all of it or part of it" idea, one level down:
+
+```
+tilt = {
+  amount  : 0 .. 1        magnitude past the rest grip   (veins)
+  signed  : -1 .. +1      which side of the reference    (Moon)
+  azimuth : radians       the full bearing               (Magnet)
+}
+```
+
+`amount` stays exactly what ships today, so nothing that reads tilt now has to change.
+
+**Signed against what, though?** Three defensible references, and they are not interchangeable:
+
+- **the rest grip's own azimuth** — deviation from your habitual lean direction. Most consistent with how
+  magnitude is already normalised, and stable across a stroke.
+- **the stroke's direction of travel** — "leaning into the turn or out of it". The most expressive for a
+  drawing tool, but it rotates as the stroke curves, so the same wrist angle changes sign mid-stroke.
+- **the slab** — absolute screen left/right. Simplest, and indifferent to both the user and the gesture.
+
+Worth choosing deliberately rather than discovering later. The rest-grip reference is the one that matches
+the rest of this design.
+
+**One real failure mode to handle.** Near upright, azimuth is *noisy* — a nearly-vertical pen swings its
+reported bearing wildly on tiny wobbles. So the sign has to be **gated by the magnitude**: inside the dead
+zone the sign is not weak, it is meaningless, and must read 0 rather than flickering between ±1. The
+existing `smoothstep(9/90, 25/90, …)` already establishes that dead zone for magnitude; the signed reading
+needs the symmetric version of it, and should inherit the same gate.
+
+**A side benefit for mouse and touch.** A signed value is far easier to author without a stylus: one
+slider reading *lean left — upright — lean right* is natural, where a 2D azimuth needs a dial. So `signed`
+is probably the channel the explicit control should expose, with `azimuth` left to stylus input and to
+tools that genuinely need a bearing.
 
 ### The learned grip does not settle, and it should
 
