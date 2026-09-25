@@ -90,15 +90,23 @@ const probe = async ({ budgetMs }) => {
 // Does the strip path — the whole large-render tier — actually produce a decodable PNG on this engine?
 const streamed = async ({ w, stripH }) => {
   if (typeof CompressionStream !== 'function') return { skipped: 'no CompressionStream — the tier is not offered here' };
-  const t0 = Date.now();
-  const r = await window.__sa.renderStreamedPNG(w, null, null, { stripH });
-  const head = new Uint8Array(await r.blob.slice(0, 24).arrayBuffer());
-  const sig = [137, 80, 78, 71, 13, 10, 26, 10].every((v, i) => head[i] === v);
-  const dv = new DataView(head.buffer);
-  const bmp = await createImageBitmap(r.blob);                      // decodes the whole zlib stream, not just the header
-  const out = { sig, ihdr: [dv.getUint32(16), dv.getUint32(20)], decoded: [bmp.width, bmp.height],
-                bands: r.plan.strips, bytes: r.bytes, ms: Date.now() - t0 };
-  bmp.close();
+  const once = async (opts) => {
+    const t0 = Date.now();
+    const r = await window.__sa.renderStreamedPNG(w, null, null, opts);
+    const head = new Uint8Array(await r.blob.slice(0, 24).arrayBuffer());
+    const sig = [137, 80, 78, 71, 13, 10, 26, 10].every((v, i) => head[i] === v);
+    const dv = new DataView(head.buffer);
+    const bmp = await createImageBitmap(r.blob);                    // decodes the whole zlib stream, not just the header
+    const decoded = [bmp.width, bmp.height];
+    bmp.close();                                                    // reading width AFTER this returns 0
+    return { sig, ihdr: [dv.getUint32(16), dv.getUint32(20)], decoded,
+             planned: r.plan.strips, bands: r.bands, shrinks: r.shrinks, bytes: r.bytes, ms: Date.now() - t0 };
+  };
+  const out = await once({ stripH });
+  // And the same render with the first two band allocations forced to fail. A machine under memory pressure
+  // is where a band that fitted at plan time stops fitting, and the answer must be a smaller band rather
+  // than a lost render — so the recovery gets exercised on every engine, not just reasoned about.
+  out.degraded = await once({ stripH, failFirst: 2 });
   return out;
 };
 
@@ -201,7 +209,11 @@ function report(r) {
   for (const line of r.diff.map) console.log(`          |${line}|`);
   const s = r.stream;
   if (s.skipped) console.log(`  stream  ${s.skipped}`);
-  else console.log(`  stream  ${s.sig ? 'PNG' : 'NOT A PNG'} · IHDR ${s.ihdr.join('x')} · decoded ${s.decoded.join('x')} · ${s.bands} bands · ${(s.bytes / 1e6).toFixed(1)} MB scanlines · ${s.ms} ms`);
+  else {
+    console.log(`  stream  ${s.sig ? 'PNG' : 'NOT A PNG'} · IHDR ${s.ihdr.join('x')} · decoded ${s.decoded.join('x')} · ${s.bands} bands · ${(s.bytes / 1e6).toFixed(1)} MB scanlines · ${s.ms} ms`);
+    const g = s.degraded;
+    console.log(`  degrade 2 forced band failures -> ${g.shrinks} shrink(s), ${g.bands} bands (planned ${g.planned}) · decoded ${g.decoded.join('x')} · ${(g.bytes / 1e6).toFixed(1)} MB · ${g.ms} ms`);
+  }
   if (r.pageError) console.log(`  page error: ${r.pageError}`);
 
   if (!r.self) { console.log(`  FAIL: ${r.name} does not render the same slab the same way twice.`); fail++; }
@@ -215,6 +227,11 @@ function report(r) {
     if (!ok) { console.log(`  FAIL: the streamed PNG does not decode to the size it declares on ${r.name}.`); fail++; }
     // one band would mean the forced band height never arrived and this checked the easy path instead
     if (s.bands < MIN_BANDS) { console.log(`  FAIL: only ${s.bands} band(s) — the multi-band path was not exercised at all.`); fail++; }
+    const g = s.degraded;
+    if (g.shrinks !== 2) { console.log(`  FAIL: forced two band failures and the band shrank ${g.shrinks} time(s) — the recovery did not run.`); fail++; }
+    if (g.bands <= s.bands) { console.log(`  FAIL: degraded to ${g.bands} bands against ${s.bands} normally — a smaller band must mean more of them.`); fail++; }
+    if (g.bytes !== s.bytes) { console.log(`  FAIL: degraded render streamed ${g.bytes} scanline bytes against ${s.bytes} — the bands no longer tile the image.`); fail++; }
+    if (!(g.sig && g.decoded[0] === g.ihdr[0] && g.decoded[1] === g.ihdr[1])) { console.log(`  FAIL: the degraded PNG does not decode to the size it declares.`); fail++; }
   }
   console.log('');
 }

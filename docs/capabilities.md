@@ -212,10 +212,29 @@ and 3:20 at 65535, with 7:35 as the floor because the render itself cannot be hi
 **It is refused anyway.** Rendering band N+1 while band N is still queued in the writer means one more band
 buffer alive — about **300 MB** at 65535, against a current peak near 1.0–1.1 GB and a measured death point
 of 1.5 GB. This is an *offline* render: there is no frame budget, and if it takes a while it takes a while.
-The optimisation spends the one resource that is genuinely scarce to buy the one that is not. (The
-mid-render **degrade** — halving the band and retrying when an allocation fails, rather than losing a
-ten-minute render — passes the same test the pipeline fails: it costs no memory and converts a crash into a
-slow finish. It remains unbuilt.)
+The optimisation spends the one resource that is genuinely scarce to buy the one that is not.
+
+**The band degrades instead.** The band height is planned once, from a probe, and a machine under memory
+pressure is exactly where a band that fitted at plan time stops fitting. The loop used to answer that by
+throwing away a render that had been going for ten minutes, under a dialogue that says it cannot resume. It
+now catches the failure — a throw, or a canvas that came back **clamped**, which is the silent case — hands
+the canvas back before asking again, halves the band, yields a macrotask so the engine can reclaim, and
+carries on. Floor of 32 rows, below which it fails honestly. This is the opposite trade to the pipeline: it
+costs no memory at all and converts a crash into a slow finish, which is what an offline job can afford.
+
+Two things make it trustworthy rather than hopeful. The **scanline byte-count backstop** already refuses any
+render whose bands do not tile the image exactly, so a degrade that lost or duplicated a row could not
+produce a file. And band height turns out to change the *bytes* but not the *picture*: measured at 2048,
+five bands of 256 against forty of 32 differ in **0.01% of pixels**, max 25/255, scattered rather than
+gathered at the seams — the lens pass resamples to ≤640 whatever the band plan, and the 25px bleed covers
+the coat's blur either way. A degraded render is pixel-identical to one *planned* at the height it lands on.
+It also means a Firefox user's 65535 differs from a Chrome user's by this much on top of the engine
+difference, because `deviceMemory` gives them a different band plan.
+
+The provenance records `bands` as **rendered** and a `shrinks` count, so a render that degraded says so
+rather than looking like a slow one for no reason. The [engine gate](gallery.md#three-engines-one-job)
+forces two band failures on every engine and requires the render to finish, decode at its declared size,
+and stream the same byte count as the undegraded run.
 
 **Extreme names the machine it is known to finish on.** Beside its tickbox and again in its confirmation
 dialogue: *"Recommended: 16 GB of memory — the machine this tier is known to finish on. Below that it is

@@ -1086,7 +1086,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.25.6';
+  const BUILD = '2026.09.25.7';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4504,20 +4504,49 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const pump = (async () => { for (;;) { const { done, value } = await reader.read(); if (done) break;
       pend.push(value); plen += value.length; if (plen > (16 << 20)) flushIdat(); } })();
     const rowLen = p.FW * 4 + 1;
-    let y = 0, bytes = 0, tRender = 0;
+    // The band height is planned once, from a probe, and then DEGRADES if reality disagrees. A machine
+    // under memory pressure is exactly where a band that fitted at plan time stops fitting, and the old
+    // loop answered that by throwing away a render that had run for ten minutes, under a dialogue that
+    // says it cannot resume. Halving and carrying on costs nothing when there is headroom and turns a
+    // lost render into a slow one — the opposite trade to pipelining the encode, which buys time with the
+    // memory that ends renders. An offline job can afford time; it cannot afford to die at band 30.
+    const MIN_BAND = 32;
+    let y = 0, bytes = 0, tRender = 0, bandH = p.stripH, bands = 0, shrinks = 0;
+    let failFirst = opts && opts.failFirst || 0;           // harness only: prove the degrade actually fires
     while (y < p.FH) {
-      const h = Math.min(p.stripH, p.FH - y), t0 = Date.now();
-      const near = wins.filter(w => {                      // skip a window this band cannot see
-        const cy = w.y * p.FW, rad = (w.r + w.feather) * p.FW;
-        return cy + rad >= y - p.bleed && cy - rad <= y + h + p.bleed;
-      });
-      const c = renderStrip(W, y, h, p.bleed, near);
-      const px = c.getContext('2d').getImageData(0, p.bleed, p.FW, h).data;   // crop the bleed
-      const buf = new Uint8Array(h * rowLen);
-      for (let r = 0; r < h; r++) { buf[r * rowLen] = 0; buf.set(px.subarray(r * p.FW * 4, (r + 1) * p.FW * 4), r * rowLen + 1); }
-      c.width = 1; c.height = 1;
+      const t0 = Date.now();
+      let buf = null;
+      for (;;) {
+        const h = Math.min(bandH, p.FH - y);
+        const near = wins.filter(w => {                    // skip a window this band cannot see
+          const cy = w.y * p.FW, rad = (w.r + w.feather) * p.FW;
+          return cy + rad >= y - p.bleed && cy - rad <= y + h + p.bleed;
+        });
+        let c = null;
+        try {
+          if (failFirst > 0) { failFirst--; throw new Error('forced band failure (harness)'); }
+          c = renderStrip(W, y, h, p.bleed, near);
+          // A canvas past a cap does not throw: it reports the size asked for and leaves the far end
+          // unwritten, so the size it came back as is the thing to check.
+          if (c.width !== p.FW) throw new Error('band canvas clamped to ' + c.width + ' of ' + p.FW);
+          const px = c.getContext('2d').getImageData(0, p.bleed, p.FW, h).data;   // crop the bleed
+          buf = new Uint8Array(h * rowLen);
+          for (let r = 0; r < h; r++) { buf[r * rowLen] = 0; buf.set(px.subarray(r * p.FW * 4, (r + 1) * p.FW * 4), r * rowLen + 1); }
+        } catch (e) {
+          buf = null;
+          if (c) { try { c.width = 1; c.height = 1; } catch (_) {} }   // hand it back BEFORE asking again
+          if (bandH <= MIN_BAND) throw e;                  // out of room to give: fail honestly
+          bandH = Math.max(MIN_BAND, bandH >> 1); shrinks++;
+          await new Promise(r => setTimeout(r, 0));         // a macrotask, so the engine can reclaim
+          continue;
+        }
+        c.width = 1; c.height = 1;
+        y += h;
+        break;
+      }
+      bands++;
       tRender += Date.now() - t0;
-      y += h; bytes += buf.length;
+      bytes += buf.length;
       await writer.write(buf);
       if (onStrip) await onStrip(y, p.FH, p);
     }
@@ -4529,10 +4558,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const ihdr = new Uint8Array(13), dv = new DataView(ihdr.buffer);
     dv.setUint32(0, p.FW); dv.setUint32(4, p.FH); ihdr[8] = 8; ihdr[9] = 6;   // 8-bit RGBA
     const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', ihdr)];
-    const metaStr = typeof meta === 'function' ? meta({ msRender: tRender, bands: p.strips, bytes }) : meta;
+    // bands as RENDERED, not as planned, and the shrink count with it: a render that degraded says so in
+    // its own provenance rather than looking like a slow one for no reason.
+    const metaStr = typeof meta === 'function' ? meta({ msRender: tRender, bands, shrinks, bytes }) : meta;
     if (metaStr) parts.push(pngTextChunk('stone-author', metaStr));
     parts.push(...idats, pngChunk('IEND', new Uint8Array(0)));
-    return { blob: new Blob(parts, { type: 'image/png' }), plan: p, msRender: tRender, bytes };
+    return { blob: new Blob(parts, { type: 'image/png' }), plan: p, msRender: tRender, bytes, bands, shrinks };
   }
   const expMeta = o => JSON.stringify(Object.assign({
     tool: 'stone-author', at: new Date().toISOString(),
