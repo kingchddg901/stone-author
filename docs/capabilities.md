@@ -202,6 +202,19 @@ streamed one settles at ~4–5 and stays there, so streaming costs roughly **3×
 3.6 is low against both its neighbours and reads as machine state, not as a property of that width.) This
 is the measurement behind the friction in front of the large tiers: *"this is not fast"* is not a hedge.
 
+**What is known about anyone else's machine: almost nothing, and one number decides much of it.** The
+Extreme tier has been completed on exactly one machine — 16 GB, 12 cores, Windows — across four browsers.
+The [engine gate](gallery.md#three-engines-one-job) proves the path itself works in Blink, Gecko and
+WebKit, but at 2048 with a forced band height: not at 65535, and not under memory pressure. And
+`stripPlan`'s budget is reduced by `navigator.deviceMemory`, which is a **Chromium-only API**. Measured in
+CI: Blink reports 8 and plans at 900 MB; Gecko and WebKit report nothing, fall back to 4, and plan at
+**537 MB** — whatever the machine actually has. That is ~1.7× the bands, and every band repaints the whole
+slab, so a Firefox user on a 64 GB workstation renders slower than a Chrome user on 8 GB *by our choice,
+not the engine's*. It is left conservative on purpose: an allocation succeeding is not the same as a
+machine sustaining it, and on the desktop where the 900 MB figure was measured, 1.5 GB killed the renderer
+outright. The honest summary of the tier is the one its own dialogue gives — not fast, not guaranteed
+stable — with the addition that *stable here* is a sample of one.
+
 The 65535 run's own `tEXt` chunk: **35 bands**, 10,737,033,219 bytes of scanlines compressed to 841,322,901
 (12.8:1), `render 452,936 ms` of `total 655,393 ms` — so deflate and write are **31%** of the wall clock,
 not a rounding error. Run twice, 74 minutes apart and across a build change, the image data came back
