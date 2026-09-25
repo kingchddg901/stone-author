@@ -816,7 +816,13 @@ window.SA_I18N = (() => {
   "view.identity": "Identity",
   "view.stone": "Stone"
 } };
+  // NAMES holds a language we have actually loaded; INDEX holds one we know EXISTS but have not fetched.
+  // Without the second, a pack dropped into i18n/ was unreachable by every route: the menu lists
+  // Object.keys(PACKS), ?lang= and the browser preference are matched against PACKS too, and nothing ever
+  // puts a file-based pack into PACKS. So "drop i18n/<lang>.json beside the page" could not work, and the
+  // language menu had exactly one entry no matter how many packs were sitting next to it.
   const NAMES = { en: 'English' };
+  let INDEX = {};
   const KEY = 'sa.lang';
   let LANG = 'en';
   const _pr = {}, missing = new Set(), listeners = new Set();
@@ -883,19 +889,41 @@ window.SA_I18N = (() => {
   function pick() {                                 // ?lang= wins, then a remembered choice, then the browser
     const q = new URLSearchParams(location.search).get('lang');
     let stored = null; try { stored = localStorage.getItem(KEY); } catch (e) {}
+    const known = c => PACKS[c] || INDEX[c];
     for (const c of [q, stored, ...(navigator.languages || [navigator.language || 'en'])]) {
       if (!c) continue;
       const short = String(c).toLowerCase().split('-')[0];
-      if (PACKS[c]) return c;
-      if (PACKS[short]) return short;
+      if (known(c)) return c;
+      if (known(short)) return short;
+      // zh-TW and zh-HK are Traditional; the bare "zh" and everything else fall to Simplified.
+      const region = String(c).toLowerCase();
+      if (short === 'zh') { const want = /-(tw|hk|mo|hant)/.test(region) ? 'zh-Hant' : 'zh-Hans'; if (known(want)) return want; }
     }
     return 'en';
   }
 
+  // The catalogue of packs that exist beside the page. Fetched once, after the first frame has already
+  // painted in English — so nobody waits on the network to see the studio, and a reader whose language we
+  // have repaints into it a moment later. Adding a language still means touching only the i18n folder.
+  async function catalogue() {
+    try {
+      const r = await fetch('i18n/_index.json');
+      if (r.ok) INDEX = await r.json();
+    } catch (e) { /* offline or single-file build: the inline packs are all there is */ }
+    listeners.forEach(f => f(LANG));            // the language menu rebuilds itself from this
+    const want = pick();
+    if (want !== LANG) await setLang(want);
+  }
+
   return { T, apply, register, load, setLang, onChange: f => listeners.add(f),
-           get lang() { return LANG; }, get languages() { return Object.keys(PACKS); },
-           nameOf: l => NAMES[l] || l, get missing() { return [...missing]; },
-           keys: () => Object.keys(PACKS.en), _init: () => { LANG = pick(); applyDir(); apply(); }, get isRTL() { return RTL.has(String(LANG).toLowerCase().split('-')[0]); } };
+           get lang() { return LANG; },
+           // loaded packs AND the ones we merely know exist — English first, the rest by their own name
+           get languages() {
+             const all = [...new Set([...Object.keys(PACKS), ...Object.keys(INDEX)])];
+             return all.sort((a, b) => a === 'en' ? -1 : b === 'en' ? 1 : (NAMES[a] || INDEX[a] || a).localeCompare(NAMES[b] || INDEX[b] || b));
+           },
+           nameOf: l => NAMES[l] || INDEX[l] || l, get missing() { return [...missing]; },
+           keys: () => Object.keys(PACKS.en), _init: () => { LANG = pick(); applyDir(); apply(); catalogue(); }, get isRTL() { return RTL.has(String(LANG).toLowerCase().split('-')[0]); } };
 })();
 SA_I18N._init();   // the studio markup above is already parsed, so this paints the first frame translated
 </script>

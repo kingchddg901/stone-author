@@ -171,6 +171,69 @@ for (const [k, v] of Object.entries(EN)) {
     fail.push('nothing sets the document direction — an RTL pack would translate the words and leave the layout mirrored wrong');
 }
 
+// ---- 4d. a plural key must carry the forms ITS OWN language has -----------------------------------
+// English has one/other. Polish, Czech and Russian have one/few/many/other; Arabic has six; Japanese,
+// Korean, Chinese and Indonesian have only other. T() falls back to `other` when the category it needs
+// is absent, so a pack carrying English's two forms does not break — it just quietly says "5 files" with
+// the wrong ending for ever, in the four languages where anyone would notice. ICU is the authority here,
+// not a table I typed: Intl.PluralRules tells us what each language actually requires.
+for (const file of packs) {
+  const lang = file.replace(/\.json$/, '');
+  const pack = JSON.parse(readFileSync(join(dir, file), 'utf8'));
+  let want;
+  try { want = new Intl.PluralRules(lang).resolvedOptions().pluralCategories; }
+  catch (_) { fail.push(`${lang}: not a language tag Intl understands, so its plural forms cannot be checked`); continue; }
+  const need = [...want].sort().join(',');
+  for (const k of enKeys) {
+    if (!EN[k] || typeof EN[k] !== 'object') continue;          // not a count string
+    const got = pack[k];
+    if (got == null) continue;                                   // already reported as a missing key
+    if (typeof got !== 'object') { fail.push(`${lang}: ${k} is a count string in English but a single string here — it can never agree with {n}`); continue; }
+    const have = Object.keys(got).sort().join(',');
+    if (have !== need) fail.push(`${lang}: ${k} has forms [${have}] but ${lang} takes [${need}]`);
+  }
+}
+
+// ---- 4e. and the same plain-text rule applies to every pack, not only to English -----------------
+// A translator reaching for "&amp;" in a section heading gets the same literal five characters, and the
+// English pack has no business being the only one protected. Same allowance: data-i18n-html keys only.
+{
+  const htmlKeys = new Set([...markup.matchAll(/data-i18n-html="([^"]+)"/g)].map(m => m[1]));
+  const ENT = /&(?:[a-zA-Z][a-zA-Z0-9]{1,9}|#\d{1,5}|#x[0-9a-fA-F]{1,5});/;
+  for (const file of packs) {
+    const lang = file.replace(/\.json$/, '');
+    const pack = JSON.parse(readFileSync(join(dir, file), 'utf8'));
+    for (const [k, v] of Object.entries(pack)) {
+      if (htmlKeys.has(k)) continue;
+      for (const form of (v && typeof v === 'object') ? Object.values(v) : [v]) {
+        const hit = ENT.exec(String(form));
+        if (hit) fail.push(`${lang}: ${k} holds the HTML entity "${hit[0]}" but is written as text, so it renders literally — use the character itself`);
+      }
+    }
+  }
+}
+
+// ---- 4f. the catalogue and the folder must agree --------------------------------------------------
+// The studio learns which languages exist from i18n/_index.json. A pack missing from it is unreachable —
+// it cannot be listed in the menu, matched by ?lang=, or picked from the browser's preferences — and an
+// entry with no pack file offers the reader a language that 404s and silently falls back to English.
+{
+  const idxPath = join(dir, '_index.json');
+  if (!existsSync(idxPath)) {
+    if (packs.length) fail.push('i18n/_index.json is missing, so none of the packs beside it can be reached');
+  } else {
+    const idx = JSON.parse(readFileSync(idxPath, 'utf8'));
+    if (idx.en) fail.push('_index.json lists "en" — English ships inline and must not be fetched');
+    for (const lang of Object.keys(idx))
+      if (!packs.includes(lang + '.json')) fail.push(`_index.json offers "${lang}" but i18n/${lang}.json does not exist — the menu would offer a language that 404s`);
+    for (const file of packs) {
+      const lang = file.replace(/\.json$/, '');
+      if (!(lang in idx)) fail.push(`i18n/${file} exists but _index.json does not list it — nothing can reach that pack`);
+      else if (!String(idx[lang]).trim()) fail.push(`_index.json gives "${lang}" no name, so the menu would show a blank row`);
+    }
+  }
+}
+
 // ---- 5. translator context: every key explained, every placeholder named, no stale entries ---------
 // These words are mostly ordinary English carrying a domain meaning (gauge, family, ground, matrix,
 // island, warp, moon, web), so a translator without context picks the wrong sense and the result reads
