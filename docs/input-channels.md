@@ -321,8 +321,14 @@ browser and 1.000 in the other, with five times the distinct values. A calibrati
 either one would be wrong in the other, so the working range has to be **learned at runtime** — exactly
 like the rest grip, and for exactly the same reason.
 
-One practical note, since the studio's phone surface *is* the webview: opening the artifact in the Claude
-app gets 60 Hz and two-thirds of the pressure range; opening the same artifact URL in Chrome gets the lot.
+**And the authoring actually happens in Chrome**, which settles which column matters. Chris works in
+Chrome on the phone rather than the Claude app view, because the app's webview does not keep
+`localStorage` across a close — the studio autosaves correctly (debounced, flushed on `visibilitychange`
+*and* `pagehide`) and the webview discards it anyway, silently.
+
+So the ×5.8 is not a hypothetical about some other browser. It is being lost on every stroke of the real
+work, in the environment the real work happens in. That moves consuming coalesced events from "worth
+doing" to the first thing worth doing.
 
 **What the capture does confirm, with better evidence than the granite sheet:**
 
