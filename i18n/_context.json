@@ -250,6 +250,12 @@
   },
   "where": "beside the export width menu in the File section"
  },
+ "exp.err.encode": {
+  "placeholders": {
+   "px": "the export width in pixels that failed, e.g. 16384"
+  },
+  "where": "failure message in the hint line when an export cannot encode an image at the chosen width"
+ },
  "exp.packing": {
   "where": "progress line under the File section buttons, once every image is rendered"
  },

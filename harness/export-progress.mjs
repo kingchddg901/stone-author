@@ -8,6 +8,8 @@
 // So this does not check that a message appears. It checks that the message KEEPS CHANGING, that the
 // button is held disabled while the work runs, and that both are put back afterwards.
 //
+// It then checks the other half: that an export which CANNOT finish says so instead of waiting for ever.
+//
 //   node harness/export-progress.mjs
 import { chromium } from 'playwright';
 import { createServer } from 'http';
@@ -66,10 +68,7 @@ const got = await page.evaluate(async (WIDTH) => {
   } finally { HTMLAnchorElement.prototype.click = origClick; }
 }, WIDTH);
 
-await browser.close();
-server.close();
-
-if (got.error) { console.error('export-progress harness: ' + got.error); process.exit(1); }
+if (got.error) { await browser.close(); server.close(); console.error('export-progress harness: ' + got.error); process.exit(1); }
 
 const pcts = got.fills.map(w => parseInt(w, 10) || 0);
 const rises = pcts.every((v, i) => i === 0 || v >= pcts[i - 1]);
@@ -81,6 +80,52 @@ const checks = [
   ['Export is usable again afterwards', got.enabledAfter, got.enabledAfter === true],
   ['the bar is put away afterwards', got.hiddenAfter, got.hiddenAfter === true],
 ];
+
+// --- and it must FAIL loudly rather than wait for ever -------------------------------------------
+// An encode that cannot happen used to leave a promise unsettled: the worker's onmessage is async, so a
+// rejection inside it never reaches onerror, and the no-worker fallback called b.arrayBuffer() on the
+// null that toBlob hands back when it cannot encode. Either way no message arrives, the pool's promise
+// never settles, and the export sits on "Rendering 1 of 14" for ever with the UI responsive -- which is
+// exactly how it presented on a phone at 16384. Forced here at 1024, where memory is not a factor.
+const HANG_MS = 15000;
+const fails = await page.evaluate(async (HANG_MS) => {
+  const btn = document.getElementById('export'), stat = document.getElementById('expstat');
+  const realWorker = window.Worker, realToBlob = HTMLCanvasElement.prototype.toBlob, realClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () {};
+  const out = {};
+  const run = async (label) => {
+    btn.click();
+    const t0 = Date.now();
+    while (Date.now() - t0 < HANG_MS) { await new Promise(r => setTimeout(r, 50)); if (!btn.disabled) break; }
+    out[label] = { settled: !btn.disabled, ms: Date.now() - t0, status: stat.textContent,
+                   flagged: stat.classList.contains('bad'), lineShown: !document.getElementById('expprog').hidden };
+  };
+  try {
+    delete window.Worker;                                  // take the sequential toBlob path
+    HTMLCanvasElement.prototype.toBlob = function (cb) { setTimeout(() => cb(null), 0); };
+    await run('toBlob returns null');
+    HTMLCanvasElement.prototype.toBlob = realToBlob;
+    window.Worker = class {                                // a worker that reports a failure
+      constructor() { this.onmessage = null; this.onerror = null; }
+      postMessage(d) { setTimeout(() => this.onmessage && this.onmessage({ data: { i: d.i, err: 'convertToBlob failed' } }), 0); }
+      terminate() {}
+    };
+    await run('worker reports an error');
+  } finally {
+    window.Worker = realWorker;
+    HTMLCanvasElement.prototype.toBlob = realToBlob;
+    HTMLAnchorElement.prototype.click = realClick;
+  }
+  return out;
+}, HANG_MS);
+
+await browser.close();
+server.close();
+
+for (const [label, r] of Object.entries(fails)) {
+  checks.push([`${label}: export settles`, r.settled ? `${r.ms} ms` : `HUNG for ${r.ms} ms`, r.settled === true]);
+  checks.push([`${label}: says why, and stays`, r.status.slice(0, 44), r.settled && r.flagged && r.lineShown]);
+}
 
 for (const [name, value, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(34)}  ${value}`);
 console.log('');

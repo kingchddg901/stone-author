@@ -8,7 +8,7 @@
   /* One look on purpose - a dark workbench around the slab - so no light theme. */
   :root {
     --ground: #0d0e12; --line: #262836; --text: #d7d8e3; --dim: #8b8da2;
-    --btn: #171823; --on: #33365a; --on-line: #6b6ea0; --focus: #a3a6e6;
+    --btn: #171823; --on: #33365a; --on-line: #6b6ea0; --focus: #a3a6e6; --warn: #e0b070;
     color-scheme: dark;
   }
   body { background: var(--ground); color: var(--text);
@@ -63,6 +63,7 @@
   .expprog { display: grid; gap: 6px; margin-top: 10px; }
   .expbar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .expbar > i { display: block; height: 100%; width: 0; background: var(--on-line); transition: width .15s linear; }
+  .stat.bad { color: var(--warn); }
   .note b { color: var(--text); font-weight: 500; }
   .layers { display: grid; gap: 5px; width: 100%; }
   .lay { display: grid; grid-template-columns: 16px 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch 18px;
@@ -479,6 +480,7 @@ window.SA_I18N = (() => {
   "cal.saved": "Saved for this device.",
   "cal.too-short": "Too short to measure — draw right across the slab.",
   "exp.ceiling": "this device tops out at {px}px",
+  "exp.err.encode": "This device could not encode a {px}px image.",
   "exp.packing": "Packing the archive…",
   "exp.prog": "Rendering {done} of {total} · {px}px",
   "exp.saving": "Saving the file…",
@@ -4204,7 +4206,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const eocd = Uint8Array.from([0x50, 0x4b, 5, 6, 0, 0, 0, 0, ...b2(cen.length), ...b2(cen.length), ...b4(cs), ...b4(off), 0, 0]);
     return new Blob([...parts, ...cparts, eocd], { type: 'application/zip' });
   }
-  const toU8 = c => new Promise(r => c.toBlob(b => b.arrayBuffer().then(a => r(new Uint8Array(a))), 'image/png'));
+  // toBlob calls back with NULL when the canvas is too large to encode, and a throw inside that callback
+  // is swallowed -- the executor has already returned, so the promise simply never settles. An export
+  // that hangs for ever on step 1 with the UI still responsive is what that looks like from the outside.
+  const toU8 = c => new Promise((res, rej) => {
+    try {
+      c.toBlob(b => {
+        if (!b) { rej(new Error(TR('exp.err.encode', { px: c.width }))); return; }
+        b.arrayBuffer().then(a => res(new Uint8Array(a)), rej);
+      }, 'image/png');
+    } catch (e) { rej(e); }
+  });
   const expCanvas = W => { const c = document.createElement('canvas'); c.width = W; c.height = Math.round(W * H); return c; };
   const polyPath = (cx, pts) => { cx.beginPath(); cx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) cx.lineTo(pts[i][0], pts[i][1]); };
   function expCompleted(W) {                              // the finished slab — FULL pipeline, tiled so a huge export stays bounded in memory (matches renderFull, back light falls back to it)
@@ -4258,13 +4270,23 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // PARALLEL PNG ENCODE: the export's cost is PNG compression (toBlob ~1s/file at 4096), not the render (~55ms).
   // The files are independent, so encode them one-per-worker off the main thread (measured ~50× vs sequential).
+  // The worker pool exists to encode the SMALL images in parallel. It is the wrong tool for a large one,
+  // because it needs THREE copies of the image where toBlob needs one: createImageBitmap snapshots the
+  // canvas, the worker's OffscreenCanvas holds a second, and convertToBlob allocates the output on top.
+  // At 16384x10240 that is 640 MiB x 3 = 1.9 GiB for a single image, and the export encodes EXP_PEAK of
+  // them at once. Measured against a phone that exports 8192 happily and hung on the hero at 16384.
+  const ENC_BIG = 8e6;                                    // pixels; 2048-class images stay on the pool
   async function encodePNGs(canvases) {
     const n = canvases.length;
     if (n === 0) return [];
-    if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
-      const out = []; for (const c of canvases) out.push(await toU8(c)); return out;   // no workers → sequential fallback
+    const big = canvases.some(c => c.width * c.height > ENC_BIG);
+    if (big || typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
+      const out = []; for (const c of canvases) out.push(await toU8(c)); return out;   // one buffer at a time
     }
-    const src = `self.onmessage=async function(e){var d=e.data;var oc=new OffscreenCanvas(d.bmp.width,d.bmp.height);oc.getContext('2d').drawImage(d.bmp,0,0);d.bmp.close();var b=await oc.convertToBlob({type:'image/png'});var buf=await b.arrayBuffer();self.postMessage({i:d.i,buf:buf},[buf]);};`;
+    // The handler is async, so a rejection inside it is an UNHANDLED REJECTION in the worker -- which does
+    // not fire the main thread's onerror. Without this try/catch the worker goes quiet, no message is
+    // posted, and the pool's promise waits for ever. Report the failure as a message instead.
+    const src = `self.onmessage=async function(e){var d=e.data;try{var oc=new OffscreenCanvas(d.bmp.width,d.bmp.height);oc.getContext('2d').drawImage(d.bmp,0,0);d.bmp.close();var b=await oc.convertToBlob({type:'image/png'});var buf=await b.arrayBuffer();self.postMessage({i:d.i,buf:buf},[buf]);}catch(err){try{d.bmp.close();}catch(_){}self.postMessage({i:d.i,err:String((err&&err.message)||err)});}};`;
     const url = URL.createObjectURL(new Blob([src], { type: 'application/javascript' }));
     const nw = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, n, 8));
     const pool = []; for (let i = 0; i < nw; i++) pool.push(new Worker(url));
@@ -4273,7 +4295,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       await new Promise((resolve, reject) => {
         pool.forEach(w => w.onerror = e => reject(new Error('encode worker: ' + e.message)));
         const send = (w, i) => createImageBitmap(canvases[i]).then(bmp => {
-          w.onmessage = e => { out[e.data.i] = new Uint8Array(e.data.buf); done++; if (next < n) send(w, next++); else if (done === n) resolve(); };
+          w.onmessage = e => {
+            if (e.data.err) { reject(new Error(TR('exp.err.encode', { px: canvases[e.data.i].width }) + ' — ' + e.data.err)); return; }
+            out[e.data.i] = new Uint8Array(e.data.buf); done++; if (next < n) send(w, next++); else if (done === n) resolve();
+          };
           w.postMessage({ i, bmp }, [bmp]);
         }).catch(reject);
         for (const w of pool) { if (next < n) send(w, next++); }
@@ -4295,12 +4320,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let exporting = false;
   // A big export blocks the main thread for minutes. The only signal used to be a hint that removes
   // itself after 2.6 s, so for the rest of the run the page was indistinguishable from a dead one.
+  // frac below zero means FAILURE: no bar, and the line stays put. A failed export used to report itself
+  // through hint(), which removes itself after 2.6 s -- so the one message explaining why you have no file
+  // was gone before you looked up.
   function expStat(msg, frac) {
     const w = document.getElementById('expprog'); if (!w) return;
     w.hidden = msg == null;
     if (msg == null) return;
-    document.getElementById('expstat').textContent = msg;
-    document.getElementById('expfill').style.width = Math.round(100 * Math.min(1, Math.max(0, frac || 0))) + '%';
+    const bad = frac < 0, s = document.getElementById('expstat');
+    w.querySelector('.expbar').hidden = bad;
+    s.textContent = msg; s.classList.toggle('bad', bad);
+    if (!bad) document.getElementById('expfill').style.width = Math.round(100 * Math.min(1, Math.max(0, frac || 0))) + '%';
   }
   // setTimeout, NOT requestAnimationFrame: rAF stops firing when the window is backgrounded, and an
   // export that deadlocks because you looked at something else is worse than one you cannot watch.
@@ -4347,8 +4377,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (dl) await dl.save({ filename: 'stone-export.zip', data: zip });
       else download('stone-export.zip', zip);
       hint(TR('hint.exported-files', { n: files.length }));
-    } catch (e) { hint(TR('hint.export-failed-msg', { err: (e && e.message || e) })); }
-    finally { expStat(null); btn.disabled = false; exporting = false; }
+      expStat(null);
+    } catch (e) {
+      const msg = TR('hint.export-failed-msg', { err: (e && e.message || e) });
+      hint(msg); expStat(msg, -1);                         // stays on screen; the hint will not
+    }
+    finally { btn.disabled = false; exporting = false; }
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
