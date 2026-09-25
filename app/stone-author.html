@@ -1081,8 +1081,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.25.1';
+  const BUILD = '2026.09.25.2';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
+
+  // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
+  // units are REFERENCE canvas pixels, not on-screen ones: tying them to the live canvas width made the
+  // same slab export differently after a window resize, which quietly broke "a render is a pure function
+  // of the slab". 1000 keeps a 1024px export almost exactly at the authored radii, so a quick small
+  // render previews a giant one proportionally.
+  const COAT_REF = 1000;
 
   const SLAB_FT = 8, FT_MM = 304.8;                    // frame width in feet; feet to mm
   const FAM = {
@@ -2792,7 +2799,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // W-wide canvas, whole slab, no pan/zoom. Shares applyCoat/paintStoneContent/paintBacklit with live draw().
   function renderFull(W) {
     const oc = document.createElement('canvas'); oc.width = W; oc.height = Math.round(W * H);
-    const ox = oc.getContext('2d'), prevG = g2d, bs = W / (Wc || 360), backlit = !layTiles && G.backlight > 0;
+    const ox = oc.getContext('2d'), prevG = g2d, bs = W / COAT_REF, backlit = !layTiles && G.backlight > 0;
     ox.setTransform(1, 0, 0, 1, 0, 0); ox.globalAlpha = 1;
     if (backlit) { ox.fillStyle = '#0b0b0e'; ox.fillRect(0, 0, oc.width, oc.height); }
     else if (uvMode) { ox.fillStyle = UV_DARK; ox.fillRect(0, 0, oc.width, oc.height); }
@@ -2837,12 +2844,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function applyWindows(canvas, W) {                                    // export path: full-slab transform (0..1 → 0..W)
     const wins = gatherMasks().filter(m => m.show != null); if (!wins.length) return;
     const cx = canvas.getContext('2d'), h = canvas.height;
-    for (const win of wins) compositeWindow(cx, win, W, h, [W, 0, 0, W, 0, 0], W / (Wc || 360), win.x * W, win.y * W, W);
+    for (const win of wins) compositeWindow(cx, win, W, h, [W, 0, 0, W, 0, 0], W / COAT_REF, win.x * W, win.y * W, W);
   }
   function applyWindowsScreen() {                                       // interactive path: the live view transform
     const wins = gatherMasks().filter(m => m.show != null); if (!wins.length) return;
     const k = Wc * V.z * dpr, ex = (Wc / 2 - V.cx * Wc * V.z) * dpr, ey = (Hc / 2 - V.cy * Wc * V.z) * dpr;
-    for (const win of wins) compositeWindow(ctx, win, cv.width, cv.height, [k, 0, 0, k, ex, ey], dpr, win.x * k + ex, win.y * k + ey, k);
+    for (const win of wins) compositeWindow(ctx, win, cv.width, cv.height, [k, 0, 0, k, ex, ey], cv.width / COAT_REF, win.x * k + ex, win.y * k + ey, k);
   }
   // The islands, drawn as dashed rings while the Mask tool is active (never exported): solid ring at r, a fainter
   // ring at r+feather. Colour carries both bits at once — amber = protects, rose = window into chaos; the lit pair
@@ -2876,7 +2883,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // watch and one that looks wedged. The pixels are the same work in the same sequence either way.
   function tiledPlan(W, tilePx, bleedPx) {
     tilePx = tilePx || 1024;
-    const finalW = W, finalH = Math.round(W * H), bs = W / (Wc || 360), bleed = bleedPx != null ? bleedPx : Math.ceil(12 * bs);
+    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = bleedPx != null ? bleedPx : Math.ceil(12 * bs);
     const fc = document.createElement('canvas'); fc.width = finalW; fc.height = finalH;
     const fx = fc.getContext('2d'), prevG = g2d;
     const baseFill = cx2 => { cx2.setTransform(1, 0, 0, 1, 0, 0); if (uvMode) { cx2.fillStyle = UV_DARK; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else { cx2.fillStyle = STONE_BG; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); if (layVis('base')) { cx2.globalAlpha = layOp('base'); cx2.fillStyle = COL.ground; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); cx2.globalAlpha = 1; } } };
@@ -2937,15 +2944,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // reports the size asked for and then hands back dead pixels rather than throwing — so prove the band
     // can actually hold a written pixel, halving until one does, instead of trusting one engine's number.
     while (eh0 > 64 && !canvasFits(FW, eh0, 1)) eh0 = Math.floor(eh0 / 2);
-    // The tiled path's own bleed is 12 * W/Wc, which is 1365 rows at 65535 — more padding than payload.
+    // The tiled path's own bleed is 12 * W/COAT_REF, which is 786 rows at 65535 — more padding than payload.
     // Measured at 2048, quadrupling bleed moved the difference from an untiled render only 22.3% → 19.7%.
-    const bleed = Math.max(8, Math.min(Math.ceil(12 * (W / (Wc || 360))), 256, Math.floor(eh0 / 4)));
+    const bleed = Math.max(8, Math.min(Math.ceil(12 * (W / COAT_REF)), 256, Math.floor(eh0 / 4)));
     const stripH = Math.max(1, Math.min(opts.stripH || (eh0 - 2 * bleed), FH));
     return { FW, FH, stripH, bleed, live, strips: Math.ceil(FH / stripH),
              peakMB: Math.round(live * FW * (stripH + 2 * bleed) * 4 / 1e6) };
   }
   function renderStrip(W, y0, h, bleed, wins) {
-    const finalW = W, finalH = Math.round(W * H), bs = W / (Wc || 360), prevG = g2d;
+    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, prevG = g2d;
     const ey0 = y0 - bleed, eh = h + 2 * bleed;
     const c = document.createElement('canvas'); c.width = finalW; c.height = eh;
     const cx = c.getContext('2d');
@@ -3000,7 +3007,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const backlit = !layTiles && G.backlight > 0;
     if (backlit || typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return renderTiled(W);   // no workers / back light → the single-thread tiled path
     const tilePx = opts.tilePx || 1024, nWorkers = Math.max(1, Math.min(opts.workers || (navigator.hardwareConcurrency || 4), 8));
-    const finalW = W, finalH = Math.round(W * H), bs = W / (Wc || 360), bleed = Math.ceil(12 * bs);
+    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = Math.ceil(12 * bs);
     // build the shared state + the modulator bitmaps (once)
     const modBitmap = (need, ensure) => need ? createImageBitmap(ensure()) : Promise.resolve(null);
     const [clB, bdB, brB] = await Promise.all([
@@ -3062,7 +3069,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     if (layTiles) { drawTiles(F); paintLive(); if (tool === 'light') drawLightGuide(); ctx.globalAlpha = 1; stat(); return; }
     if (backlit) paintBacklit(); else paintStoneContent(ident, angleView);
-    applyCoat(cv, ctx, dpr, { ident, uvMode, backlit });   // coat tier: emission bloom · subsurface · specular · lens (shared with renderFull)
+    applyCoat(cv, ctx, cv.width / COAT_REF, { ident, uvMode, backlit });   // coat tier: emission bloom · subsurface · specular · lens (shared with renderFull); same reference as the export, so the preview matches
     if (!ident && !layTiles) applyWindowsScreen();                      // reality windows: daylight (or another light) through the islands
     ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);   // restore the view for guides/live
     if (guidesOn) drawGuides();
