@@ -379,6 +379,7 @@
       <button id="load" type="button" data-i18n="btn.load">Load</button>
       <button id="export" type="button" data-i18n="btn.export">Export</button>
       <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option></select>
+      <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select>
       <span class="stat" id="expcap"></span>
       <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
     <div class="expprog" id="expprog" hidden><div class="expbar"><i id="expfill"></i></div><span class="stat" id="expstat"></span></div>
@@ -419,6 +420,7 @@ window.SA_I18N = (() => {
   "a11y.black-light-only-the-uv": "Black light — only the UV palette glows",
   "a11y.choose-the-interface-language": "Choose the interface language",
   "a11y.edit": "Edit",
+  "a11y.export-what": "What to export",
   "a11y.export-width": "Export width",
   "a11y.export-width-px": "Export width (px)",
   "a11y.family": "Family",
@@ -516,6 +518,7 @@ window.SA_I18N = (() => {
     "one": "Exported {n} file.",
     "other": "Exported {n} files."
   },
+  "hint.exported-render": "Saved the render at {px}px.",
   "hint.exporting-render": "Exporting… rendering {w}px…",
   "hint.gravity-moves-specks-switch-to-granite": "Gravity moves specks. Switch to Granite, or pour some first.",
   "hint.hover-traces-on-move-the-pen": "Hover traces on: move the pen or mouse just above the slab to work lightly; each pause keeps the trace.",
@@ -620,6 +623,8 @@ window.SA_I18N = (() => {
   "note.identity": "<b>Identity</b> shows what an animation would read: each line in its own colour, brightening along its length in the direction you drew it; web cracks brighten toward the line that spread them. Nothing had to be traced &mdash; the line was known when it was made.",
   "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint. In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
   "note.magnet": "<b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab. The Angle view colours every speck by the way it points, so alignment shows as a single colour.",
+  "opt.exp-all": "Everything",
+  "opt.exp-render": "Just the render",
   "sec.banding": "Banding",
   "sec.breccia": "Breccia",
   "sec.calibrate": "Calibrate the pen",
@@ -4336,11 +4341,28 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // export that deadlocks because you looked at something else is worse than one you cannot watch.
   const breathe = () => new Promise(r => setTimeout(r, 0));
 
-  async function exportAll(W) {
+  // The full kit is 8 full-size images plus 6 small ones, and expIdT builds two of the big ones in a
+  // single pass, so two full-size canvases alive at once is a FLOOR for it: 1.28 GiB at 16384, before a
+  // byte of PNG. "Just the render" holds exactly one, encodes it, and writes the PNG straight out with
+  // no archive to assemble -- which is the difference between roughly 1.8 GB and 0.9 GB at that width.
+  async function exportAll(W, only) {
     if (exporting) return; exporting = true;
     const btn = document.getElementById('export'); btn.disabled = true;
     hint(TR('hint.exporting-render', { w: W }));
     try {
+      if (only) {
+        expStat(TR('exp.prog', { done: 1, total: 1, px: W }), 0); await breathe();
+        const c = expCompleted(W);
+        const [png] = await encodePNGs([c]);
+        c.width = 1; c.height = 1;                           // hand it back before we hold the blob
+        expStat(TR('exp.saving'), 0.7); await breathe();
+        const blob = new Blob([png], { type: 'image/png' });
+        const d = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
+        if (d) await d.save({ filename: 'stone-render.png', data: blob }); else download('stone-render.png', blob);
+        expStat(null);
+        hint(TR('hint.exported-render', { px: W }));
+        return;
+      }
       const te = new TextEncoder(), oW = Math.min(W, 2048), oOrder = ['base', 'web', 'micro', 'minor', 'major'];
       // Built in PAIRS and freed as we go. The old "render everything first" batch held EIGHT full-size
       // canvases alive before encoding any of them: 5 GiB at 16384, which no machine has, and 1.2 GiB at
@@ -4511,7 +4533,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       hint(TR('hint.this-device-remembers-your-work-automatically'));
     }
   });
-  document.getElementById('export').addEventListener('click', () => exportAll(+document.getElementById('expres').value));
+  document.getElementById('export').addEventListener('click', () =>
+    exportAll(+document.getElementById('expres').value, document.getElementById('expwhat').value === 'render'));
   document.getElementById('load').addEventListener('click', () => document.getElementById('loadfile').click());
   document.getElementById('loadfile').addEventListener('change', e => {
     const f = e.target.files[0]; if (!f) return;

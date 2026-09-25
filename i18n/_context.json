@@ -11,6 +11,9 @@
  "a11y.edit": {
   "where": "accessibility label (aria-label), not visible on screen"
  },
+ "a11y.export-what": {
+  "where": "label on the menu beside the export width, choosing what the export contains"
+ },
  "a11y.export-width": {
   "where": "accessibility label (aria-label), not visible on screen"
  },
@@ -384,6 +387,12 @@
   },
   "plural": "a count string: supply the plural forms your language needs",
   "where": "transient hint line under the tool palette"
+ },
+ "hint.exported-render": {
+  "placeholders": {
+   "px": "the export width in pixels"
+  },
+  "where": "hint line after a render-only export finishes"
  },
  "hint.exporting-render": {
   "placeholders": {
@@ -892,6 +901,12 @@
    "speck"
   ],
   "where": "under the \"how-the-tools-read\" section"
+ },
+ "opt.exp-all": {
+  "where": "option in the what-to-export menu: the full kit — render, masks and layered file"
+ },
+ "opt.exp-render": {
+  "where": "option in the what-to-export menu: the finished picture only, as one PNG"
  },
  "sec.banding": {
   "where": "title of a collapsible section in the right-hand rail"
