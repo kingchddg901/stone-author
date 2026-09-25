@@ -49,13 +49,16 @@ const got = await page.evaluate(async (WIDTH) => {
     if (!stat) return { error: 'there is no export status line at all' };
 
     const seen = [], fills = [];
-    let everDisabled = false;
+    let everDisabled = false, menusLocked = null;
     const iv = setInterval(() => {
       const t = stat.textContent;
       if (t && seen[seen.length - 1] !== t) { seen.push(t); fills.push(document.getElementById('expfill').style.width); }
       if (btn.disabled) everDisabled = true;
     }, 15);
     btn.click();
+    // Read in this tick: exportAll disables synchronously, before its first await, and a small export can
+    // finish before any sampler fires. An earlier version of this check sampled 30 ms in and saw nothing.
+    menusLocked = document.getElementById('expres').disabled && document.getElementById('expwhat').disabled;
     // Poll for the end rather than sleeping a fixed time: the container's speed is not ours to assume.
     const deadline = Date.now() + 60000;
     while (Date.now() < deadline) {
@@ -63,7 +66,9 @@ const got = await page.evaluate(async (WIDTH) => {
       if (seen.length && !btn.disabled) break;
     }
     clearInterval(iv);
-    return { seen, fills, everDisabled, enabledAfter: !btn.disabled,
+    return { seen, fills, everDisabled, menusLocked,
+             menusFreeAfter: !document.getElementById('expres').disabled && !document.getElementById('expwhat').disabled,
+             enabledAfter: !btn.disabled,
              finalLine: stat.textContent, clock: document.getElementById('expclock').textContent,
              stillShown: !document.getElementById('expprog').hidden };
   } finally { HTMLAnchorElement.prototype.click = origClick; }
@@ -79,6 +84,10 @@ const checks = [
   ['the bar actually advances', (pcts[pcts.length - 1] || 0) + '%', (pcts[pcts.length - 1] || 0) >= 50],
   ['Export was disabled while it ran', got.everDisabled, got.everDisabled === true],
   ['Export is usable again afterwards', got.enabledAfter, got.enabledAfter === true],
+  // Leaving the menus live during an export lets you change one, see nothing happen, and conclude the
+  // app ignored you.
+  ['the width and scope menus lock too', got.menusLocked, got.menusLocked === true],
+  ['and are free again afterwards', got.menusFreeAfter, got.menusFreeAfter === true],
   // The finished line STAYS: it is the record of what was last exported and how long it took, which is
   // the number you compare against after touching the renderer.
   ['it leaves the finished export up', got.finalLine, got.stillShown === true && /\d+:\d\d$/.test(got.finalLine)],

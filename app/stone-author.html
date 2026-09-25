@@ -4419,7 +4419,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // no archive to assemble -- which is the difference between roughly 1.8 GB and 0.9 GB at that width.
   async function exportAll(W, only) {
     if (exporting) return; exporting = true;
-    const btn = document.getElementById('export'); btn.disabled = true;
+    // The MENUS go dead too, not just the button. Leaving them live means you can pick a different width
+    // or scope mid-export, watch nothing happen, and reasonably conclude the app ignored you.
+    const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
+    btn.disabled = selW.disabled = selWhat.disabled = true;
     hint(TR('hint.exporting-render', { w: W }));
     try {
       if (only) {
@@ -4516,7 +4519,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const msg = TR('hint.export-failed-msg', { err: (e && e.message || e) });
       hint(msg); expStat(msg, -1);                         // stays on screen; the hint will not
     }
-    finally { btn.disabled = false; exporting = false; }
+    finally { btn.disabled = selW.disabled = selWhat.disabled = false; exporting = false; }
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
@@ -4647,6 +4650,20 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   });
   document.getElementById('export').addEventListener('click', () =>
     exportAll(+document.getElementById('expres').value, document.getElementById('expwhat').value === 'render'));
+  // Remember what you last chose. Per viewer, per device: a reload used to drop you back on Everything at
+  // 2048 without saying so, which reads as the app overriding you. The width is still clamped by the
+  // ceiling probe when the File section opens, so a remembered size this device cannot manage is corrected.
+  { const EXPOPT_KEY = 'stone-author:expopts:v1';
+    const w = document.getElementById('expres'), what = document.getElementById('expwhat');
+    const has = (sel, v) => [...sel.options].some(o => o.value === String(v));
+    try {
+      const o = JSON.parse(localStorage.getItem(EXPOPT_KEY) || '{}');
+      if (o.w != null && has(w, o.w)) w.value = String(o.w);
+      if (o.what && has(what, o.what)) what.value = o.what;
+    } catch (_) { /* storage blocked; the defaults in the markup stand */ }
+    const save = () => { try { localStorage.setItem(EXPOPT_KEY, JSON.stringify({ w: +w.value, what: what.value })); } catch (_) {} };
+    w.addEventListener('change', save); what.addEventListener('change', save);
+  }
   document.getElementById('load').addEventListener('click', () => document.getElementById('loadfile').click());
   document.getElementById('loadfile').addEventListener('change', e => {
     const f = e.target.files[0]; if (!f) return;
