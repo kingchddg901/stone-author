@@ -75,7 +75,14 @@ const probe = async ({ budgetMs }) => {
     bands.push(`${w}x${h}:${ok ? 'ok' : 'NO'}/${Date.now() - t1}ms`);
     await breathe();
   }
+  // stripPlan's memory budget is reduced by navigator.deviceMemory, which is a Chromium-only API. Where it
+  // is absent the planner falls back to 4 and plans at 512 MB instead of 900 — half the band height, twice
+  // the bands, on every machine running that engine. Reported because the budget was tuned on one desktop
+  // and this is the mechanism by which somebody else's machine is not that desktop.
+  const dm = navigator.deviceMemory;
   return { stream: typeof CompressionStream === 'function', dpr: window.devicePixelRatio,
+           deviceMemory: dm === undefined ? null : dm,
+           budgetMB: Math.round(Math.min(900e6, ((dm || 4) * 1024 ** 3) / 8) / 1e6),
            side: lo, sideMs, bands: bands.join(' ') };
 };
 
@@ -186,7 +193,8 @@ process.exit(fail ? 1 : 0);
 function report(r) {
   console.log(`  --- ${r.name} ---`);
   const c = r.caps;
-  console.log(`  caps    CompressionStream ${c.stream ? 'yes' : 'NO'} · dpr ${c.dpr} · largest side ${c.side} (${c.sideMs}ms) · bands ${c.bands}`);
+  console.log(`  caps    CompressionStream ${c.stream ? 'yes' : 'NO'} · dpr ${c.dpr} · deviceMemory ${c.deviceMemory === null ? 'absent' : c.deviceMemory} · band budget ${c.budgetMB} MB`);
+  console.log(`          largest side ${c.side} (${c.sideMs}ms) · bands ${c.bands}`);
   console.log(`  render  self-determinism ${r.self ? 'PASS' : 'FAIL'} · ${r.hash} · luma sd ${r.diff.sd}`);
   console.log(`  vs ${r.against}`);
   console.log(`          mean ${r.diff.mean}/255 · max ${r.diff.max} · ${r.diff.pctOver1}% of pixels differ by more than 1`);
