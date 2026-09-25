@@ -202,6 +202,21 @@ streamed one settles at ~4–5 and stays there, so streaming costs roughly **3×
 3.6 is low against both its neighbours and reads as machine state, not as a property of that width.) This
 is the measurement behind the friction in front of the large tiers: *"this is not fast"* is not a hedge.
 
+**Pipelining the encode is a dead end, and the measurement is here so nobody re-proposes it.** The loop
+awaits the writer before rendering the next band, which serialises two things that need not be serial:
+measured in a real browser, a 96 MB compression in flight does not hold up a render at all (the same render
+took 70 ms with and without one), because `CompressionStream`'s deflate is off the main thread. So the
+202 s that sits outside the render loop at 65535 is recoverable in principle — roughly a minute at 32768
+and 3:20 at 65535, with 7:35 as the floor because the render itself cannot be hidden.
+
+**It is refused anyway.** Rendering band N+1 while band N is still queued in the writer means one more band
+buffer alive — about **300 MB** at 65535, against a current peak near 1.0–1.1 GB and a measured death point
+of 1.5 GB. This is an *offline* render: there is no frame budget, and if it takes a while it takes a while.
+The optimisation spends the one resource that is genuinely scarce to buy the one that is not. (The
+mid-render **degrade** — halving the band and retrying when an allocation fails, rather than losing a
+ten-minute render — passes the same test the pipeline fails: it costs no memory and converts a crash into a
+slow finish. It remains unbuilt.)
+
 **Extreme names the machine it is known to finish on.** Beside its tickbox and again in its confirmation
 dialogue: *"Recommended: 16 GB of memory — the machine this tier is known to finish on. Below that it is
 untested, not unsupported."* Untested rather than unsupported because nobody has tested a boundary, and
