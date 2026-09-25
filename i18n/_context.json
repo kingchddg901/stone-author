@@ -235,6 +235,15 @@
  "cal.too-short": {
   "where": "status or hint line for the pen calibration, in the right-hand rail"
  },
+ "exp.ceiling": {
+  "placeholders": {
+   "px": "the largest export width this device managed, in pixels"
+  },
+  "where": "beside the export width menu in the File section"
+ },
+ "exp.too-big": {
+  "where": "tooltip on an export width this device cannot manage, in the File section"
+ },
  "fam.calacatta": {
   "where": "in the \"Family\" group/panel"
  },

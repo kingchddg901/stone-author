@@ -367,12 +367,13 @@
     <p class="stat" id="cal-step"></p>
     <dl class="stats" id="cal-out"></dl>
   </div></details>
-  <details class="sec"><summary data-i18n="sec.file">File</summary><div class="body">
+  <details class="sec" id="filesec"><summary data-i18n="sec.file">File</summary><div class="body">
     <div class="grp" role="group" aria-label="File" data-i18n-attr="aria-label=a11y.file">
       <button id="save" type="button" data-i18n="btn.save">Save</button>
       <button id="load" type="button" data-i18n="btn.load">Load</button>
       <button id="export" type="button" data-i18n="btn.export">Export</button>
-      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option></select>
+      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option></select>
+      <span class="stat" id="expcap"></span>
       <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
   </div></details>
   <details class="sec"><summary data-i18n="sec.how-the-tools-read">How the tools read</summary><div class="body">
@@ -470,6 +471,8 @@ window.SA_I18N = (() => {
   "cal.row.speed": "Speed normal / quick",
   "cal.saved": "Saved for this device.",
   "cal.too-short": "Too short to measure — draw right across the slab.",
+  "exp.ceiling": "this device tops out at {px}px",
+  "exp.too-big": "This device cannot allocate a canvas that large. Open the studio on a desktop for this size.",
   "fam.calacatta": "Calacatta",
   "fam.carrara": "Carrara",
   "fam.granite": "Granite",
@@ -3771,6 +3774,58 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
     stoneReady = false; buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
   }
+  // ---- EXPORT CEILING ------------------------------------------------------------------------------
+  // renderTiled bounds the SCRATCH buffers, but its assembly canvas is still full size — 16384 x 10240
+  // RGBA is 640 MiB — so the real limit is simply whether this browser will hand over a canvas that big.
+  //
+  // "Is this a phone" is the wrong question, and the browser can answer it: navigator.userAgentData.mobile
+  // is a real boolean in Chromium, alongside deviceMemory, hardwareConcurrency and (pointer: coarse). But
+  // none of them answers THIS question — a 16 GB tablet and a 4 GB phone are both "mobile" — so test the
+  // constraint itself.
+  //
+  // Probe UPWARD and stop at the first failure. That is the safety property: we never attempt a size more
+  // than one step beyond proven capability, so a device that manages 4096 (64 MiB) is asked for 8192
+  // (256 MiB) and never for 640. Probing downward from 16384 would risk taking the tab with it.
+  const EXP_KEY = 'stone-author:expcap:v1';
+  function canvasFits(w, h) {
+    let c = null;
+    try {
+      c = document.createElement('canvas'); c.width = w; c.height = h;
+      if (c.width !== w || c.height !== h) return false;          // silently clamped
+      const x = c.getContext('2d'); if (!x) return false;
+      x.fillStyle = '#fff'; x.fillRect(w - 2, h - 2, 2, 2);       // the FAR CORNER: a clamped canvas fails here
+      return x.getImageData(w - 1, h - 1, 1, 1).data[0] === 255;
+    } catch (_) { return false; }
+    finally { if (c) { c.width = 1; c.height = 1; } }              // hand the memory back immediately
+  }
+  function exportCeiling() {
+    try { const v = +JSON.parse(localStorage.getItem(EXP_KEY) || '{}')[calSig()]; if (v) return v; } catch (_) {}
+    let best = 1024;
+    for (const w of [2048, 4096, 8192, 16384]) {
+      if (!canvasFits(w, Math.round(w * H))) break;
+      best = w;
+    }
+    try {
+      const all = JSON.parse(localStorage.getItem(EXP_KEY) || '{}');
+      all[calSig()] = best; localStorage.setItem(EXP_KEY, JSON.stringify(all));
+    } catch (_) {}
+    return best;
+  }
+  let expCap = 0;
+  function applyExportCeiling() {
+    if (expCap) return;
+    expCap = exportCeiling();
+    const sel = document.getElementById('expres'); if (!sel) return;
+    for (const o of sel.options) {
+      const over = +o.value > expCap;
+      o.disabled = over;
+      o.title = over ? TR('exp.too-big') : '';
+    }
+    if (+sel.value > expCap) sel.value = String(expCap);
+    const cap = document.getElementById('expcap');
+    if (cap) cap.textContent = TR('exp.ceiling', { px: expCap });
+  }
+
   // ---- CALIBRATION ---------------------------------------------------------------------------------
   // Every normalisation the channels need is a property of a HAND and a DEVICE, never a constant. Measured
   // rather than assumed: a real hand spends 90% of a stroke in the bottom TENTH of the pressure sensor, and
@@ -3905,6 +3960,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     calSave(p);
     calEnd(TR('cal.saved'));
     hint(TR('cal.done'));
+  }
+  // Probed when the File section is opened — a deliberate act — never on load, because the probe itself
+  // allocates the sizes it is testing and there is no reason to spend that on someone who never exports.
+  { const fs = document.getElementById('filesec');
+    if (fs) fs.addEventListener('toggle', () => { if (fs.open) applyExportCeiling(); });
   }
   { const s = document.getElementById('cal-start'), c = document.getElementById('cal-cancel'),
           f = document.getElementById('cal-clear');
