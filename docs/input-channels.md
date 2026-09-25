@@ -205,6 +205,54 @@ And the gaussian kick is now clearly wrong for a reason better than "it preserve
 **simulating the appearance of disorder instead of the thing that causes it.** Ask what physically
 happened and the special case collapses into one parameter on the mechanism that was already there.
 
+#### Measured from real use — a controlled sheet
+
+Chris authored a clean granite sheet (everything but the speck ground zeroed) and drew five magnet
+strokes, **deliberately holding pressure steady and varying only speed and direction.** Measuring that
+file is worth more than any amount of reasoning about what a hand does.
+
+| mark | n | speed (slab-widths/s) | direction | straightness | pressure mean ± sd | lean mean ± sd |
+|---|---|---|---|---|---|---|
+| 1 | 18 | 0.401 | 11° | 0.99 | 0.121 ± 0.135 (**111%**) | 0.384 ± 0.031 |
+| 2 | 6 | 0.027 | 35° | 0.87 | 0.013 ± 0.006 (44%) | 0.394 ± 0.004 |
+| 3 | 127 | 0.059 | 3° | 0.98 | 0.050 ± 0.029 (59%) | 0.309 ± 0.140 |
+| 4 | 14 | 0.459 | 93° | 0.99 | 0.115 ± 0.045 (39%) | 0.629 ± 0.109 |
+| 5 | 172 | 0.031 | 91° | 0.99 | 0.045 ± 0.023 (52%) | 0.389 ± 0.097 |
+
+**Sample rate: 60.2 Hz.** The figure in the tuning note is real, at least at the event level.
+
+**Speed spans 17×** — 0.027 to 0.459 — from one hand, on purpose, with straightness 0.98+ on four of the
+five. The rotating-magnet model needs exactly that range to show both regimes, and a hand supplies it
+without being asked.
+
+**But "steady pressure" is not steady in the data.** He held his hand still and the signal moved with a
+coefficient of variation of **39–111%**. That is not a light-touch habit to design around — the entire
+gesture lives in the bottom tenth of the sensor's range (p90 = **0.086**, max 0.368), which is precisely
+where a stylus is least linear and noisiest. Two consequences:
+
+- **Pressure needs the same treatment tilt already gets.** Tilt is normalised against a learned rest
+  grip; pressure is normalised against nothing, so the studio reads 0..1 while a real hand delivers
+  0..0.1. Normalise against the user's *observed working range*, learned the same way.
+- **And it needs smoothing, which tilt also already gets.** `leanProfile` takes a ±8-sample moving
+  average. `applyMagnet` reads `q[3]` **raw, per sample** — so at these CVs the magnet's strength and its
+  standoff height are being modulated by sensor noise. Compare the lean column: sd 0.03–0.14 against a
+  mean of ~0.39. **Tilt is by far the cleaner channel in a real hand**, and it is the one that got the
+  care.
+
+**Sizing ω against real speeds.** At his median 0.059 and a speck spacing of ~0.005:
+
+| ω | per-sample step at 60 Hz | neighbour phase gap at median speed |
+|---|---|---|
+| 0.5 rot/s | 3° | 15° — a loose grain |
+| 1 rot/s | 6° | 31° |
+| 3 rot/s | 18° | **92° — full decorrelation** |
+| 5 rot/s | 30° | 153° |
+
+So **~3 rot/s** is the scatter end and the useful dial runs roughly **0.5–5 rot/s**. Note the per-sample
+step depends only on ω and the sample rate, *not* on speed — so a fast flick cannot alias no matter how
+quick it is, and the whole range stays clear of the 90°/sample ceiling. Speed changes only the spatial
+frequency, which is the effect.
+
 #### Simulating input, for testing the model
 
 The channels can be driven synthetically, which is what makes the rotating-magnet model testable one
