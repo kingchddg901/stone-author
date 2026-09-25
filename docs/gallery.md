@@ -204,6 +204,37 @@ Nothing about this worked first time, and each failure was worth more than the g
   already believed has not earned its runtime; this one produced a number, and the number was half wrong in
   a way that mattered.
 
+## Animation — the same renderer, one mark at a time
+
+A slab is a still, but a mark is a path, and truncating that path frame by frame animates the thing it
+does. `tools/make-crosshatch.mjs` writes `test-slabs/crosshatch.json` for exactly this: six near-straight
+veins on an empty plane with a moon whose path is **120 resample steps long**, so one frame is one step.
+
+Three facts make it a good instrument rather than a toy:
+
+- **It rebuilds in ~90 ms.** The generator strips the speck, web, stylolite and fog layers, and that is the
+  whole difference — the hero slab rebuilds in **5.21 s**, because 8,050 specks are generated on every
+  build whether they are painted or not (switching a granite layer *off* does not skip them). On the hero,
+  the build is 97% of a frame and the render size barely matters.
+- **Frame advance should land on 0.006**, `applyMoon`'s own resample step. Below it, consecutive frames
+  share grid points and the drag ripples at roughly a 1.2-frame period. A long authored path advances by
+  several steps a frame instead, which is fine.
+- **The slab carries the look.** `crosshatch.json` holds the emission stops and the strain settings at
+  bucket level, so the renderer produces the glow through the ordinary ladder and the harness only moves
+  a moon.
+
+`harness/frame-worker.js` runs the frames. Load it into a page carrying the `__anim` hook, give each of
+several tabs a stride, and each posts finished frames to a local save server — a tab is its own renderer
+process, so tabs are cores. **Measured: three tabs at 16384 gave 3.33 s a frame against 5.66 s alone.**
+That is 1.7×, not 3×, and each tab individually got *slower* (10 s), because three processes rasterising
+671 MB apiece queue for one memory bus. Three is about where it stops paying.
+
+Assembly is ffmpeg, never `MediaRecorder`. Capturing a canvas happens in **real time**, so a render slower
+than 41.7 ms drops frames silently — measured, 89 of 120 at 4K, and the giveaway was a five-second clip
+weighing 0.5 MB. ffmpeg reads the PNGs at its own pace: 7.6 s for 120 frames at 3840×2400, 1.2 MB out.
+`tools/make-loop-list.mjs` writes a concat list that plays the sequence out and back, dropping a frame at
+each turn so the loop closes seamlessly — the `reverse` filter would buffer 3.3 GB to do the same job.
+
 ## What determinism actually holds — and what doesn't
 
 The self-determinism gate exercises exactly the property the "slab is the master" claim rests on, and it
