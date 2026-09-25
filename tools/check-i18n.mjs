@@ -149,6 +149,28 @@ for (const [k, v] of Object.entries(EN)) {
   }
 }
 
+// ---- 4c. the layout must mirror, because two of the languages read right to left -----------------
+// Arabic and Hebrew are in the pack set. The i18n core sets dir="rtl" on the root for those, which only
+// works if the CSS asks for inline-start/end rather than left/right. A single margin-left is enough to
+// strand one control on the wrong side, and it is invisible to anyone testing in English.
+{
+  const style = src.slice(src.indexOf('<style>'), src.indexOf('</style>'));
+  const inline = [...src.matchAll(/style="([^"]*)"/g)].map(m => m[1]).join(' ; ');
+  const PHYSICAL = [
+    [/margin-(left|right)\s*:/g, 'margin-inline-start / margin-inline-end'],
+    [/padding-(left|right)\s*:/g, 'padding-inline-start / padding-inline-end'],
+    [/border-(left|right)(-\w+)?\s*:/g, 'border-inline-start / border-inline-end'],
+    [/text-align\s*:\s*(left|right)(?![-\w])/g, 'text-align: start / end'],
+    [/(?<![\w-])(left|right)\s*:\s*(?!auto\s*;?\s*\/\/)/g, 'inset-inline-start / inset-inline-end'],
+  ];
+  for (const [where, blob] of [['the style block', style], ['an inline style attribute', inline]])
+    for (const [re, want] of PHYSICAL)
+      for (const hit of blob.matchAll(re))
+        fail.push(`${where} uses "${hit[0].trim()}" — the UI ships Arabic and Hebrew, so use ${want}`);
+  if (!/documentElement/.test(src) || !/\.dir\s*=/.test(src))
+    fail.push('nothing sets the document direction — an RTL pack would translate the words and leave the layout mirrored wrong');
+}
+
 // ---- 5. translator context: every key explained, every placeholder named, no stale entries ---------
 // These words are mostly ordinary English carrying a domain meaning (gauge, family, ground, matrix,
 // island, warp, moon, web), so a translator without context picks the wrong sense and the result reads

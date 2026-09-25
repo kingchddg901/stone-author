@@ -40,7 +40,7 @@
            outline: 1px solid var(--line); background: #1a1b20; touch-action: none; cursor: crosshair; }
   .row { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
   .grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-right: 2px; }
+  .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-inline-end: 2px; }
   button { font: inherit; font-size: 14px; background: var(--btn); color: var(--text);
            border: 1px solid var(--line); border-radius: 5px; padding: 6px 11px; cursor: pointer; }
   button[aria-pressed="true"] { background: var(--on); border-color: var(--on-line); }
@@ -86,7 +86,7 @@
   .lay.sel-on { background: rgba(138, 141, 224, 0.12); border-radius: 6px; }   /* row in the current selection */
   .lay .nm { font-size: 13px; color: var(--text); cursor: pointer; }
   .lay .tag { font: 500 10px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim); background: var(--btn);
-              border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; margin-right: 5px; letter-spacing: 0; }
+              border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; margin-inline-end: 5px; letter-spacing: 0; }
   .nm-edit { font: inherit; font-size: 13px; width: 100%; background: var(--btn); color: var(--text); border: 1px solid var(--on-line); border-radius: 4px; padding: 1px 4px; }
   .hidden-panel { display: grid; gap: 4px; width: 100%; margin-top: 8px; }
   .hidden-panel .lbl { font-size: 12px; color: var(--dim); }
@@ -110,7 +110,7 @@
   .selact input[type=color] { width: 30px; height: 24px; padding: 0; border: none; background: none; }
   .selact button { font-size: 12px; padding: 4px 8px; color: var(--dim); }
   .lay output { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
-                text-align: right; font-variant-numeric: tabular-nums; }
+                text-align: end; font-variant-numeric: tabular-nums; }
   .lay input[type=range] { width: 100%; accent-color: #8a8de0; }
 
   /* ANDROID EDGE GESTURE: the system back swipe owns roughly 24dp of each screen edge and takes the
@@ -131,7 +131,7 @@
       <button id="f-marquina" type="button" data-fam="marquina" data-i18n="fam.marquina">Nero Marquina</button>
       <button id="f-granite" type="button" data-fam="granite" data-i18n="fam.granite">Granite</button>
     </div>
-    <div class="grp" style="margin-left:auto">
+    <div class="grp" style="margin-inline-start:auto">
       <label for="lang" class="lbl" data-i18n="lbl.language">Language</label>
       <select id="lang" data-i18n-attr="aria-label=a11y.choose-the-interface-language" aria-label="Choose the interface language"></select>
     </div>
@@ -287,7 +287,7 @@
   <div class="grp" role="group" aria-label="Tile options" data-i18n-attr="aria-label=a11y.tile-options"><span class="lbl" data-i18n="lbl.layout">Layout</span>
     <button id="t-inorder" type="button" data-lay="order" aria-pressed="true" data-i18n="tool.inorder">In order</button>
     <button id="t-shuffle" type="button" data-lay="shuffle" aria-pressed="false" data-i18n="tool.shuffle">Shuffled</button>
-    <span class="lbl" style="margin-left:8px" data-i18n="lbl.units">Units</span>
+    <span class="lbl" style="margin-inline-start:8px" data-i18n="lbl.units">Units</span>
     <button id="u-in" type="button" data-unit="in" aria-pressed="true" data-i18n="unit.in">inches</button>
     <button id="u-mm" type="button" data-unit="mm" aria-pressed="false" data-i18n="unit.mm">mm</button>
     <button id="t-joints" type="button" aria-pressed="true" data-i18n="tool.joints">Show hairline joints</button>
@@ -862,11 +862,21 @@ window.SA_I18N = (() => {
           register(lang, await r.json()); return true; } catch (e) { return false; }
   }
 
+  // Arabic and Hebrew read right to left. Without this the strings translate and the LAYOUT does not:
+  // the rail, the labels and every row stay mirrored the wrong way round, which is worse than English.
+  // The canvas is deliberately untouched — a slab of stone is not a sentence and must never flip.
+  const RTL = new Set(['ar', 'he', 'fa', 'ur', 'yi', 'ps', 'dv']);
+  function applyDir() {
+    const el = document.documentElement;
+    el.lang = LANG;                                  // also gets hyphenation and screen readers right
+    el.dir = RTL.has(String(LANG).toLowerCase().split('-')[0]) ? 'rtl' : 'ltr';
+  }
+
   async function setLang(lang) {
     if (!PACKS[lang]) await load(lang);
     LANG = PACKS[lang] ? lang : 'en';
     try { localStorage.setItem(KEY, LANG); } catch (e) {}
-    apply(); listeners.forEach(f => f(LANG));
+    applyDir(); apply(); listeners.forEach(f => f(LANG));
     return LANG;
   }
 
@@ -885,7 +895,7 @@ window.SA_I18N = (() => {
   return { T, apply, register, load, setLang, onChange: f => listeners.add(f),
            get lang() { return LANG; }, get languages() { return Object.keys(PACKS); },
            nameOf: l => NAMES[l] || l, get missing() { return [...missing]; },
-           keys: () => Object.keys(PACKS.en), _init: () => { LANG = pick(); apply(); } };
+           keys: () => Object.keys(PACKS.en), _init: () => { LANG = pick(); applyDir(); apply(); }, get isRTL() { return RTL.has(String(LANG).toLowerCase().split('-')[0]); } };
 })();
 SA_I18N._init();   // the studio markup above is already parsed, so this paints the first frame translated
 </script>
