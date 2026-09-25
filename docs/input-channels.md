@@ -17,7 +17,7 @@ first tool that needs the whole set.
 | **path** | pointer position | where the gesture went |
 | **speed / dwell** | derived, `v = distance / Δt` | how long the gesture acted on each part of the slab |
 | **pressure** | stylus pressure, or an authored value | how strongly or closely it acted |
-| **tilt** | stylus lean + azimuth, or an authored value | its orientation, and any asymmetry that implies |
+| **tilt** | stylus lean + azimuth, or an authored value | its orientation, and any asymmetry that implies — **normalised against the user's learned rest grip, never raw degrees** (see below) |
 
 Every stroke carries all four. **A tool declares which it consumes** — a vein wants pressure for width and
 lean for edge softness; the magnet wants all four; a chip wants only the path. Unused channels cost
@@ -36,6 +36,61 @@ physical stylus ─┼─ stylus tilt ─────────┤
 mouse / touch ───┼─ explicit pressure ───┤
                  └─ explicit tilt ───────┘
 ```
+
+## Tilt is normalised, and the normalisation is part of the channel
+
+**The tilt channel is not device tilt.** Everyone holds a pen at their own angle, so an absolute reading
+is meaningless — what carries intent is *how far past your normal grip you leaned*. The studio already
+does this:
+
+```js
+smoothstep(9 / 90, 25 / 90, leanAverage − rest)
+```
+
+So the channel is a **0..1 "how far past your rest grip"**, ramping over roughly 9° to 25° beyond it —
+not an angle. Three consequences the adapter has to carry, not leave to each tool:
+
+- **Consumers receive the normalised value.** A tool asking for tilt must never see raw degrees.
+- **The authored mouse/touch value lives in the same 0..1 space.** If the explicit control is in degrees
+  while the stylus path is normalised, the two inputs stop producing the same event — which is the whole
+  point of the adapter.
+- **The baseline travels with the mark.** `rest` is already captured once at pointer-down and frozen onto
+  the mark, which is what keeps a stored slab's render reproducible. Keep that.
+
+### The learned grip does not settle, and it should
+
+Today the baseline is a **sliding window**, not a learned constant:
+
+| | today |
+|---|---|
+| source | samples taken **while the pen is down** (`gripLean`), capped to the last 900 |
+| ready at | **60 samples** |
+| before that | median of hover in the last 500 ms; failing that, `leanProfile` silently uses the median of the **stroke's own first 8 samples** |
+| persisted | **no** — every page load relearns from zero |
+
+That produces three problems, all of the same shape: *the same physical gesture means different things at
+different moments.*
+
+1. **It drifts all session.** A rolling median over the last 900 pen-down samples moves as you work — and
+   a long, deliberately leaned stroke shifts the very baseline it is being measured against.
+2. **It is contaminated by its own signal.** `gripLean` is collected *while drawing*, which is exactly
+   when the user is tilting on purpose. **Hover** is the cleaner source: the pen near the surface, not
+   being used for anything.
+3. **Early strokes are normalised against something else entirely.** Below 60 samples there are two
+   further fallbacks, and the last one uses the stroke itself as its own reference — so the first marks of
+   a session answer a different question than the rest.
+
+Renders stay safe, because `rest` is frozen onto each mark. It is the **authoring feel** that is not
+reproducible, which is harder to notice and more annoying to live with.
+
+What it should be instead — and it is cheap:
+
+- **Learn from hover**, not from pen-down.
+- **Settle and freeze.** A few hundred samples is right; at a stylus's 120–240 Hz that is one to three
+  seconds of hovering, so the cost is nothing. Once settled, stop moving it for the session.
+- **Persist it** to local storage, so a returning user is not relearned from zero every page load.
+- **Make it visible and resettable** — one value the user can see and clear if they change grip or device.
+  A learned constant the user cannot inspect is a magic number with extra steps.
 
 ## Why the adapter, and not per-tool reads
 
@@ -79,8 +134,11 @@ What is missing to make it a real adapter:
 2. **An azimuth extractor.** `leanProfile` covers lean; the magnet reads `q[5]` itself.
 3. **A source for mouse and touch.** There is no authored pressure or tilt anywhere. The magnet's fallback
    is a silent constant — `lean = 55/90`, axis along travel — which is a guess standing in for a control
-   the user never had.
-4. **A declaration.** Nothing states which channels a tool consumes; it is discoverable only by reading
+   the user never had. Its tilt value must be in the **normalised** 0..1 space, not degrees.
+4. **A settled, persisted rest grip**, learned from hover — see
+   [Tilt is normalised](#tilt-is-normalised-and-the-normalisation-is-part-of-the-channel). The magnet's
+   `lean = 55/90` fallback is a second, unrelated normalisation sitting beside the first.
+5. **A declaration.** Nothing states which channels a tool consumes; it is discoverable only by reading
    each tool.
 
 ## The order that makes sense
