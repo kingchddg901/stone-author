@@ -38,6 +38,23 @@ for (const m of markup.matchAll(/<[a-z0-9]+((?:[^<>"]|"[^"]*")*?)>/g)) {
   if (a && !SYM.test(a[1]) && !m[1].includes('data-i18n-attr')) fail.push(`unrouted attribute: ${JSON.stringify(a[1].slice(0, 60))}`);
 }
 
+// ---- 1c. the pack is PLAIN TEXT, except where the markup says otherwise ------------------------
+// A value bound with data-i18n is written with textContent, and one bound with data-i18n-attr goes
+// through setAttribute: neither resolves HTML entities, so "&amp;" renders as the five characters
+// &-a-m-p-;. It shipped that way on four section headings, and because .sec summaries are uppercased
+// by CSS it reached the screen as "CLOUDS &AMP; WARP". Only data-i18n-html keys may carry markup.
+{
+  const htmlKeys = new Set([...markup.matchAll(/data-i18n-html="([^"]+)"/g)].map(m => m[1]));
+  const ENT = /&(?:[a-zA-Z][a-zA-Z0-9]{1,9}|#\d{1,5}|#x[0-9a-fA-F]{1,5});/;
+  for (const [k, v] of Object.entries(EN)) {
+    if (htmlKeys.has(k)) continue;
+    for (const form of (v && typeof v === 'object') ? Object.values(v) : [v]) {
+      const hit = ENT.exec(String(form));
+      if (hit) fail.push(`${k}: holds the HTML entity "${hit[0]}" but is written as text, so it renders literally — use the character itself`);
+    }
+  }
+}
+
 // ---- 2. every key the app asks for exists -------------------------------------------------------
 const asked = new Set();
 for (const m of markup.matchAll(/data-i18n(?:-html)?="([^"]+)"/g)) asked.add(m[1]);
