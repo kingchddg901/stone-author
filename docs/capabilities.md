@@ -202,6 +202,14 @@ streamed one settles at ~4–5 and stays there, so streaming costs roughly **3×
 3.6 is low against both its neighbours and reads as machine state, not as a property of that width.) This
 is the measurement behind the friction in front of the large tiers: *"this is not fast"* is not a hedge.
 
+**Extreme names the machine it is known to finish on.** Beside its tickbox and again in its confirmation
+dialogue: *"Recommended: 16 GB of memory — the machine this tier is known to finish on. Below that it is
+untested, not unsupported."* Untested rather than unsupported because nobody has tested a boundary, and
+refusing a machine we have never tried would be a stronger claim than the evidence carries. Whatever
+`navigator.deviceMemory` says is printed beside it rather than used as a verdict, because it cannot be one:
+Gecko and WebKit do not implement it, and Blink builds disagree — the CI Chromium reports 8 where the
+desktop one reports 16.
+
 **What is known about anyone else's machine: almost nothing, and one number decides much of it.** The
 Extreme tier has been completed on exactly one machine — 16 GB, 12 cores, Windows — across four browsers.
 The [engine gate](gallery.md#three-engines-one-job) proves the path itself works in Blink, Gecko and
