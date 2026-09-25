@@ -137,9 +137,29 @@ walk through the full 0–360°. Then:
 - and it is **deterministic**, which removes mechanism 3 below — there is no random stream left to key to
   a sample index.
 
-Worth deciding whether the sweep advances per unit **length** along the path or per unit **time**. Length
-makes a slow, careful pass and a quick flick produce the same pattern; time makes dwell wind the axis
-further, which is more consistent with how the rest of the magnet already treats time.
+**Per length or per time?** Chris: *a simple d/t*. That settles it, because speed as the angular rate is
+not a third option — it **is** the per-length one:
+
+```
+dθ/dt = k·v = k·(ds/dt)   ⟹   dθ = k·ds   ⟹   θ = k·s
+```
+
+Drive the sweep at a rate proportional to speed and integrate it over time, and the axis angle comes out
+proportional to **arc length**. The two candidates collapse into one, and it is the right one on three
+counts:
+
+- **The pattern belongs to the path, not to the hand.** Draw the same path slowly or quickly and you get
+  the same scatter. Reproducible, and it keeps the swept target deterministic.
+- **Dwell does the physically correct thing.** At `v → 0` the axis stops advancing, so standing still
+  drives one angle *harder* rather than winding through others — which is exactly what holding a bar
+  magnet over filings does. It aligns them hard along one axis; it does not swirl them. My earlier note
+  arguing for the time-based version had this backwards.
+- **The channels stop overlapping.** Dwell already controls alignment *strength* through
+  `w = min(1, str · dt · 30 · …)`. Under per-length, dwell owns strength and travel owns angle — one
+  quantity each, composing cleanly, instead of both fighting over the same knob.
+
+So: **θ = k · s**, with `k` the rotational range per unit length, and the sign of `k` taken from the signed
+tilt channel.
 
 ### Dragging the magnet left-to-right already differs from right-to-left
 
