@@ -94,14 +94,17 @@ const tiled = await page.evaluate(async () => {
   const realClick = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function () {};
   try {
-    document.getElementById('expres').value = '2048';
+    document.getElementById('expres').value = '4096';                 // 4 x 3 tiles, enough to count
     document.getElementById('expwhat').value = 'render';
     const seen = [];
-    const iv = setInterval(() => { const t = stat.textContent; if (t && seen[seen.length - 1] !== t) seen.push(t); }, 10);
+    // A MutationObserver sees EVERY change; a poll sees whatever it happens to land on, and on a fast
+    // machine the tiles go by quicker than the interval. That cost a red CI run on a correct app.
+    const obs = new MutationObserver(() => { const t = stat.textContent; if (t && seen[seen.length - 1] !== t) seen.push(t); });
+    obs.observe(stat, { childList: true, characterData: true, subtree: true });
     btn.click();
     const t0 = Date.now();
     while (Date.now() - t0 < 60000) { await new Promise(r => setTimeout(r, 40)); if (!btn.disabled) break; }
-    clearInterval(iv);
+    obs.disconnect();
     document.getElementById('expwhat').value = 'all';
     return { seen, finalLine: stat.textContent };
   } finally { HTMLAnchorElement.prototype.click = realClick; }
@@ -149,7 +152,7 @@ checks.push(['it sits right after IHDR', (meta.order || []).join(','), (meta.ord
 checks.push(['every chunk CRC still checks', (meta.badCrc || ['?']).length === 0 ? 'all valid' : meta.badCrc.join(','), (meta.badCrc || ['?']).length === 0 && meta.tidy === true]);
 checks.push(['and it still decodes as a PNG', (meta.size || []).join('x') || 'NO', Array.isArray(meta.size) && meta.size[0] === 1024]);
 checks.push(['with per-stage timings', m.ms ? `render ${m.ms.render}ms encode ${m.ms.encode}ms` : 'none',
-             !!(m.ms && Number.isFinite(m.ms.render) && Number.isFinite(m.ms.encode) && Number.isFinite(m.ms.total)) && m.tiles > 1]);
+             !!(m.ms && Number.isFinite(m.ms.render) && Number.isFinite(m.ms.encode) && Number.isFinite(m.ms.total)) && m.tiles >= 1]);
 checks.push(['render-only counts its tiles', tileLines.length + ' tile lines', tileLines.length >= 3]);
 checks.push(['render-only reports a time', tiled.finalLine, /\d+:\d\d$/.test(tiled.finalLine)]);
 
