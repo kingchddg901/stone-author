@@ -4,7 +4,8 @@ What this system is and how its parts fit — the documentation of the code. The
 deliberately *not* here; it lives in the [README](../README.md). Companion docs:
 [`functions.md`](functions.md) (the function reference), [`colour-layer.md`](colour-layer.md) (the
 colour engine), [`stone-generator.md`](stone-generator.md) (the Python/panel generator, rule by
-rule), [`i18n.md`](i18n.md) (translating the studio), [`moon.md`](moon.md) (Moon as a moving-body event —
+rule), [`i18n.md`](i18n.md) (translating the studio), [`input-channels.md`](input-channels.md) (one
+adapter turning a stroke into named channels) and [`moon.md`](moon.md) (Moon as a moving-body event — both
 designed, not yet implemented).
 
 The shared spine, in one line: **colour routes, greyscale stores** — the generator emits

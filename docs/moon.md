@@ -116,6 +116,12 @@ mouse / touch ───┼─ explicit pressure ───┤
 **Same event model, different input adapters.** That separation is the architectural core and should
 survive any rewrite of this note.
 
+**And it is not Moon's.** The adapter is general: one thing turns a raw stroke into named channels, and
+each tool consumes all of them, some, or none. A vein wants pressure and lean; the magnet wants all four;
+a chip wants only the path. Moon is simply the first tool that needs the complete set and has none of it,
+which is why the idea surfaced here — but it belongs at the input layer, shared. It is written up on its
+own terms in [`input-channels.md`](input-channels.md), including the two extractors that already exist.
+
 It also means a recorded Moon is not merely "a warped result". It is a **replayable semantic event**
 carrying a trajectory and its changing parameters — which is what makes replaying Moon history possible
 later. This design comes first: it is how that history gets authored in the first place.
@@ -153,10 +159,11 @@ So the work is, in order:
 2. **Derive speed and dwell** from consecutive sample timestamps, as `applyMagnet` already does.
 3. **Let pressure vary along the stroke**, replacing the constant `st`.
 4. **Let tilt make the field asymmetric**, replacing the radially symmetric `f = 1 − d²/R²`.
-5. **Add the explicit channel controls** for mouse and touch — and note this is a gap in the *Magnet* too,
-   which currently falls back to a silent default (`lean = 55/90`, axis along travel) rather than to
-   anything the user authored. The adapter belongs at the input layer, shared by both tools, not inside
-   `applyMoon`.
+5. **Add the explicit channel controls** for mouse and touch — but not here. That is the shared input
+   adapter, and the same gap exists in the Magnet, which falls back to a silent default (`lean = 55/90`,
+   axis along travel) rather than to anything the user authored. See
+   [`input-channels.md`](input-channels.md); its steps 1 and 2 are prerequisites for this one, and unlike
+   this one they change nothing on screen.
 
 Step 1 is the one that unblocks the rest, and it is also the one that changes existing renders: a Moon
 mark authored before this would begin honouring timing it was drawn with but never expressed. Worth a
