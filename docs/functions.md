@@ -431,3 +431,42 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
 - `exportAll(W)` — assemble `render.png`, `masks/{base,major,minor,micro,web}.png`,
   `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, and
   `slab.ora` into one zip and hand it to the viewer. *(2382)*
+
+## Large renders — what a canvas can hold, and what to do past it
+
+Above `STRIP_FROM` (16384) the picture is never allocated whole: it is rendered as horizontal bands and
+written straight into a PNG's IDAT stream, so peak memory is one band rather than one image. Everything
+here answers a question about the machine by **measuring it**, because a canvas past a cap does not throw —
+it reports the size asked for and leaves the far end unwritten. See
+[`capabilities.md`](capabilities.md) for the measured ladder and what it costs.
+
+- `canvasFits(w, h, n)` — can this machine hold `n` canvases of `w × h`? Writes the **far corner** and
+  reads it back, because a silently clamped canvas passes every other test. *(4024)*
+- `exportCeiling()` — the direct export's ceiling: probes 2048→16384 for `EXP_PEAK` (2) canvases, cached
+  per device signature. This is the ceiling of the *non-streamed* path only. *(4039)*
+- `sideCap()` — the widest single canvas this **build** can allocate, by bisecting `1 × N`, cached. Not a
+  constant: CI measures Gecko and WebKit clamping to 32767 while a desktop Firefox writes a true 65535, so
+  the cap belongs to the build rather than the engine. *(4061)*
+- `applyExportCeiling()` — disables the plain sizes past `exportCeiling()`, leaves the tier sizes to
+  `applyTiers()`, and re-runs it so the ceiling line matches the armed tiers. *(4077)*
+- `stripPlan(W, opts)` — band geometry: band height from a 900 MB budget (reduced by
+  `navigator.deviceMemory`, which is Chromium-only), bleed capped at 256, then **probed** with
+  `canvasFits` and halved until a band actually holds a written pixel. *(2939)*
+- `renderStrip(W, y0, h, bleed, wins)` — one band with bleed above and below, painted at the full-slab
+  transform with a tile offset so global gradients and the specular hotspot land in image space. *(2959)*
+- `pngChunk(type, data)` / `pngTextChunk(keyword, text)` — a self-framed PNG chunk; the `tEXt` chunk that
+  carries provenance. *(4469 / 4476)*
+- `renderStreamedPNG(W, meta, onStrip, opts)` — the strip engine: band → filter byte 0 → a
+  `CompressionStream('deflate')`, whose output is exactly the zlib stream IDAT wants. Refuses past
+  `sideCap()`, and **refuses if the scanline byte count does not match the plan**, because a band written
+  twice or skipped is invisible to every decoder. Returns `{blob, plan, msRender, bytes}`. *(4493)*
+- `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
+  family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(4537)*
+- `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
+  never the `close` event, which was measured never firing in an embedded Chromium. *(4962)*
+- `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
+  render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
+  actually on offer, not a probe's answer to a different question. *(4984)*
+- `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(5034)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(5070)*

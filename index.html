@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stone Author</title>
+<meta name="description" content="Draw where the lines go; the stone happens. A single-file marble studio that runs entirely in your browser. Public domain.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  :root {
+    --ink: #e8e6e2; --dim: #9a968f; --ground: #0e0f11; --panel: #16181c;
+    --edge: #262a31; --gold: #d99a1e; --link: #8fb3ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--ground); color: var(--ink); }
+  body { font: 16px/1.6 "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 48px 20px 64px; }
+  h1 { font: 500 34px/1.15 "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--gold); font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; letter-spacing: 0.04em; margin: 0 0 28px; }
+  p { max-width: 62ch; }
+  .lede { font-size: 18px; color: var(--ink); }
+  .muted { color: var(--dim); }
+  figure { margin: 32px 0; }
+  img { display: block; width: 100%; height: auto; border: 1px solid var(--edge); border-radius: 3px; background: #000; }
+  figcaption { color: var(--dim); font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; margin-top: 8px; }
+  .grp { display: flex; flex-wrap: wrap; gap: 10px; margin: 28px 0 8px; }
+  a.btn {
+    display: inline-block; padding: 11px 18px; border: 1px solid var(--edge); border-radius: 3px;
+    background: var(--panel); color: var(--ink); text-decoration: none; font-weight: 500;
+  }
+  a.btn.go { border-color: #6a5a24; background: #241d0d; color: #f0d79a; }
+  a.btn:hover { border-color: var(--gold); }
+  a { color: var(--link); }
+  ul { max-width: 62ch; padding-left: 20px; }
+  li { margin: 6px 0; }
+  footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--edge); color: var(--dim); font-size: 14px; }
+  code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; color: var(--gold); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Stone Author</h1>
+  <p class="sub">a marble studio in one HTML file</p>
+
+  <p class="lede">You draw where the lines go. The stone happens.</p>
+
+  <p>It runs entirely in your browser — no install, no account, no upload. The slab is the document: a
+  <code>.json</code> file that renders to the same picture every time, at any size from a thumbnail to
+  65,535 pixels wide.</p>
+
+  <div class="grp">
+    <a class="btn go" href="app/stone-author.html">Open the studio</a>
+    <a class="btn" href="gallery/">Gallery</a>
+    <a class="btn" href="https://github.com/kingchddg901/stone-author">Source</a>
+  </div>
+
+  <figure>
+    <img src="gallery/img/daylight.png" alt="A warped gold-and-white fracture network on near-black granite, scorched at the junction.">
+    <figcaption>African St Laurent, warped — one of four heroes in the gallery, rendered from its slab.</figcaption>
+  </figure>
+
+  <ul>
+    <li>Veins, branches, webs, stylolites, breccia, drusy, granite speck fields — each one a mark you place,
+      not a preset you pick.</li>
+    <li>A coat tier over the top: subsurface glow, specular, one movable light, and a lens that refracts.</li>
+    <li>Black light and any other spectrum, with per-layer emission — the same slab under a different lamp.</li>
+    <li>Exports the picture, the coverage masks, vein id and <em>t</em> maps, an <code>.ora</code> with a
+      layer per authoring layer, the vectors as SVG, and the slab itself.</li>
+  </ul>
+
+  <p class="muted">Past 16,384 pixels the export streams the picture in bands straight into a PNG, so the
+  whole image never exists at once. The largest measured: 65,535 × 40,959 — 2.68 gigapixels — written in a
+  browser tab in eleven minutes, and rendered twice to identical bytes.</p>
+
+  <footer>
+    Public domain under <a href="LICENSE">CC0 1.0</a> — the studio, the gallery slabs and the renders.
+    Use them for anything, including commercially, with no attribution required.
+  </footer>
+
+</div>
+</body>
+</html>
