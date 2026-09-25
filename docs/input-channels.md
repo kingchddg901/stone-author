@@ -205,6 +205,31 @@ And the gaussian kick is now clearly wrong for a reason better than "it preserve
 **simulating the appearance of disorder instead of the thing that causes it.** Ask what physically
 happened and the special case collapses into one parameter on the mechanism that was already there.
 
+#### Simulating input, for testing the model
+
+The channels can be driven synthetically, which is what makes the rotating-magnet model testable one
+variable at a time — a hand cannot hold speed constant while sweeping `ω`. A `PointerEvent` with
+`pointerType: 'pen'` carries `pressure`, `tiltX` and `tiltY`, and the studio reads them through exactly
+the same path as real hardware. Verified end to end against the live build: a synthetic stroke committed a
+magnet mark whose samples carried the pressure ramp (0.200 → 0.900) and the tilt sweep as sent, and the
+specks moved.
+
+Two things a simulator must get right, both found by getting them wrong:
+
+- **Pace the events in real time.** Dispatching a stroke in a tight loop gives `dt ≈ 0.2 ms` — about 80×
+  too fast — and since `w` carries `dt`, the magnet barely acts. `await` one frame between samples;
+  ~17 ms reproduces 60 Hz.
+- **Hover before pressing.** `restLean()` needs either 60 pen-down samples or five hover samples within
+  500 ms, so a stroke that begins at pointer-down has no grip baseline to normalise against.
+
+**And a finding that measurement turned up, where reading the code had only implied it:** the magnet mark
+commits as `{kind, seed, samples, tgt}` — **no `rest`**. Confirmed by inspecting a committed mark:
+`'rest' in mark === false`. So `applyMagnet` reads `q[4]` **raw**, and the magnet is the one tool that
+never rest-normalises its tilt. Two people with different natural grips get different magnet behaviour
+from the same gesture, and the same person changing grip changes the tool. That is the "second, unrelated
+normalisation" noted above, now measured rather than inferred — and folding it into the shared adapter
+fixes it as a side-effect.
+
 #### While we are here: the pen's samples are being thrown away
 
 `getCoalescedEvents()` appears **nowhere** in the studio. Browsers coalesce pointer moves down to roughly
