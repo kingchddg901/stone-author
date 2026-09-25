@@ -63,27 +63,45 @@ not an angle. Three consequences the adapter has to carry, not leave to each too
 them apart — even though the information is right there, since a stylus reports lean *and* azimuth, and
 `leanProfile` simply never looks at azimuth.
 
-The tempting fix is to make the channel `-1..+1`. That is right for some consumers and **wrong for
-others**, which is the useful finding:
+A first pass at this claimed the sign was useless or harmful for two of the three consumers. **That was
+wrong** — every one of them has a real use for it, and the uses are more interesting than "softer":
 
-| consumer | what it wants | a signed channel would… |
-|---|---|---|
-| vein edge softness | **magnitude** — leaning either way should soften equally | break it: one direction becomes *negative* softness, which is meaningless |
-| Moon's asymmetric field | **sign** — which side the body passed on | be exactly right |
-| Magnet axis | **the full 2D direction** — a sign cannot express a compass bearing | be lossy |
+| consumer | what the sign buys it |
+|---|---|
+| vein edge softness | **throws the shade the other way.** Today lean only *softens*, symmetrically. Signed, the soft shoulder goes to the side you lean toward and the other edge stays crisp — which is how a chisel or a broad nib actually behaves. The `halo → shoulder → main` paint order already has the shoulder to offset. |
+| Moon's asymmetric field | which side the body passed on. |
+| magnet | **flips the polarity of alignment.** With one caveat below. |
 
-So the answer is not to replace the scalar but to let tilt be a small structured channel, and let each tool
-take the part it needs — the same "all of it or part of it" idea, one level down:
+The magnet caveat is worth stating precisely, because the obvious reading does not work. Its comb term
+uses **doubled angles**:
+
+```js
+c2 = Math.cos(2 * Math.atan2(ay, ax)),  s2 = Math.sin(2 * Math.atan2(ay, ax))
+```
+
+Doubling is what makes a speck *axial* — "a speck has no front", so θ and θ+180° are the same thing.
+Which means negating the tilt axis, `(ax, ay) → (−ax, −ay)`, is a **mathematical no-op**: it shifts the
+angle by π, and doubled that is 2π. So a sign cannot flip the magnet's *axis*.
+
+But the magnet already has a `×−1` that does flip its behaviour — `sign = M.mag`, the Align/Scatter
+toggle, where positive rotates specks toward the field and negative randomises them. **That** is the
+polarity a signed tilt could drive: lean one way to comb the specks into order, the other way to break the
+order up, instead of reaching for a button. Same idea, different term.
+
+So the reason to keep tilt structured is not that some tools cannot use the sign. It is that **azimuth
+carries strictly more than the sign does** — a bearing is not recoverable from ±1 — and different tools
+want the same quantity at different resolutions:
 
 ```
 tilt = {
-  amount  : 0 .. 1        magnitude past the rest grip   (veins)
-  signed  : -1 .. +1      which side of the reference    (Moon)
-  azimuth : radians       the full bearing               (Magnet)
+  amount  : 0 .. 1        magnitude past the rest grip   — how far
+  signed  : -1 .. +1      which side of the reference    — which way
+  azimuth : radians       the full bearing               — exactly where
 }
 ```
 
-`amount` stays exactly what ships today, so nothing that reads tilt now has to change.
+`amount` stays exactly what ships today, so nothing that reads tilt now has to change — and a tool can
+move up a resolution when it wants one, without the adapter growing a second channel.
 
 **Signed against what, though?** Three defensible references, and they are not interchangeable:
 
