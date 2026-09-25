@@ -58,6 +58,11 @@
   .stat { font: 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
           font-variant-numeric: tabular-nums; }
   .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 68ch; }
+  /* Export progress. A big export blocks the main thread for minutes, and the only previous signal was
+     a hint that removes itself after 2.6 s, so the page read as dead. */
+  .expprog { display: grid; gap: 6px; margin-top: 10px; }
+  .expbar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .expbar > i { display: block; height: 100%; width: 0; background: var(--on-line); transition: width .15s linear; }
   .note b { color: var(--text); font-weight: 500; }
   .layers { display: grid; gap: 5px; width: 100%; }
   .lay { display: grid; grid-template-columns: 16px 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch 18px;
@@ -375,6 +380,7 @@
       <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option></select>
       <span class="stat" id="expcap"></span>
       <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
+    <div class="expprog" id="expprog" hidden><div class="expbar"><i id="expfill"></i></div><span class="stat" id="expstat"></span></div>
   </div></details>
   <details class="sec"><summary data-i18n="sec.how-the-tools-read">How the tools read</summary><div class="body">
   <p class="note" id="fwd" data-i18n="btn.fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
@@ -473,6 +479,9 @@ window.SA_I18N = (() => {
   "cal.saved": "Saved for this device.",
   "cal.too-short": "Too short to measure — draw right across the slab.",
   "exp.ceiling": "this device tops out at {px}px",
+  "exp.packing": "Packing the archive…",
+  "exp.prog": "Rendering {done} of {total} · {px}px",
+  "exp.saving": "Saving the file…",
   "exp.too-big": "This device cannot allocate a canvas that large. Open the studio on a desktop for this size.",
   "fam.calacatta": "Calacatta",
   "fam.carrara": "Carrara",
@@ -504,10 +513,6 @@ window.SA_I18N = (() => {
   "hint.exported-files": {
     "one": "Exported {n} file.",
     "other": "Exported {n} files."
-  },
-  "hint.exporting-encode": {
-    "one": "Exporting… encoding {n} image in parallel…",
-    "other": "Exporting… encoding {n} images in parallel…"
   },
   "hint.exporting-render": "Exporting… rendering {w}px…",
   "hint.gravity-moves-specks-switch-to-granite": "Gravity moves specks. Switch to Granite, or pour some first.",
@@ -4288,8 +4293,23 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return zipStore(files).arrayBuffer().then(a => new Uint8Array(a));
   }
   let exporting = false;
+  // A big export blocks the main thread for minutes. The only signal used to be a hint that removes
+  // itself after 2.6 s, so for the rest of the run the page was indistinguishable from a dead one.
+  function expStat(msg, frac) {
+    const w = document.getElementById('expprog'); if (!w) return;
+    w.hidden = msg == null;
+    if (msg == null) return;
+    document.getElementById('expstat').textContent = msg;
+    document.getElementById('expfill').style.width = Math.round(100 * Math.min(1, Math.max(0, frac || 0))) + '%';
+  }
+  // setTimeout, NOT requestAnimationFrame: rAF stops firing when the window is backgrounded, and an
+  // export that deadlocks because you looked at something else is worse than one you cannot watch.
+  const breathe = () => new Promise(r => setTimeout(r, 0));
+
   async function exportAll(W) {
-    if (exporting) return; exporting = true; hint(TR('hint.exporting-render', { w: W }));
+    if (exporting) return; exporting = true;
+    const btn = document.getElementById('export'); btn.disabled = true;
+    hint(TR('hint.exporting-render', { w: W }));
     try {
       const te = new TextEncoder(), oW = Math.min(W, 2048), oOrder = ['base', 'web', 'micro', 'minor', 'major'];
       // Built in PAIRS and freed as we go. The old "render everything first" batch held EIGHT full-size
@@ -4305,13 +4325,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         () => expCompleted(oW), ...oOrder.map(b => () => expBucket(b, oW)),
       ];
       const names = ['render.png', 'masks/base.png', 'masks/major.png', 'masks/minor.png', 'masks/micro.png', 'masks/web.png', 'rich/vein-ids.png', 'rich/vein-t.png'];
-      hint(TR('hint.exporting-encode', { n: makers.length }));
-      const bytes = [];
+      const bytes = [], steps = makers.length + 2;          // + packing + saving
       for (let i = 0; i < makers.length; i += EXP_PEAK) {
+        expStat(TR('exp.prog', { done: i + 1, total: makers.length, px: W }), i / steps);
+        await breathe();                                     // paint the line BEFORE we block on the render
         const group = makers.slice(i, i + EXP_PEAK).map(f => f());
         for (const b of await encodePNGs(group)) bytes.push(b);    // still parallel within the pair
         for (const c of group) { c.width = 1; c.height = 1; }      // hand it back before building the next
       }
+      expStat(TR('exp.packing'), makers.length / steps); await breathe();
       const files = [];
       for (let i = 0; i < names.length; i++) files.push({ name: names[i], data: bytes[i] });
       files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(idt.legend)) });
@@ -4320,12 +4342,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       files.push({ name: 'source.json', data: te.encode(JSON.stringify(serialize())) });
       files.push({ name: 'slab.ora', data: await buildOraFrom(bytes[8], oOrder.map((b, i) => bytes[9 + i]), oOrder, oW) });
       const zip = zipStore(files);
+      expStat(TR('exp.saving'), (makers.length + 1) / steps); await breathe();
       const dl = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
       if (dl) await dl.save({ filename: 'stone-export.zip', data: zip });
       else download('stone-export.zip', zip);
       hint(TR('hint.exported-files', { n: files.length }));
     } catch (e) { hint(TR('hint.export-failed-msg', { err: (e && e.message || e) })); }
-    exporting = false;
+    finally { expStat(null); btn.disabled = false; exporting = false; }
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });

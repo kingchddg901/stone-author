@@ -250,6 +250,20 @@
   },
   "where": "beside the export width menu in the File section"
  },
+ "exp.packing": {
+  "where": "progress line under the File section buttons, once every image is rendered"
+ },
+ "exp.prog": {
+  "placeholders": {
+   "done": "which image is being rendered now, counting from 1",
+   "px": "the export width in pixels, e.g. 16384",
+   "total": "how many images the export contains"
+  },
+  "where": "progress line under the File section buttons, while an export is running"
+ },
+ "exp.saving": {
+  "where": "progress line under the File section buttons, as the archive is handed to the browser"
+ },
  "exp.too-big": {
   "where": "tooltip on an export width this device cannot manage, in the File section"
  },
@@ -359,13 +373,6 @@
   "where": "transient hint line under the tool palette"
  },
  "hint.exported-files": {
-  "placeholders": {
-   "n": "a count — supply your language's plural forms as {one,few,many,other} as needed"
-  },
-  "plural": "a count string: supply the plural forms your language needs",
-  "where": "transient hint line under the tool palette"
- },
- "hint.exporting-encode": {
   "placeholders": {
    "n": "a count — supply your language's plural forms as {one,few,many,other} as needed"
   },

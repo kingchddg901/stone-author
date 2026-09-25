@@ -1,12 +1,16 @@
 name: browser harness
 
-# The two gates that need a real browser, in one pinned Playwright/Chromium container.
+# The three gates that need a real browser, in one pinned Playwright/Chromium container.
 #
 # GALLERY SELF-DETERMINISM — renders every hero from its slab (gallery/reference.json) twice from a fresh
 # load and requires byte-identical pixels, so the render is a pure function of the slab in this
 # environment. A cross-build REFERENCE match against the committed pixelSHA256 is deliberately NOT gated:
 # sub-pixel canvas AA varies between Chromium builds, so the picture is identical but the bytes are not
 # (that comparison was dropped from harness/render.mjs).
+#
+# EXPORT PROGRESS — runs a small export and requires the status line to keep changing and the button to
+# be held disabled. Added after a big export was found to report itself only through a hint that removes
+# itself after 2.6 s, leaving minutes of work looking like a hung page.
 #
 # PEN CALIBRATION — hands the calibrator a synthetic pen of known rate, pressure, tilt and speed and
 # requires it to report those numbers back. Added after the calibrator measured a 480 Hz pen as 3333 Hz,
@@ -46,3 +50,5 @@ jobs:
         run: node harness/render.mjs
       - name: Calibrate a synthetic pen and check the studio recovers it
         run: node harness/calibration.mjs
+      - name: Check an export says it is working for as long as it works
+        run: node harness/export-progress.mjs
