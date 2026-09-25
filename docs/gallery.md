@@ -24,6 +24,25 @@ authored marble idea shown four ways — **pristine → subtly wrong → screami
 | 03 | **psyker** | `slabs/warped.json` | the *same* slab at full warp, recoloured into emission under a −1 (UV/psyker) spectrum, with a **reality window** at the burn — daylight stone showing through the screaming |
 | 04 | **chaos** | `slabs/warped.json` | the same slab, same disc, **mask inverted** — the warp acts *only* inside the disc, so the stone around it holds still in daylight while the window looks out on the −1 spectrum. The 03 relationship turned inside out |
 
+### `slabs/Hero_Psyker.json` — the psyker hero as a standalone slab
+
+Heroes 02–04 are `warped.json` plus settings the harness applies at render time, so the psyker look does
+not exist as a file you can simply **Load**. `Hero_Psyker.json` is that file: the same slab with the UV
+palette baked into `OVR_uv` (each entry stored against spectrum −1, `lay:minor` deliberately absent so the
+minors stay dark) and the reality window added as a real `mask` mark. `moonStrength` needed no change —
+`warped.json` already carries 2.15, which means the harness's override is a no-op for 03 and 04 and only
+ever mattered for 02.
+
+**Load it, then press Black light.** A slab always opens in daylight — `uvMode`/`lightSpectrum`/`spotOn`
+are deliberately not persisted — so the palette arrives with the file but the light does not. Verified by
+ablation: at spectrum −1 this slab renders 2,653 saturated pixels of 16,892 sampled (cyan 1072, orange 911,
+green 290, magenta 194) while `warped.json` at the *same* spectrum renders **0 lit, 0 saturated** — the
+difference is entirely the baked palette.
+
+The gallery image also has a **burn** pass applied after the render (radial multiply + lighter at the
+junction, from `reference.json`). That is a post-process on the exported canvas, not part of any slab, so
+the preset does not carry it.
+
 Daylight and psyker are one geometry under two lights: at rest it reads near-true; under the other
 spectrum the distortion it was always carrying is exposed. Committed PNGs live in `gallery/img/` at
 **1600 × 1000** (the slab keeps its 8×5 ratio); the page notes the same slabs re-render up to ~168 MP.
