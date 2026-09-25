@@ -203,11 +203,34 @@ length version, because samples arrive on a time schedule:
 theta += k * dt;        // one multiply. no hypot, no division, nothing.
 ```
 
-**One trap, and it is a real one.** "Per sample" and "per time" are only the same thing at a fixed rate.
-If the step is literally *per sample* — `theta += delta` once per event — the sweep rate becomes a
-property of the **hardware**: a 240 Hz stylus winds four times faster than a 60 Hz one for the identical
-gesture, and the same slab drawn on two devices comes out different. Use `dt`, clamped as `applyMagnet`
-already clamps it. Then it is device-independent and just as cheap.
+This was first written up as a *trap* — that a literal per-sample step makes the sweep a property of the
+hardware, since a 240 Hz stylus would wind four times faster than a 60 Hz one. Chris: **it is just a
+calibration.** Right, and the numbers are clean — 6°/sample at 60 Hz is 360°/s, so 120 Hz wants 3°/sample
+for the same rate. Calibrate the per-sample step from the device rate and per-sample *is* per-time.
+
+That reframing is better than the original, because it exposes a trade that "just use `dt`" hides:
+
+| | per-sample, calibrated | raw `dt` |
+|---|---|---|
+| timestamp jitter | **immune** — the step is a constant | **inherits it** — and timestamps are the noisiest thing in the record, which is why `applyMagnet` clamps `dt` to `[0, 0.05]` |
+| dropped or coalesced samples | **under-advances** — the sweep silently falls behind the gesture | **correct** — the gap is in the timestamp |
+| cost | one add | one multiply |
+
+So neither pure form is right: a constant is smooth but lies when the rate wobbles; raw `dt` is honest but
+noisy. The synthesis is to **calibrate per stroke** — take the *median* `dt` across the stroke's samples
+and use that as the constant:
+
+```js
+const step = k * med(dts);      // one calibrated constant per stroke
+```
+
+Median because a few stalls should not move it, which is the same reason `restLean()` already uses `med()`
+for the grip baseline. That gets the smoothness of a constant, the device-independence of `dt`, and
+robustness against the frame the browser dropped — and it costs one pass over the samples that the stroke
+is already being walked for.
+
+A long stall is then the one case left over, and it should probably be treated as what it is — the user
+stopped — rather than as a very slow sample.
 
 **What it changes.** Time and length are not variations on one idea, they are different instruments:
 
@@ -225,7 +248,7 @@ rotate). For a **scatter** control it is arguably exactly right, and it matches 
 *a fairly quick walk through 0–359* is a rate over time, not over distance.
 
 Since Scatter is being folded into Align as one rate, the choice decides both. Recommendation: **θ = k·dt**
-— it is the cheapest, it is device-independent once `dt` is used rather than a sample count, and
+— cheapest, device-independent once calibrated per stroke (above), and
 grind-in-place is a gesture worth having. The cost is giving up "the same path always scatters the same
 way", and that is Chris's call to make rather than mine.
 
