@@ -20,3 +20,6 @@ harness/dist/
 _check.js
 *-test.html
 *-backup.html
+
+# private, local-only: the big-render toolkit lives here and this repo is public
+.claude/
