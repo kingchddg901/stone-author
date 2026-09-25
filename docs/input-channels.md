@@ -101,6 +101,47 @@ A swirl instead of a sunburst. Worth trying once the channel exists.
 (Not to be confused with `sign = M.mag`, the existing Align/Scatter toggle, which is a separate `×−1`
 deciding whether specks rotate toward the field or are randomised.)
 
+### Dragging the magnet left-to-right already differs from right-to-left
+
+Observed by Chris, and it is real — the same path drawn in opposite directions gives visibly different
+stone. Which looks like it contradicts the no-op above, and does not: **reversing a stroke is not negating
+an axis.** Three separate mechanisms produce it, and they are worth telling apart because only one of them
+is a design decision.
+
+**1. The effect accumulates in stroke order.** Each sample rotates nearby specks *toward* the field by a
+weight `w`, and the target changes along the stroke. Iterative convergence toward a moving target is
+order-dependent: a speck reached early and nudged repeatedly does not end where the same speck reached
+late does. This is the big one, and it is **correct**. A body that passed left-to-right *is* a different
+event from one that passed right-to-left, and the whole Moon design rests on exactly that. The magnet is
+already demonstrating the principle the rest of this document is arguing for.
+
+**2. The heading estimator is seeded pointing right.** When there is no tilt to read — mouse, finger — the
+axis is taken from the direction of travel, smoothed:
+
+```js
+let hx = 1, hy = 0;                                    // ← seeded along +X
+hx = hx * 0.7 + dx / d * 0.3;                          // exponential moving average
+```
+
+A left-to-right drag begins already aligned with its own heading. A right-to-left one has to converge from
+`(1, 0)` to `(−1, 0)` — and on the way it passes through `hx ≈ 0`, where the vector is near zero-length
+and `Math.hypot(hx, hy) || 1` quietly falls back to dividing by 1 instead of normalising. So the first
+stretch of a leftward stroke is combed by a heading that is still turning around, and briefly by one that
+is barely a direction at all. That is **accidental**, not modelled. It only bites on the no-tilt path.
+
+**3. The scatter stream is keyed to sample index.** `sub(m.seed, 60, i)` draws its randomness from the
+sample's position in the stroke, so reversing the stroke gives the same physical location a different
+draw. Irrelevant under Align, which never uses `g`; under **Scatter** it changes the result outright. Also
+accidental.
+
+So the direction-dependence should be *kept* — and its accidental half fixed, so that what survives is the
+part that means something. Seed the heading from the stroke's first real motion rather than from `+X`, and
+key the scatter stream to something spatial rather than to `i`. Then a reversed drag differs because the
+encounter genuinely ran the other way, which is the answer the model should be giving.
+
+A cheap way to tell mechanism 1 from mechanism 2, if it matters: repeat the test **with a pen**. With tilt
+present the heading estimator is never consulted, so any remaining difference is pure stroke order.
+
 So the reason to keep tilt structured is not that some tools cannot use the sign. It is that **azimuth
 carries strictly more than the sign does** — a bearing is not recoverable from ±1 — and different tools
 want the same quantity at different resolutions:
