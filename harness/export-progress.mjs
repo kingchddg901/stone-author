@@ -64,7 +64,8 @@ const got = await page.evaluate(async (WIDTH) => {
     }
     clearInterval(iv);
     return { seen, fills, everDisabled, enabledAfter: !btn.disabled,
-             hiddenAfter: document.getElementById('expprog').hidden };
+             finalLine: stat.textContent, clock: document.getElementById('expclock').textContent,
+             stillShown: !document.getElementById('expprog').hidden };
   } finally { HTMLAnchorElement.prototype.click = origClick; }
 }, WIDTH);
 
@@ -78,8 +79,79 @@ const checks = [
   ['the bar actually advances', (pcts[pcts.length - 1] || 0) + '%', (pcts[pcts.length - 1] || 0) >= 50],
   ['Export was disabled while it ran', got.everDisabled, got.everDisabled === true],
   ['Export is usable again afterwards', got.enabledAfter, got.enabledAfter === true],
-  ['the bar is put away afterwards', got.hiddenAfter, got.hiddenAfter === true],
+  // The finished line STAYS: it is the record of what was last exported and how long it took, which is
+  // the number you compare against after touching the renderer.
+  ['it leaves the finished export up', got.finalLine, got.stillShown === true && /\d+:\d\d$/.test(got.finalLine)],
+  ['and a wall-clock time with it', got.clock, /^\d+:\d\d$/.test(got.clock)],
 ];
+
+// --- render-only must count TILES, not sit on one step -------------------------------------------
+// For a render-only export the single image IS the whole job, so "Rendering 1 of 1" is a progress bar
+// with one tick -- and at 16384 that one tick lasts about two minutes on a phone, which reads as a hang.
+// renderTiledStepped runs the same tile closures in the same order with a yield between them.
+const tiled = await page.evaluate(async () => {
+  const btn = document.getElementById('export'), stat = document.getElementById('expstat');
+  const realClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () {};
+  try {
+    document.getElementById('expres').value = '2048';
+    document.getElementById('expwhat').value = 'render';
+    const seen = [];
+    const iv = setInterval(() => { const t = stat.textContent; if (t && seen[seen.length - 1] !== t) seen.push(t); }, 10);
+    btn.click();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 60000) { await new Promise(r => setTimeout(r, 40)); if (!btn.disabled) break; }
+    clearInterval(iv);
+    document.getElementById('expwhat').value = 'all';
+    return { seen, finalLine: stat.textContent };
+  } finally { HTMLAnchorElement.prototype.click = realClick; }
+});
+const tileLines = tiled.seen.filter(t => /\d+ of \d+/.test(t) && !/1 of 1/.test(t));
+
+// --- the render must carry its own timings, and still be a PNG -----------------------------------
+// A tEXt chunk spliced after IHDR records what the render was and how long each stage took, so a later
+// "it feels faster" can be checked against a number. Splicing bytes into a PNG is exactly the kind of
+// thing that silently produces a file that opens in one viewer and not another, so every chunk's CRC is
+// verified, not just the added one.
+const meta = await page.evaluate(async () => {
+  const btn = document.getElementById('export');
+  document.getElementById('expres').value = '1024';
+  document.getElementById('expwhat').value = 'render';
+  let grabbed = null;
+  const realURL = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click;
+  URL.createObjectURL = function (b) { if (b instanceof Blob && b.type === 'image/png') grabbed = b; return realURL.call(URL, b); };
+  HTMLAnchorElement.prototype.click = function () {};
+  try {
+    btn.click();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 60000) { await new Promise(r => setTimeout(r, 40)); if (!btn.disabled) break; }
+    if (!grabbed) return { error: 'no PNG was produced' };
+    const u8 = new Uint8Array(await grabbed.arrayBuffer()), dv = new DataView(u8.buffer);
+    const crc32 = a => { let c = ~0; for (let i = 0; i < a.length; i++) { c ^= a[i]; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1)); } return ~c >>> 0; };
+    let at = 8, badCrc = [], order = [], text = null;
+    while (at < u8.length) {
+      const len = dv.getUint32(at), type = String.fromCharCode(...u8.subarray(at + 4, at + 8));
+      if (dv.getUint32(at + 8 + len) !== crc32(u8.subarray(at + 4, at + 8 + len))) badCrc.push(type);
+      order.push(type);
+      if (type === 'tEXt') { const d = u8.subarray(at + 8, at + 8 + len), z = d.indexOf(0);
+        text = { kw: new TextDecoder().decode(d.subarray(0, z)), body: new TextDecoder().decode(d.subarray(z + 1)) }; }
+      if (type === 'IEND') break;
+      at += 12 + len;
+    }
+    const size = await createImageBitmap(grabbed).then(b => [b.width, b.height]).catch(() => null);
+    return { order: order.slice(0, 2), badCrc, tidy: at + 12 === u8.length, size,
+             kw: text && text.kw, meta: text && JSON.parse(text.body) };
+  } finally { URL.createObjectURL = realURL; HTMLAnchorElement.prototype.click = realClick; }
+});
+const m = meta.meta || {};
+checks.push(['the render carries a tEXt chunk', meta.kw || 'none', meta.kw === 'stone-author']);
+checks.push(['it sits right after IHDR', (meta.order || []).join(','), (meta.order || []).join(',') === 'IHDR,tEXt']);
+checks.push(['every chunk CRC still checks', (meta.badCrc || ['?']).length === 0 ? 'all valid' : meta.badCrc.join(','), (meta.badCrc || ['?']).length === 0 && meta.tidy === true]);
+checks.push(['and it still decodes as a PNG', (meta.size || []).join('x') || 'NO', Array.isArray(meta.size) && meta.size[0] === 1024]);
+checks.push(['with per-stage timings', m.ms ? `render ${m.ms.render}ms encode ${m.ms.encode}ms` : 'none',
+             !!(m.ms && Number.isFinite(m.ms.render) && Number.isFinite(m.ms.encode) && Number.isFinite(m.ms.total)) && m.tiles > 1]);
+checks.push(['render-only counts its tiles', tileLines.length + ' tile lines', tileLines.length >= 3]);
+checks.push(['render-only reports a time', tiled.finalLine, /\d+:\d\d$/.test(tiled.finalLine)]);
 
 // --- and it must FAIL loudly rather than wait for ever -------------------------------------------
 // An encode that cannot happen used to leave a promise unsettled: the worker's onmessage is async, so a
@@ -129,7 +201,8 @@ for (const [label, r] of Object.entries(fails)) {
 
 for (const [name, value, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(34)}  ${value}`);
 console.log('');
-console.log('messages seen: ' + got.seen.join(' | '));
+console.log('kit:         ' + got.seen.join(' | '));
+console.log('render only: ' + tiled.seen.join(' | '));
 
 const bad = checks.filter(c => !c[2]).length;
 console.log('');

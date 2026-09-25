@@ -63,6 +63,13 @@
   .expprog { display: grid; gap: 6px; margin-top: 10px; }
   .expbar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .expbar > i { display: block; height: 100%; width: 0; background: var(--on-line); transition: width .15s linear; }
+  .exprow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  /* Some stages cannot count themselves -- PNG encoding is one call. A moving stripe plus the running
+     clock is still the difference between "working" and "wedged", which is the only question being asked. */
+  .expbar.busy { background: linear-gradient(90deg, var(--line) 0 40%, var(--on-line) 50%, var(--line) 60% 100%); background-size: 260% 100%; animation: expsweep 1.4s linear infinite; }
+  .expbar.busy > i { display: none; }
+  @keyframes expsweep { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+  @media (prefers-reduced-motion: reduce) { .expbar.busy { animation: none; background: var(--on-line); opacity: .5; } }
   .stat.bad { color: var(--warn); }
   .note b { color: var(--text); font-weight: 500; }
   .layers { display: grid; gap: 5px; width: 100%; }
@@ -382,7 +389,7 @@
       <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select>
       <span class="stat" id="expcap"></span>
       <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
-    <div class="expprog" id="expprog" hidden><div class="expbar"><i id="expfill"></i></div><span class="stat" id="expstat"></span></div>
+    <div class="expprog" id="expprog" hidden><div class="expbar" id="expbar"><i id="expfill"></i></div><div class="exprow"><span class="stat" id="expstat"></span><span class="stat" id="expclock"></span></div></div>
   </div></details>
   <details class="sec"><summary data-i18n="sec.how-the-tools-read">How the tools read</summary><div class="body">
   <p class="note" id="fwd" data-i18n="btn.fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
@@ -482,10 +489,15 @@ window.SA_I18N = (() => {
   "cal.saved": "Saved for this device.",
   "cal.too-short": "Too short to measure — draw right across the slab.",
   "exp.ceiling": "this device tops out at {px}px",
+  "exp.done-kit": "Exported {n} files · {px}px · {t}",
+  "exp.done-render": "Saved the render · {px}px · {t}",
+  "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
   "exp.packing": "Packing the archive…",
+  "exp.preparing": "Preparing…",
   "exp.prog": "Rendering {done} of {total} · {px}px",
   "exp.saving": "Saving the file…",
+  "exp.tiles": "Rendering tile {done} of {total} · {px}px",
   "exp.too-big": "This device cannot allocate a canvas that large. Open the studio on a desktop for this size.",
   "fam.calacatta": "Calacatta",
   "fam.carrara": "Carrara",
@@ -2765,9 +2777,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // seamless), then the bleed is cropped. Specular is placed in full-image coords (viewport-aware); the lens runs
   // once on the assembled image (it downscales to ≤640, so it's global + cheap). Back light isn't tiled yet
   // (its fold is a whole-slab 512 pass) → falls back to renderFull.
-  function renderTiled(W, tilePx, bleedPx) {
-    const backlit = !layTiles && G.backlight > 0;
-    if (backlit) return renderFull(W);                     // back-light fold is whole-slab; tiling it is a separate step
+  // Split into a PLAN and two drivers. The plan builds the assembly canvas and one closure per tile; the
+  // synchronous driver runs them back to back exactly as before, and the stepped driver runs the same
+  // closures in the same order with a yield between them, so it can report "tile 7 of 160" and let the
+  // line paint. At 16384 that is 160 tiles over about two minutes -- the difference between a job you can
+  // watch and one that looks wedged. The pixels are the same work in the same sequence either way.
+  function tiledPlan(W, tilePx, bleedPx) {
     tilePx = tilePx || 1024;
     const finalW = W, finalH = Math.round(W * H), bs = W / (Wc || 360), bleed = bleedPx != null ? bleedPx : Math.ceil(12 * bs);
     const fc = document.createElement('canvas'); fc.width = finalW; fc.height = finalH;
@@ -2775,23 +2790,47 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const baseFill = cx2 => { cx2.setTransform(1, 0, 0, 1, 0, 0); if (uvMode) { cx2.fillStyle = UV_DARK; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else { cx2.fillStyle = STONE_BG; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); if (layVis('base')) { cx2.globalAlpha = layOp('base'); cx2.fillStyle = COL.ground; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); cx2.globalAlpha = 1; } } };
     baseFill(fx);                                          // fill the assembly canvas so any sub-pixel gaps read as base, not transparent
     const tc = document.createElement('canvas'), tcx = tc.getContext('2d');
+    const jobs = [];
     for (let ty0 = 0; ty0 < finalH; ty0 += tilePx) {
       const tileH = Math.min(tilePx, finalH - ty0);
       for (let tx0 = 0; tx0 < finalW; tx0 += tilePx) {
         const tileW = Math.min(tilePx, finalW - tx0);
-        const ex0 = tx0 - bleed, ey0 = ty0 - bleed, ew = tileW + 2 * bleed, eh = tileH + 2 * bleed;
-        if (tc.width !== ew || tc.height !== eh) { tc.width = ew; tc.height = eh; }
-        baseFill(tcx);
-        tcx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); tcx.lineCap = 'round'; tcx.lineJoin = 'round'; g2d = tcx;   // slab 0..1 → final px, offset so this tile's expanded region fills tc
-        paintStoneContent(false, false);
-        applyCoat(tc, tcx, bs, { ident: false, uvMode, backlit: false, tiled: true }, { ox: ex0, oy: ey0, fw: finalW, fh: finalH });
-        g2d = prevG;
-        fx.setTransform(1, 0, 0, 1, 0, 0); fx.drawImage(tc, bleed, bleed, tileW, tileH, tx0, ty0, tileW, tileH);   // crop the bleed
+        jobs.push(() => {
+          const ex0 = tx0 - bleed, ey0 = ty0 - bleed, ew = tileW + 2 * bleed, eh = tileH + 2 * bleed;
+          if (tc.width !== ew || tc.height !== eh) { tc.width = ew; tc.height = eh; }
+          baseFill(tcx);
+          tcx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); tcx.lineCap = 'round'; tcx.lineJoin = 'round'; g2d = tcx;   // slab 0..1 → final px, offset so this tile's expanded region fills tc
+          paintStoneContent(false, false);
+          applyCoat(tc, tcx, bs, { ident: false, uvMode, backlit: false, tiled: true }, { ox: ex0, oy: ey0, fw: finalW, fh: finalH });
+          g2d = prevG;
+          fx.setTransform(1, 0, 0, 1, 0, 0); fx.drawImage(tc, bleed, bleed, tileW, tileH, tx0, ty0, tileW, tileH);   // crop the bleed
+        });
       }
     }
-    if (!uvMode && G.lens > 0) applyLens(fc, fx);           // the glass, once, on the whole assembled slab
-    applyWindows(fc, finalW);
-    return fc;
+    const finish = () => {
+      if (!uvMode && G.lens > 0) applyLens(fc, fx);         // the glass, once, on the whole assembled slab
+      applyWindows(fc, finalW);
+      return fc;
+    };
+    return { jobs, finish };
+  }
+  function renderTiled(W, tilePx, bleedPx) {
+    const backlit = !layTiles && G.backlight > 0;
+    if (backlit) return renderFull(W);                     // back-light fold is whole-slab; tiling it is a separate step
+    const p = tiledPlan(W, tilePx, bleedPx);
+    for (const j of p.jobs) j();
+    return p.finish();
+  }
+  // Same plan, same order, a yield between tiles so the caller can say where it has got to.
+  async function renderTiledStepped(W, onTile) {
+    const backlit = !layTiles && G.backlight > 0;
+    if (backlit) { if (onTile) await onTile(0, 0); return renderFull(W); }
+    const p = tiledPlan(W);
+    for (let i = 0; i < p.jobs.length; i++) {
+      p.jobs[i]();
+      if (onTile) await onTile(i + 1, p.jobs.length);
+    }
+    return p.finish();
   }
   // ---- CPU WORKER POOL: parallelise the tile render across cores. The render core (paintStoneContent + coat +
   // helpers) is serialised via fn.toString() into an inline Blob worker (single-file app → no separate worker
@@ -4198,6 +4237,29 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // ---- EXPORT: two levels + the rich set + .ora + SVG + source, all in one zip ------------------
   // Store-only zip (PNGs are already compressed; .ora needs stored anyway). Verified round-trip.
   function crc32(u8) { let crc = ~0; for (let i = 0; i < u8.length; i++) { crc ^= u8[i]; for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1)); } return ~crc >>> 0; }
+  // A tEXt chunk, spliced in straight after IHDR, so a render carries its own provenance: what it was,
+  // how it was divided, and how long each stage took. That is the only way to tell later whether a change
+  // to the renderer actually made something faster, rather than feeling that it did. PNG-standard and
+  // strippable, and every viewer ignores it. NOTE: it records the browser's user-agent string, because on
+  // a phone the device IS the measurement -- strip the chunk before sharing a render if that matters.
+  function pngText(u8, keyword, text) {
+    const te = new TextEncoder(), kw = te.encode(keyword), tx = te.encode(text);
+    const dataLen = kw.length + 1 + tx.length;
+    const chunk = new Uint8Array(12 + dataLen), dv = new DataView(chunk.buffer);
+    dv.setUint32(0, dataLen);
+    chunk.set(te.encode('tEXt'), 4); chunk.set(kw, 8); chunk[8 + kw.length] = 0; chunk.set(tx, 9 + kw.length);
+    dv.setUint32(8 + dataLen, crc32(chunk.subarray(4, 8 + dataLen)));
+    const at = 8 + 8 + 13 + 4;                             // signature + IHDR (length+type+13 bytes+crc)
+    const out = new Uint8Array(u8.length + chunk.length);
+    out.set(u8.subarray(0, at), 0); out.set(chunk, at); out.set(u8.subarray(at), at + chunk.length);
+    return out;
+  }
+  const expMeta = o => JSON.stringify(Object.assign({
+    tool: 'stone-author', at: new Date().toISOString(),
+    marks: marks.length, lines: geo.lines.length, family: fam,
+    spectrum: lightSpectrum, dpr: dpr || 1, cores: navigator.hardwareConcurrency || null,
+    ua: navigator.userAgent,
+  }, o));
   function zipStore(files) {
     const te = new TextEncoder(), parts = [], cen = []; let off = 0;
     const b2 = n => [n & 255, n >> 8 & 255], b4 = n => [n & 255, n >> 8 & 255, n >> 16 & 255, n >> 24 & 255];
@@ -4327,15 +4389,24 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // itself after 2.6 s, so for the rest of the run the page was indistinguishable from a dead one.
   // frac below zero means FAILURE: no bar, and the line stays put. A failed export used to report itself
   // through hint(), which removes itself after 2.6 s -- so the one message explaining why you have no file
-  // was gone before you looked up.
+  // was gone before you looked up. frac === null means a stage that cannot count itself: shimmer instead.
+  let expT0 = 0, expTick = null;
+  const expElapsed = ms => { const t = Math.round(ms / 1000); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+  function expClock() {
+    const c = document.getElementById('expclock'); if (c) c.textContent = expT0 ? expElapsed(Date.now() - expT0) : '';
+  }
+  const expFreeze = () => { clearInterval(expTick); expTick = null; };   // leave the line and its time on screen
   function expStat(msg, frac) {
     const w = document.getElementById('expprog'); if (!w) return;
     w.hidden = msg == null;
-    if (msg == null) return;
-    const bad = frac < 0, s = document.getElementById('expstat');
-    w.querySelector('.expbar').hidden = bad;
+    if (msg == null) { expT0 = 0; clearInterval(expTick); expTick = null; expClock(); return; }
+    if (!expT0) { expT0 = Date.now(); expTick = setInterval(expClock, 500); }   // the clock is the proof of life
+    const bad = frac < 0, bar = document.getElementById('expbar'), s = document.getElementById('expstat');
+    if (bad) { clearInterval(expTick); expTick = null; }   // stop the clock where it died; leave it showing
+    bar.hidden = bad; bar.classList.toggle('busy', frac === null);
     s.textContent = msg; s.classList.toggle('bad', bad);
-    if (!bad) document.getElementById('expfill').style.width = Math.round(100 * Math.min(1, Math.max(0, frac || 0))) + '%';
+    if (!bad && frac != null) document.getElementById('expfill').style.width = Math.round(100 * Math.min(1, Math.max(0, frac))) + '%';
+    expClock();
   }
   // setTimeout, NOT requestAnimationFrame: rAF stops firing when the window is backgrounded, and an
   // export that deadlocks because you looked at something else is worse than one you cannot watch.
@@ -4351,15 +4422,32 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     hint(TR('hint.exporting-render', { w: W }));
     try {
       if (only) {
-        expStat(TR('exp.prog', { done: 1, total: 1, px: W }), 0); await breathe();
-        const c = expCompleted(W);
-        const [png] = await encodePNGs([c]);
+        expStat(TR('exp.preparing'), null); await breathe();
+        // 16 x 10 tiles at 16384, about 0.75 s each on a phone: enough to watch, cheap enough to yield to.
+        let shown = -1, tiles = 0;
+        const tR = Date.now();
+        const c = await renderTiledStepped(W, async (done, total) => {
+          tiles = total;
+          if (done === shown) return;
+          shown = done;
+          expStat(TR('exp.tiles', { done, total, px: W }), 0.9 * done / total);
+          await breathe();                                 // let the line land before the next tile blocks
+        });
+        const msRender = Date.now() - tR;
+        expStat(TR('exp.encoding'), null); await breathe();   // one call; it cannot count itself
+        const tE = Date.now();
+        const [raw] = await encodePNGs([c]);
+        const msEncode = Date.now() - tE, cw = c.width, ch = c.height;
         c.width = 1; c.height = 1;                           // hand it back before we hold the blob
+        const png = pngText(raw, 'stone-author', expMeta({
+          scope: 'render', w: cw, h: ch, tiles, bytes: raw.length,
+          ms: { render: msRender, encode: msEncode, total: Date.now() - expT0 },
+        }));
         expStat(TR('exp.saving'), 0.7); await breathe();
         const blob = new Blob([png], { type: 'image/png' });
         const d = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
         if (d) await d.save({ filename: 'stone-render.png', data: blob }); else download('stone-render.png', blob);
-        expStat(null);
+        expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1); expFreeze();
         hint(TR('hint.exported-render', { px: W }));
         return;
       }
@@ -4378,11 +4466,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       ];
       const names = ['render.png', 'masks/base.png', 'masks/major.png', 'masks/minor.png', 'masks/micro.png', 'masks/web.png', 'rich/vein-ids.png', 'rich/vein-t.png'];
       const bytes = [], steps = makers.length + 2;          // + packing + saving
+      let msRender = 0, msEncode = 0;
       for (let i = 0; i < makers.length; i += EXP_PEAK) {
         expStat(TR('exp.prog', { done: i + 1, total: makers.length, px: W }), i / steps);
         await breathe();                                     // paint the line BEFORE we block on the render
+        const tR = Date.now();
         const group = makers.slice(i, i + EXP_PEAK).map(f => f());
+        msRender += Date.now() - tR;
+        const tE = Date.now();
         for (const b of await encodePNGs(group)) bytes.push(b);    // still parallel within the pair
+        msEncode += Date.now() - tE;
         for (const c of group) { c.width = 1; c.height = 1; }      // hand it back before building the next
       }
       expStat(TR('exp.packing'), makers.length / steps); await breathe();
@@ -4392,6 +4485,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       files.push({ name: 'rich/paths.json', data: te.encode(pathsJSON()) });
       files.push({ name: 'lines.svg', data: te.encode(linesSVG()) });
       files.push({ name: 'source.json', data: te.encode(JSON.stringify(serialize())) });
+      // The same figures the render PNG carries in its tEXt chunk, as a file you can read without a
+      // PNG reader. The total stops here: packing and saving are after it, and vary with the browser.
+      files.push({ name: 'export.json', data: te.encode(expMeta({
+        scope: 'all', w: W, h: Math.round(W * H), images: makers.length, bytes: bytes.reduce((a, b) => a + b.length, 0),
+        ms: { render: msRender, encode: msEncode, toPack: Date.now() - expT0 },
+      })) });
       files.push({ name: 'slab.ora', data: await buildOraFrom(bytes[8], oOrder.map((b, i) => bytes[9 + i]), oOrder, oW) });
       const zip = zipStore(files);
       expStat(TR('exp.saving'), (makers.length + 1) / steps); await breathe();
@@ -4399,7 +4498,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (dl) await dl.save({ filename: 'stone-export.zip', data: zip });
       else download('stone-export.zip', zip);
       hint(TR('hint.exported-files', { n: files.length }));
-      expStat(null);
+      expStat(TR('exp.done-kit', { n: files.length, px: W, t: expElapsed(Date.now() - expT0) }), 1); expFreeze();
     } catch (e) {
       const msg = TR('hint.export-failed-msg', { err: (e && e.message || e) });
       hint(msg); expStat(msg, -1);                         // stays on screen; the hint will not
