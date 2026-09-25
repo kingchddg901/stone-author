@@ -296,19 +296,40 @@ to `θ = k·s` — the arc-length sweep, arrived at physically instead of algebr
 three regimes without the lag having to be argued for: a slowly turning bar is one the shapes can follow,
 a fast one drags them partway, a very fast one averages to nothing.
 
-**But not "one rotation per sample".** That is precisely the frequency the simulation cannot see. Sampled
-once per full turn, the target sits at the identical angle every sample, so a bar spinning flat out reads
-as a bar standing perfectly still — and the specks align to it beautifully. The wagon-wheel effect, and it
-produces the exact opposite of the intent.
+**The rate is one rotation per second**, with the per-sample step calibrated from the device: 6°/sample at
+60 Hz, 3° at 120 Hz, 1.5° at 240 Hz — all of which are 360°/s.
 
-It is worse than the 360° figure suggests, because the field is **axial**: a speck responds to the axis
-mod 180°, so the alias period is **half a turn, not a whole one**. Every multiple of 180° per sample
-aliases to a static bar. Nyquist puts the hard ceiling at 90°/sample just to register that the axis is
-turning at all, and well below that to look like rotation rather than jitter.
+That calibration buys more than consistency, and this is the reason to do it: **`w` carries `dt` too.**
+The tracking rate and the sweep step scale together, so a speck's lag behind the bar comes out the same at
+any sample rate. The *physics* becomes device-independent, not merely the bookkeeping.
 
-Chris's earlier figure is safely clear of it: **6°/sample is 30 samples per axial cycle**, smooth and
-unambiguous. As a rule, keep the per-sample step **under about 30°** and the aliasing family is nowhere
-near.
+```
+60 Hz :  w ≈ 0.30/sample,  target moves 6°/sample   ⟶  lag ≈ 20°
+240 Hz:  w ≈ 0.075/sample, target moves 1.5°/sample ⟶  lag ≈ 20°
+```
+
+(An aliasing caveat, now moot at these numbers but worth recording: since the field is **axial**, a speck
+responds to the axis mod 180°, so the alias period is **half a turn, not a whole one** — any multiple of
+180°/sample would read as a bar standing still. 6°/sample is 30 samples per axial cycle, nowhere near it.
+Keep the step under ~30° and the whole family stays out of reach.)
+
+**But 360°/s probably will not scatter.** At default strength a centre speck's lag settles at roughly
+`r/w = 6/0.3 ≈ 20°` — it *tracks* the bar, trailing at a fixed offset. That is a combed gradient rotated
+20°, which is a lovely effect and is not disorder. For specks to be genuinely left behind, the lag wants
+to approach the axial half-period:
+
+```
+r / w ≳ 90°   ⟹   r ≳ 27°/sample   ⟹   ≈ 4–5 rotations/second
+```
+
+Still inside the Nyquist-safe band at 60 Hz, which is a fortunate coincidence: the usable range runs from
+0 up to ~30°/sample, and **scatter lives near the top of it** while alignment lives at the bottom. One
+control really does span both, exactly as the folded-together model wants.
+
+A textural consequence falls out too, from `w`'s `exp(−ρ²/(R²·0.5))` falloff: rim specks have a smaller
+`w`, so they lag more than centre ones at the same spin. A moderate rate should give an **aligned core
+with a scattered halo** rather than a uniform result. Worth looking at before deciding it is a defect —
+it may be the most useful setting on the dial.
 
 Which is also the honest answer to the coarse-stepping above. A fast flick stepping ~48° per sample is
 *not* an artifact to subdivide away — but it is uncomfortably close to the band where the step stops
