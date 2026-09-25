@@ -1081,7 +1081,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.25.2';
+  const BUILD = '2026.09.25.3';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2671,7 +2671,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     g2d = prev; return c;
   }
   function paintBacklit(tcv, bs) {                          // tcv/bs default to the live canvas; renderFull passes an offscreen target + its blur scale
-    tcv = tcv || cv; bs = bs || dpr;
+    tcv = tcv || cv; bs = bs || (tcv.width / COAT_REF);     // the same reference the export uses, so the glow is not a window measurement
     const W = 512, body = expBaseMask(W);                  // the base bucket = the translucent matrix that GLOWS
     const gw = body.width, gh = body.height;
     if (backC.width !== gw || backC.height !== gh) { backC.width = gw; backC.height = gh; }
