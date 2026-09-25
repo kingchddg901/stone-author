@@ -192,6 +192,15 @@
  "cal.forgotten": {
   "where": "status or hint line for the pen calibration, in the right-hand rail"
  },
+ "cal.live": {
+  "placeholders": {
+   "deg": "the pen lean in degrees, or an em dash when there is no tilt",
+   "done": "strokes finished in this phase",
+   "p": "the pressure this sample reported, or an em dash when the device reports none",
+   "total": "strokes this phase asks for"
+  },
+  "where": "status line in the Calibrate the pen section, updating live while a stroke is drawn"
+ },
  "cal.none": {
   "where": "status or hint line for the pen calibration, in the right-hand rail"
  },

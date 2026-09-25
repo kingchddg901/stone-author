@@ -101,7 +101,10 @@ for (const file of packs) {
     if ((t.match(/ /g) || []).length < 5) continue;      // needs to read like a sentence
     if (!PROSE.test(t)) continue;
     if (/^[a-z0-9.\-_/]+$/.test(t)) continue;           // a key or a path
-    if (/^\d/.test(t)) continue;                        // a CSS font shorthand — '11px "IBM Plex Mono", …'
+    // CSS font shorthands: '11px "IBM Plex Mono", …' whole, or 'px "IBM Plex Sans", …' when the size was
+    // concatenated on. A generic family keyword is the unambiguous tell and cannot appear in real prose.
+    if (/^\d/.test(t)) continue;
+    if (/\b(sans-serif|ui-monospace|monospace|system-ui)\b/.test(t)) continue;
     if (enKeys.has(t)) continue;                        // it IS a key
     fail.push(`prose literal in the studio script, not routed through a pack: ${JSON.stringify(t.slice(0, 62))}…`);
   }

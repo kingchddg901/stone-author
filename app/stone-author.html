@@ -458,6 +458,7 @@ window.SA_I18N = (() => {
   "cal.cancelled": "Calibration cancelled.",
   "cal.done": "Calibrated. The studio knows your hand on this device now.",
   "cal.forgotten": "Calibration forgotten for this device.",
+  "cal.live": "pressure {p}   lean {deg}   — {done} of {total}",
   "cal.none": "Not calibrated on this device yet.",
   "cal.phase.hard": "Four more, pressing as hard as is comfortable.",
   "cal.phase.laid": "Four with the pen laid right over.",
@@ -2853,6 +2854,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return fc;
   }
   function draw() {
+    if (cal) return;   // calibration owns the canvas; without this the redraw loop paints the slab back
+                       // over the instructions and the strokes, every frame, silently
     const F = FAM[fam], ident = view !== 'stone', angleView = view === 'angle';
     const backlit = !ident && !layTiles && G.backlight > 0;   // back light replaces the daylight body + its front-lit coat passes; it takes precedence over uv so emitters can compose at the current spectrum
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
@@ -3888,7 +3891,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     cv.addEventListener('pointermove', calMove, true);
     cv.addEventListener('pointerup', calUp, true);
     cv.addEventListener('pointercancel', calUp, true);
-    calStep();
+    calStep(true);
   }
   function calEnd(msg) {
     cv.removeEventListener('pointerdown', calDown, true);
@@ -3901,11 +3904,69 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     document.getElementById('cal-step').textContent = msg || '';
     redraw(false);
   }
-  function calStep() {
+  // The canvas IS the instruction sheet. Without it you cannot see where to draw, whether the pen is
+  // registering, or — the one that makes a phase incoherent — what "as light as still draws" could
+  // possibly mean. The stroke's width IS the pressure, so the lightest touch that still marks the
+  // canvas is literally the thing being asked for, and a pen reporting nothing draws nothing.
+  function calCanvas() {
+    const w = cv.width, h = cv.height, d = dpr || 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1; ctx.filter = 'none';
+    ctx.fillStyle = '#0d0e12'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#262836'; ctx.lineWidth = d; ctx.setLineDash([6 * d, 5 * d]);
+    ctx.strokeRect(w * 0.10, h * 0.32, w * 0.80, h * 0.36);
+    ctx.setLineDash([]);
+    // Wrapped and shrunk to fit: at phone width a prompt set in one centred line is simply cut off, and
+    // an instruction you cannot read is worse than none.
+    ctx.fillStyle = '#d7d8e3'; ctx.textAlign = 'center';
+    const maxW = w * 0.88;
+    let px = 15 * d;
+    const words = TR('cal.phase.' + CAL_PHASES[cal.phase]).split(' ');
+    let lines;
+    for (;; px -= d) {
+      ctx.font = px + 'px "IBM Plex Sans", system-ui, sans-serif';
+      lines = [];
+      let cur = '';
+      for (const word of words) {
+        const t = cur ? cur + ' ' + word : word;
+        if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = word; } else cur = t;
+      }
+      if (cur) lines.push(cur);
+      if ((lines.length <= 3 && lines.every(l => ctx.measureText(l).width <= maxW)) || px <= 9 * d) break;
+    }
+    lines.forEach((l, i) => ctx.fillText(l, w / 2, h * 0.16 + i * px * 1.3));
+    calCount();
+    ctx.textAlign = 'start';
+  }
+  // Repainted on its own after every stroke, so the count on the canvas cannot disagree with the rail
+  // while the strokes already drawn stay where they are.
+  function calCount() {
+    const w = cv.width, h = cv.height, d = dpr || 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#0d0e12'; ctx.fillRect(0, h * 0.76, w, h * 0.12);
+    ctx.fillStyle = '#8b8da2'; ctx.textAlign = 'center';
+    ctx.font = (13 * d) + 'px "IBM Plex Mono", ui-monospace, monospace';
+    ctx.fillText(TR('cal.progress', { done: cal.stroke, total: CAL_PER }), w / 2, h * 0.83);
+    ctx.textAlign = 'start';
+  }
+  function calSeg(a, b, p) {
+    const d = dpr || 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.strokeStyle = '#8a8de0'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.lineWidth = (p == null ? 2 : p * 30) * d;      // a pen reporting nothing leaves nothing behind
+    if (ctx.lineWidth <= 0) return;
+    ctx.beginPath();
+    ctx.moveTo(a.x * cv.width, a.y * cv.height);
+    ctx.lineTo(b.x * cv.width, b.y * cv.height);
+    ctx.stroke();
+  }
+  function calStep(fresh) {
     const ph = CAL_PHASES[cal.phase];
     document.getElementById('cal-step').textContent =
       TR('cal.phase.' + ph) + '  ' + TR('cal.progress', { done: cal.stroke, total: CAL_PER });
     hint(TR('cal.phase.' + ph));
+    if (fresh) calCanvas();                            // clear only between PHASES, so you can see all four
+    else if (cal) calCount();                          // otherwise just refresh the tally
   }
   // Capture phase + stopPropagation: the studio must not author stone while we are measuring the hand.
   function calDown(e) {
@@ -3924,25 +3985,37 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const c = cal.cur; if (!c) return;
     const b = cv.getBoundingClientRect();
     const x = (e.clientX - b.left) / b.width, y = (e.clientY - b.top) / b.height, t = now();
-    if (e.pointerType === 'pen' && e.pressure != null) c.press.push(e.pressure);
+    const pen = e.pointerType === 'pen' && e.pressure != null ? e.pressure : null;
+    if (pen != null) c.press.push(pen);
     const ln = leanOf(e); if (ln != null) c.lean.push(ln);
-    if (c.last) { c.dt.push(t - c.last.t); c.pts.push(Math.hypot(x - c.last.x, y - c.last.y)); }
+    if (c.last) {
+      c.dt.push(t - c.last.t); c.pts.push(Math.hypot(x - c.last.x, y - c.last.y));
+      calSeg(c.last, { x, y }, pen);
+    }
     c.last = { x, y, t };
+    // live readout, so you can watch the numbers move while you draw rather than after
+    const el = document.getElementById('cal-step');
+    if (el) el.textContent = TR('cal.live', {
+      p: pen == null ? '—' : pen.toFixed(3),
+      deg: ln == null ? '—' : Math.round(ln * 90) + '°',
+      done: cal.stroke, total: CAL_PER,
+    });
   }
   function calUp(e) {
     if (!cal.cur) return;
     e.stopPropagation(); e.preventDefault();
     const c = cal.cur, dur = now() - c.t0, dist = c.pts.reduce((a, d) => a + d, 0);
     cal.cur = null;
-    if (dist < 0.05) { hint(TR('cal.too-short')); return; }      // a tap is not a stroke; do not count it
+    if (dist < 0.05) { hint(TR('cal.too-short')); calStep(false); return; }   // a tap is not a stroke
     const bag = cal.bag[CAL_PHASES[cal.phase]];
     for (const v of c.press) bag.press.push(v);
     for (const v of c.lean) bag.lean.push(v);
     for (const v of c.dt) if (v > 0 && v < 0.2) bag.dt.push(v);
     if (dur > 0) bag.speed.push(dist / dur);
     cal.stroke++;
-    if (cal.stroke >= CAL_PER) { cal.stroke = 0; cal.phase++; }
-    if (cal.phase >= CAL_PHASES.length) calFinish(); else calStep();
+    let advanced = false;
+    if (cal.stroke >= CAL_PER) { cal.stroke = 0; cal.phase++; advanced = true; }
+    if (cal.phase >= CAL_PHASES.length) calFinish(); else calStep(advanced);
   }
   function calFinish() {
     const B = cal.bag, all = k => CAL_PHASES.reduce((a, p) => a.concat(B[p][k]), []);
