@@ -321,6 +321,24 @@ browser and 1.000 in the other, with five times the distinct values. A calibrati
 either one would be wrong in the other, so the working range has to be **learned at runtime** — exactly
 like the rest grip, and for exactly the same reason.
 
+**The rate is 480 Hz, and it was worth deriving rather than reading off a median.** A first pass reported
+**476 Hz** — the median of the coalesced intervals. That figure is an artifact: Chrome quantises event
+timestamps to 0.1 ms, and the true 2.0833 ms period falls *between* grid points, so recorded gaps
+alternate 2.0 / 2.1 / 2.2 and the median snaps to 2.1. The mean across the within-burst band (n = 10,504)
+gives **2.0801 ms → 480.8 Hz**, which is **exactly 8 × the 60 Hz display**. Samsung's own spec for the
+S23 Ultra confirms it: **480 Hz report rate via the Wacom integrated circuit**, 2.8 ms latency. Not to be
+confused with the *display touch* sampling rate, which is a different sensor and a different number.
+
+The same spec quotes **4,096 pressure levels**, which closes the other loop:
+
+| | distinct pressure values seen | of the 4,096 the pen provides |
+|---|---|---|
+| Chrome | 3,143 | **77%** |
+| WebView (Claude app) | 597 | **15%** |
+
+So the webview is not merely capping the sample *rate*. It is also delivering about a seventh of the
+pressure resolution the hardware has, on top of clipping the range at 0.613.
+
 **And the authoring actually happens in Chrome**, which settles which column matters. Chris works in
 Chrome on the phone rather than the Claude app view, because the app's webview does not keep
 `localStorage` across a close — the studio autosaves correctly (debounced, flushed on `visibilitychange`
