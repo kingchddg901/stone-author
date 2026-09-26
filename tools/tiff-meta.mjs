@@ -105,7 +105,11 @@ for (const path of paths) {
     : m.streamed ? `streamed, ${m.bands} bands` : 'single stream';
   console.log(`  ${m.w ? num(m.w) + ' x ' + num(m.h) : '?'}  ${geom}`);
   console.log(`  rendered ${m.at}  scope=${m.scope}  slab=${m.slab || '(not recorded)'}  family=${m.family}`);
-  console.log(`  spectrum ${m.spectrum}${m.spectrum === -1 ? ' (black light)' : m.spectrum === 0 ? ' (daylight)' : ''}   back light ${G.backlight ?? '?'}   state ${m.state || '(not recorded)'}`);
+  console.log(`  spectrum ${m.spectrum}${m.spectrum === -1 ? ' (black light)' : m.spectrum === 0 ? ' (daylight)' : ''}   back light ${G.backlight ?? '?'}`);
+  // inputs is the signature that answers "same picture"; state is kept only so older masters still read,
+  // and it is labelled here because reading it as an answer is exactly the mistake it invites.
+  console.log(`  inputs   ${m.inputs || '(not recorded — master predates the render signature)'}` +
+              `   state ${m.state || '(not recorded)'}${m.inputs ? ' (session, not the picture)' : ''}`);
   console.log(`  content  ${num(m.marks || 0)} marks, ${num(m.lines || 0)} veins${m.cracks != null ? `, ${num(m.cracks)} cracks, ${num(m.specks)} specks, ${num(m.drusy)} drusy, ${num(m.seams)} seams` : ' (counts not recorded)'}`);
   console.log(`  machine  ${m.cores || '?'} cores, dpr ${m.dpr}, toDisk ${m.toDisk ?? '(not recorded)'}`);
   console.log(`           ${(m.ua || '').slice(0, 100)}`);
@@ -119,14 +123,23 @@ for (const path of paths) {
   if (pt && Array.isArray(pt.ms) && pt.ms.length) {
     const t = pt.ms, med = median(t), hi = t.filter(x => x > 2 * med);
     console.log(`  per tile ${t.length} render tiles: median ${med} ms, fastest ${Math.min(...t)}, slowest ${Math.max(...t)}`);
-    if (Array.isArray(pt.bytes) && pt.bytes.length === t.length) {
-      const r = correlate(t, pt.bytes);
-      console.log(`           time vs bytes r = ${r === null ? 'n/a' : r.toFixed(2)}  ->  ` +
-        (r === null ? 'cannot tell' : r > 0.7 ? 'time followed the PICTURE (dense tiles cost more)'
+    // The two signals must be read TOGETHER or they contradict each other. A slow tile is only evidence of
+    // a stall if the time did NOT follow the bytes; where the correlation is high the outliers are simply
+    // the dense tiles, which is the innocent answer. Reporting the outlier count on its own once printed
+    // "time followed the PICTURE" and "the shape of a STALL" about the same render.
+    const r = Array.isArray(pt.bytes) && pt.bytes.length === t.length ? correlate(t, pt.bytes) : null;
+    if (r !== null) {
+      console.log(`           time vs bytes r = ${r.toFixed(2)}  ->  ` +
+        (r > 0.7 ? 'time followed the PICTURE (dense tiles cost more)'
           : r > 0.3 ? 'partly the picture, partly something else'
           : 'time did NOT follow the picture — look at the machine, not the slab'));
     }
-    console.log(`           ${hi.length ? `${hi.length} tile(s) over twice the median (${hi.slice(0, 8).join(', ')}${hi.length > 8 ? ', …' : ''}) — the shape of a STALL` : 'no tile over twice the median — no stalls'}`);
+    if (!hi.length) console.log('           no tile over twice the median');
+    else if (r !== null && r > 0.7)
+      console.log(`           ${hi.length} tile(s) over twice the median — the dense ones, as the correlation says. Not stalls.`);
+    else
+      console.log(`           ${hi.length} tile(s) over twice the median (${hi.slice(0, 8).join(', ')}${hi.length > 8 ? ', …' : ''})` +
+                  `${r === null ? '' : ' and the time did not track the bytes'} — the shape of a STALL`);
   } else if (m.tiled) {
     console.log('  per tile not recorded (master predates per-tile timing)');
   }
