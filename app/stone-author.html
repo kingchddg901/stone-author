@@ -1091,7 +1091,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.4';
+  const BUILD = '2026.09.26.5';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4168,6 +4168,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // export actually builds. `tiff` says it is not. Called from applyTiers, which settles the format first.
   function gatePlain(tiff) {
     const sel = document.getElementById('expres'); if (!sel) return;
+    if (!expCap) expCap = exportCeiling();     // applyTiers can reach here first; an unprobed 0 disables everything
     for (const o of sel.options) {
       if (o.dataset.tier) continue;            // the streamed sizes answer to the side cap, not to this probe
       const over = !tiff && +o.value > expCap;
@@ -5264,14 +5265,20 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
   });
   // ---- LARGE RENDER TIERS -------------------------------------------------------------------------
-  // Above 16384 the export stops using a canvas and streams bands (renderStreamedPNG). That is slower,
-  // holds ~900 MB while it works, makes a file measured in hundreds of megabytes, and CANNOT RESUME —
-  // close the tab and the whole thing is gone. So it is off by default, never offered on a phone, and
-  // the top size is armed separately and disarms itself the moment a render starts.
+  // These sizes take minutes and cannot resume, so they stay off by default and the top one disarms
+  // itself the moment a render starts.
+  //
+  // They are no longer withheld from phones. That guard existed because the only route up here was the
+  // band path, which holds a great deal at once and could not be offered honestly to a small device. The
+  // grid changed the facts: an iPhone 14 Pro rendered a 65535 master in 2:09 — FASTER than a twelve-core
+  // desktop, because it streams tiles to disk and never accumulates — and a 3 GB tablet finished the same
+  // picture in 91 minutes. Withholding it was protecting devices that turned out to be good at this.
+  //
+  // What replaced the guard is honesty per capability rather than per form factor: CompressionStream is
+  // still required, tiffPlan halves the tile until one allocates and refuses by name if none will, and
+  // above 16384 the format defaults to TIFF, so reaching the band path from a phone now takes arming a
+  // tier, overriding that default, and accepting the dialogue.
   const TIER_KEY = 'stone-author:tiers:v1', STRIP_FROM = 16384;
-  const isMobile = () => (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean')
-    ? navigator.userAgentData.mobile
-    : /Mobi|Android|iPhone|iPod/i.test(navigator.userAgent || '');
   let tierLarge = false, tierExtreme = false, fmtChosen = false;
   try { tierLarge = JSON.parse(localStorage.getItem(TIER_KEY) || '{}').large === true; } catch (_) {}
 
@@ -5304,9 +5311,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
 
   function applyTiers() {
     const wrap = document.getElementById('tiers'), sel = document.getElementById('expres');
-    // Bands become an IDAT stream through CompressionStream: Chrome/Edge 80, Firefox 113, Safari 16.4.
-    // Without it this path cannot work at all, so the tier is withheld rather than offered and broken.
-    const what = document.getElementById('expwhat'), mob = isMobile() || typeof CompressionStream !== 'function';
+    // Bands and tiles both go through CompressionStream: Chrome/Edge 80, Firefox 113, Safari 16.4.
+    // Without it neither path can work, so the tier is withheld rather than offered and broken.
+    const what = document.getElementById('expwhat'), mob = typeof CompressionStream !== 'function';
     wrap.hidden = mob;                                     // not warned about here — simply not offered
     if (mob) { tierLarge = tierExtreme = false; }
     document.getElementById('tier-large').checked = tierLarge;
@@ -5352,9 +5359,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // says plainly when a bigger one is a tickbox away rather than out of reach.
     const cap = document.getElementById('expcap');
     if (cap) {
-      const top = Math.max(...[...sel.options].filter(o => !o.disabled).map(o => +o.value));
+      const on = [...sel.options].filter(o => !o.disabled).map(o => +o.value);
+      const top = on.length ? Math.max(...on) : 0;
       const moreBehindATick = !mob && !tierExtreme && [...sel.options].some(o => o.dataset.tier && +o.value <= side);
-      cap.textContent = TR(moreBehindATick ? 'exp.ceiling-direct' : 'exp.ceiling', { px: top });
+      cap.textContent = top ? TR(moreBehindATick ? 'exp.ceiling-direct' : 'exp.ceiling', { px: top }) : '';
     }
   }
 
