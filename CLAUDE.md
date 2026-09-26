@@ -19,6 +19,28 @@ The engines are **already characterised**. Before running any experiment compari
 dark region is that, not a new discovery. Measuring it again costs a round trip and finds what the docs
 already say.
 
+## A short sample measures the ramp, not the steady state
+
+Two unrelated systems here behave this way, and the error always runs the same direction — it makes the
+weaker device look worse than it is.
+
+**Render.** Mobile devices get faster through a run as the CPU governor commits to higher clocks; desktops
+do not. Measured as ms per MB of output, by quarter of the run: Tab A 114/116/92/**79**, S23
+106/118/94/**82**, desktop Chrome 116/88/94/**101**. And the **first tile is expensive on every device** —
+138% of its own average on the Tab A, 177% on the iPhone, 215% on desktop Chrome, where a fixed warm-up
+cost is a larger fraction of a 3.6-second tile.
+
+So a small render is measured almost entirely inside the ramp and **understates** a device's sustained
+throughput. It is not a conservative proxy for a large one.
+
+**Network.** The same, on the radio. The Tab A moved 46 MB at 5.5 MB/s and 793 MB at **12.7** — the small
+transfer never left TCP slow-start and Wi-Fi rate adaptation. The iPhone shows no such effect (29.5
+against 29.3), the S23 a small one. The weaker the link, the longer it takes to settle, so the device
+most likely to be written off is the one the short sample misjudges most.
+
+**Read the transferred size before reading the rate**, and prefer a full-size run when the number will be
+used to decide whether a device is viable.
+
 ## Gates before any push
 
 ```
