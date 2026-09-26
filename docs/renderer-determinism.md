@@ -1,11 +1,20 @@
 # What changes the pixels, and what does not
 
-Measured 26 September 2026, on one slab (`Hero_Psyker`, 666 marks) rendered at 65535 × 40959 into 160
-stored tiles of 4096, across four engines and two architectures. Every master below was audited tile by
-tile before being compared: all tiles inflate to full size and every tile contains drawn pixels.
+**This builds on [`final-render.md`](final-render.md) and [`gallery.md`](gallery.md), which already
+establish the cross-engine picture** — each engine byte-deterministic with itself, Gecko differing from
+Blink by a mean of 7.919/255 and WebKit by 8.547/255, with Gecko's difference living in blur quantisation
+inside the **blooms** and WebKit's at every edge. That was measured before any of this. Read it first; an
+engine brightness difference in a dark region is the known bloom disagreement, not a finding.
 
-The question behind all of it: **can a single master be assembled from tiles rendered on different
-machines?** If two machines disagree, a farmed master has a seam at every device boundary.
+What is new here is a different question, asked at 65535 in a tiled master: **can a single master be
+assembled from tiles rendered on different machines?** If two machines disagree, a farmed master has a
+seam at every device boundary. That needs two things the earlier work did not cover — the difference
+*within* one engine across CPU architectures, and whether any of these differences are **visible at a
+join** rather than merely present in the bytes.
+
+Measured 26 September 2026 on one slab (`Hero_Psyker`, 666 marks) at 65535 × 40959 into 160 stored tiles
+of 4096. Every master was audited tile by tile before being compared: all tiles inflate to full size and
+every tile contains drawn pixels.
 
 ## The result
 
@@ -41,13 +50,16 @@ The same engine difference reverses in daylight, where the glow is inactive: Gec
 Blink's 730 MB for the identical picture. So file size is an engine property, not a quality measure, and
 the spread across engines is 4.2×.
 
-### WebKit is unresolved
+### WebKit splits by light
 
-Same lit fraction as Blink (1.84%), but brighter peaks — 211 against 174 — and by far the smoothest
-rasterisation, giving a 54 MB master where Blink gives 286 MB under black light. Statistically it looks
-closer to Blink than Gecko does, but it has not been through the vein crossing test, so **do not assume it
-can be mixed with Blink.** That test is the open item, and it matters because the iPhone is the fastest
-device measured.
+**Under black light it sits in the same band as the ARM/x86 pair** — 28.7% of channels identical, 38.9%
+within ±1, and the lit fraction matches Blink exactly at 1.84%. Mixable, on the same evidence.
+
+**In daylight it is not mixable**, and the cause is the known bloom disagreement rather than anything new.
+Mean luma on the same tile: Blink 22.0, Gecko 28.5, WebKit 37.2 — all three differ, in a dark region,
+which is exactly where a bloom lifting the floor shows. A 69% brightness difference would read as an
+obvious step at any boundary. That makes it a defect to fix rather than a property to design around, but
+until it is fixed those tiles are not interchangeable in daylight.
 
 ## Method, so this is repeatable
 
