@@ -50,16 +50,37 @@ The same engine difference reverses in daylight, where the glow is inactive: Gec
 Blink's 730 MB for the identical picture. So file size is an engine property, not a quality measure, and
 the spread across engines is 4.2×.
 
-### WebKit splits by light
+### WebKit cannot be mixed with Blink, in either light
 
-**Under black light it sits in the same band as the ARM/x86 pair** — 28.7% of channels identical, 38.9%
-within ±1, and the lit fraction matches Blink exactly at 1.84%. Mixable, on the same evidence.
+Checked the same way as the ARM/x86 pair — a vein crossing a tile boundary, one engine either side,
+against a control. **The join is obvious at a glance**, a clear step in field brightness down the whole
+boundary. Measured at that location under black light, on a field whose mean is 63:
 
-**In daylight it is not mixable**, and the cause is the known bloom disagreement rather than anything new.
-Mean luma on the same tile: Blink 22.0, Gecko 28.5, WebKit 37.2 — all three differ, in a dark region,
-which is exactly where a bloom lifting the floor shows. A 69% brightness difference would read as an
-obvious step at any boundary. That makes it a defect to fix rather than a property to design around, but
-until it is fixed those tiles are not interchangeable in daylight.
+| | mean shift across the join | per-64px-block, median | max |
+| --- | --- | --- | --- |
+| Blink ARM vs Blink x86 | **0.15** | 0.36 | 1.31 |
+| WebKit vs Blink x86 | **−16.53** | 18.10 | 38.07 |
+
+A 16.5-level step on a field of 63 is a 26% brightness drop across the boundary. In daylight it is worse
+and in the same direction: mean luma on one tile reads Blink 22.0, Gecko 28.5, WebKit 37.2.
+
+This is the known bloom disagreement, so it is a defect to fix rather than a property to design around —
+but until it is fixed, **only Blink devices may be mixed.**
+
+### Measure the local mean, not the per-pixel difference
+
+The WebKit result was predicted wrong twice before being measured correctly, and both mistakes are easy
+to repeat.
+
+**A seam is a low-frequency difference over an area, so a per-pixel distribution cannot see it.** The
+WebKit/Blink per-channel histogram looks reassuring — 38.9% of channels within ±1 — because a uniform
++16 across a whole region barely moves a histogram of per-pixel deltas while being unmissable on screen.
+The statistic that matches the eye is the **mean of a block, compared across the join**. It agreed with
+observation in both directions here: 0.15 invisible, 16.53 glaring.
+
+**The bloom difference is regional, so it must be measured where the join is.** At tile 77 WebKit and
+Blink agree almost exactly under black light (27.6 against 27.1) and the lit fractions match at 1.84%;
+at tile 148 they are 16.5 apart. Statistics taken in a quiet region say nothing about a loud one.
 
 ## Method, so this is repeatable
 
