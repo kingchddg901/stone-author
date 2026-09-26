@@ -1092,7 +1092,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.10';
+  const BUILD = '2026.09.26.11';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4735,7 +4735,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // much is IN it, and without these a later reader cannot tell a slow machine from a busy picture.
     cracks: geo.web.length, specks: geo.specks.length, drusy: geo.drusy.length, seams: geo.styl.length,
     spectrum: lightSpectrum, dpr: dpr || 1, cores: navigator.hardwareConcurrency || null,
-    ua: navigator.userAgent, state: stateSig(), inputs: renderSig(), G: Object.assign({}, G),
+    // deviceMemory is what the tile plan budgets against, so without it the plan cannot be explained
+    // after the fact: an A7 Lite chose 4096 tiles on Android 11 and 2048 on Android 13, and nothing in
+    // the file says whether the budget shrank or the canvas probe refused the larger one.
+    ua: navigator.userAgent, mem: navigator.deviceMemory || null,
+    state: stateSig(), inputs: renderSig(), G: Object.assign({}, G),
   }, o));
   function zipStore(files) {
     const te = new TextEncoder(), parts = [], cen = []; let off = 0;

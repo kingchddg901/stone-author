@@ -111,7 +111,7 @@ for (const path of paths) {
   console.log(`  inputs   ${m.inputs || '(not recorded — master predates the render signature)'}` +
               `   state ${m.state || '(not recorded)'}${m.inputs ? ' (session, not the picture)' : ''}`);
   console.log(`  content  ${num(m.marks || 0)} marks, ${num(m.lines || 0)} veins${m.cracks != null ? `, ${num(m.cracks)} cracks, ${num(m.specks)} specks, ${num(m.drusy)} drusy, ${num(m.seams)} seams` : ' (counts not recorded)'}`);
-  console.log(`  machine  ${m.cores || '?'} cores, dpr ${m.dpr}, toDisk ${m.toDisk ?? '(not recorded)'}`);
+  console.log(`  machine  ${m.cores || '?'} cores, ${m.mem ? m.mem + ' GB reported' : 'memory not recorded'}, dpr ${m.dpr}, toDisk ${m.toDisk ?? '(not recorded)'}`);
   console.log(`           ${(m.ua || '').slice(0, 100)}`);
   if (ms.render) {
     const raw = (m.tiles || 0) * (m.tile || 0) ** 2 * 4;
