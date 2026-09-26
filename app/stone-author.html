@@ -1091,7 +1091,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.6';
+  const BUILD = '2026.09.26.7';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4682,6 +4682,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const expMeta = o => JSON.stringify(Object.assign({
     tool: 'stone-author', at: new Date().toISOString(),
     marks: marks.length, lines: geo.lines.length, family: fam,
+    // The element counts the stat line shows. Recorded because a master's cost is dominated by how
+    // much is IN it, and without these a later reader cannot tell a slow machine from a busy picture.
+    cracks: geo.web.length, specks: geo.specks.length, drusy: geo.drusy.length, seams: geo.styl.length,
     spectrum: lightSpectrum, dpr: dpr || 1, cores: navigator.hardwareConcurrency || null,
     ua: navigator.userAgent, state: stateSig(), G: Object.assign({}, G),
   }, o));
@@ -5479,8 +5482,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const sink = await tiffSink(W, p.FH, p.store, p.store);
       const tR = Date.now();
       let bytes = 0;
+      // WHERE THE TIME WENT, per render tile. Two performance.now() calls against a unit of work that
+      // takes seconds is about 8 microseconds across the whole grid -- the one kind of instrumentation
+      // that is genuinely free, because the observer is nine orders of magnitude cheaper than the
+      // observed. It earns that keep by separating the two explanations for a slow master, which are
+      // otherwise indistinguishable from the outside: STALLS are spiky, with a few tiles far off the
+      // median, while a slow processor is uniform, and a busy PICTURE tracks the tile's own byte count.
+      // Reconstructing that from a finished file took a morning of benchmarking; it is under a kilobyte.
+      // These sum to msRender by construction, since the clock starts at the top of each iteration.
+      const tileMs = [], tileBytes = [];
       for (let gy = 0; gy < p.rDown; gy++) for (let gx = 0; gx < p.rAcross; gx++) {
-        const n = gy * p.rAcross + gx;
+        const n = gy * p.rAcross + gx, tTile = performance.now();
+        let tb = 0;                                        // this render tile's share of the file
         expStat(TR('exp.tiles', { done: n + 1, total: p.renders, px: W }), 0.92 * n / p.renders);
         await breathe();
         const c = renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
@@ -5492,16 +5505,23 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // ImageWidth and ImageLength to say where the picture stops, so an edge tile is padded.
           const px = cx.getImageData(p.bleed + sx * p.store, p.bleed + sy * p.store, p.store, p.store).data;
           const z = await deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength));
-          await sink.add(ty * p.across + tx, z); bytes += z.length;   // straight to disk under OPFS
+          await sink.add(ty * p.across + tx, z); bytes += z.length; tb += z.length;   // straight to disk under OPFS
         }
         c.width = 1; c.height = 1;                         // only now: every quarter has been read
+        tileMs.push(Math.round(performance.now() - tTile)); tileBytes.push(tb);
       }
       const msRender = Date.now() - tR;
       expStat(TR('exp.saving'), 0.96); await breathe();
       const { blob } = await sink.finish(expMeta({
         scope: 'render', tiled: true, w: W, h: p.FH, tile: p.store, render: p.ts,
         tiles: p.tiles, renders: p.renders, bleed: p.bleed,
-        toDisk: sink.toDisk, bytes, ms: { render: msRender, total: Date.now() - expT0 },
+        toDisk: sink.toDisk, bytes,
+        ms: { render: msRender, total: Date.now() - expT0 },
+        // Paired on purpose: time ALONE cannot say why a tile was slow. Against its own byte count it
+        // can -- time that tracks bytes is the picture being dense, time that spikes where bytes did
+        // not is the machine stalling. Two arrays of 40 numbers, under a kilobyte, and the next
+        // anomaly gets read off the file instead of re-measured.
+        perTile: { ms: tileMs, bytes: tileBytes },
       }));
       const runtime = typeof claude !== 'undefined' && !!claude.use;
       const d = runtime ? await claude.use('downloads') : null;
