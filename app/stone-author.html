@@ -1091,7 +1091,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.3';
+  const BUILD = '2026.09.26.4';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4672,11 +4672,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     parts.push(...idats, pngChunk('IEND', new Uint8Array(0)));
     return { blob: new Blob(parts, { type: 'image/png' }), plan: p, msRender: tRender, bytes, bands, shrinks };
   }
+  // What the render was made FROM, not just what made it. Two masters of the same slab are not comparable
+  // without this: a control nudged between them changes the picture by more than an engine does, and the
+  // difference is invisible afterwards. `state` is a checksum over everything a save would carry, so two
+  // files can be told apart or matched in one comparison; `G` is here as well because when they differ you
+  // want to see WHICH control moved, not merely that one did.
+  const stateSig = () => { try { return crc32(new TextEncoder().encode(JSON.stringify(serialize()))).toString(16); } catch (_) { return null; } };
   const expMeta = o => JSON.stringify(Object.assign({
     tool: 'stone-author', at: new Date().toISOString(),
     marks: marks.length, lines: geo.lines.length, family: fam,
     spectrum: lightSpectrum, dpr: dpr || 1, cores: navigator.hardwareConcurrency || null,
-    ua: navigator.userAgent,
+    ua: navigator.userAgent, state: stateSig(), G: Object.assign({}, G),
   }, o));
   function zipStore(files) {
     const te = new TextEncoder(), parts = [], cen = []; let off = 0;
@@ -4706,17 +4712,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // `tiles` are DEFLATE-compressed payloads in row-major order, each a FULL tileW x tileH block of RGBA.
   // Edge tiles are padded rather than cropped, because TIFF requires every tile to be full size and uses
   // ImageWidth/ImageLength to say where the picture actually stops.
-  function tiffTiled(W, H, tileW, tileH, tiles, desc) {
+  // The file's shape, computed from where the tiles actually landed: a 16-byte header, the tile payloads
+  // back to back, then the directory that says where each one is. Shared by both writers below so they
+  // cannot drift apart — they are not two formats, they are the same bytes assembled differently.
+  function tiffLayout(W, H, tileW, tileH, offs, cnts, desc) {
     const across = Math.ceil(W / tileW), down = Math.ceil(H / tileH), N = across * down;
-    if (tiles.length !== N) throw new Error(`tiff: got ${tiles.length} tiles, expected ${across}x${down}`);
+    if (offs.length !== N) throw new Error(`tiff: got ${offs.length} tiles, expected ${across}x${down}`);
     const dsc = desc ? new TextEncoder().encode(desc + '\0') : null;
     const ENTRIES = dsc ? 14 : 13, IFD_LEN = 8 + ENTRIES * 20 + 8, pad8 = n => (n + 7) & ~7;
     const u64 = (dv, p, v) => { dv.setUint32(p, v >>> 0, true); dv.setUint32(p + 4, Math.floor(v / 4294967296), true); };
 
-    let at = 16;                                           // tile payloads start straight after the header
-    const offs = [], cnts = [];
-    for (const t of tiles) { offs.push(at); cnts.push(t.length); at += t.length; }
-    const ifdAt = pad8(at), gap = ifdAt - at;
+    const end = N ? offs[N - 1] + cnts[N - 1] : 16;
+    const ifdAt = pad8(end), gap = ifdAt - end;
     let ext = ifdAt + IFD_LEN;
     const dscAt = ext; if (dsc) ext = pad8(ext + dsc.length);
     const offsAt = ext, cntsAt = ext + N * 8;
@@ -4742,7 +4749,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     entry(258, 3, 4, shorts(8));                           // BitsPerSample — 8 bits, four samples
     entry(259, 3, 1, short1(8));                           // Compression — Adobe Deflate, what CompressionStream emits
     entry(262, 3, 1, short1(2));                           // PhotometricInterpretation — RGB
-    if (dsc) entry(270, 2, dsc.length, far(dscAt));        // ImageDescription — the same provenance the PNG puts in tEXt
+    if (dsc) entry(270, 2, dsc.length, far(dscAt));        // ImageDescription — the provenance the PNG puts in tEXt
     entry(277, 3, 1, short1(4));                           // SamplesPerPixel
     entry(284, 3, 1, short1(1));                           // PlanarConfiguration — chunky
     entry(322, 4, 1, long1(tileW));                        // TileWidth
@@ -4753,16 +4760,83 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     entry(339, 3, 4, shorts(1));                           // SampleFormat — unsigned integer
     u64(iv, e, 0);                                         // no second IFD
 
-    const parts = [head, ...tiles];
-    if (gap) parts.push(new Uint8Array(gap));
-    parts.push(ifd);
-    if (dsc) { parts.push(dsc); const p = pad8(dscAt + dsc.length) - (dscAt + dsc.length); if (p) parts.push(new Uint8Array(p)); }
+    const tail = [];
+    if (gap) tail.push(new Uint8Array(gap));
+    tail.push(ifd);
+    if (dsc) { tail.push(dsc); const p = pad8(dscAt + dsc.length) - (dscAt + dsc.length); if (p) tail.push(new Uint8Array(p)); }
     if (N > 1) {                                           // one tile fits its offset and length inline
       const arr = new Uint8Array(N * 16), av = new DataView(arr.buffer);
       for (let i = 0; i < N; i++) { u64(av, i * 8, offs[i]); u64(av, N * 8 + i * 8, cnts[i]); }
-      parts.push(arr);
+      tail.push(arr);
     }
+    return { head, tail };
+  }
+  // Everything in memory. Kept for callers that already hold every tile — the harness gate does.
+  function tiffTiled(W, H, tileW, tileH, tiles, desc) {
+    let at = 16;
+    const offs = [], cnts = [];
+    for (const t of tiles) { offs.push(at); cnts.push(t.length); at += t.length; }
+    const { head, tail } = tiffLayout(W, H, tileW, tileH, offs, cnts, desc);
+    const parts = [head, ...tiles, ...tail];
     return { blob: new Blob(parts, { type: 'image/tiff' }), parts };   // parts, so a caller can checksum without a second copy
+  }
+  // ---- the same file, written to disk as it is made -------------------------------------------------
+  // A tile held is a tile that has to be held again at the end. On a 3 GB tablet a 65535 master is about
+  // three quarters of a gigabyte of compressed tiles, all of it live until the very last step, and that
+  // last step is where a render that has run for an hour is lost. OPFS removes the term entirely: each
+  // tile goes to a private file the moment it exists, and what is handed to the download at the end is
+  // BACKED BY THAT FILE rather than copied out of it.
+  //
+  // The header is written last, patched in place, because where the directory lands is only known once
+  // every tile has been written — which is the same reason this layout can be streamed at all.
+  //
+  // Where OPFS is missing it collects in memory instead, which is exactly what the app did before.
+  // Chrome (including Android), Firefox 111 and Safari 17 have it; the file picker reaches far fewer.
+  async function tiffSink(W, H, tileW, tileH) {
+    let w = null, handle = null;
+    try {
+      if (navigator.storage && navigator.storage.getDirectory) {
+        const dir = await navigator.storage.getDirectory();
+        handle = await dir.getFileHandle('stone-master.tif', { create: true });
+        w = await handle.createWritable({ keepExistingData: false });
+        await w.write(new Uint8Array(16));                 // a placeholder; the real header goes in at the end
+      }
+    } catch (_) { w = null; handle = null; }                // quota, permission, or no OPFS: fall back
+    const N = Math.ceil(W / tileW) * Math.ceil(H / tileH);
+    const offs = new Array(N), cnts = new Array(N), order = [];   // `order` is write order; offs is by index
+    let at = 16, done = 0;
+    return {
+      toDisk: !!w, tiles: N,
+      // Tiles arrive in whatever order they are produced. A tiled TIFF does not care — the offset array is
+      // what places them — so a rendered tile can be cut and its pieces written as they come.
+      async add(i, tile) {
+        if (offs[i] !== undefined) throw new Error('tiff: tile ' + i + ' written twice');
+        offs[i] = at; cnts[i] = tile.length; at += tile.length; done++;
+        if (w) await w.write(tile); else order.push(tile);
+      },
+      async finish(desc) {
+        if (done !== N) throw new Error(`tiff: wrote ${done} of ${N} tiles`);
+        const { head, tail } = tiffLayout(W, H, tileW, tileH, offs, cnts, desc);
+        if (!w) { const parts = [head, ...order, ...tail]; return { blob: new Blob(parts, { type: 'image/tiff' }), parts }; }
+        for (const part of tail) await w.write(part);
+        await w.write({ type: 'write', position: 0, data: head });
+        await w.close();
+        return { blob: await handle.getFile(), parts: null };   // disk-backed: handing this over copies nothing
+      },
+    };
+  }
+  // A CRC32 over a blob without pulling it into memory — read a slice, fold it in, let it go. The zip
+  // wrapper needs one, and a disk-backed master would otherwise have to be materialised to compute it,
+  // which is the copy this whole path exists to avoid.
+  async function crcOfBlob(blob, onProgress) {
+    const SLICE = 8 << 20;
+    let crc = ~0;
+    for (let p = 0; p < blob.size; p += SLICE) {
+      const u8 = new Uint8Array(await blob.slice(p, Math.min(p + SLICE, blob.size)).arrayBuffer());
+      for (let i = 0; i < u8.length; i++) { crc ^= u8[i]; for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1)); }
+      if (onProgress) await onProgress(Math.min(p + SLICE, blob.size) / blob.size);
+    }
+    return ~crc >>> 0;
   }
   // A zip holding ONE stored (uncompressed) file, assembled with the payload as a Blob rather than as
   // bytes. That is the whole point: zipStore takes a Uint8Array, and materialising a 2 GB TIFF to hand it
@@ -5335,6 +5409,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // per unit area. The side is then chosen by what will actually allocate, largest first — a bigger tile
   // is both faster and less wasteful, so the only reason to come down is memory. Measured at 16384: tile
   // size changes speed and nothing else, with fidelity identical from 1024 to 8192.
+  // Two tile sizes, because they answer to different things. The RENDERED tile is as large as memory
+  // allows, since bleed is a perimeter cost and a bigger tile wastes less of it. The STORED tile is capped
+  // at 4096 because that is where readers stop: libvips refuses anything larger outright ("tile size out
+  // of range"), and 256, 512 and 1024 are what tiled TIFFs conventionally use. Cutting a rendered tile
+  // into stored ones costs nothing — the pixels are already in hand — so this buys readability for free
+  // rather than by rendering more.
+  const TIFF_STORE_MAX = 4096;
   function tiffPlan(W) {
     const FH = Math.round(W * H), bleed = Math.ceil(12 * (W / COAT_REF));
     const budget = Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / 8);
@@ -5347,8 +5428,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (ts <= 256) throw new Error(TR('exp.err.tile', { px: W }));
       ts = Math.floor(ts / 2);
     }
-    const across = Math.ceil(W / ts), down = Math.ceil(FH / ts);
-    return { FH, ts, bleed, across, down, tiles: across * down,
+    const store = Math.min(ts, TIFF_STORE_MAX), k = ts / store;   // k is 1 or 2: ts halves from 8192
+    const across = Math.ceil(W / store), down = Math.ceil(FH / store);
+    return { FH, ts, store, k, bleed,
+             across, down, tiles: across * down,                  // the STORED grid, what the file declares
+             rAcross: Math.ceil(W / ts), rDown: Math.ceil(FH / ts),
+             renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
              tileMB: Math.round((ts + 2 * bleed) ** 2 * 4 / 1e6) };
   }
   async function exportTiff(W) {
@@ -5360,28 +5445,34 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     hint(TR('hint.exporting-render', { w: W }));
     try {
       expStat(TR('exp.preparing'), null); await breathe();
-      const p = tiffPlan(W), parts = [];
+      const p = tiffPlan(W);
+      const sink = await tiffSink(W, p.FH, p.store, p.store);
       const tR = Date.now();
       let bytes = 0;
-      for (let gy = 0; gy < p.down; gy++) for (let gx = 0; gx < p.across; gx++) {
-        const n = gy * p.across + gx;
-        expStat(TR('exp.tiles', { done: n + 1, total: p.tiles, px: W }), 0.92 * n / p.tiles);
+      for (let gy = 0; gy < p.rDown; gy++) for (let gx = 0; gx < p.rAcross; gx++) {
+        const n = gy * p.rAcross + gx;
+        expStat(TR('exp.tiles', { done: n + 1, total: p.renders, px: W }), 0.92 * n / p.renders);
         await breathe();
         const c = renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
-        // The FULL tile, padding included: TIFF wants every tile the same size and uses ImageWidth and
-        // ImageLength to say where the picture stops, so an edge tile is padded rather than cropped.
-        const px = c.getContext('2d').getImageData(p.bleed, p.bleed, p.ts, p.ts).data;
-        c.width = 1; c.height = 1;                         // hand the canvas back before compressing
-        const z = await deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength));
-        parts.push(z); bytes += z.length;
+        const cx = c.getContext('2d');
+        for (let sy = 0; sy < p.k; sy++) for (let sx = 0; sx < p.k; sx++) {
+          const tx = gx * p.k + sx, ty = gy * p.k + sy;
+          if (tx >= p.across || ty >= p.down) continue;    // this quarter lies past the picture entirely
+          // The FULL stored tile, padding included: TIFF wants every tile the same size and uses
+          // ImageWidth and ImageLength to say where the picture stops, so an edge tile is padded.
+          const px = cx.getImageData(p.bleed + sx * p.store, p.bleed + sy * p.store, p.store, p.store).data;
+          const z = await deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength));
+          await sink.add(ty * p.across + tx, z); bytes += z.length;   // straight to disk under OPFS
+        }
+        c.width = 1; c.height = 1;                         // only now: every quarter has been read
       }
       const msRender = Date.now() - tR;
       expStat(TR('exp.saving'), 0.96); await breathe();
-      const { blob, parts: tiffParts } = tiffTiled(W, p.FH, p.ts, p.ts, parts, expMeta({
-        scope: 'render', tiled: true, w: W, h: p.FH, tile: p.ts, tiles: p.tiles, bleed: p.bleed,
-        bytes, ms: { render: msRender, total: Date.now() - expT0 },
+      const { blob } = await sink.finish(expMeta({
+        scope: 'render', tiled: true, w: W, h: p.FH, tile: p.store, render: p.ts,
+        tiles: p.tiles, renders: p.renders, bleed: p.bleed,
+        toDisk: sink.toDisk, bytes, ms: { render: msRender, total: Date.now() - expT0 },
       }));
-      parts.length = 0;
       const runtime = typeof claude !== 'undefined' && !!claude.use;
       const d = runtime ? await claude.use('downloads') : null;
       const fn = expName(W, 'tif');
@@ -5389,13 +5480,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // The artifact runtime only saves a fixed set of extensions and .tif is not among them, so there
         // the file travels inside a zip. The checksum is taken over the pieces the TIFF was built from,
         // and the payload goes in as a Blob — so nothing the size of the picture is copied a second time.
-        expStat(TR('exp.saving'), 0.98);
-        let crc = ~0;
-        for (const q of tiffParts) {
-          for (let i = 0; i < q.length; i++) { crc ^= q[i]; for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1)); }
-          await breathe();                                 // a 2 GB checksum must not freeze the page
-        }
-        await d.save({ filename: expName(W, 'zip'), data: zipOneStored(fn, blob, blob.size, ~crc >>> 0) });
+        const crc = await crcOfBlob(blob, async (f) => { expStat(TR('exp.saving'), 0.96 + 0.03 * f); await breathe(); });
+        await d.save({ filename: expName(W, 'zip'), data: zipOneStored(fn, blob, blob.size, crc) });
       } else if (runtime) throw new Error(TR('exp.err.no-download'));   // the sandbox blocks the anchor too
       else download(fn, blob);
       expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1);
