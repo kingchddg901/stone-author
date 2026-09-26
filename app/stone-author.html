@@ -400,7 +400,7 @@
       <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select>
       <input id="slabname" type="text" maxlength="80" placeholder="stone" aria-label="Slab name" data-i18n-attr="aria-label=a11y.slab-name;placeholder=a11y.slab-name-ph">
       <span class="stat" id="expcap"></span>
-      <input id="loadfile" type="file" accept="application/json,.json" hidden></div>
+      <input id="loadfile" type="file" hidden><!-- no accept: it locks iOS out entirely, see the change handler --></div>
     <div class="expprog" id="expprog" hidden><div class="expbar" id="expbar"><i id="expfill"></i></div><div class="exprow"><span class="stat" id="expstat"></span><span class="stat" id="expclock"></span></div></div>
     <div class="tiers" id="tiers" hidden>
       <label class="tgl"><input type="checkbox" id="tier-large"><span data-i18n="big.large">Large render</span></label>
@@ -1086,7 +1086,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.25.9';
+  const BUILD = '2026.09.25.10';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5209,6 +5209,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     w.addEventListener('change', save); what.addEventListener('change', save);
   }
   document.getElementById('load').addEventListener('click', () => document.getElementById('loadfile').click());
+  // The file input carries NO `accept`. It used to say `application/json,.json`, which reads as helpful and
+  // on iOS means a slab cannot be opened at all: Safari resolves `accept` to its own type identifiers, does
+  // not recognise that one, and greys out every file in the picker — including a slab the app itself saved.
+  // Measured on an iPhone: Save works, because that is a download, and Load never does. Filtering is not
+  // worth a platform, and nothing depends on it, because the two hints below already carry a wrong pick:
+  // unparseable text says so, and parseable text that is not a stone says THAT. So the picker offers
+  // everything and the file itself decides.
   document.getElementById('loadfile').addEventListener('change', e => {
     const f = e.target.files[0]; if (!f) return;
     const r = new FileReader();
