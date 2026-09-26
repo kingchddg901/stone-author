@@ -66,3 +66,5 @@ jobs:
         run: node harness/strain.mjs
       - name: Grid tiles join, re-render identically, and survive the TIFF round trip
         run: node harness/tiff.mjs
+      - name: The signature that describes a render covers the light
+        run: node harness/signature.mjs

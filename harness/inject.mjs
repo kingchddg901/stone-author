@@ -23,6 +23,8 @@ const hook = `
     renderOneTile, tiffPlan, tiffTiled, deflateBytes,
     // the spectral resolver, so a gate can ask what an artifact glows at a given light without rendering
     emit, emitAt, setSpx: (v) => { lightSpectrum = v; uvMode = v !== 0; },
+    // both signatures, so a gate can show which one answers "same picture?"
+    stateSig, renderSig,
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
     render: () => { size(); build(); stoneReady = false; draw(); },
     get G() { return G; }, get OVR_uv() { return OVR_uv; },

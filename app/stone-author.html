@@ -1091,7 +1091,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.8';
+  const BUILD = '2026.09.26.9';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4699,6 +4699,34 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // files can be told apart or matched in one comparison; `G` is here as well because when they differ you
   // want to see WHICH control moved, not merely that one did.
   const stateSig = () => { try { return crc32(new TextEncoder().encode(JSON.stringify(serialize()))).toString(16); } catch (_) { return null; } };
+  // WHAT REACHES THE PIXELS. stateSig signs the whole document, which is the wrong question twice over:
+  // it moves when you pick a different tool or select a layer, and it does NOT move when you switch the
+  // light from daylight to black light, because the spectrum is not serialised. Both were demonstrated
+  // with files on disk - a daylight master and a UV master of this slab share one signature, and two
+  // byte-identical S23 renders carry two different ones. So a matching stateSig neither proves nor
+  // disproves that two masters came from the same picture.
+  //
+  // This one signs an explicit list of render inputs. The membership was MEASURED, not reasoned: each
+  // candidate was mutated and a tile re-rendered, and only fields that moved pixels are in. tool, view,
+  // layTiles, guidesOn, activeLayer, folders, nextId, name, NEXT and T all moved zero bytes. soloLay
+  // moved 477,630 of 655,360 and would have been dropped on reasoning alone - it reads like selection
+  // state and it is not. T and layTiles stay in anyway: they are inert for THIS path but they are the
+  // floor settings, and the kit export draws the floor. Including an inert field only costs a signature
+  // that moves when the picture did not; omitting a live one lets two different pictures claim to match,
+  // which is the failure that actually misleads.
+  //
+  // stateSig is kept alongside, unchanged, so every master already on disk still reads.
+  const renderSig = () => {
+    try {
+      const s = serialize();
+      return crc32(new TextEncoder().encode(JSON.stringify({
+        fam: s.fam, G: s.G, T: s.T, layTiles: s.layTiles,
+        layers: s.layers, soloLay: s.soloLay,
+        OVR: s.OVR, OVR_uv: s.OVR_uv, perItem: s.perItem, hidden: s.hidden, marks: s.marks,
+        light: [lightSpectrum, uvMode, spotOn],          // never serialised, and it changes everything
+      }))).toString(16);
+    } catch (_) { return null; }
+  };
   const expMeta = o => JSON.stringify(Object.assign({
     tool: 'stone-author', at: new Date().toISOString(),
     slab: fileStem(), marks: marks.length, lines: geo.lines.length, family: fam,
@@ -4706,7 +4734,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // much is IN it, and without these a later reader cannot tell a slow machine from a busy picture.
     cracks: geo.web.length, specks: geo.specks.length, drusy: geo.drusy.length, seams: geo.styl.length,
     spectrum: lightSpectrum, dpr: dpr || 1, cores: navigator.hardwareConcurrency || null,
-    ua: navigator.userAgent, state: stateSig(), G: Object.assign({}, G),
+    ua: navigator.userAgent, state: stateSig(), inputs: renderSig(), G: Object.assign({}, G),
   }, o));
   function zipStore(files) {
     const te = new TextEncoder(), parts = [], cen = []; let off = 0;
