@@ -12,6 +12,7 @@
 //   node tools/tiff-meta.mjs --rename <file> [file...]        what it WOULD rename, changing nothing
 //   node tools/tiff-meta.mjs --rename --go <file> [file...]   do it
 import { openSync, readSync, closeSync, statSync, existsSync, renameSync } from 'fs';
+import { inflateSync } from 'zlib';
 
 const WINDOW = 4 << 20;                                  // the block sits in the IFD tail; head is a fallback
 const RE = /\{"tool":"stone-author"[\s\S]*/;
@@ -86,7 +87,27 @@ function canonical(base, m) {
   return stem + '-' + m.w + '-' + lightOf(m) + '-' + engineOf(m) + stamp + ext;
 }
 
+// the tile index, so --audit can decode. Kept separate from findMeta, which never touches a pixel.
+function openTiff(path) {
+  const fd = openSync(path, 'r');
+  const at = (o, l) => { const b = Buffer.alloc(l); readSync(fd, b, 0, l, o); return b; };
+  const u64 = (b, p) => b.readUInt32LE(p) + b.readUInt32LE(p + 4) * 4294967296;
+  const ifd = u64(at(0, 16), 8), n = u64(at(ifd, 8), 0), ent = at(ifd + 8, n * 20);
+  const SZ = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 16: 8, 17: 8, 18: 8 }, tags = {};
+  for (let i = 0; i < n; i++) {
+    const e = i * 20, tag = ent.readUInt16LE(e), ty = ent.readUInt16LE(e + 2), c = u64(ent, e + 4);
+    const by = (SZ[ty] || 0) * c;
+    const raw = by <= 8 ? ent.subarray(e + 12, e + 12 + by) : at(u64(ent, e + 12), by);
+    const v = [];
+    for (let k = 0; k < c; k++) v.push(ty === 16 ? u64(raw, k * 8) : ty === 4 ? raw.readUInt32LE(k * 4) : ty === 3 ? raw.readUInt16LE(k * 2) : raw[k]);
+    tags[tag] = v;
+  }
+  const g = t => tags[t] && tags[t][0];
+  return { at, close: () => closeSync(fd), tw: g(322), th: g(323), offs: tags[324], cnts: tags[325] };
+}
+
 const RENAME = process.argv.includes('--rename'), GO = process.argv.includes('--go');
+const AUDIT = process.argv.includes('--audit');
 const paths = process.argv.slice(2).filter(a => !a.startsWith('--'));
 if (!paths.length) { console.error('usage: node tools/tiff-meta.mjs [--rename [--go]] <file> [file...]'); process.exit(2); }
 
@@ -142,6 +163,30 @@ for (const path of paths) {
                   `${r === null ? '' : ' and the time did not track the bytes'} — the shape of a STALL`);
   } else if (m.tiled) {
     console.log('  per tile not recorded (master predates per-tile timing)');
+  }
+  // --audit decodes every tile. Two failures hide from the metadata, and both were met on one day:
+  //   a LOST CANVAS writes a fully transparent tile and the export reports success. The render fills an
+  //   opaque ground before drawing, so alpha 0 is impossible in real output whatever the colour - and the
+  //   colour must not be the test, because a slab may legitimately be pure black.
+  //   a TRUNCATED BLOOM leaves the picture whole but dim. Under black light the bloom IS the picture, so a
+  //   render tile too small for the blur's reach loses a third of the light with no other symptom. The
+  //   whole-picture mean is what catches it, by comparison against another master of the same slab.
+  if (AUDIT && m.w) {
+    const f = openTiff(path);
+    let dead = 0, wrong = 0, sum = 0, lit = 0, n = 0;
+    for (let T = 0; T < f.offs.length; T++) {
+      const px = inflateSync(f.at(f.offs[T], f.cnts[T]));
+      if (px.length !== f.tw * f.th * 4) wrong++;
+      let opaque = false;
+      for (let i = 3; i < px.length && !opaque; i += 4004) if (px[i] !== 0) opaque = true;
+      if (!opaque) { dead++; continue; }
+      for (let i = 0; i < px.length; i += 400) { const l = (px[i] + px[i + 1] + px[i + 2]) / 3; sum += l; if (l > 40) lit++; n++; }
+    }
+    f.close();
+    console.log(`  AUDIT    ${f.offs.length} tiles, ${wrong} wrong size, ${dead} never drawn  ->  ${(dead || wrong) ? 'CORRUPT' : 'clean'}`);
+    if (n) console.log(`           whole-picture mean ${(sum / n).toFixed(2)}, lit>40 ${(100 * lit / n).toFixed(2)}%` +
+                       `   (compare against another master of the same slab and spectrum; a dim one has a truncated bloom)`);
+    if (dead || wrong) bad++;
   }
   if (RENAME && m.w) plan.push({ path, base: baseOf(path), m });
 }
