@@ -1091,7 +1091,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.5';
+  const BUILD = '2026.09.26.6';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4978,6 +4978,28 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return zipStore(files).arrayBuffer().then(a => new Uint8Array(a));
   }
   let exporting = false;
+  // SCREEN WAKE LOCK, held for exactly as long as `exporting` is. A render that outlasts the screen
+  // timeout does not crash -- it is throttled to death. The tile loop yields with setTimeout between
+  // tiles, and Blink drops a hidden page's timers to one call a second, then to one a MINUTE once it has
+  // been hidden for five; 160 tiles waiting a minute each is longer than the render itself. A
+  // backgrounded tab holding a gigabyte is also the first thing a small device evicts, and the master is
+  // opened with createWritable, which commits at close() -- so an evicted tab loses every tile it wrote.
+  // Wanting the lock and holding it are separate things: the platform releases it whenever the page
+  // hides, so the FLAG is what survives a trip to the lock screen, and visibilitychange re-takes the lock.
+  // Best-effort by design, and only while a render runs -- keeping someone's screen awake is not ours to
+  // do otherwise. It needs a secure context: https, localhost or a local file, but NOT a page served from
+  // a LAN address over plain http, where there is no lock to be had and nothing here can change that.
+  let wakeWanted = false, wakeLock = null;
+  async function wakeTake() {
+    if (!wakeWanted || wakeLock || document.hidden || !navigator.wakeLock) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });   // the platform let go, not us
+    } catch (_) { wakeLock = null; }                       // denied or unsupported: the render still runs
+  }
+  function wakeOn() { wakeWanted = true; wakeTake(); }     // not awaited: the render must not wait on it
+  function wakeOff() { wakeWanted = false; const s = wakeLock; wakeLock = null; if (s) s.release().catch(() => {}); }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeTake(); });
   // A big export blocks the main thread for minutes. The only signal used to be a hint that removes
   // itself after 2.6 s, so for the rest of the run the page was indistinguishable from a dead one.
   // frac below zero means FAILURE: no bar, and the line stays put. A failed export used to report itself
@@ -5031,7 +5053,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     download(fn, blob);
   }
   async function exportAll(W, only) {
-    if (exporting) return; exporting = true;
+    if (exporting) return; exporting = true; wakeOn();
     // The MENUS go dead too, not just the button. Leaving them live means you can pick a different width
     // or scope mid-export, watch nothing happen, and reasonably conclude the app ignored you.
     const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
@@ -5135,7 +5157,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const msg = TR('hint.export-failed-msg', { err: (e && e.message || e) });
       hint(msg); expStat(msg, -1);                         // stays on screen; the hint will not
     }
-    finally { btn.disabled = selW.disabled = selWhat.disabled = false; exporting = false; }
+    finally { btn.disabled = selW.disabled = selWhat.disabled = false; exporting = false; wakeOff(); }
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
@@ -5445,7 +5467,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
              tileMB: Math.round((ts + 2 * bleed) ** 2 * 4 / 1e6) };
   }
   async function exportTiff(W) {
-    if (exporting) return; exporting = true;
+    if (exporting) return; exporting = true; wakeOn();
     const btn = document.getElementById('export'), selW = document.getElementById('expres');
     const selF = document.getElementById('expfmt');
     btn.disabled = selW.disabled = selF.disabled = true;
@@ -5497,13 +5519,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } catch (e) {
       expStat(TR('hint.export-failed-msg', { err: (e && e.message) || e }), -1);
     } finally {
-      btn.disabled = selW.disabled = selF.disabled = false; exporting = false; expFreeze();
+      btn.disabled = selW.disabled = selF.disabled = false; exporting = false; wakeOff(); expFreeze();
     }
   }
   // Render-only, streamed in bands. Shares the progress line, the clock and the failure handling with
   // the ordinary export; what differs is that nothing the size of the picture is ever allocated.
   async function exportStreamed(W) {
-    if (exporting) return; exporting = true;
+    if (exporting) return; exporting = true; wakeOn();
     const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
     btn.disabled = selW.disabled = true;
     expReset();
@@ -5524,7 +5546,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } catch (e) {
       const msg = TR('hint.export-failed-msg', { err: (e && e.message || e) });
       hint(msg); expStat(msg, -1);
-    } finally { btn.disabled = selW.disabled = false; exporting = false; applyTiers(); }
+    } finally { btn.disabled = selW.disabled = false; exporting = false; wakeOff(); applyTiers(); }
   }
   applyTiers();
   // Remember what you last chose. Per viewer, per device: a reload used to drop you back on Everything at

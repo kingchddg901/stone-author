@@ -14,6 +14,7 @@ on:
       - 'tools/check-i18n.mjs'
       - 'tools/check-build.mjs'
       - 'tools/check-render-purity.mjs'
+      - 'tools/check-wake-lock.mjs'
       - '.github/workflows/i18n.yml'
   pull_request:
     paths:
@@ -22,6 +23,7 @@ on:
       - 'tools/check-i18n.mjs'
       - 'tools/check-build.mjs'
       - 'tools/check-render-purity.mjs'
+      - 'tools/check-wake-lock.mjs'
       - '.github/workflows/i18n.yml'
   workflow_dispatch:
 
@@ -41,3 +43,5 @@ jobs:
         run: node tools/check-build.mjs
       - name: Nothing that scales the coat may measure the window
         run: node tools/check-render-purity.mjs
+      - name: Every export path takes and drops the screen wake lock
+        run: node tools/check-wake-lock.mjs
