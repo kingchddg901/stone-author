@@ -14,6 +14,15 @@
  "a11y.export-what": {
   "where": "label on the menu beside the export width, choosing what the export contains"
  },
+ "opt.fmt-png": {
+  "where": "option in the export format menu; a file format name, the same in every language"
+ },
+ "opt.fmt-tiff": {
+  "where": "option in the export format menu; a file format name, the same in every language"
+ },
+ "a11y.export-format": {
+  "where": "accessibility label (aria-label and title), not visible on screen; the menu chooses PNG or TIFF"
+ },
  "a11y.export-width": {
   "where": "accessibility label (aria-label), not visible on screen"
  },
@@ -335,6 +344,12 @@
    "px": "the export width in pixels that failed, e.g. 16384"
   },
   "where": "failure message in the hint line when an export cannot encode an image at the chosen width"
+ },
+ "exp.err.tile": {
+  "placeholders": {
+   "px": "the export width in pixels that was asked for"
+  },
+  "where": "error when even the smallest tile will not allocate, so a TIFF at this width cannot start"
  },
  "exp.err.side-cap": {
   "placeholders": {

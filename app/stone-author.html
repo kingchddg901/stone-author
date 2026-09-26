@@ -397,7 +397,7 @@
       <button id="load" type="button" data-i18n="btn.load">Load</button>
       <button id="export" type="button" data-i18n="btn.export">Export</button>
       <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option></select>
-      <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select>
+      <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select><select id="expfmt" aria-label="Export format" title="Export format" data-i18n-attr="aria-label=a11y.export-format;title=a11y.export-format"><option value="png" data-i18n="opt.fmt-png">PNG</option><option value="tiff" data-i18n="opt.fmt-tiff">TIFF</option></select>
       <input id="slabname" type="text" maxlength="80" placeholder="stone" aria-label="Slab name" data-i18n-attr="aria-label=a11y.slab-name;placeholder=a11y.slab-name-ph">
       <span class="stat" id="expcap"></span>
       <input id="loadfile" type="file" hidden><!-- no accept: it locks iOS out entirely, see the change handler --></div>
@@ -449,6 +449,7 @@ window.SA_I18N = (() => {
   "a11y.choose-the-interface-language": "Choose the interface language",
   "a11y.edit": "Edit",
   "a11y.export-what": "What to export",
+  "a11y.export-format": "Export format",
   "a11y.export-width": "Export width",
   "a11y.export-width-px": "Export width (px)",
   "a11y.family": "Family",
@@ -528,6 +529,7 @@ window.SA_I18N = (() => {
   "exp.done-render": "Saved the render · {px}px · {t}",
   "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
+  "exp.err.tile": "This device cannot hold a tile big enough for {px}px.",
   "exp.err.side-cap": "This browser cannot make an image wider than {px} pixels, whatever the memory.",
   "exp.packing": "Packing the archive…",
   "exp.preparing": "Preparing…",
@@ -674,6 +676,8 @@ window.SA_I18N = (() => {
   "note.identity": "<b>Identity</b> shows what an animation would read: each line in its own colour, brightening along its length in the direction you drew it; web cracks brighten toward the line that spread them. Nothing had to be traced &mdash; the line was known when it was made.",
   "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint. In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
   "note.magnet": "<b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab. The Angle view colours every speck by the way it points, so alignment shows as a single colour.",
+  "opt.fmt-png": "PNG",
+  "opt.fmt-tiff": "TIFF",
   "opt.exp-all": "Everything",
   "opt.exp-render": "Just the render",
   "sec.banding": "Banding",
@@ -1086,7 +1090,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.1';
+  const BUILD = '2026.09.26.2';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3003,6 +3007,28 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       compositeWindow(cx, win, finalW, eh, [finalW, 0, 0, finalW, 0, -ey0], bs, win.x * finalW, win.y * finalW - ey0, finalW, tile);
     return c;                                              // caller keeps rows [bleed, bleed + h)
   }
+  // An arbitrary RECTANGLE of the W-wide picture. renderStrip is full width by construction — its `ox` is
+  // hardcoded to 0 — so a grid needs the x-offset too. Everything else is the same work the tile worker
+  // already does: same ground fill, same transform, same tile descriptor into applyCoat. Verified equal to
+  // renderStrip at bleed 0, and neighbouring tiles join with a mean difference of 0.
+  function renderOneTile(W, tx0, ty0, tw, th, bleed) {
+    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, prevG = g2d;
+    const ex0 = tx0 - bleed, ey0 = ty0 - bleed, ew = tw + 2 * bleed, eh = th + 2 * bleed;
+    const c = document.createElement('canvas'); c.width = ew; c.height = eh;
+    if (c.width !== ew || c.height !== eh) throw new Error('tile canvas clamped to ' + c.width + 'x' + c.height);
+    const cx = c.getContext('2d');
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;
+    if (uvMode) { cx.fillStyle = UV_DARK; cx.fillRect(0, 0, ew, eh); }
+    else {
+      cx.fillStyle = STONE_BG; cx.fillRect(0, 0, ew, eh);
+      if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, ew, eh); cx.globalAlpha = 1; }
+    }
+    cx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
+    paintStoneContent(false, false);
+    applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true }, { ox: ex0, oy: ey0, fw: finalW, fh: finalH });
+    g2d = prevG;
+    return c;                                              // caller keeps [bleed, bleed+tw) x [bleed, bleed+th)
+  }
   // Same plan, same order, a yield between tiles so the caller can say where it has got to.
   async function renderTiledStepped(W, onTile) {
     const backlit = !layTiles && G.backlight > 0;
@@ -4137,22 +4163,26 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return sideCapPx;
   }
   let expCap = 0;
-  function applyExportCeiling() {
-    if (!expCap) expCap = exportCeiling();
+  // The plain sizes answer to the two-canvas export probe — but only when a canvas that size is what the
+  // export actually builds. `tiff` says it is not. Called from applyTiers, which settles the format first.
+  function gatePlain(tiff) {
     const sel = document.getElementById('expres'); if (!sel) return;
     for (const o of sel.options) {
       if (o.dataset.tier) continue;            // the streamed sizes answer to the side cap, not to this probe
-      const over = +o.value > expCap;
+      const over = !tiff && +o.value > expCap;
       o.disabled = over;
       o.title = over ? TR('exp.too-big') : '';
     }
-    // Only ever pull a PLAIN size down. This function used to return early once the probe had run, so it
-    // could never refresh the label; making it re-runnable is what makes the tier skip above load-bearing.
-    // Without it, re-opening the File section after choosing 32768 would disable the tier sizes and quietly
-    // drop the width to the probe's 16384 — an export that looks like the one you asked for and is not.
+    // Only ever pull a PLAIN size down. This used to return early once the probe had run, so it could never
+    // refresh the label; making it re-runnable is what makes the tier skip above load-bearing. Without it,
+    // re-opening the File section after choosing 32768 would disable the tier sizes and quietly drop the
+    // width to the probe's 16384 — an export that looks like the one you asked for and is not.
     const cur = sel.selectedOptions[0];
-    if (cur && !cur.dataset.tier && +sel.value > expCap) sel.value = String(expCap);
-    applyTiers();                              // the ceiling it prints depends on which tiers are armed
+    if (!tiff && cur && !cur.dataset.tier && +sel.value > expCap) sel.value = String(expCap);
+  }
+  function applyExportCeiling() {
+    if (!expCap) expCap = exportCeiling();
+    applyTiers();                              // decides the format, then gates both halves against it
   }
 
   // ---- CALIBRATION ---------------------------------------------------------------------------------
@@ -4660,6 +4690,106 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const eocd = Uint8Array.from([0x50, 0x4b, 5, 6, 0, 0, 0, 0, ...b2(cen.length), ...b2(cen.length), ...b4(cs), ...b4(off), 0, 0]);
     return new Blob([...parts, ...cparts, eocd], { type: 'application/zip' });
   }
+  // ---- TILED BigTIFF -------------------------------------------------------------------------------
+  // A picture stored as independent tiles, plus two arrays saying where each one lives and how long it
+  // is. That single property is why this exists: tiles can be produced in any order, written the moment
+  // they finish, and one tile can be replaced later by appending it and changing two numbers. PNG can do
+  // none of those — it is one continuous deflate stream in strict row order, so nothing can be written
+  // early, and changing any region invalidates every byte after it.
+  //
+  // BigTIFF (version 43, 8-byte offsets) rather than classic TIFF, always, so there is one code path
+  // rather than two: a 65535 render's tile data measured ~2 GB on the hero, and a noisier slab would pass
+  // classic TIFF's 4 GB ceiling outright. Offsets are written as two 32-bit halves rather than through
+  // setBigUint64, which is Safari 15 — the app's floor is 13.1 and a container should not move it.
+  //
+  // `tiles` are DEFLATE-compressed payloads in row-major order, each a FULL tileW x tileH block of RGBA.
+  // Edge tiles are padded rather than cropped, because TIFF requires every tile to be full size and uses
+  // ImageWidth/ImageLength to say where the picture actually stops.
+  function tiffTiled(W, H, tileW, tileH, tiles, desc) {
+    const across = Math.ceil(W / tileW), down = Math.ceil(H / tileH), N = across * down;
+    if (tiles.length !== N) throw new Error(`tiff: got ${tiles.length} tiles, expected ${across}x${down}`);
+    const dsc = desc ? new TextEncoder().encode(desc + '\0') : null;
+    const ENTRIES = dsc ? 14 : 13, IFD_LEN = 8 + ENTRIES * 20 + 8, pad8 = n => (n + 7) & ~7;
+    const u64 = (dv, p, v) => { dv.setUint32(p, v >>> 0, true); dv.setUint32(p + 4, Math.floor(v / 4294967296), true); };
+
+    let at = 16;                                           // tile payloads start straight after the header
+    const offs = [], cnts = [];
+    for (const t of tiles) { offs.push(at); cnts.push(t.length); at += t.length; }
+    const ifdAt = pad8(at), gap = ifdAt - at;
+    let ext = ifdAt + IFD_LEN;
+    const dscAt = ext; if (dsc) ext = pad8(ext + dsc.length);
+    const offsAt = ext, cntsAt = ext + N * 8;
+
+    const head = new Uint8Array(16), hv = new DataView(head.buffer);
+    head[0] = head[1] = 0x49;                              // "II" — little-endian
+    hv.setUint16(2, 43, true); hv.setUint16(4, 8, true); hv.setUint16(6, 0, true);
+    u64(hv, 8, ifdAt);
+
+    const ifd = new Uint8Array(IFD_LEN), iv = new DataView(ifd.buffer);
+    u64(iv, 0, ENTRIES);
+    let e = 8;
+    const entry = (tag, type, count, write) => {           // tags MUST be written in ascending order
+      iv.setUint16(e, tag, true); iv.setUint16(e + 2, type, true);
+      u64(iv, e + 4, count); write(e + 12); e += 20;
+    };
+    const short1 = v => p => iv.setUint16(p, v, true);
+    const long1 = v => p => iv.setUint32(p, v, true);
+    const far = v => p => u64(iv, p, v);                   // a value of 8 bytes or less sits here inline
+    const shorts = v => p => { for (let i = 0; i < 4; i++) iv.setUint16(p + i * 2, v, true); };
+    entry(256, 4, 1, long1(W));                            // ImageWidth
+    entry(257, 4, 1, long1(H));                            // ImageLength
+    entry(258, 3, 4, shorts(8));                           // BitsPerSample — 8 bits, four samples
+    entry(259, 3, 1, short1(8));                           // Compression — Adobe Deflate, what CompressionStream emits
+    entry(262, 3, 1, short1(2));                           // PhotometricInterpretation — RGB
+    if (dsc) entry(270, 2, dsc.length, far(dscAt));        // ImageDescription — the same provenance the PNG puts in tEXt
+    entry(277, 3, 1, short1(4));                           // SamplesPerPixel
+    entry(284, 3, 1, short1(1));                           // PlanarConfiguration — chunky
+    entry(322, 4, 1, long1(tileW));                        // TileWidth
+    entry(323, 4, 1, long1(tileH));                        // TileLength
+    entry(324, 16, N, N === 1 ? far(offs[0]) : far(offsAt));   // TileOffsets (LONG8)
+    entry(325, 16, N, N === 1 ? far(cnts[0]) : far(cntsAt));   // TileByteCounts (LONG8)
+    entry(338, 3, 1, short1(2));                           // ExtraSamples — unassociated alpha
+    entry(339, 3, 4, shorts(1));                           // SampleFormat — unsigned integer
+    u64(iv, e, 0);                                         // no second IFD
+
+    const parts = [head, ...tiles];
+    if (gap) parts.push(new Uint8Array(gap));
+    parts.push(ifd);
+    if (dsc) { parts.push(dsc); const p = pad8(dscAt + dsc.length) - (dscAt + dsc.length); if (p) parts.push(new Uint8Array(p)); }
+    if (N > 1) {                                           // one tile fits its offset and length inline
+      const arr = new Uint8Array(N * 16), av = new DataView(arr.buffer);
+      for (let i = 0; i < N; i++) { u64(av, i * 8, offs[i]); u64(av, N * 8 + i * 8, cnts[i]); }
+      parts.push(arr);
+    }
+    return { blob: new Blob(parts, { type: 'image/tiff' }), parts };   // parts, so a caller can checksum without a second copy
+  }
+  // A zip holding ONE stored (uncompressed) file, assembled with the payload as a Blob rather than as
+  // bytes. That is the whole point: zipStore takes a Uint8Array, and materialising a 2 GB TIFF to hand it
+  // over doubles the peak at the very last step of a forty-minute render. The CRC is taken over the
+  // pieces the file was built from, which costs a read but not a copy.
+  function zipOneStored(name, body, len, crc) {
+    if (len > 0xFFFFFFFF) throw new Error('zip: ' + len + ' bytes needs ZIP64');
+    const nm = new TextEncoder().encode(name);
+    const b2 = n => [n & 255, n >> 8 & 255], b4 = n => [n & 255, n >> 8 & 255, n >> 16 & 255, n >> 24 & 255];
+    const lh = Uint8Array.from([0x50, 0x4b, 3, 4, ...b2(20), 0, 0, 0, 0, 0, 0, 0, 0, ...b4(crc), ...b4(len), ...b4(len), ...b2(nm.length), 0, 0]);
+    const ch = Uint8Array.from([0x50, 0x4b, 1, 2, ...b2(20), ...b2(20), 0, 0, 0, 0, 0, 0, 0, 0, ...b4(crc), ...b4(len), ...b4(len), ...b2(nm.length), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ...b4(0)]);
+    const eocd = Uint8Array.from([0x50, 0x4b, 5, 6, 0, 0, 0, 0, ...b2(1), ...b2(1), ...b4(ch.length + nm.length), ...b4(lh.length + nm.length + len), 0, 0]);
+    return new Blob([lh, nm, body, ch, nm, eocd], { type: 'application/zip' });
+  }
+  // Deflate a tile's raw RGBA the way TIFF's compression tag 8 expects: the zlib stream itself, with no
+  // per-row filter byte. PNG's writer puts a filter byte in front of every row; TIFF has no such thing,
+  // so the same CompressionStream serves both and only the input differs.
+  async function deflateBytes(u8) {
+    const cs = new CompressionStream('deflate');
+    const w = cs.writable.getWriter();
+    w.write(u8); w.close();
+    const out = [], rd = cs.readable.getReader();
+    let n = 0;
+    for (;;) { const { done, value } = await rd.read(); if (done) break; out.push(value); n += value.length; }
+    const b = new Uint8Array(n); let o = 0;
+    for (const q of out) { b.set(q, o); o += q.length; }
+    return b;
+  }
   // toBlob calls back with NULL when the canvas is too large to encode, and a throw inside that callback
   // is swallowed -- the executor has already returned, so the promise simply never settles. An export
   // that hangs for ever on step 1 with the UI still responsive is what that looks like from the outside.
@@ -5058,7 +5188,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const isMobile = () => (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean')
     ? navigator.userAgentData.mobile
     : /Mobi|Android|iPhone|iPod/i.test(navigator.userAgent || '');
-  let tierLarge = false, tierExtreme = false;
+  let tierLarge = false, tierExtreme = false, fmtChosen = false;
   try { tierLarge = JSON.parse(localStorage.getItem(TIER_KEY) || '{}').large === true; } catch (_) {}
 
   // Deliberately does NOT wait on the dialog's `close` event. Measured in an embedded Chromium: the
@@ -5098,22 +5228,35 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     document.getElementById('tier-large').checked = tierLarge;
     document.getElementById('tier-extreme-row').hidden = !tierLarge;
     document.getElementById('tier-extreme').checked = tierExtreme;
+    // Decide the FORMAT before gating anything, because the two answer to different limits and the gate
+    // has to know which one it is applying.
+    const ff = document.getElementById('expfmt');
+    if (ff && !fmtChosen) ff.value = +sel.value > STRIP_FROM ? 'tiff' : 'png';
+    const tiff = !!ff && ff.value === 'tiff';
+    // Neither canvas limit describes the TIFF path. It never allocates a canvas the size of the picture —
+    // one tile at a time, and tiffPlan halves the tile until it fits — so the two-canvas export probe and
+    // the single-canvas side cap both price a cost it does not incur. That mispricing is what refused a
+    // 16384 render to a 3 GB tablet and to an iPhone, either of which can produce one tile at a time
+    // comfortably. A size TIFF genuinely cannot manage now fails where the truth is known: at render,
+    // when tiffPlan runs out of room to halve.
     const side = mob ? 0 : sideCap();
     for (const o of sel.options) {
       const t = o.dataset.tier;
-      if (!t) continue;                                    // plain canvas sizes: the ceiling probe owns those
+      if (!t) continue;                                    // plain canvas sizes: gatePlain owns those
       const armed = t === 'large' ? tierLarge : tierExtreme;
-      const tooWide = +o.value > side;                     // wider than a canvas this build can hold
+      const tooWide = !tiff && +o.value > side;            // wider than a canvas this build can hold
       o.hidden = !armed;
       o.disabled = !armed || tooWide;
       o.title = armed && tooWide ? TR('exp.side-cap', { px: side }) : '';
     }
+    gatePlain(tiff);
     if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) {
       const ok = [...sel.options].filter(o => !o.disabled);
       sel.value = ok.length ? ok[ok.length - 1].value : '1024';   // the highest still on offer
     }
-    // The kit at these sizes would be eight full-size images; only the render is on the table.
-    const streamed = +sel.value > STRIP_FROM;
+    // The kit at these sizes would be eight full-size images; only the render is on the table. TIFF is
+    // render-only at every size — the kit is eight PNGs and has nothing to do with the grid.
+    const streamed = +sel.value > STRIP_FROM || tiff;
     if (streamed) what.value = 'render';
     what.disabled = streamed;
     document.getElementById('tier-note').textContent = !tierLarge ? ''
@@ -5159,19 +5302,98 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     applyTiers();
   });
   document.getElementById('expres').addEventListener('change', applyTiers);
+  document.getElementById('expfmt').addEventListener('change', () => { fmtChosen = true; applyExportCeiling(); });
 
   document.getElementById('export').addEventListener('click', async () => {
     const W = +document.getElementById('expres').value;
+    const fmt = document.getElementById('expfmt').value;
+    if (W > STRIP_FROM) {
+      const h = Math.round(W * H);
+      if (W >= 65535 && !(await bigDialog(
+            TR('big.confirm', { w: W.toLocaleString(), h: h.toLocaleString(), gpx: (W * h / 1e9).toFixed(3) })
+              + '\n\n' + memNote(),
+            TR('btn.start-giant')))) return;
+      tierExtreme = false; applyTiers();                   // disarm on LAUNCH, not on success
+    }
+    if (fmt === 'tiff') return exportTiff(W);              // a grid of tiles, no assembly canvas
     if (W <= STRIP_FROM) return exportAll(W, document.getElementById('expwhat').value === 'render');
-    const h = Math.round(W * H);
-    if (W >= 65535 && !(await bigDialog(
-          TR('big.confirm', { w: W.toLocaleString(), h: h.toLocaleString(), gpx: (W * h / 1e9).toFixed(3) })
-            + '\n\n' + memNote(),
-          TR('btn.start-giant')))) return;
-    tierExtreme = false; applyTiers();                     // disarm on LAUNCH, not on success
     exportStreamed(W);
   });
 
+  // ---- TIFF, rendered as a grid ---------------------------------------------------------------------
+  // A tile is square because bleed is a PERIMETER cost, and a square is the shape that spends least of it
+  // per unit area. The side is then chosen by what will actually allocate, largest first — a bigger tile
+  // is both faster and less wasteful, so the only reason to come down is memory. Measured at 16384: tile
+  // size changes speed and nothing else, with fidelity identical from 1024 to 8192.
+  function tiffPlan(W) {
+    const FH = Math.round(W * H), bleed = Math.ceil(12 * (W / COAT_REF));
+    const budget = Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / 8);
+    let ts = Math.min(W, 8192);
+    for (;;) {
+      const ew = ts + 2 * bleed;
+      if (ew * ew * 4 <= budget && canvasFits(ew, ew, 1)) break;
+      // The floor is checked, not assumed. Refusing here names the real limit; planning a grid whose
+      // tiles cannot allocate would fail forty minutes later with nothing to show for it.
+      if (ts <= 256) throw new Error(TR('exp.err.tile', { px: W }));
+      ts = Math.floor(ts / 2);
+    }
+    const across = Math.ceil(W / ts), down = Math.ceil(FH / ts);
+    return { FH, ts, bleed, across, down, tiles: across * down,
+             tileMB: Math.round((ts + 2 * bleed) ** 2 * 4 / 1e6) };
+  }
+  async function exportTiff(W) {
+    if (exporting) return; exporting = true;
+    const btn = document.getElementById('export'), selW = document.getElementById('expres');
+    const selF = document.getElementById('expfmt');
+    btn.disabled = selW.disabled = selF.disabled = true;
+    expReset();
+    hint(TR('hint.exporting-render', { w: W }));
+    try {
+      expStat(TR('exp.preparing'), null); await breathe();
+      const p = tiffPlan(W), parts = [];
+      const tR = Date.now();
+      let bytes = 0;
+      for (let gy = 0; gy < p.down; gy++) for (let gx = 0; gx < p.across; gx++) {
+        const n = gy * p.across + gx;
+        expStat(TR('exp.tiles', { done: n + 1, total: p.tiles, px: W }), 0.92 * n / p.tiles);
+        await breathe();
+        const c = renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
+        // The FULL tile, padding included: TIFF wants every tile the same size and uses ImageWidth and
+        // ImageLength to say where the picture stops, so an edge tile is padded rather than cropped.
+        const px = c.getContext('2d').getImageData(p.bleed, p.bleed, p.ts, p.ts).data;
+        c.width = 1; c.height = 1;                         // hand the canvas back before compressing
+        const z = await deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength));
+        parts.push(z); bytes += z.length;
+      }
+      const msRender = Date.now() - tR;
+      expStat(TR('exp.saving'), 0.96); await breathe();
+      const { blob, parts: tiffParts } = tiffTiled(W, p.FH, p.ts, p.ts, parts, expMeta({
+        scope: 'render', tiled: true, w: W, h: p.FH, tile: p.ts, tiles: p.tiles, bleed: p.bleed,
+        bytes, ms: { render: msRender, total: Date.now() - expT0 },
+      }));
+      parts.length = 0;
+      const d = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
+      const fn = expName(W, 'tif');
+      if (d) {
+        // The artifact runtime only saves a fixed set of extensions and .tif is not among them, so there
+        // the file travels inside a zip. The checksum is taken over the pieces the TIFF was built from,
+        // and the payload goes in as a Blob — so nothing the size of the picture is copied a second time.
+        expStat(TR('exp.saving'), 0.98);
+        let crc = ~0;
+        for (const q of tiffParts) {
+          for (let i = 0; i < q.length; i++) { crc ^= q[i]; for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1)); }
+          await breathe();                                 // a 2 GB checksum must not freeze the page
+        }
+        await d.save({ filename: expName(W, 'zip'), data: zipOneStored(fn, blob, blob.size, ~crc >>> 0) });
+      } else download(fn, blob);
+      expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1);
+      hint(TR('hint.exported-render', { px: W }));
+    } catch (e) {
+      expStat(TR('hint.export-failed-msg', { err: (e && e.message) || e }), -1);
+    } finally {
+      btn.disabled = selW.disabled = selF.disabled = false; exporting = false; expFreeze();
+    }
+  }
   // Render-only, streamed in bands. Shares the progress line, the clock and the failure handling with
   // the ordinary export; what differs is that nothing the size of the picture is ever allocated.
   async function exportStreamed(W) {

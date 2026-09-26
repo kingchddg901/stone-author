@@ -19,6 +19,8 @@ const hook = `
     renderTiled, expBaseMask, expCoverage, expIdT,
     // the strip path: a render larger than a canvas can be, assembled as a PNG stream
     renderStreamedPNG, stripPlan, renderStrip,
+    // the grid path: an arbitrary rectangle of the picture, and the tiled container it is written into
+    renderOneTile, tiffPlan, tiffTiled, deflateBytes,
     // the spectral resolver, so a gate can ask what an artifact glows at a given light without rendering
     emit, emitAt, setSpx: (v) => { lightSpectrum = v; uvMode = v !== 0; },
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain

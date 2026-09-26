@@ -64,3 +64,5 @@ jobs:
         run: node harness/spectrum.mjs
       - name: Strain glow obeys the artifact/layer/bucket ladder, and is silent by default
         run: node harness/strain.mjs
+      - name: Grid tiles join, re-render identically, and survive the TIFF round trip
+        run: node harness/tiff.mjs
