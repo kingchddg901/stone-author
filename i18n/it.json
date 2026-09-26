@@ -84,6 +84,7 @@
  "exp.encoding": "Codifica del PNG…",
  "exp.err.encode": "Questo dispositivo non è riuscito a codificare un'immagine da {px}px.",
  "exp.err.tile": "Questo dispositivo non può contenere un tassello abbastanza grande per {px}px.",
+ "exp.err.no-download": "Questo render non può essere salvato da qui. Accedi, oppure apri lo studio dalla sua pagina.",
  "exp.err.side-cap": "Questo browser non può creare un'immagine più larga di {px} pixel, quale che sia la memoria.",
  "exp.packing": "Creazione dell'archivio…",
  "exp.preparing": "Preparazione…",

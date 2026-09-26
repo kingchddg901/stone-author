@@ -530,6 +530,7 @@ window.SA_I18N = (() => {
   "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
   "exp.err.tile": "This device cannot hold a tile big enough for {px}px.",
+  "exp.err.no-download": "This render cannot be saved from here. Sign in, or open the studio from its own page.",
   "exp.err.side-cap": "This browser cannot make an image wider than {px} pixels, whatever the memory.",
   "exp.packing": "Packing the archive…",
   "exp.preparing": "Preparing…",
@@ -1090,7 +1091,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.2';
+  const BUILD = '2026.09.26.3';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4943,6 +4944,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // single pass, so two full-size canvases alive at once is a FLOOR for it: 1.28 GiB at 16384, before a
   // byte of PNG. "Just the render" holds exactly one, encodes it, and writes the PNG straight out with
   // no archive to assemble -- which is the difference between roughly 1.8 GB and 0.9 GB at that width.
+  // Where a file actually goes. Inside the artifact runtime the sandbox blocks a page from starting its
+  // own download, so an anchor is inert there — which meant a signed-out viewer got "Saved the render" and
+  // no file, for a render that had run for minutes. Being IN that runtime and having no downloads
+  // capability is therefore a failure to report, not a case to fall through.
+  async function saveBlob(fn, blob) {
+    const runtime = typeof claude !== 'undefined' && !!claude.use;
+    const d = runtime ? await claude.use('downloads') : null;
+    if (d) return d.save({ filename: fn, data: blob });
+    if (runtime) throw new Error(TR('exp.err.no-download'));
+    download(fn, blob);
+  }
   async function exportAll(W, only) {
     if (exporting) return; exporting = true;
     // The MENUS go dead too, not just the button. Leaving them live means you can pick a different width
@@ -4977,9 +4989,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         }));
         expStat(TR('exp.saving'), 0.7); await breathe();
         const blob = new Blob([png], { type: 'image/png' });
-        const d = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
-        const fn = expName(W, 'png');
-        if (d) await d.save({ filename: fn, data: blob }); else download(fn, blob);
+        await saveBlob(expName(W, 'png'), blob);
         expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1); expFreeze();
         hint(TR('hint.exported-render', { px: W }));
         return;
@@ -5040,8 +5050,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       files.push({ name: 'slab.ora', data: await buildOraFrom(bytes[8], oOrder.map((b, i) => bytes[9 + i]), oOrder, oW) });
       const zip = zipStore(files);
       expStat(TR('exp.saving'), (makers.length + 1) / steps); await breathe();
-      const dl = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
       const fn = expName(W, 'zip');
+      const dl = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
       if (dl) await dl.save({ filename: fn, data: zip });
       else download(fn, zip);
       hint(TR('hint.exported-files', { n: files.length }));
@@ -5372,7 +5382,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         bytes, ms: { render: msRender, total: Date.now() - expT0 },
       }));
       parts.length = 0;
-      const d = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
+      const runtime = typeof claude !== 'undefined' && !!claude.use;
+      const d = runtime ? await claude.use('downloads') : null;
       const fn = expName(W, 'tif');
       if (d) {
         // The artifact runtime only saves a fixed set of extensions and .tif is not among them, so there
@@ -5385,7 +5396,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           await breathe();                                 // a 2 GB checksum must not freeze the page
         }
         await d.save({ filename: expName(W, 'zip'), data: zipOneStored(fn, blob, blob.size, ~crc >>> 0) });
-      } else download(fn, blob);
+      } else if (runtime) throw new Error(TR('exp.err.no-download'));   // the sandbox blocks the anchor too
+      else download(fn, blob);
       expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1);
       hint(TR('hint.exported-render', { px: W }));
     } catch (e) {
@@ -5412,9 +5424,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         await breathe();
       });
       expStat(TR('exp.saving'), 0.96); await breathe();
-      const d = (typeof claude !== 'undefined' && claude.use) ? await claude.use('downloads') : null;
-      const fn = expName(W, 'png');
-      if (d) await d.save({ filename: fn, data: r.blob }); else download(fn, r.blob);
+      await saveBlob(expName(W, 'png'), r.blob);
       expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1); expFreeze();
       hint(TR('hint.exported-render', { px: W }));
     } catch (e) {

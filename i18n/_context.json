@@ -351,6 +351,9 @@
   },
   "where": "error when even the smallest tile will not allocate, so a TIFF at this width cannot start"
  },
+ "exp.err.no-download": {
+  "where": "failure when the studio runs embedded and the host will not save files, so an export would silently produce nothing"
+ },
  "exp.err.side-cap": {
   "placeholders": {
    "px": "the browser’s maximum canvas side in pixels, 65535"
