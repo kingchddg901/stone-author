@@ -25,6 +25,7 @@ const hook = `
     emit, emitAt, setSpx: (v) => { lightSpectrum = v; uvMode = v !== 0; },
     // both signatures, so a gate can show which one answers "same picture?"
     stateSig, renderSig,
+    tilePainted,                                 // the lost-canvas guard, so it can be shown to bite
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
     render: () => { size(); build(); stoneReady = false; draw(); },
     get G() { return G; }, get OVR_uv() { return OVR_uv; },

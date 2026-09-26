@@ -530,6 +530,7 @@ window.SA_I18N = (() => {
   "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
   "exp.err.tile": "This device cannot hold a tile big enough for {px}px.",
+  "exp.err.blank": "Tile {n} of {total} came back unpainted twice, so the render was stopped rather than saved with holes in it. This device is short of memory — try a smaller width.",
   "exp.err.no-download": "This render cannot be saved from here. Sign in, or open the studio from its own page.",
   "exp.err.side-cap": "This browser cannot make an image wider than {px} pixels, whatever the memory.",
   "exp.packing": "Packing the archive…",
@@ -1091,7 +1092,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.9';
+  const BUILD = '2026.09.26.10';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5496,6 +5497,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // of range"), and 256, 512 and 1024 are what tiled TIFFs conventionally use. Cutting a rendered tile
   // into stored ones costs nothing — the pixels are already in hand — so this buys readability for free
   // rather than by rendering more.
+  // Did this canvas take our drawing at all? Only the grid path is guarded by this; the band path is
+  // parked and still writes whatever it is handed, which is where the missing stripe came from.
+  function tilePainted(c) {
+    try {
+      const cx = c.getContext('2d');
+      for (const y of [0, c.height >> 1, c.height - 1]) {
+        const d = cx.getImageData(0, y, c.width, 1).data;
+        for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return true;
+      }
+      return false;
+    } catch (_) { return false; }                          // a canvas that will not even read back is lost
+  }
   const TIFF_STORE_MAX = 4096;
   function tiffPlan(W) {
     const FH = Math.round(W * H), bleed = Math.ceil(12 * (W / COAT_REF));
@@ -5544,7 +5557,25 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         let tb = 0;                                        // this render tile's share of the file
         expStat(TR('exp.tiles', { done: n + 1, total: p.renders, px: W }), 0.92 * n / p.renders);
         await breathe();
-        const c = renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
+        // A LOST CANVAS IS NOT A DARK PICTURE. Chrome can hand back a canvas whose backing never
+        // allocated: three of them appeared in a 65535 master, each after a ~60 second stall, each
+        // written out as finished work, and the file reported success with twelve black tiles in it.
+        // Same defect as the stripe missing from a 24576 PNG the night before.
+        //
+        // The test is ALPHA, never colour. A slab may legitimately be pure black one day, so a guard
+        // that treats rgb(0,0,0) as impossible would lock that out; but the render fills an opaque
+        // ground before drawing anything, so a real pixel is opaque whatever colour it ends up. A tile
+        // with nothing opaque in it was never drawn on. Three rows are enough because this failure is
+        // whole-canvas: the backing is there or it is not.
+        let c = null;
+        for (let attempt = 1; ; attempt++) {
+          c = renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
+          if (tilePainted(c)) break;
+          c.width = 1; c.height = 1;                       // hand the failed allocation back first
+          if (attempt >= 2) throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders }));
+          expStat(TR('exp.tiles', { done: n + 1, total: p.renders, px: W }), 0.92 * n / p.renders);
+          await breathe();                                 // a retry costs one tile; a hole costs the master
+        }
         const cx = c.getContext('2d');
         for (let sy = 0; sy < p.k; sy++) for (let sx = 0; sx < p.k; sx++) {
           const tx = gx * p.k + sx, ty = gy * p.k + sy;

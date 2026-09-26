@@ -351,6 +351,13 @@
   },
   "where": "error when even the smallest tile will not allocate, so a TIFF at this width cannot start"
  },
+ "exp.err.blank": {
+  "placeholders": {
+   "n": "which render tile failed, counting from 1",
+   "total": "how many render tiles the grid has"
+  },
+  "where": "error when a tile came back with nothing drawn on it twice running, so the render is stopped rather than written with holes"
+ },
  "exp.err.no-download": {
   "where": "failure when the studio runs embedded and the host will not save files, so an export would silently produce nothing"
  },
