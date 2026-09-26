@@ -1091,7 +1091,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.7';
+  const BUILD = '2026.09.26.8';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4026,7 +4026,27 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     while (out.length && (out.endsWith('.') || out.endsWith(' '))) out = out.slice(0, -1);
     return out.trim().slice(0, 80) || SLAB_FALLBACK;
   }
-  const expName = (W, ext) => `${fileStem()}-${W}.${ext}`;
+  // A NAME THAT SAYS WHICH RENDER THIS IS. Every device wrote stone-<W>.<ext>, so five machines rendering
+  // one slab produced five files under a single name -- which is how a finished 90-minute A7 master was
+  // destroyed by an upload arriving under the same name half an hour later, and why the engine and the
+  // light were being written back in by hand afterwards. The name now carries what tells two masters
+  // apart without opening either: the slab, the width, the light, what drew it, and when.
+  // These are identifiers, so they are slugs: not translated, not prettified, safe on every filesystem.
+  const lightTag = () => lightSpectrum === 0 ? 'day' : lightSpectrum === -1 ? 'uv'
+    : 'spx' + String(Math.round(lightSpectrum * 100)).replace('-', 'm');
+  function engineTag() {
+    const u = navigator.userAgent;
+    const plat = /Android/.test(u) ? 'android' : /iPhone|iPad|iPod/.test(u) ? 'ios'
+      : /Windows/.test(u) ? 'win' : /Mac OS X/.test(u) ? 'mac' : /Linux|X11/.test(u) ? 'linux' : 'web';
+    // Order is load-bearing: every Chromium engine also claims Safari, and Edge and Opera also claim Chrome.
+    const eng = /Firefox\//.test(u) ? 'firefox' : /Edg\//.test(u) ? 'edge' : /OPR\/|Opera/.test(u) ? 'opera'
+      : /Chrome\//.test(u) ? 'chrome' : /Safari\//.test(u) ? 'safari' : 'other';
+    return plat + '-' + eng;
+  }
+  // LOCAL time, deliberately: this is the clock he read the elapsed off. The metadata keeps UTC.
+  const stampTag = () => { const d = new Date(), p = n => String(n).padStart(2, '0');
+    return p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); };
+  const expName = (W, ext) => `${fileStem()}-${W}-${lightTag()}-${engineTag()}-${stampTag()}.${ext}`;
 
   function serialize() {
     return { v: 1, name: slabName, fam, tool, view, layTiles, guidesOn,
@@ -4681,7 +4701,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const stateSig = () => { try { return crc32(new TextEncoder().encode(JSON.stringify(serialize()))).toString(16); } catch (_) { return null; } };
   const expMeta = o => JSON.stringify(Object.assign({
     tool: 'stone-author', at: new Date().toISOString(),
-    marks: marks.length, lines: geo.lines.length, family: fam,
+    slab: fileStem(), marks: marks.length, lines: geo.lines.length, family: fam,
     // The element counts the stat line shows. Recorded because a master's cost is dominated by how
     // much is IN it, and without these a later reader cannot tell a slow machine from a busy picture.
     cracks: geo.web.length, specks: geo.specks.length, drusy: geo.drusy.length, seams: geo.styl.length,
@@ -5531,7 +5551,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // the file travels inside a zip. The checksum is taken over the pieces the TIFF was built from,
         // and the payload goes in as a Blob — so nothing the size of the picture is copied a second time.
         const crc = await crcOfBlob(blob, async (f) => { expStat(TR('exp.saving'), 0.96 + 0.03 * f); await breathe(); });
-        await d.save({ filename: expName(W, 'zip'), data: zipOneStored(fn, blob, blob.size, crc) });
+        // derived from fn, never a second expName call: the stamp would differ if a second ticked
+        await d.save({ filename: fn.replace(/\.tif$/, '.zip'), data: zipOneStored(fn, blob, blob.size, crc) });
       } else if (runtime) throw new Error(TR('exp.err.no-download'));   // the sandbox blocks the anchor too
       else download(fn, blob);
       expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1);
