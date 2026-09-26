@@ -69,8 +69,9 @@ function appNamed(base, m) {
   if (m.slab) stems.push(m.slab);
   for (const stem of stems) {
     const esc = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (new RegExp('^' + esc + '-' + m.w + '\\.[a-z0-9]+$', 'i').test(base)) return 'the old default';
-    if (new RegExp('^' + esc + '-' + m.w + '-[a-z0-9]+-[a-z]+-[a-z]+-\\d{4}-\\d{6}\\.[a-z0-9]+$', 'i').test(base)) return 'the current scheme';
+    // A trailing -2, -3 ... is the save server's collision suffix, not a judgement someone typed.
+    if (new RegExp('^' + esc + '-' + m.w + '(-\\d+)?\\.[a-z0-9]+$', 'i').test(base)) return 'the old default';
+    if (new RegExp('^' + esc + '-' + m.w + '-[a-z0-9]+-[a-z]+-[a-z]+-\\d{4}-\\d{6}(-\\d+)?\\.[a-z0-9]+$', 'i').test(base)) return 'the current scheme';
   }
   return null;
 }
