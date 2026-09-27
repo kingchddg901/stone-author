@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.33';
+  const BUILD = '2026.09.26.34';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5830,14 +5830,25 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // One source for the figure. The warning quotes what the planner will actually take, or it is not
   // a warning about this program.
   const memBudget = () => Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / MEM_DIV);
-  const TILE_PROOF_KEY = 'stone-author:tileproof:v1';
-  function provenTile() {
-    try { return +JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}')[calSig()] || 0; } catch (_) { return 0; }
+  // WHAT THIS DEVICE SETTLED ON. Measuring beats predicting, but a planner that MEASURES is not
+  // automatically repeatable: candidates are compared on timing, and timings move. Two renders of the
+  // same slab on the same machine could pick different tile sizes, and a different tile size is a
+  // different canvas size, which Chrome does not rasterise identically - measured, 0.8% of bytes. So
+  // render #3 and render #50,000 would not match, which is a stated requirement.
+  //
+  // So the race runs ONCE per device, width and light. After that the answer is remembered and only
+  // VERIFIED - one calibration tile, the same check the race used. It still fails safely: if the
+  // remembered plan stops calibrating, the memory is dropped and the race runs again. Measurement on the
+  // first render, determinism on every one after.
+  const TILE_PROOF_KEY = 'stone-author:plan:v2';
+  const planKey = W => calSig() + ':' + W + ':' + (uvMode ? 'uv' : 'day');
+  function provenTile(W) {
+    try { return +JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}')[planKey(W)] || 0; } catch (_) { return 0; }
   }
-  function proveTile(ts) {
+  function proveTile(ts, W) {
     try {
       const all = JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}');
-      if (!(all[calSig()] >= ts)) { all[calSig()] = ts; localStorage.setItem(TILE_PROOF_KEY, JSON.stringify(all)); }
+      if (all[planKey(W)] !== ts) { all[planKey(W)] = ts; localStorage.setItem(TILE_PROOF_KEY, JSON.stringify(all)); }
     } catch (_) {}
   }
   function forgetTile() {
@@ -5965,7 +5976,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const probeSigma = canBlur ? sigma : 0;                  // nothing to learn from asking again per size
     if (sigma > 0 && !canBlur) trail.push('no ctx.filter - bloomless');
     const budget = memBudget();
-    const proven = TILE_FORCED ? 0 : provenTile();
+    const proven = TILE_FORCED ? 0 : provenTile(W);
     let ts = Math.min(W, 8192);
     // WHY the plan chose what it chose. The outcome was recorded and the reasoning was not, so a tablet
     // that silently halved its tile after an OS update could not be explained without the device in hand.
@@ -6005,6 +6016,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const ref = renderFull(CAL_REF_W), refCx = ref.getContext('2d');
       const CANVAS_HARD_MAX = 900e6;
       const ok = [];
+      // The remembered plan, verified rather than re-raced. This is what makes two renders of the same
+      // thing on the same machine produce the same picture.
+      if (proven && proven <= ts) {
+        const t0 = performance.now();
+        const cal = calibrate(W, FH, proven, bleed, ref, refCx);
+        trail.push(proven + ':remembered, ' + (cal.ok
+          ? 'calibrated ' + (cal.got != null ? cal.got.toFixed(1) + ' vs ' + cal.want.toFixed(1) : cal.why) + ' in ' + Math.round(performance.now() - t0) + 'ms'
+          : 'NO LONGER VALID (' + (cal.why || 'dim') + '), racing again'));
+        if (cal.ok) ok.push({ ts: proven, est: 0 });
+        else proveTile(0, W);
+      }
+      if (!ok.length)
       for (; ts > Math.max(256, bleed); ts = Math.floor(ts / 2)) {
         const ew = ts + 2 * bleed, need = ew * ew * 4 * surfaces + TIFF_STORE_MAX * TIFF_STORE_MAX * 4;
         if (ew * ew * 4 > CANVAS_HARD_MAX) { trail.push(ts + '/' + ew + ':over 900MB, not attempted'); continue; }
@@ -6110,7 +6133,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         c.width = 1; c.height = 1;                         // only now: every quarter has been read
         tileMs.push(Math.round(performance.now() - tTile)); tileBytes.push(tb);
       }
-      proveTile(p.ts);                                     // every tile drew at this size: that is the proof
+      proveTile(p.ts, W);                                  // settled: every render after this one matches it
       const msRender = Date.now() - tR;
       expStat(TR('exp.saving'), 0.96); await breathe();
       await sealing;                                        // the device block, ready before the metadata is built

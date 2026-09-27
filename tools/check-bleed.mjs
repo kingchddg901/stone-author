@@ -112,6 +112,13 @@ if (/const inBudget = need <= budget/.test(plan)) fail.push('the memory veto is 
 if (!/ew \* ew \* 4 > CANVAS_HARD_MAX/.test(plan)) fail.push('nothing stops an attempt at a canvas past the browser renderer limit');
 // The largest workable tile is not automatically the best one.
 if (!/ok\.sort\(\(a, b\) => a\.est - b\.est\)/.test(plan)) fail.push('the plan takes the first tile that works rather than the fastest that works');
+// MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
+// renders of the same slab on one machine could pick different tile sizes - and a different tile size
+// is a different canvas, which Chrome does not rasterise identically. The race runs once per device,
+// width and light; after that the answer is remembered and only verified.
+if (!/proven && proven <= ts/.test(plan)) fail.push('the plan does not consult what this device already settled on, so render #3 and render #50,000 can differ');
+if (!/proveTile\(p\.ts, W\)/.test(app)) fail.push('a completed render does not record its plan, so nothing is ever remembered');
+if (!/proveTile\(0, W\)/.test(plan)) fail.push('a remembered plan that stops calibrating is not dropped');
 
 // ---- 3b. the whole-image steps this path has no whole image for ------------------------------------
 // renderFull, the strip path and the worker path all composite reality windows onto an assembled canvas.
