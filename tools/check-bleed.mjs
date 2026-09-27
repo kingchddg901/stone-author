@@ -95,7 +95,9 @@ for (const m of app.matchAll(/bleed\s*=\s*[^;\n]*/g))
 // at 1024 - one canvas, untiled, nothing that can be truncated - and the comparison is sound because the
 // renderer is scale-invariant, measured at 60.61 for the same region at both 20480 and 24576.
 const plan = app.slice(app.indexOf('async function tiffPlan'), app.indexOf('async function exportTiff'));
-const cal = app.slice(app.indexOf('function calibrate(W, FH'), app.indexOf('async function tiffPlan'));
+// From the top of the calibration block, not from calibrate() itself: meanOfRegion sits above it, and a
+// slice that starts too late reads as "the code is missing" when it is only out of frame.
+const cal = app.slice(app.indexOf('const CAL_REF_W'), app.indexOf('async function tiffPlan'));
 if (!/renderFull\(CAL_REF_W\)/.test(plan)) fail.push('the plan has no untiled reference to judge a tile against');
 if (!/calibrate\(W, FH, ts, bleed, ref, refCx\)/.test(plan)) fail.push('the plan does not calibrate its candidates on a real tile');
 if (!/renderOneTile\(W, pick\.gx \* ts/.test(cal)) fail.push('calibration does not render a REAL tile, so it tests a path the render does not take');
