@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.25';
+  const BUILD = '2026.09.26.26';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3078,7 +3078,20 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     cx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
     paintStoneContent(false, false);
-    applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true }, { ox: ex0, oy: ey0, fw: finalW, fh: finalH });
+    const vp = { ox: ex0, oy: ey0, fw: finalW, fh: finalH };
+    applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true }, vp);
+    // REALITY WINDOWS ARE NOT A WHOLE-PICTURE STEP HERE, because this path never assembles a picture.
+    // renderFull, the strip path and the worker path all composite them onto an assembled canvas; this one
+    // writes each tile straight to disk, so they were simply dropped — every tiled master ever written is
+    // missing its islands. Hero's window shows DAYLIGHT (maskSpec 0), which is invisible in a daylight
+    // master and the most prominent object in the picture under black light: that is how it survived a
+    // week of exports. Composite per tile in the tile's own transform, and only for tiles a disc reaches.
+    for (const win of gatherMasks()) {
+      if (win.show == null) continue;
+      const wx = win.x * finalW, wy = win.y * finalW, wr = (win.r + win.feather) * finalW;
+      if (wx + wr < ex0 || wx - wr > ex0 + ew || wy + wr < ey0 || wy - wr > ey0 + eh) continue;
+      compositeWindow(cx, win, ew, eh, [finalW, 0, 0, finalW, -ex0, -ey0], bs, wx - ex0, wy - ey0, finalW, vp);
+    }
     g2d = prevG;
     return c;                                              // caller keeps [bleed, bleed+tw) x [bleed, bleed+th)
   }
@@ -5760,6 +5773,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // The widest blur this slab actually applies, in render pixels. Zero when nothing blurs (Hero in
     // daylight has subsurface 0 and specular 0), and then there is no bloom to lose and nothing to probe.
     const sigma = coatRadius(W / COAT_REF);
+    const wins = gatherMasks().filter(m => m.show != null).length;   // each one costs surfaces, per tile
     const budget = memBudget();
     const proven = TILE_FORCED ? 0 : provenTile();
     let ts = Math.min(W, 8192);
@@ -5792,7 +5806,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // budget waved through an 8192 pass that then had to allocate a gigabyte on a 2 GB tablet - and why
       // every failure this week was under black light, where the blur is the work.
       const ew = ts + 2 * bleed;
-      const need = ew * ew * 4 * (sigma > 0 ? 2 : 1) + TIFF_STORE_MAX * TIFF_STORE_MAX * 4;
+      // Count SURFACES, not one canvas. The tile itself, a scratch for the blur (Skia cannot blur in
+      // place), and for a reality window: the alternate-light render of the whole slab, its own blur
+      // scratch, and the masked copy. Five at once under black light with a window, one in plain daylight.
+      const surfaces = 1 + (sigma > 0 ? 1 : 0) + (wins ? 2 + (sigma > 0 ? 1 : 0) : 0);
+      const need = ew * ew * 4 * surfaces + TIFF_STORE_MAX * TIFF_STORE_MAX * 4;
       const inBudget = need <= budget;
       // MEMORY THAT IS BUSY IS STILL THERE. canvasFits allocates at one instant, so a device doing
       // something else for sixty milliseconds declines a canvas it holds perfectly well — and halving on
@@ -5846,7 +5864,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!Number.isInteger(k) || store < 256) throw new Error(TR('exp.err.tile', { px: W }));
     trail.push('store ' + store + ' x' + k);
     const across = Math.ceil(W / store), down = Math.ceil(FH / store);
-    return { FH, ts, store, k, bleed, sigma, trail, proven, memDiv: MEM_DIV, budgetMB: Math.round(budget / 1e6),
+    return { FH, ts, store, k, bleed, sigma, wins, trail, proven, memDiv: MEM_DIV, budgetMB: Math.round(budget / 1e6),
              across, down, tiles: across * down,                  // the STORED grid, what the file declares
              rAcross: Math.ceil(W / ts), rDown: Math.ceil(FH / ts),
              renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
@@ -5928,6 +5946,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const { blob } = await sink.finish(expMeta({
         scope: 'render', tiled: true, w: W, h: p.FH, tile: p.store, render: p.ts,
         tiles: p.tiles, renders: p.renders, bleed: p.bleed, sigma: Math.round(p.sigma) || 0,
+        windows: p.wins || 0,
+        // KNOWN OMISSION. The lens is a whole-image step and this path has no whole image, so a
+        // tiled master silently leaves it out. Recorded rather than hidden until it is done per tile.
+        omits: G.lens > 0 ? ['lens'] : undefined,
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
         // The light this master carries, sampled as it was written. 'mean' is the whole-picture average
         // luma over every 100th pixel — the same statistic `tiff-meta --audit` computes from a full

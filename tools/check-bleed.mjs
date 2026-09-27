@@ -91,13 +91,28 @@ if (!/canvasFits\(ew, ew, 1, sigma\)/.test(plan)) fail.push('the plan probes the
 if (!/proven >= ts && !\(sigma > 0\)/.test(plan)) fail.push('the tile proof bypasses the bloom probe: a proven tile must still be blur-tested');
 // A blur cannot happen in place, so a blooming render peaks at about twice its canvas. Counting one
 // surface is what let an 8192 pass through the budget and then fail to allocate on the device.
-if (!/sigma > 0 \? 2 : 1/.test(plan)) fail.push('the budget counts one surface: a blur needs a second, and the plan will wave through a pass the device cannot hold');
+if (!/const surfaces = 1 \+ \(sigma > 0 \? 1 : 0\)/.test(plan) || !/need = ew \* ew \* 4 \* surfaces/.test(plan))
+  fail.push('the budget no longer counts surfaces: a blur needs a scratch and a window needs three more, and the plan will wave through a pass the device cannot hold');
+// A window costs surfaces PER TILE, so a plan that ignores them allocates five and budgets for two.
+if (!/wins \? 2 \+ \(sigma > 0 \? 1 : 0\) : 0/.test(plan)) fail.push('the budget does not count a reality window\'s surfaces');
 if (!/BLOOM LOST/.test(plan)) fail.push('a bloom refusal is not named in the plan trail, so a master cannot explain itself');
 
 const probe = app.slice(app.indexOf('function bloomWorks'), app.indexOf('function canvasFits'));
 if (!/filter = `blur\(\$\{sigma\}px\)`/.test(probe) || !/drawImage\(c, 0, 0\)/.test(probe))
   fail.push('bloomWorks no longer blurs the canvas onto itself the way applyCoat does');
 if (!/data\[3\]/.test(probe)) fail.push('bloomWorks must read ALPHA: a colour test cannot tell a black slab from a dropped blur');
+
+// ---- 3b. the whole-image steps this path has no whole image for ------------------------------------
+// renderFull, the strip path and the worker path all composite reality windows onto an assembled canvas.
+// The BigTIFF path assembles nothing, so for a week it simply omitted them and every tiled master lost
+// its islands — invisible in daylight, where the window shows daylight, and the loudest object in the
+// picture under black light. It composites per tile now, and must keep doing so.
+const oneTile = app.slice(app.indexOf('function renderOneTile'), app.indexOf('async function renderTiledStepped'));
+if (!/compositeWindow\(cx, win, ew, eh/.test(oneTile)) fail.push('renderOneTile does not composite reality windows: every tiled master would lose its islands');
+if (!/win\.show == null\) continue/.test(oneTile)) fail.push('renderOneTile composites masks that are not windows');
+// Presence only: it catches the line being deleted, not the condition being neutered — `if (false && …)`
+// still reads as present. Say so rather than let it look stronger than it is.
+if (!/wx \+ wr < ex0 \|\| wx - wr > ex0 \+ ew/.test(oneTile)) fail.push('renderOneTile has no intersection test: every tile would pay for every window');
 
 // ---- 4. the light a master records about itself ----------------------------------------------------
 if (!/litSum \+= l;/.test(app)) fail.push('the export no longer accumulates the light it wrote');
