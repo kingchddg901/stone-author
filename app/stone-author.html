@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.11';
+  const BUILD = '2026.09.27.12';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2860,7 +2860,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'lighter';
       // With BLOOM_DRAW the halo was already drawn by each element, so there is nothing left to derive
       // from the pixels - and nothing to need neighbours for, which is the entire point.
-      if (!BLOOM_DRAW) {
+      if (!(BLOOM_DRAW && glowPx > 0)) {              // no drawn halo here, so the blur still has to run
         tx.globalAlpha = 0.55; blurDraw(tx, tcv, 3 * bs, w, h);
         tx.globalAlpha = 0.35; blurDraw(tx, tcv, 8 * bs, w, h);
       }
@@ -3322,7 +3322,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     if (layTiles) { drawTiles(F); paintLive(); if (tool === 'light') drawLightGuide(); ctx.globalAlpha = 1; stat(); return; }
-    glowPx = BLOOM_DRAW ? 16 * (cv.width / COAT_REF) : 0;   // before the paint: the glow is drawn WITH each element
+    // THE PREVIEW DOES NOT DRAW THE GLOW. It cost 8,050 per-element shadows a frame, each with its own
+    // shadowColor so nothing batches, and a tablet could not open the studio. It was paying that to show
+    // something WRONG anyway: the preview's sigma is the window width over COAT_REF, about 12, against an
+    // export's 524, and the drawn glow's deficit is sigma-dependent - so the preview never showed the look
+    // a render would produce. It keeps the image-space bloom, which is what it has always shown.
+    glowPx = 0;
     if (backlit) paintBacklit(); else paintStoneContent(ident, angleView);
     applyCoat(cv, ctx, cv.width / COAT_REF, { ident, uvMode, backlit });   // coat tier: emission bloom · subsurface · specular · lens (shared with renderFull); same reference as the export, so the preview matches
     if (!ident && !layTiles) applyWindowsScreen();                      // reality windows: daylight (or another light) through the islands

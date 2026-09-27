@@ -214,7 +214,7 @@ if (!app.includes("get('dim')"))
 // for. The two have to move together, and with the flag off nothing may change at all.
 if (!app.includes('if (uv && !BLOOM_DRAW) r = Math.max(r, 8 * bs, 3 * bs);'))
   fail.push('coatRadius no longer collapses the bleed under ?bloom=draw, or collapses it unconditionally: the bleed and the blur it feeds must switch together');
-if (!app.includes('if (!BLOOM_DRAW) {'))
+if (!app.includes('if (!(BLOOM_DRAW && glowPx > 0)) {'))
   fail.push('applyCoat runs the image-space bloom regardless of ?bloom=draw, so the drawn glow would be added ON TOP of the blurred one');
 
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
