@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.34';
+  const BUILD = '2026.09.26.35';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5851,10 +5851,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (all[planKey(W)] !== ts) { all[planKey(W)] = ts; localStorage.setItem(TILE_PROOF_KEY, JSON.stringify(all)); }
     } catch (_) {}
   }
-  function forgetTile() {
+  // The one path that un-remembers a bad plan. It deleted all[calSig()] while the store had moved to
+  // calSig:width:light, so for two commits a plan that produced an UNDRAWN TILE was refused correctly and
+  // then remembered anyway, ready to be handed straight back to the next render.
+  function forgetTile(W) {
     try {
       const all = JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}');
-      delete all[calSig()]; localStorage.setItem(TILE_PROOF_KEY, JSON.stringify(all));
+      delete all[planKey(W)]; localStorage.setItem(TILE_PROOF_KEY, JSON.stringify(all));
     } catch (_) {}
   }
   const TIFF_STORE_MAX = 4096;
@@ -5981,17 +5984,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // WHY the plan chose what it chose. The outcome was recorded and the reasoning was not, so a tablet
     // that silently halved its tile after an OS update could not be explained without the device in hand.
     // There are exactly two gates and they mean different things: the BUDGET is arithmetic on
-    // navigator.deviceMemory, while canvasFits actually allocates, paints a far corner and reads it back.
-    // A budget refusal says the device admits to little memory; a canvas refusal says the browser will not
-    // hand over the surface whatever the memory. Each step names the canvas it wanted, its cost, and which
-    // gate turned it down.
+    // a REAL TILE, so every step records the canvas it wanted, what that tile actually produced against
+    // the untiled reference, and how long it took. There is no budget refusal left to name, because there
+    // is no budget refusal: arithmetic over a hint that rounds down by up to half was refusing renders
+    // this hardware can do. The only thing declined before an attempt is a canvas past the browser's own
+    // limit.
     const trail = [];
-    // TAKEN ON TRUST, and the point is that nothing is asked. canvasFits allocates once, at this instant,
-    // so a machine busy with something else refuses a canvas it granted an hour earlier - and the render
-    // then commits to a smaller tile for its whole run with no way to reconsider. When you have watched
-    // this device do this size, asking it again is the step that produces the wrong answer. So neither
-    // gate runs: not the budget, not the probe. A canvas that genuinely will not allocate still fails
-    // safely rather than silently, because tilePainted refuses to write out a tile nothing was drawn on.
     if (TILE_FORCED) {
       ts = Math.min(TILE_FORCED, W);
       const ew = ts + 2 * bleed;
@@ -6112,7 +6110,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           c = renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
           if (tilePainted(c)) break;
           c.width = 1; c.height = 1;                       // hand the failed allocation back first
-          if (attempt >= 2) { forgetTile(); throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders })); }
+          if (attempt >= 2) { forgetTile(W); throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders })); }
           expStat(TR('exp.tiles', { done: n + 1, total: p.renders, px: W }), 0.92 * n / p.renders);
           await breathe();                                 // a retry costs one tile; a hole costs the master
         }

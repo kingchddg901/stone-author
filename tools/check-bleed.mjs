@@ -118,6 +118,18 @@ if (!/ok\.sort\(\(a, b\) => a\.est - b\.est\)/.test(plan)) fail.push('the plan t
 // width and light; after that the answer is remembered and only verified.
 if (!/proven && proven <= ts/.test(plan)) fail.push('the plan does not consult what this device already settled on, so render #3 and render #50,000 can differ');
 if (!/proveTile\(p\.ts, W\)/.test(app)) fail.push('a completed render does not record its plan, so nothing is ever remembered');
+// The store is keyed calSig:width:light. forgetTile deleted all[calSig()] for two commits after that
+// change, so a plan that produced an UNDRAWN TILE was refused correctly and then kept, ready to be handed
+// back to the next render. The one path that un-remembers a bad plan had silently stopped working.
+if (!/delete all\[planKey\(W\)\]/.test(app)) fail.push('forgetTile is not using the plan key, so a plan that produced a blank tile is never forgotten');
+// The semicolon matters: without it this matches `function forgetTile(W) {` and passes while the CALL
+// site has stopped passing the width — the definition satisfying a check about its caller.
+if (!/forgetTile\(W\);/.test(app)) fail.push('the blank-tile guard does not pass the width, so it forgets nothing');
+// Narrow, and it exists because rewriting a comment deleted this declaration: `trail` is pushed to in
+// seven places and declared in one, and `node --check` cannot see a missing declaration — it is a runtime
+// ReferenceError, not a parse error. Nothing else exercises the tiled planner at all, which is the real
+// gap: the harness renders 4096, and the grid path only engages past 16384.
+if (!/const trail = \[\];/.test(plan)) fail.push('the plan trail is never declared: every tiled export would die with a ReferenceError');
 if (!/proveTile\(0, W\)/.test(plan)) fail.push('a remembered plan that stops calibrating is not dropped');
 
 // ---- 3b. the whole-image steps this path has no whole image for ------------------------------------
