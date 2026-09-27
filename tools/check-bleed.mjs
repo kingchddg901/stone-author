@@ -88,6 +88,21 @@ if (blurReach) {
 for (const m of app.matchAll(/bleed\s*=\s*[^;\n]*/g))
   if (/12 \* bs|12 \* \(W \/ COAT_REF\)/.test(m[0])) fail.push(`a bleed is back on the old constant: ${m[0].trim()}`);
 
+// A BLUR THAT FEEDS AN ADDITIVE COMPOSITE CANNOT GO MISSING QUIETLY. WebKit has no ctx.filter, and most
+// of this renderer's filtered passes survive that: subsurface and the specular glint each blur into a
+// `difference` high-pass, and difference against an unblurred copy of the same canvas is black, so the
+// pass adds or screens black and simply vanishes. Wrong art, right picture. The back light's two passes
+// composite with `lighter`, so unblurred they added two SHARP copies of the whole image at 0.30 and 0.18
+// alpha - the picture at 1.48x brightness with every edge intact. blurDraw is the only path with a
+// fallback, so an additive pass has to use it.
+const backlit = app.slice(app.indexOf('function paintBacklit'), app.indexOf('function applyCoat'));
+for (const m of backlit.matchAll(/filter\s*=\s*.blur\(/g))
+  fail.push(`the back light blurs with a raw canvas filter (${m[0]}): where ctx.filter is absent that pass adds a SHARP copy of the picture, because it composites with lighter`);
+if ((backlit.match(/blurDraw\(/g) || []).length < 2)
+  fail.push('the back light scatter and bloom do not both go through blurDraw, so a browser with no canvas filter gets a wrong picture rather than a missing effect');
+if (!/blurDraw\(t, src, px/.test(app))
+  fail.push('blurCanvas does not go through blurDraw, so a layer declaring scatter gets a sharp copy of the accumulator instead of diffused light');
+
 // The harness counts too. tiff.mjs restated the bleed as `Math.ceil(12 * (W / 1000))` under a comment
 // claiming it was what tiffPlan takes, and went on passing for every commit after that stopped being
 // true. A test that hard-codes a derived value is testing its own copy of the past, and this rule only

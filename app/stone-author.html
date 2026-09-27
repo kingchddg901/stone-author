@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.2';
+  const BUILD = '2026.09.27.3';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2764,7 +2764,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function blurCanvas(src, px) {                           // scatter: a layer diffusing the light passing through it
     if (blurC.width !== src.width || blurC.height !== src.height) { blurC.width = src.width; blurC.height = src.height; }
     const t = blurC.getContext('2d'); t.setTransform(1, 0, 0, 1, 0, 0); t.globalAlpha = 1; t.globalCompositeOperation = 'source-over';
-    t.clearRect(0, 0, blurC.width, blurC.height); t.filter = `blur(${px}px)`; t.drawImage(src, 0, 0); t.filter = 'none'; return blurC;
+    t.clearRect(0, 0, blurC.width, blurC.height);
+    // Without the real filter this returned src UNCHANGED, and the caller masks it to one layer's coverage
+    // and draws it back over the same pixels - so the scatter was a no-op rather than a wrong picture.
+    // Silent either way, and the layer that declares scatter is asking for light to spread.
+    t.globalAlpha = 1; blurDraw(t, src, px, src.width, src.height); return blurC;
   }
   function drawLayerArtifacts(L, col) {                    // draw just THIS layer's geometry into the current g2d, in `col` (shared by mask + coverage)
     const key = L.key, b = L.bucket, cx = g2d; cx.strokeStyle = cx.fillStyle = col;
@@ -2838,8 +2842,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     g2d.drawImage(emitC, 0, 0, gw, gh, 0, 0, 1, H); g2d.globalCompositeOperation = prevOp;
     // SCATTER / BLOOM: a real backlight bleeds — soft additive bloom of the whole lit result so it reads as light, not tint
     g2d.save(); g2d.setTransform(1, 0, 0, 1, 0, 0); g2d.globalCompositeOperation = 'lighter';
-    g2d.globalAlpha = 0.3; g2d.filter = `blur(${5 * bs}px)`; g2d.drawImage(tcv, 0, 0);
-    g2d.globalAlpha = 0.18; g2d.filter = `blur(${11 * bs}px)`; g2d.drawImage(tcv, 0, 0);
+    // THROUGH blurDraw, like the emission bloom. These two are additive under 'lighter', so where the
+    // filter does not exist they did not degrade to nothing - they added two SHARP copies of the whole
+    // picture at 0.30 and 0.18, which is the image at 1.48x brightness with every edge intact. The other
+    // filtered passes in this renderer all feed a `difference` high-pass, and difference against an
+    // unblurred copy of the same canvas is black, so those go quietly absent. An additive pass cannot.
+    g2d.globalAlpha = 0.3; blurDraw(g2d, tcv, 5 * bs, tcv.width, tcv.height);
+    g2d.globalAlpha = 0.18; blurDraw(g2d, tcv, 11 * bs, tcv.width, tcv.height);
     g2d.filter = 'none'; g2d.globalAlpha = 1; g2d.globalCompositeOperation = 'source-over'; g2d.restore();
   }
   // COAT PASSES — factored so live draw() and the offline renderFull share one implementation (no drift).
