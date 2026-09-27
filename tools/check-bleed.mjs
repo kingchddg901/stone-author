@@ -288,8 +288,15 @@ else if (app.includes('!CAN_FILTER ? WEBKIT_LIFT') && app.indexOf('const WEBKIT_
   fail.push('WEBKIT_LIFT is read above its own declaration - a temporal dead zone on the one branch only WebKit takes, so it would throw on iOS and nowhere else');
 if (!app.includes("GLOW_RAW === '' || GLOW_RAW === 'auto'"))
   fail.push('the lift does not default to auto, so a default render uses no correction at all and comes back dim at every large width');
-if (!app.includes('glowRatio: glowRatio() || undefined'))
+if (!app.includes('glowRatio: BLOOM_DRAW ? glowRatio() : undefined'))
   fail.push('a master does not record the drawn-against-blurred ratio, so the per-engine branch can never be replaced by a fitted curve');
+// THE PROBE READING ZERO HAS TO REACH THE FILE. It reads zero on every engine today - the blurred branch
+// quantises away below half a level - and the old stamp deleted that zero, so a probe that never saw
+// anything was indistinguishable from a build that never had one. The gate above proves the LINE exists;
+// only a recorded zero proves the probe RAN. Nothing static can check the canvas arithmetic itself.
+const ratioStamp = app.split(String.fromCharCode(10)).find(l => l.includes('glowRatio:') && l.includes('glowRatio()')) || '';
+if (ratioStamp.includes('|| undefined'))
+  fail.push('the drawn-against-blurred probe drops a reading of exactly zero, which is the reading it actually gives: a probe that saw nothing would look like a build that never ran one');
 
 // AN EXPLICIT ?glow NUMBER WINS, INCLUDING A NEGATIVE ONE. WebKit does not under-deliver, it overshoots,
 // so the only way to measure what it needs is to be able to take light away - and the engine branch that

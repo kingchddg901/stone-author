@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.19';
+  const BUILD = '2026.09.27.20';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6480,15 +6480,28 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // tiled master silently leaves it out. Recorded rather than hidden until it is done per tile.
         omits: G.lens > 0 ? ['lens'] : undefined,
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
-        dimOverride: DIM_OK || undefined,
-        bloomDraw: BLOOM_DRAW || undefined,
+        dimOverride: DIM_OK || undefined,            // the light veto was withheld: read the light below against a good master
+        bloomDraw: BLOOM_DRAW || undefined,           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan
         // A LIFT OF EXACTLY ZERO IS A CHOICE, NOT AN ABSENCE. `|| undefined` dropped it, so every WebKit
         // master written before this carried no glowLift field at all - indistinguishable from a build
         // that never recorded one, when in fact it had run at the single value that was wrong. Present
         // whenever a halo was drawn, absent when there was none to lift.
         glowLift: BLOOM_DRAW ? +glowLift().toFixed(3) : undefined,   // toward white, or negative toward black
         glowAuto: GLOW_AUTO || undefined,                // ...and whether that came from the sigma fit or a fixed number
-        glowRatio: glowRatio() || undefined,             // drawn halo against the blur it replaces, at sigma 320: the quantity the per-engine lift IS           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan              // the light veto was withheld: read the light below against a good master
+        // Drawn halo against the blur it replaces, at sigma 320. MEASURED 2026-09-27 AND IT READS ZERO ON
+        // EVERY ENGINE: a radius-6 disc spread over sigma 320 puts its whole energy across ~2.9M pixels,
+        // so the blurred branch peaks BELOW HALF A LEVEL and the 8-bit readback sums it as nothing. The
+        // drawn branch survives at exactly 1 level, so the two are not even symmetric. The guard then
+        // returns 0 for "blurred > 0 is false", and `|| undefined` deleted that 0 from the stamp - which
+        // is why no master carries this field and nothing said so for a day.
+        //
+        // A radius sweep at sigma 320 clears the floor above radius ~48, and the ratio then DRIFTS WITH
+        // RADIUS: 0.935 at 48, 0.916 at 96, 0.964 at 144, 1.008 at 200, 1.032 at 256. So it is not one
+        // device constant that the per-engine lift could be read off; it is geometry-dependent, and the
+        // radius would decide the answer. On a 2048 canvas a radius that clears the floor cannot also
+        // contain 3 sigma, so this needs a bigger sheet or a smaller sigma - a real choice, not a tweak.
+        // Left recording honestly until then: 0 now means "the probe ran and could not see anything".
+        glowRatio: BLOOM_DRAW ? glowRatio() : undefined,
         // The light this master carries, sampled as it was written. 'mean' is the whole-picture average
         // luma over every 100th pixel — the same statistic `tiff-meta --audit` computes from a full
         // decode, so the two are comparable and a disagreement is itself a finding.
