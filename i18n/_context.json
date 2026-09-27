@@ -143,6 +143,14 @@
  "big.mem-unknown": {
   "where": "follows the recommendation when the browser reports no memory figure at all"
  },
+ "big.mem-budget": {
+  "placeholders": { "mb": "the megabytes this render may allocate on this device" },
+  "where": "appended to the memory note, stating what the planner will actually take"
+ },
+ "big.note-tiled": {
+  "placeholders": { "px": "the width above which the export stops using a single canvas" },
+  "where": "note under the tier toggles when TIFF is chosen, where the export renders a grid of tiles rather than bands"
+ },
  "big.note": {
   "placeholders": {
    "px": "the width above which the export streams in bands, 16384"
