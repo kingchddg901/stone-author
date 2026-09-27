@@ -1093,7 +1093,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.17';
+  const BUILD = '2026.09.26.18';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5524,6 +5524,26 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Keyed like the export ceiling, so a browser version change starts the evidence over. Forgotten when
   // a tile genuinely comes back undrawn, which is the one signal that the device has really lost ground
   // rather than merely being busy.
+  // HOW MUCH OF THE MACHINE THIS RENDER MAY HAVE. The budget was a fixed eighth of reported memory,
+  // which is right for a page sharing a browsing session and pessimistic for one the operator has
+  // deliberately left alone — the same assumption the probe was making, baked into arithmetic instead of
+  // a measurement. It is the difference between a tablet planning 4096 tiles and 8192: at 65535 an 8192
+  // tile needs 381 MB, which an eighth of 2 GB refuses and a quarter allows, and 8192 is the geometry
+  // measured clean on three devices.
+  //
+  // So it is a dial, not a constant: an eighth to share the machine, a half to own it. Set once with
+  // ?mem=4 and remembered per device, because a setting you must retype is one you will forget on the
+  // render that matters. Only 2, 4 and 8 are accepted; anything else leaves it alone.
+  const MEM_KEY = 'stone-author:memshare:v1';
+  const MEM_DIV = (() => {
+    const ok = v => v === 2 || v === 4 || v === 8;
+    try {
+      const asked = +new URLSearchParams(location.search).get('mem');
+      if (ok(asked)) { try { localStorage.setItem(MEM_KEY, String(asked)); } catch (_) {} return asked; }
+    } catch (_) {}
+    try { const kept = +localStorage.getItem(MEM_KEY); if (ok(kept)) return kept; } catch (_) {}
+    return 8;
+  })();
   const TILE_PROOF_KEY = 'stone-author:tileproof:v1';
   function provenTile() {
     try { return +JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}')[calSig()] || 0; } catch (_) { return 0; }
@@ -5568,7 +5588,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   })();
   async function tiffPlan(W) {
     const FH = Math.round(W * H), bleed = Math.ceil(12 * (W / COAT_REF));
-    const budget = Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / 8);
+    const budget = Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / MEM_DIV);
     const floor = W > TILE_FLOOR_ABOVE ? Math.min(4096, W) : 256;
     const proven = TILE_FORCED ? 0 : provenTile();
     let ts = Math.min(W, 8192);
@@ -5627,7 +5647,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     const store = Math.min(ts, TIFF_STORE_MAX), k = ts / store;   // k is 1 or 2: ts halves from 8192
     const across = Math.ceil(W / store), down = Math.ceil(FH / store);
-    return { FH, ts, store, k, bleed, trail, proven, budgetMB: Math.round(budget / 1e6),
+    return { FH, ts, store, k, bleed, trail, proven, memDiv: MEM_DIV, budgetMB: Math.round(budget / 1e6),
              across, down, tiles: across * down,                  // the STORED grid, what the file declares
              rAcross: Math.ceil(W / ts), rDown: Math.ceil(FH / ts),
              renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
@@ -5701,7 +5721,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
         // the planner's own working: which tile sizes were tried, what each would cost, and which of the
         // two gates refused it. Under a kilobyte, and the only thing that can explain a plan afterwards.
-        plan: { budgetMB: p.budgetMB, mem: navigator.deviceMemory || null, proven: p.proven || undefined, tried: p.trail },
+        plan: { budgetMB: p.budgetMB, memDiv: p.memDiv, mem: navigator.deviceMemory || null,
+                proven: p.proven || undefined, tried: p.trail },
         toDisk: sink.toDisk, bytes,
         ms: { render: msRender, total: Date.now() - expT0 },
         // Paired on purpose: time ALONE cannot say why a tile was slow. Against its own byte count it
