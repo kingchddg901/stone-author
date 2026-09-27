@@ -85,8 +85,18 @@ if (blurReach) {
   }
   if (blurReach(0) !== 0 || blurReach(-5) !== 0) fail.push('blurReach must be 0 for a blur that is not applied');
 }
+// INVERTED 2026-09-27. This used to name the ONE historical mistake — a bleed of `12 * bs` — and pass
+// everything else, so `14 * bs`, or any fresh inline arithmetic, would have gone straight through. A
+// blocklist keyed to the past only ever catches the bug you already had. The contract runs the other way:
+// coatReach is the one thing that knows what a bleed is, so every bleed must come FROM it, and anything
+// else fails on sight whether or not it has been seen before. `bleedPx` is admitted because it is the
+// caller-supplied override, and the caller got it from coatReach.
+//
+// Same shape as a document rule that bans the spelled-out form once the abbreviation is defined: it is
+// not enough to forbid one known longhand, you have to require the short form everywhere.
 for (const m of app.matchAll(/bleed\s*=\s*[^;\n]*/g))
-  if (/12 \* bs|12 \* \(W \/ COAT_REF\)/.test(m[0])) fail.push(`a bleed is back on the old constant: ${m[0].trim()}`);
+  if (!/coatReach|bleedPx/.test(m[0]))
+    fail.push(`a bleed is computed without coatReach, so there are now two answers to a question that has one: ${m[0].trim()}`);
 
 // A BLUR THAT FEEDS AN ADDITIVE COMPOSITE CANNOT GO MISSING QUIETLY. WebKit has no ctx.filter, and most
 // of this renderer's filtered passes survive that: subsurface and the specular glint each blur into a
@@ -110,8 +120,11 @@ if (!/blurDraw\(t, src, px/.test(app))
 for (const f of ['harness/tiff.mjs', 'harness/render.mjs', 'harness/hero.mjs']) {
   let src = '';
   try { src = readFileSync(f, 'utf8'); } catch (_) { continue; }
-  if (/12 \* \(W \/ 1000\)|12 \* bs|12 \* \(W \/ COAT_REF\)/.test(src))
-    fail.push(`${f} restates the bleed instead of asking the app for it — it will keep passing after the app changes`);
+  // Inverted for the same reason as the app rule above: naming the one wrong formula lets the next wrong
+  // formula through. A harness has exactly one legitimate source for a bleed, which is to ask the app.
+  for (const m of src.matchAll(/bleed\s*=\s*[^;\n]*/g))
+    if (!/plan\.bleed|tiffPlan|\.bleed\b/.test(m[0]))
+      fail.push(`${f} computes its own bleed instead of asking the app for it — it will keep passing after the app changes: ${m[0].trim()}`);
 }
 
 // ---- 3. the plan is MEASURED, not predicted --------------------------------------------------------
