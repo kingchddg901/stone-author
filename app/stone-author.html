@@ -1093,7 +1093,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.13';
+  const BUILD = '2026.09.26.14';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5543,8 +5543,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function tiffPlan(W) {
     const FH = Math.round(W * H), bleed = Math.ceil(12 * (W / COAT_REF));
     const budget = Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / 8);
-    const floor = !TILE_FORCED && W > TILE_FLOOR_ABOVE ? Math.min(4096, W) : 256;
-    let ts = TILE_FORCED ? Math.min(TILE_FORCED, W) : Math.min(W, 8192);
+    const floor = W > TILE_FLOOR_ABOVE ? Math.min(4096, W) : 256;
+    let ts = Math.min(W, 8192);
     // WHY the plan chose what it chose. The outcome was recorded and the reasoning was not, so a tablet
     // that silently halved its tile after an OS update could not be explained without the device in hand.
     // There are exactly two gates and they mean different things: the BUDGET is arithmetic on
@@ -5553,7 +5553,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // hand over the surface whatever the memory. Each step names the canvas it wanted, its cost, and which
     // gate turned it down.
     const trail = [];
-    for (;;) {
+    // TAKEN ON TRUST, and the point is that nothing is asked. canvasFits allocates once, at this instant,
+    // so a machine busy with something else refuses a canvas it granted an hour earlier - and the render
+    // then commits to a smaller tile for its whole run with no way to reconsider. When you have watched
+    // this device do this size, asking it again is the step that produces the wrong answer. So neither
+    // gate runs: not the budget, not the probe. A canvas that genuinely will not allocate still fails
+    // safely rather than silently, because tilePainted refuses to write out a tile nothing was drawn on.
+    if (TILE_FORCED) {
+      ts = Math.min(TILE_FORCED, W);
+      const ew = ts + 2 * bleed;
+      trail.push(ts + '/' + ew + '=' + Math.round(ew * ew * 4 / 1e6) + 'MB:forced');
+    } else for (;;) {
       const ew = ts + 2 * bleed, need = ew * ew * 4;
       const inBudget = need <= budget, fits = inBudget && canvasFits(ew, ew, 1);
       trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:' + (!inBudget ? 'budget' : fits ? 'ok' : 'canvas'));
