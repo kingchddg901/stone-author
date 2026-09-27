@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.10';
+  const BUILD = '2026.09.27.11';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3373,7 +3373,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (gl > 0) { g2d.shadowColor = colour; g2d.shadowBlur = gl * 6; } }
     // The bloom, carried by the element instead of derived from the pixels around it. shadowBlur is in
     // OUTPUT pixels and ignores the transform, which is exactly right: sigma is an output-space quantity.
-    if (BLOOM_DRAW && uvMode && !ident && glowPx > 0) { g2d.shadowColor = colour; g2d.shadowBlur = glowPx; }
+    if (BLOOM_DRAW && uvMode && !ident && glowPx > 0) { g2d.shadowColor = liftCol(colour); g2d.shadowBlur = glowPx; }
     return saved;
   }
   function fxOff(s) { g2d.globalCompositeOperation = s.op; g2d.shadowColor = s.sc; g2d.shadowBlur = s.sb; }
@@ -3420,7 +3420,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const g_ = Math.floor((s.u || 0) * ng), v_ = Math.floor((s.u2 || 0) * nv),
             mkey = nv > 1 ? 'micro:' + g_ + '.' + v_ : (ng > 1 ? 'micro:' + g_ : null),
             mcol = uv ? (emit(null, only, s.x, s.y) || UV_DARK) : (OVR['lay:' + only] || (mkey && COL[mkey] !== undefined ? COL[mkey] : COL.micro));
-      if (BLOOM_DRAW && uv && !ident && glowPx > 0) g2d.shadowColor = mcol;   // per-speck halo, not one hue for the layer
+      if (BLOOM_DRAW && uv && !ident && glowPx > 0) g2d.shadowColor = liftCol(mcol);   // per-speck halo, not one hue for the layer
       g2d.fillStyle = !ident ? mcol
         : angleView ? (s.el > 1.3 ? `hsl(${Math.round(((2 * s.ang * 180 / Math.PI) % 360 + 360) % 360)} 78% 58%)` : '#3a3c48')
         : s.ground ? `hsl(${Math.round(210 - 190 * Math.min(1, Math.hypot(s.x - s.x0, s.y - s.y0) / 0.008))} 80% 55%)`
@@ -5995,6 +5995,45 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     try { return /^(draw|1)$/i.test(new URLSearchParams(location.search).get('bloom') || ''); }
     catch (_) { return false; }
   })();
+  // ?glow=N - LIFT THE HALO TOWARD WHITE, 0 to 1. Drawn glow gives each element a halo in the element's
+  // OWN colour. The image-space bloom does not: it blurs the composite, where overlapping light sums under
+  // 'lighter' and climbs toward white, so a bright vein's halo reads far lighter than the vein. That is why
+  // the drawn version looks more saturated and the blurred one looks lit. This mixes the shadow colour
+  // toward white by N, so the halo can carry the lit colour rather than the pigment.
+  //
+  // 0 is the element's own colour, which is where the measured deficit was -10.2% of the mean at 65535.
+  // It is a dial and not a fitted constant because the right value is a look, not an arithmetic answer.
+  const GLOW_LIFT = (() => {
+    try { const v = parseFloat(new URLSearchParams(location.search).get('glow')); return v >= 0 && v <= 1 ? v : 0; }
+    catch (_) { return 0; }
+  })();
+  const liftCv = document.createElement('canvas');
+  const liftMap = new Map();                               // 8,050 specks a tile: parse each colour once, not once per element
+  function liftCol(css) {
+    if (!(GLOW_LIFT > 0)) return css;
+    const hit = liftMap.get(css);
+    if (hit !== undefined) return hit;
+    let out = css;
+    try {
+      // Let the canvas normalise it: any CSS colour in, '#rrggbb' or 'rgba(r, g, b, a)' out. No parser of ours.
+      const x = liftCv.getContext('2d');
+      x.fillStyle = '#000'; x.fillStyle = css;
+      const n = x.fillStyle;
+      let r, g, b, a = 1;
+      if (n.charAt(0) === '#') {
+        r = parseInt(n.substr(1, 2), 16); g = parseInt(n.substr(3, 2), 16); b = parseInt(n.substr(5, 2), 16);
+      } else {
+        const inner = n.slice(n.indexOf('(') + 1, n.lastIndexOf(')')).split(',');
+        r = parseFloat(inner[0]); g = parseFloat(inner[1]); b = parseFloat(inner[2]);
+        if (inner.length > 3) a = parseFloat(inner[3]);
+      }
+      const t = GLOW_LIFT;
+      out = 'rgba(' + Math.round(r + (255 - r) * t) + ',' + Math.round(g + (255 - g) * t) + ',' +
+            Math.round(b + (255 - b) * t) + ',' + a + ')';
+    } catch (_) { /* leave it as it came */ }
+    liftMap.set(css, out);
+    return out;
+  }
   let glowPx = 0;            // the wide pass as a canvas shadowBlur, in OUTPUT pixels: a shadow's deviation is half its blur
   const DIM_OK = (() => {
     try { return /^(off|allow|1)$/i.test(new URLSearchParams(location.search).get('dim') || ''); }
@@ -6320,7 +6359,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         omits: G.lens > 0 ? ['lens'] : undefined,
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
         dimOverride: DIM_OK || undefined,
-        bloomDraw: BLOOM_DRAW || undefined,           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan              // the light veto was withheld: read the light below against a good master
+        bloomDraw: BLOOM_DRAW || undefined,
+        glowLift: GLOW_LIFT || undefined,             // how far the drawn halo was lifted toward white           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan              // the light veto was withheld: read the light below against a good master
         // The light this master carries, sampled as it was written. 'mean' is the whole-picture average
         // luma over every 100th pixel — the same statistic `tiff-meta --audit` computes from a full
         // decode, so the two are comparable and a disagreement is itself a finding.
