@@ -11,33 +11,65 @@ record of each.
 
 ## Build — Claude Code
 
-The bulk of the build is one continuous Claude Code session, archived complete: every message, every tool
-call *with its arguments*, and every tool result. It's the provenance oracle — the one source that can
-answer "why is this the way it is?" down to the exact call that made it.
+The build is **two continuous Claude Code sessions**, back to back — the second one opened 23 seconds after
+the first closed — running from 2026-09-20 20:03 UTC to 2026-09-27 01:42 UTC: six days and five hours of
+wall-clock span, 9,178 tool calls, all 202 commits in this repo. Both are archived: every message, every tool
+call *with its arguments*, and every tool result. That record is the provenance oracle — the one source that
+can answer "why is this the way it is?" down to the exact call that made it.
 
-The raw record is ~254 MB (a 228 MB transcript plus 45 offloaded sidecar blobs it references), so it is
-**not committed here** — it lives as a compressed archive kept privately and, if ever published, attached
-to a GitHub Release. This table is the pointer to it.
+The raw material is ~574 MB across the two, so it is **not committed here** — it lives as compressed archives
+kept privately and, if ever published, attached to a GitHub Release. These tables are the pointer to them.
+
+### Session 1 — the studio
 
 | | |
 |---|---|
 | Session ID | `698bc007-76d7-4c9f-8f93-ad00bf28ca5c` |
-| Span | 2026-09-20 20:03 → 2026-09-23 01:47 UTC (53h 44m wall-clock; the marble studio itself from Sep 21) |
-| Tool calls | 4,042 (arguments recorded verbatim) |
-| Tool results | 4,040 (full output; 136 errors) |
-| Sidecars | 45 files, 26 MB (large results offloaded from the transcript) |
-| Archive | `stone-author-session-698bc007-76d7-4c9f-8f93-ad00bf28ca5c.tar.xz` (101 MB, xz) |
-| SHA-256 | `3d5cc32d62910c09ab1f701004bf0a4ee6053e69a1b9f4cc22733ff9dde6dee2` |
+| Span | 2026-09-20 20:03:43Z → 2026-09-23 06:55:12Z (58h 51m wall-clock, breaks included) |
+| Captured | after the session closed — **complete** |
+| Transcript | 247.6 MB, 30,243 lines |
+| Tool calls | 4,384 (arguments recorded verbatim) |
+| Tool results | 4,383 (full output; 145 errors) |
+| Sidecars | 51 files, 35.6 MB (large results offloaded from the transcript) |
+| Commits here | 41 of 202 — the marble studio itself, from the repo split on Sep 21 |
+| Archive | `stone-author-session-698bc007-76d7-4c9f-8f93-ad00bf28ca5c.tar.xz` (113.8 MB, xz) |
+| SHA-256 | `8365ee337924e61da2f5efb22a38b04d5ae31619e855febb008fc3f6957f9c2a` |
 
-**Contents:** the transcript `.jsonl` (one JSON object per line: messages, tool calls + arguments, tool
-results) and the 45 sidecar files it references (montages and large blobs). It is replayable call-by-call —
-which is how the build's every decision, dead end, and correction can be reconstructed.
+### Session 2 — the coat, the layers, and the masters
 
-The build then **continued in a later Claude Code session**, `28da307f-5ea7-4449-815d-ae43b7b0ba89`, which
-added the coat tier and the back light — subsurface, specular, the one movable light, black light and the
-condition-agnostic spectrum engine, the lens top-coat, and the layer-aware back-light fold (roughly artifact
-v49 onward). That session's transcript is retained separately and not yet folded into the archive above, so
-the table's counts and hash cover the first session only.
+| | |
+|---|---|
+| Session ID | `28da307f-5ea7-4449-815d-ae43b7b0ba89` |
+| Span | 2026-09-23 06:55:35Z → 2026-09-27 01:42:24Z (90h 47m) |
+| Captured | 2026-09-27 01:42:24Z, **while the session was still live** — a prefix, to be re-cut at close |
+| Transcript | 233.3 MB, 38,557 lines |
+| Tool calls | 4,794 (arguments recorded verbatim) |
+| Tool results | 4,793 (full output; 154 errors) |
+| Sidecars | 76 files, 57.1 MB — 66 offloaded results plus 10 subagent transcripts (5 runs) |
+| Commits here | 161 of 202 — the coat tier, the layer system, and the master export path |
+| Archive | `stone-author-session-28da307f-5ea7-4449-815d-ae43b7b0ba89.tar.xz` (95.5 MB, xz) |
+| SHA-256 | `aaf6f59d69190da0b2cbe778c35d2d1af197c16dd437a879fefae46aa851f49a` |
+
+The second session is the larger part of this repo's history: the coat tier (subsurface, specular, the one
+movable light, light temperature, black light and the condition-agnostic spectrum engine, the lens top-coat,
+and the layer-aware back-light fold), the layer system (Fog, layer delete, render order decoupled from kind,
+layer-select sculpt, protected warp islands, the Mask tool), the two-pane workbench, the gallery heroes,
+`renderFull` and `renderTiled`, off-thread PNG encode, strips, the large render tiers, the whole tiled-BigTIFF
+master path with its export guards, and the refactor that removed Wood and made this stone-only.
+
+**Contents of each archive:** the transcript `.jsonl` (one JSON object per line: messages, tool calls +
+arguments, tool results) and the sidecar files it references — results too large to inline were offloaded and
+left behind as a pointer, so without those blobs the record is incomplete. Each archive was checked before it
+was cut: every offloaded blob present is referenced by its transcript, and nothing referenced is absent (51
+of 51, and 66 of 66). Both are replayable call by call — which is how the build's every decision, dead end,
+and correction can be reconstructed.
+
+**On "captured".** A capture taken while a session is running is a prefix of that session, and the first
+archive published here was one: it was cut on 2026-09-23 at 02:16 UTC, five hours before session 1 actually
+ended, and so listed 4,042 tool calls rather than 4,384. Session 1 has since closed and been re-archived
+complete, which is why its hash on this page has changed; the earlier archive was verified to be a byte-exact
+prefix of the new one, so nothing was lost in the swap. Session 2's row says plainly that it is a live
+capture, and it will be re-cut when that session closes.
 
 ## Design — ChatGPT
 
@@ -57,7 +89,8 @@ Chris provided a curated, scoped extract of that conversation. It is Stone-Autho
 omitted) and it labels its own evidence: it distinguishes exact current-chat wording, timestamped facts
 recovered from prior-chat context, and project docs used only to anchor the chronology, and it does not
 invent per-turn clock times it could not recover. The full raw ChatGPT conversation is not part of this
-record — only the extract is.
+record — only the extract is. Its span covers session 1; nothing from the sounding board is recorded here for
+the work after 2026-09-23.
 
 | | |
 |---|---|
@@ -68,7 +101,7 @@ record — only the extract is.
 
 ## Privacy
 
-The raw Claude archive contains personal paths, an email, and private working notes, so it is kept private;
-a curated, scrubbed timeline for the origin story (see [`README.md`](README.md)) is derived from it, and the
-raw dump is never shared as-is. The ChatGPT extract above was already curated and scoped before it reached
-this record. Verify any copy with `sha256sum <file>` against the hash listed for it.
+The raw Claude archives contain personal paths, an email, and private working notes, so they are kept
+private; the shareable account is the origin story in [`README.md`](README.md), written from this record
+rather than quoting it, and the raw dumps are never shared as-is. The ChatGPT extract above was already curated and scoped
+before it reached this record. Verify any copy with `sha256sum <file>` against the hash listed for it.
