@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.7';
+  const BUILD = '2026.09.27.8';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5956,6 +5956,23 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     try { const v = +new URLSearchParams(location.search).get('tile'); return v >= 256 && v <= 8192 ? v : 0; }
     catch (_) { return 0; }
   })();
+  // ?dim=off — CALIBRATE, REPORT, DO NOT VETO.
+  //
+  // The light test is the one gate here with no way to check itself. It refuses on a prediction, so a
+  // render it declines produces nothing to compare the prediction against, and a veto that is wrong is
+  // indistinguishable from one that is right. That is not hypothetical: the light FLOOR this replaced
+  // was refusing renders that were correct, and it took forcing one to find out.
+  //
+  // This is narrower than ?tile=, which skips calibration altogether and so throws away the prediction.
+  // Here every candidate is still rendered and measured and its numbers still go in the trail - the tile
+  // race, the memory ceiling and the death list all still apply - and only the refusal is withheld. The
+  // finished master then carries both the prediction and the outcome, which is the only way to tell
+  // whether the gate is calling it right. A canvas that could not be made at all is still refused: this
+  // withholds a judgement about LIGHT, not about whether a surface exists.
+  const DIM_OK = (() => {
+    try { return /^(off|allow|1)$/i.test(new URLSearchParams(location.search).get('dim') || ''); }
+    catch (_) { return false; }
+  })();
   // ---- CALIBRATION: prove the plan on one real tile before committing to the render -----------------
   // Everything the planner used to predict, measured instead. A synthetic probe answers one question
   // about an empty canvas. ONE REAL TILE at the planned settings answers all of them at once: whether
@@ -6145,7 +6162,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // never attempted: cal.why is set when the tile could not be made at all, so its absence means the
         // canvas existed, the picture was drawn into it, and the light was not there.
         if (!cal.ok && !cal.why && cal.want > 0) bestLit = Math.max(bestLit, cal.got / cal.want);
-        if (cal.ok) { ok.push({ ts, est: passes * ms, need }); if (ok.length >= 2) break; }
+        // cal.why means the canvas never existed, and no override applies to that: ?dim=off withholds a
+        // judgement about LIGHT, not about whether a surface can be made.
+        const dimmed = !cal.ok && !cal.why && cal.got != null;
+        if (dimmed && DIM_OK) trail.push(ts + ':dim accepted anyway (?dim=off)');
+        if (cal.ok || (dimmed && DIM_OK)) { ok.push({ ts, est: passes * ms, need }); if (ok.length >= 2) break; }
       }
       ref.width = 1; ref.height = 1;
       if (!ok.length) throw new Error((bestLit >= 0
@@ -6265,6 +6286,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // tiled master silently leaves it out. Recorded rather than hidden until it is done per tile.
         omits: G.lens > 0 ? ['lens'] : undefined,
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
+        dimOverride: DIM_OK || undefined,              // the light veto was withheld: read the light below against a good master
         // The light this master carries, sampled as it was written. 'mean' is the whole-picture average
         // luma over every 100th pixel — the same statistic `tiff-meta --audit` computes from a full
         // decode, so the two are comparable and a disagreement is itself a finding.

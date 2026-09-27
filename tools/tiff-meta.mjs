@@ -152,6 +152,11 @@ for (const path of paths) {
   // be made. sigma is the widest blur the slab applied, which is what a canvas has to be able to carry.
   if (m.light) console.log(`  light    mean ${m.light.mean}, lit>40 ${m.light.lit40}%  (sampled 1/${m.light.every} as written)` +
                            `${m.sigma ? `   blur sigma ${m.sigma}px` : '   no blur in this render'}`);
+  // A master rendered with ?dim=off exists BECAUSE the light gate refused it, so its light figure is the
+  // evidence in a question about that gate. Reading it without knowing that is how a deliberate
+  // experiment gets quoted back later as a normal result.
+  if (m.dimOverride) console.log(`           [LIGHT VETO WITHHELD — ?dim=off. The plan predicted this render would be dim;` +
+                                 ` the figure above is what it actually came out at. Compare it against a master of the same slab.]`);
   if (m.maxTexture) console.log(`           device reports MAX_TEXTURE_SIZE ${m.maxTexture}` +
                                 `${m.bleed && m.render ? `, this render needed ${m.render + 2 * m.bleed}px` : ''}`);
   if (m.plan) console.log(`  plan     budget ${m.plan.budgetMB} MB, tried  ${(m.plan.tried || []).join('   ')}` +

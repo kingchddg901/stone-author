@@ -182,6 +182,19 @@ if (!/bestLit >= 0/.test(plan) || !/exp\.err\.dim/.test(plan))
 if (!/!cal\.ok && !cal\.why && cal\.want > 0/.test(plan))
   fail.push('the dim test does not exclude candidates that could not be made at all, so a canvas that never allocated would be reported as dim');
 
+// ?dim=off WITHHOLDS A JUDGEMENT ABOUT LIGHT, NOTHING ELSE. The light gate refuses on a prediction, so a
+// render it declines leaves nothing to check the prediction against - a wrong veto looks exactly like a
+// right one. The light FLOOR this replaced was refusing correct renders and only forcing one found that
+// out. So the override has to keep every other refusal intact, and the master has to say it was used.
+if (!plan.includes('const dimmed = !cal.ok && !cal.why && cal.got != null'))
+  fail.push('the dim override does not distinguish a dim tile from a canvas that could not be made, so ?dim=off would force a render onto a surface that does not exist');
+if (!plan.includes('cal.ok || (dimmed && DIM_OK)'))
+  fail.push('?dim=off does not actually admit the candidate, so the override cannot be exercised');
+if (!app.includes('dimOverride: DIM_OK || undefined'))
+  fail.push('a master rendered with the light veto withheld does not record that, so its light figure would later be read as a normal result');
+if (!app.includes("get('dim')"))
+  fail.push('the dim override is not read from the URL, so it can never be turned on');
+
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size
 // is a different canvas, which Chrome does not rasterise identically. The race runs once per device,
