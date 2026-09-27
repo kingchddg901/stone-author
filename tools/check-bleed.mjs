@@ -100,6 +100,10 @@ if (!/renderFull\(CAL_REF_W\)/.test(plan)) fail.push('the plan has no untiled re
 if (!/calibrate\(W, FH, ts, bleed, ref, refCx\)/.test(plan)) fail.push('the plan does not calibrate its candidates on a real tile');
 if (!/renderOneTile\(W, pick\.gx \* ts/.test(cal)) fail.push('calibration does not render a REAL tile, so it tests a path the render does not take');
 if (!/got >= CAL_PASS \* want/.test(cal)) fail.push('calibration does not compare the tile against the reference');
+// A SAMPLED mean is the wrong statistic across a scale change: at full resolution every hundredth pixel
+// lands on a sparse speck field while the reference has those specks averaged in. Measured 0.92 on a
+// render that could not lose anything, against a 0.9 threshold.
+if (!/i \+= 4\) \{ s \+= /.test(cal)) fail.push('calibration samples rather than summing every pixel, so its tolerance sits in the noise');
 // No memory veto: deviceMemory rounds DOWN to a power of two, so arithmetic on it refused renders the
 // hardware could do. The only pre-attempt refusal left is a single canvas over the browser's own limit.
 if (/const inBudget = need <= budget/.test(plan)) fail.push('the memory veto is back: it refuses on arithmetic over a hint that rounds down by up to half');

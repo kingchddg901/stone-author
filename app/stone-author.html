@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.30';
+  const BUILD = '2026.09.26.31';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5852,12 +5852,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const CAL_REF_W = 1024;
   const CAL_PASS = 0.9;                    // a dim tile fails: the light is either there or it is not
   const CAL_WINDOW = 1024;                 // sample at most this square, so a check never costs a readback
+  // EVERY pixel, not a sample. The window is at most 1024 square, so this is a few milliseconds — and a
+  // sampled mean is the wrong statistic here: at full resolution every hundredth pixel lands on a sparse
+  // high-contrast speck field, while the 1024 reference has those same specks averaged into its pixels.
+  // Two different quantities. Measured on a daylight render that cannot lose anything, the sampled
+  // comparison read 81.1 against 88.5 — a 0.92 that should have been 1.00, and the threshold is 0.9.
   function meanOfRegion(cx, x, y, w, h) {
     if (!(w >= 1 && h >= 1)) return null;
     try {
       const d = cx.getImageData(x, y, w, h).data;
       let s = 0, n = 0;
-      for (let i = 0; i < d.length; i += 400) { s += (d[i] + d[i + 1] + d[i + 2]) / 3; n++; }
+      for (let i = 0; i < d.length; i += 4) { s += (d[i] + d[i + 1] + d[i + 2]) / 3; n++; }
       return n ? s / n : null;
     } catch (_) { return null; }
   }
