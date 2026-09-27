@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.20';
+  const BUILD = '2026.09.27.21';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6052,11 +6052,21 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //     65535     66.11     61.40 at -0.30     -0.3045        15.70
   //     32768     66.12     60.61 at -0.35     -0.3036        15.74
   //
-  // The unlifted reading is 66.11 and 66.12 - ONE HUNDREDTH APART across a factor of four in pixels. So
-  // WebKit's overshoot does not grow with sigma the way Blink's deficit does, and the correction is a
-  // number rather than a line. That is why this is not the fitted curve the previous note predicted: the
-  // curve came out flat. Blink needs 0.271 at 32768 and 0.612 at 65535 for the same picture; WebKit needs
-  // -0.304 at both.
+  // The unlifted reading is 66.11 and 66.12 - ONE HUNDREDTH APART. Blink needs 0.271 at 32768 and 0.612 at
+  // 65535 for the same picture; WebKit needs -0.304 at both, so across THIS range the correction is a
+  // number and not a line.
+  //
+  // BOUNDED TO 32768..65535, WHICH IS WHERE MASTERS ARE MADE. The full width ladder says the overshoot is
+  // NOT width-invariant, and reading a constant off two adjacent points was over-claiming:
+  //
+  //     width      1024   2048   4096    8192   16384   24576   32768   65535
+  //     raw       56.40  56.30  56.26   64.29   66.17   65.78   66.12   66.11
+  //     vs ref    +4.1%  +4.8%  +5.4%  +20.5%   +9.9%   +7.5%   +7.8%   +7.8%
+  //
+  // It settles at +7.8% from 24576 up and is a different animal below 16384, with a DISCONTINUITY between
+  // 4096 and 8192 - 56.26 to 64.29 - where Blink goes 53.40 to 53.35 and notices nothing. Unexplained.
+  // Recorded rather than smoothed over, and gated on by nothing. A small-width WebKit master is left
+  // uncorrected rather than corrected by a number measured somewhere else.
   //
   // The old branch returned 0 here, which was not "no correction needed" - it was the one wrong value,
   // shipping every WebKit master +7.8% over the reference at every width.
