@@ -85,10 +85,10 @@ for (const m of app.matchAll(/bleed\s*=\s*[^;\n]*/g))
 // ---- 3. the bloom probe, wired where the plan can act on it ----------------------------------------
 const plan = app.slice(app.indexOf('async function tiffPlan'), app.indexOf('async function exportTiff'));
 if (!/const sigma = coatRadius\(/.test(plan)) fail.push('tiffPlan does not compute the slab blur radius, so it cannot probe for the bloom');
-if (!/canvasFits\(ew, ew, 1, sigma\)/.test(plan)) fail.push('the plan probes the canvas without asking whether it BLURS');
+if (!/canvasFits\(ew, ew, 1, probeSigma\)/.test(plan)) fail.push('the plan probes the canvas without asking whether it BLURS');
 // The proof records that a surface ALLOCATES. Whether it blurs is a different answer — and every one of
 // tonight's bloomless masters read `proven` in its trail, meaning no probe ran at all.
-if (!/proven >= ts && !\(sigma > 0\)/.test(plan)) fail.push('the tile proof bypasses the bloom probe: a proven tile must still be blur-tested');
+if (!/proven >= ts && !\(probeSigma > 0\)/.test(plan)) fail.push('the tile proof bypasses the bloom probe: a proven tile must still be blur-tested');
 // A blur cannot happen in place, so a blooming render peaks at about twice its canvas. Counting one
 // surface is what let an 8192 pass through the budget and then fail to allocate on the device.
 if (!/const surfaces = 1 \+ \(sigma > 0 \? 1 : 0\)/.test(plan) || !/need = ew \* ew \* 4 \* surfaces/.test(plan))
@@ -96,6 +96,11 @@ if (!/const surfaces = 1 \+ \(sigma > 0 \? 1 : 0\)/.test(plan) || !/need = ew \*
 // A window costs surfaces PER TILE, so a plan that ignores them allocates five and budgets for two.
 if (!/wins \? 2 \+ \(sigma > 0 \? 1 : 0\) : 0/.test(plan)) fail.push('the budget does not count a reality window\'s surfaces');
 if (!/BLOOM LOST/.test(plan)) fail.push('a bloom refusal is not named in the plan trail, so a master cannot explain itself');
+// A browser with no ctx.filter fails EVERY size, so probing per size only deletes the feature and caps the
+// device. Ask once on a small canvas, then render and declare it rather than refuse.
+if (!/const canBlur = sigma > 0/.test(plan)) fail.push('the plan does not ask whether the browser can blur at all, so a WebKit device is refused at every size instead of told');
+if (!/const probeSigma = canBlur \? sigma : 0/.test(plan)) fail.push('the per-size probe is not skipped when the browser cannot blur at all');
+if (!/bloomless: p\.canBlur \? undefined : true/.test(app)) fail.push('a master rendered without a bloom does not say so');
 
 const probe = app.slice(app.indexOf('function bloomWorks'), app.indexOf('function canvasFits'));
 if (!/filter = `blur\(\$\{sigma\}px\)`/.test(probe) || !/drawImage\(c, 0, 0\)/.test(probe))

@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.26';
+  const BUILD = '2026.09.26.27';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5774,6 +5774,23 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // daylight has subsurface 0 and specular 0), and then there is no bloom to lose and nothing to probe.
     const sigma = coatRadius(W / COAT_REF);
     const wins = gatherMasks().filter(m => m.show != null).length;   // each one costs surfaces, per tile
+    // CAN THIS BROWSER BLUR AT ALL? Two failures wear the same face and want opposite answers. A canvas too
+    // big to blur is worth halving away from - the next size down works. A browser with no ctx.filter at
+    // all (WebKit, measured 2026-09-27) fails every size, so refusing does not protect the picture, it
+    // just deletes the feature and caps the device: the iPhone could render 65535 yesterday and 16384
+    // today, while still writing bloomless files below that with no indication at all.
+    //
+    // So ask once, on a canvas small enough that only support is in question. No support means render and
+    // SAY SO in the master rather than refuse; no bloom at one size means keep looking for one that blooms.
+    const canBlur = sigma > 0 ? (() => {
+      try {
+        const c = document.createElement('canvas'); c.width = c.height = 512;
+        const x = c.getContext('2d');
+        return !!x && bloomWorks(c, x, 512, 512, 24);
+      } catch (_) { return false; }
+    })() : true;
+    const probeSigma = canBlur ? sigma : 0;                  // nothing to learn from asking again per size
+    if (sigma > 0 && !canBlur) trail.push('no ctx.filter - bloomless');
     const budget = memBudget();
     const proven = TILE_FORCED ? 0 : provenTile();
     let ts = Math.min(W, 8192);
@@ -5798,7 +5815,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // configuration the planner would decline — which is how the bloom limit was found at all. But the
       // bloom is still MEASURED and recorded, so a forced master says in its own metadata whether the
       // light survived. Overriding a refusal is a choice; not knowing the outcome is not.
-      const bloom = sigma > 0 ? (canvasFits(ew, ew, 1, sigma) ? 'bloom ok' : 'BLOOM LOST at ' + Math.round(sigma) + 'px') : 'no blur';
+      const bloom = probeSigma > 0 ? (canvasFits(ew, ew, 1, probeSigma) ? 'bloom ok' : 'BLOOM LOST at ' + Math.round(sigma) + 'px') : 'no blur';
       trail.push(ts + '/' + ew + '=' + Math.round(ew * ew * 4 / 1e6) + 'MB:forced, ' + bloom);
     } else for (;;) {
       // A BLUR NEEDS A SECOND SURFACE. Skia cannot blur in place, so a render that blooms peaks at about
@@ -5830,13 +5847,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // THE PROOF DOES NOT COVER THE BLOOM. What a device proved is that it can hold this surface; whether
       // it will BLUR it is a different question with a different answer, and the one that cost four masters
       // tonight. So when the slab has an active blur the probe runs regardless of the proof.
-      if (inBudget && proven >= ts && !(sigma > 0)) fits = true;   // already done on this machine
+      if (inBudget && proven >= ts && !(probeSigma > 0)) fits = true;   // already done on this machine
       else while (inBudget && tries <= BACKOFF.length) {
         tries++;
-        if (canvasFits(ew, ew, 1, sigma)) { fits = true; break; }
+        if (canvasFits(ew, ew, 1, probeSigma)) { fits = true; break; }
         // Two refusals that must never be confused in the trail: a surface the browser will not hand over,
         // and a surface it hands over and then quietly declines to blur. Only asked on the failing path.
-        if (sigma > 0 && canvasFits(ew, ew, 1)) { why = 'bloom'; break; }
+        if (probeSigma > 0 && canvasFits(ew, ew, 1)) { why = 'bloom'; break; }
         if (tries <= BACKOFF.length) await new Promise(r => setTimeout(r, BACKOFF[tries - 1]));
       }
       trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:' +
@@ -5864,7 +5881,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!Number.isInteger(k) || store < 256) throw new Error(TR('exp.err.tile', { px: W }));
     trail.push('store ' + store + ' x' + k);
     const across = Math.ceil(W / store), down = Math.ceil(FH / store);
-    return { FH, ts, store, k, bleed, sigma, wins, trail, proven, memDiv: MEM_DIV, budgetMB: Math.round(budget / 1e6),
+    return { FH, ts, store, k, bleed, sigma, wins, canBlur, trail, proven, memDiv: MEM_DIV, budgetMB: Math.round(budget / 1e6),
              across, down, tiles: across * down,                  // the STORED grid, what the file declares
              rAcross: Math.ceil(W / ts), rDown: Math.ceil(FH / ts),
              renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
@@ -5947,6 +5964,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         scope: 'render', tiled: true, w: W, h: p.FH, tile: p.store, render: p.ts,
         tiles: p.tiles, renders: p.renders, bleed: p.bleed, sigma: Math.round(p.sigma) || 0,
         windows: p.wins || 0,
+        // The browser could not blur at all, so this master has no bloom and says so rather than pretending.
+        bloomless: p.canBlur ? undefined : true,
         // KNOWN OMISSION. The lens is a whole-image step and this path has no whole image, so a
         // tiled master silently leaves it out. Recorded rather than hidden until it is done per tile.
         omits: G.lens > 0 ? ['lens'] : undefined,
