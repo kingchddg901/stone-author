@@ -17,8 +17,16 @@ const fail = [];
 // 1 — every export entry seals. The entry is the line that claims the export lock; there are three.
 const entries = app.match(/exporting = true;[^\n]*/g) || [];
 if (entries.length < 3) fail.push(`found ${entries.length} export entr${entries.length === 1 ? 'y' : 'ies'}, expected at least 3 — has one been renamed?`);
+// It STARTS the seal and does not wait for it. Awaiting here yielded to the event loop before the export
+// disabled its own controls, so the width menu stayed live on a render already under way — caught by the
+// browser harness, not by this gate, which is why the harness owns the ordering and this owns the wiring.
 for (const [i, line] of entries.entries())
-  if (!/await sealDevice\(\)/.test(line)) fail.push(`export entry ${i + 1} does not seal the device: ${line.trim()}`);
+  if (!/sealing = sealDevice\(\)/.test(line)) fail.push(`export entry ${i + 1} does not start the device seal: ${line.trim()}`);
+if (/await sealDevice\(\)/.test(app)) fail.push('an export awaits sealDevice() inline: that yields before the controls lock');
+// and every metadata build must have waited for it, or the block is missing from that master
+const metaCalls = (app.match(/expMeta\(\{/g) || []).length;
+const awaited = (app.match(/await sealing;/g) || []).length;
+if (awaited < metaCalls) fail.push(`${metaCalls} metadata builds but only ${awaited} await the seal — one master would record no device block`);
 
 // 2 — the identity is not in the clear. expMeta may carry cores/mem/dpr/engine/arch; not the UA.
 const meta = app.slice(app.indexOf('const expMeta = o =>'), app.indexOf('function zipStore'));

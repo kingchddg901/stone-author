@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.23';
+  const BUILD = '2026.09.26.24';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4845,6 +4845,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const DEV_INFO = 'stone-author/device/v1';
   const b64 = u8 => { let s = ''; for (const b of u8) s += String.fromCharCode(b); return btoa(s); };
   let devSeal = null;
+  // Started at the top of an export and awaited only where the metadata needs it. Awaiting it at the
+  // entry yielded to the event loop BEFORE the export disabled its own controls, leaving a window in
+  // which the width menu was still live on a render already under way. The browser harness caught it.
+  let sealing = null;
   async function sealDevice() {
     // FAIL CLOSED. If the identity cannot be sealed it is not written — withheld, and the master says so.
     // The structure is what enforces that rather than care: `devSeal` is set to the withheld block FIRST,
@@ -5264,7 +5268,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     download(fn, blob);
   }
   async function exportAll(W, only) {
-    if (exporting) return; exporting = true; wakeOn(); await sealDevice();
+    if (exporting) return; exporting = true; wakeOn(); sealing = sealDevice();
     // The MENUS go dead too, not just the button. Leaving them live means you can pick a different width
     // or scope mid-export, watch nothing happen, and reasonably conclude the app ignored you.
     const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
@@ -5291,6 +5295,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         const [raw] = await encodePNGs([c]);
         const msEncode = Date.now() - tE, cw = c.width, ch = c.height;
         c.width = 1; c.height = 1;                           // hand it back before we hold the blob
+        await sealing;                                        // the device block, ready before the metadata is built
         const png = pngText(raw, 'stone-author', expMeta({
           scope: 'render', w: cw, h: ch, tiles, bytes: raw.length,
           ms: { render: msRender, encode: msEncode, total: Date.now() - expT0 },
@@ -5351,6 +5356,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       files.push({ name: 'source.json', data: te.encode(JSON.stringify(serialize())) });
       // The same figures the render PNG carries in its tEXt chunk, as a file you can read without a
       // PNG reader. The total stops here: packing and saving are after it, and vary with the browser.
+      await sealing;                                        // the device block, ready before the metadata is built
       files.push({ name: 'export.json', data: te.encode(expMeta({
         scope: 'all', w: W, h: Math.round(W * H), images: makers.length, bytes: bytes.reduce((a, b) => a + b.length, 0),
         ms: { render: msRender, encode: msEncode, toPack: Date.now() - expT0 },
@@ -5842,7 +5848,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
              tileMB: Math.round((ts + 2 * bleed) ** 2 * 4 / 1e6) };
   }
   async function exportTiff(W) {
-    if (exporting) return; exporting = true; wakeOn(); await sealDevice();
+    if (exporting) return; exporting = true; wakeOn(); sealing = sealDevice();
     const btn = document.getElementById('export'), selW = document.getElementById('expres');
     const selF = document.getElementById('expfmt');
     btn.disabled = selW.disabled = selF.disabled = true;
@@ -5913,6 +5919,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       proveTile(p.ts);                                     // every tile drew at this size: that is the proof
       const msRender = Date.now() - tR;
       expStat(TR('exp.saving'), 0.96); await breathe();
+      await sealing;                                        // the device block, ready before the metadata is built
       const { blob } = await sink.finish(expMeta({
         scope: 'render', tiled: true, w: W, h: p.FH, tile: p.store, render: p.ts,
         tiles: p.tiles, renders: p.renders, bleed: p.bleed, sigma: Math.round(p.sigma) || 0,
@@ -5961,13 +5968,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Render-only, streamed in bands. Shares the progress line, the clock and the failure handling with
   // the ordinary export; what differs is that nothing the size of the picture is ever allocated.
   async function exportStreamed(W) {
-    if (exporting) return; exporting = true; wakeOn(); await sealDevice();
+    if (exporting) return; exporting = true; wakeOn(); sealing = sealDevice();
     const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
     btn.disabled = selW.disabled = true;
     expReset();
     hint(TR('hint.exporting-render', { w: W }));
     try {
       expStat(TR('exp.preparing'), null); await breathe();
+      await sealing;                                        // the device block, ready before the metadata is built
       const r = await renderStreamedPNG(W, m => expMeta({
         scope: 'render', streamed: true, w: W, h: Math.round(W * H),
         bands: m.bands, bytes: m.bytes, ms: { render: m.msRender, total: Date.now() - expT0 },
