@@ -16,6 +16,7 @@ on:
       - 'tools/check-render-purity.mjs'
       - 'tools/check-wake-lock.mjs'
       - 'tools/check-device-seal.mjs'
+      - 'tools/check-bleed.mjs'
       - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
   pull_request:
@@ -27,6 +28,7 @@ on:
       - 'tools/check-render-purity.mjs'
       - 'tools/check-wake-lock.mjs'
       - 'tools/check-device-seal.mjs'
+      - 'tools/check-bleed.mjs'
       - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
   workflow_dispatch:
@@ -51,3 +53,5 @@ jobs:
         run: node tools/check-wake-lock.mjs
       - name: The device identity is sealed under the slab, and fails closed
         run: node tools/check-device-seal.mjs
+      - name: Every blur a tile can meet has bleed behind it, and the bloom is probed
+        run: node tools/check-bleed.mjs

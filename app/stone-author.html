@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.21';
+  const BUILD = '2026.09.26.22';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2811,6 +2811,51 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     if (!f.ident && !f.tiled && G.lens > 0) applyLens(tcv, tx);   // tiled path runs the lens once on the assembled image instead (it downscales to ≤640, so it's global + cheap)
   }
+  // ---- how far a tile must see past its own edge ---------------------------------------------------
+  // Bleed exists for ONE reason: an effect that reads a NEIGHBOURING pixel. Geometry needs none — every
+  // tile draws the whole picture under the same transform and the canvas clips it, so a vein crossing the
+  // boundary is already right, and the antialiasing matches across the join because the offset between
+  // tiles is a whole number of pixels.
+  //
+  // It used to be 12 x bs against a widest blur of 8 x bs, which reads like a 50% margin and is not one.
+  // CSS blur(r) sets the standard DEVIATION to r, and browsers implement it as the SVG spec's three box
+  // blurs of size d = floor(r * 3 * sqrt(2*PI) / 4 + 0.5) ~ 2.36r, reaching about 1.5d ~ 3.5r each side.
+  // So the old bleed covered barely a third of the bloom: every tile blurred against a transparent edge,
+  // invisible in daylight (0.3% across three tile sizes) and a visible lattice under black light, where
+  // the bloom IS the picture. Sizing it to the reach makes a tile correct at any size, which is why this
+  // is arithmetic over the slab's own settings rather than a constant fitted to the devices to hand.
+  // Two implementations, so cover the wider of them. The SVG spec's three box blurs of size
+  // d = floor(r * 3 * sqrt(2*PI) / 4 + 0.5) ~ 1.88r have an EXACT finite support of 1.5d ~ 2.82r, which is
+  // what browsers use at large r. At small r some use a real Gaussian instead, whose tail has no finite
+  // support at all — 3r holds 99.7% of it, and that is the conventional cut. Taking the max of the two
+  // means the bleed is right whichever path the browser picks, which is not something we get to observe.
+  const blurReach = r => {
+    if (!(r > 0)) return 0;
+    const d = Math.floor(r * 3 * Math.sqrt(2 * Math.PI) / 4 + 0.5);
+    return Math.max(Math.ceil(1.5 * d), Math.ceil(3 * r));
+  };
+  const shadowReach = b => blurReach(b / 2);                 // a canvas shadow's deviation is HALF its blur
+  const BLEED_MARGIN = 4;                                    // rounding, not a fudge for the formula
+  // The two effects below are in OUTPUT pixels and do not grow with the render, so they matter only when
+  // nothing else blurs — and then they are what stops the bleed being zero.
+  const maxAdjBlur = () => { let m = 0; for (const k in OVR) if (/:blur$/.test(k)) { const v = +OVR[k]; if (v > m) m = v; } return m; };
+  const maxGlow = () => { let m = 0; for (const k in COL) if (/Glow$/.test(k)) { const v = +COL[k] || 0; if (v > m) m = v; } return m; };
+  // The widest blur RADIUS a tile can be subject to, under the conditions a tile renders in: never
+  // backlit (the back light forces the whole-image path), never the lens (run once on the assembled
+  // picture), never ident. Keep this in step with applyCoat — tools/check-bleed.mjs fails if a blur
+  // appears there that is not accounted for here, because that is exactly how this defect was born.
+  function coatRadius(bs) {
+    let r = 0;
+    if (uvMode) r = Math.max(r, 8 * bs, 3 * bs);                                  // emission bloom
+    else {
+      if (G.subsurface > 0) r = Math.max(r, (2 + 3 * G.subsurface) * bs, (1 + 2 * G.subsurface) * bs);
+      if (G.specular > 0) r = Math.max(r, 2 * bs, 0.6 * bs);
+    }
+    return r;
+  }
+  function coatReach(bs) {
+    return Math.max(blurReach(coatRadius(bs)), blurReach(maxAdjBlur()), shadowReach(6 * maxGlow())) + BLEED_MARGIN;
+  }
   function applyLens(tcv, tx) {                            // ideal glass relief, per-pixel refraction gather (≤640px, resolution-independent)
     const w = tcv.width, h = tcv.height;
     const gw = Math.min(w, 640), gh = Math.max(1, Math.round(gw * h / w));
@@ -2927,7 +2972,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // watch and one that looks wedged. The pixels are the same work in the same sequence either way.
   function tiledPlan(W, tilePx, bleedPx) {
     tilePx = tilePx || 1024;
-    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = bleedPx != null ? bleedPx : Math.ceil(12 * bs);
+    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = bleedPx != null ? bleedPx : coatReach(bs);
     const fc = document.createElement('canvas'); fc.width = finalW; fc.height = finalH;
     const fx = fc.getContext('2d'), prevG = g2d;
     const baseFill = cx2 => { cx2.setTransform(1, 0, 0, 1, 0, 0); if (uvMode) { cx2.fillStyle = UV_DARK; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else { cx2.fillStyle = STONE_BG; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); if (layVis('base')) { cx2.globalAlpha = layOp('base'); cx2.fillStyle = COL.ground; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); cx2.globalAlpha = 1; } } };
@@ -2990,7 +3035,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     while (eh0 > 64 && !canvasFits(FW, eh0, 1)) eh0 = Math.floor(eh0 / 2);
     // The tiled path's own bleed is 12 * W/COAT_REF, which is 786 rows at 65535 — more padding than payload.
     // Measured at 2048, quadrupling bleed moved the difference from an untiled render only 22.3% → 19.7%.
-    const bleed = Math.max(8, Math.min(Math.ceil(12 * (W / COAT_REF)), 256, Math.floor(eh0 / 4)));
+    // A band is full width, so every bleed row costs W x 4 bytes: the real reach at 65535 is ~1480px,
+    // which is 776 MB of bleed alone. This path cannot carry it and is capped instead, so a band render
+    // above ~16K truncates the bloom by design. The grid path is the one that is correct at any size.
+    const bleed = Math.max(8, Math.min(coatReach(W / COAT_REF), 256, Math.floor(eh0 / 4)));
     const stripH = Math.max(1, Math.min(opts.stripH || (eh0 - 2 * bleed), FH));
     return { FW, FH, stripH, bleed, live, strips: Math.ceil(FH / stripH),
              peakMB: Math.round(live * FW * (stripH + 2 * bleed) * 4 / 1e6) };
@@ -3076,7 +3124,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const backlit = !layTiles && G.backlight > 0;
     if (backlit || typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return renderTiled(W);   // no workers / back light → the single-thread tiled path
     const tilePx = opts.tilePx || 1024, nWorkers = Math.max(1, Math.min(opts.workers || (navigator.hardwareConcurrency || 4), 8));
-    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = Math.ceil(12 * bs);
+    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = coatReach(bs);
     // build the shared state + the modulator bitmaps (once)
     const modBitmap = (need, ensure) => need ? createImageBitmap(ensure()) : Promise.resolve(null);
     const [clB, bdB, brB] = await Promise.all([
@@ -4135,7 +4183,32 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // wrong thing: the first version allocated one, the export held eight, and the dropdown cheerfully
   // offered a size that needed 5 GiB. exportAll now builds in groups of this size and frees as it goes.
   const EXP_PEAK = 2;
-  function canvasFits(w, h, n) {
+  // Does the BLUR survive on a canvas this big? A large surface can paint perfectly and silently drop a
+  // large filter blur. Measured on 2026-09-26: the same slab rendered in 8192 passes came back at mean
+  // 31.79 — the picture with NO bloom at all — on two different tablets at two different widths, agreeing
+  // to 248 bytes out of 68.8 MB, while desktop Chrome at the identical canvas size and bleed was correct
+  // at 61.15. Every tile present, every tile full size, signature correct, audit clean, half the light
+  // gone. Nothing in the file reveals it, so the only place to catch it is before the render starts.
+  //
+  // The test is faithful to what applyCoat does — blur the canvas onto ITSELF at the slab's own radius —
+  // because a probe that exercises a different path is worse than no probe. A patch is drawn at the
+  // centre, where no edge can truncate it, and the alpha is read one deviation beyond its edge: the blur
+  // put light there, or it did not.
+  function bloomWorks(c, x, w, h, sigma) {
+    try {
+      const S = Math.max(2, Math.min(Math.round(sigma), Math.floor(Math.min(w, h) / 8)));
+      const mx = w >> 1, my = h >> 1;
+      x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
+      x.filter = 'none';
+      x.clearRect(mx - 4 * S, my - 4 * S, 8 * S, 8 * S);         // nothing but the patch may light the sample
+      x.fillStyle = '#fff'; x.fillRect(mx - S, my - S, 2 * S, 2 * S);
+      if (x.getImageData(mx, my, 1, 1).data[3] !== 255) return false;   // the patch itself must be there
+      x.filter = `blur(${sigma}px)`; x.drawImage(c, 0, 0); x.filter = 'none';
+      const a = x.getImageData(mx + 2 * S, my, 1, 1).data[3];    // one deviation past the patch edge
+      return a >= 8;                                             // a working blur lands ~26 here; a dropped one, 0
+    } catch (_) { return false; }
+  }
+  function canvasFits(w, h, n, sigma) {
     const held = [];
     try {
       for (let k = 0; k < (n || 1); k++) {
@@ -4145,6 +4218,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         const x = c.getContext('2d'); if (!x) return false;
         x.fillStyle = '#fff'; x.fillRect(w - 2, h - 2, 2, 2);     // the FAR CORNER: a clamped canvas fails here
         if (x.getImageData(w - 1, h - 1, 1, 1).data[0] !== 255) return false;
+        if (sigma > 0 && !bloomWorks(c, x, w, h, sigma)) return false;
       }
       return true;
     } catch (_) { return false; }
@@ -4754,6 +4828,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const d = navigator.userAgentData;
       if (d && d.getHighEntropyValues) uaHigh = await d.getHighEntropyValues(['model', 'architecture', 'bitness', 'platformVersion']);
     } catch (_) { uaHigh = null; }
+  })();
+  // What the device SAYS its texture limit is. Recorded in every master as evidence; see the note at
+  // the metadata. Cached: a WebGL context is not free and the answer cannot change.
+  const maxTextureSize = (() => {
+    let v;
+    return () => {
+      if (v !== undefined) return v;
+      try {
+        const c = document.createElement('canvas'), gl = c.getContext('webgl2') || c.getContext('webgl');
+        v = gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : null;
+      } catch (_) { v = null; }
+      return v;
+    };
   })();
   const DEV_INFO = 'stone-author/device/v1';
   const b64 = u8 => { let s = ''; for (const b of u8) s += String.fromCharCode(b); return btoa(s); };
@@ -5663,7 +5750,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     catch (_) { return 0; }
   })();
   async function tiffPlan(W) {
-    const FH = Math.round(W * H), bleed = Math.ceil(12 * (W / COAT_REF));
+    const FH = Math.round(W * H), bleed = coatReach(W / COAT_REF);
+    // The widest blur this slab actually applies, in render pixels. Zero when nothing blurs (Hero in
+    // daylight has subsurface 0 and specular 0), and then there is no bloom to lose and nothing to probe.
+    const sigma = coatRadius(W / COAT_REF);
     const budget = memBudget();
     const floor = W > TILE_FLOOR_ABOVE ? Math.min(4096, W) : 256;
     const proven = TILE_FORCED ? 0 : provenTile();
@@ -5685,7 +5775,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (TILE_FORCED) {
       ts = Math.min(TILE_FORCED, W);
       const ew = ts + 2 * bleed;
-      trail.push(ts + '/' + ew + '=' + Math.round(ew * ew * 4 / 1e6) + 'MB:forced');
+      // The force stays a force: neither gate may refuse it, because the whole point is to run the
+      // configuration the planner would decline — which is how the bloom limit was found at all. But the
+      // bloom is still MEASURED and recorded, so a forced master says in its own metadata whether the
+      // light survived. Overriding a refusal is a choice; not knowing the outcome is not.
+      const bloom = sigma > 0 ? (canvasFits(ew, ew, 1, sigma) ? 'bloom ok' : 'BLOOM LOST at ' + Math.round(sigma) + 'px') : 'no blur';
+      trail.push(ts + '/' + ew + '=' + Math.round(ew * ew * 4 / 1e6) + 'MB:forced, ' + bloom);
     } else for (;;) {
       const ew = ts + 2 * bleed, need = ew * ew * 4;
       const inBudget = need <= budget;
@@ -5703,16 +5798,22 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // recorded either way — 'ok after 4' in a master is the evidence that the first readings were
       // noise, 'canvas x5' that they were not.
       const BACKOFF = [250, 500, 1000, 2000];
-      let fits = false, tries = 0;
-      if (inBudget && proven >= ts) fits = true;                  // already done on this machine
+      let fits = false, tries = 0, why = 'canvas';
+      // THE PROOF DOES NOT COVER THE BLOOM. What a device proved is that it can hold this surface; whether
+      // it will BLUR it is a different question with a different answer, and the one that cost four masters
+      // tonight. So when the slab has an active blur the probe runs regardless of the proof.
+      if (inBudget && proven >= ts && !(sigma > 0)) fits = true;   // already done on this machine
       else while (inBudget && tries <= BACKOFF.length) {
         tries++;
-        if (canvasFits(ew, ew, 1)) { fits = true; break; }
+        if (canvasFits(ew, ew, 1, sigma)) { fits = true; break; }
+        // Two refusals that must never be confused in the trail: a surface the browser will not hand over,
+        // and a surface it hands over and then quietly declines to blur. Only asked on the failing path.
+        if (sigma > 0 && canvasFits(ew, ew, 1)) { why = 'bloom'; break; }
         if (tries <= BACKOFF.length) await new Promise(r => setTimeout(r, BACKOFF[tries - 1]));
       }
       trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:' +
-        (!inBudget ? 'budget' : !fits ? 'canvas x' + tries + ' over 3.75s'
-          : tries === 0 ? 'proven' : tries > 1 ? 'ok after ' + tries : 'ok'));
+        (!inBudget ? 'budget' : !fits ? (why === 'bloom' ? 'BLOOM LOST at ' + Math.round(sigma) + 'px' : 'canvas x' + tries + ' over 3.75s')
+          : tries === 0 ? 'proven' : sigma > 0 ? (tries > 1 ? 'bloom ok after ' + tries : 'bloom ok') : tries > 1 ? 'ok after ' + tries : 'ok'));
       if (fits) break;
       // The floor is checked, not assumed. Refusing here names the real limit; planning a grid whose
       // tiles cannot allocate would fail forty minutes later with nothing to show for it.
@@ -5721,9 +5822,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (ts <= floor && floor > 256) throw new Error(TR('exp.err.floor', { px: W, tile: ts }));
       ts = Math.floor(ts / 2);
     }
-    const store = Math.min(ts, TIFF_STORE_MAX), k = ts / store;   // k is 1 or 2: ts halves from 8192
+    // The stored tile must DIVIDE the render pass, because the writer reads the pass out in k x k whole
+    // stored tiles. `Math.min(ts, MAX)` only holds while ts halves from 8192; a forced ts of 6144 gave
+    // store 4096 and k = 1.5, the loop ran twice regardless, and the second read took 2048px of BLEED and
+    // wrote it into the file as picture — no error, plausible master, wrong. So derive the store from the
+    // pass: the largest power of two that divides it and fits the cap.
+    let store = Math.min(ts, TIFF_STORE_MAX);
+    while (store > 1 && ts % store !== 0) store >>= 1;
+    const k = ts / store;
+    if (!Number.isInteger(k) || store < 256) throw new Error(TR('exp.err.tile', { px: W }));
+    trail.push('store ' + store + ' x' + k);
     const across = Math.ceil(W / store), down = Math.ceil(FH / store);
-    return { FH, ts, store, k, bleed, trail, proven, memDiv: MEM_DIV, budgetMB: Math.round(budget / 1e6),
+    return { FH, ts, store, k, bleed, sigma, trail, proven, memDiv: MEM_DIV, budgetMB: Math.round(budget / 1e6),
              across, down, tiles: across * down,                  // the STORED grid, what the file declares
              rAcross: Math.ceil(W / ts), rDown: Math.ceil(FH / ts),
              renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
@@ -5751,6 +5861,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // Reconstructing that from a finished file took a morning of benchmarking; it is under a kilobyte.
       // These sum to msRender by construction, since the clock starts at the top of each iteration.
       const tileMs = [], tileBytes = [];
+      // HOW MUCH LIGHT THE MASTER ACTUALLY CARRIES. A lost bloom leaves a file that is whole, correctly
+      // sized, fully drawn, correctly signed and half as bright — the only symptom is the brightness
+      // itself, and until now reading it meant decoding 10.7 GB after the fact. The pixels are already in
+      // hand here for the deflate, so the same statistic tiff-meta computes (every 100th pixel, so the
+      // two numbers are directly comparable) costs one pass over data already read.
+      let litSum = 0, litUp = 0, litN = 0;
       for (let gy = 0; gy < p.rDown; gy++) for (let gx = 0; gx < p.rAcross; gx++) {
         const n = gy * p.rAcross + gx, tTile = performance.now();
         let tb = 0;                                        // this render tile's share of the file
@@ -5782,6 +5898,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // The FULL stored tile, padding included: TIFF wants every tile the same size and uses
           // ImageWidth and ImageLength to say where the picture stops, so an edge tile is padded.
           const px = cx.getImageData(p.bleed + sx * p.store, p.bleed + sy * p.store, p.store, p.store).data;
+          for (let i = 0; i < px.length; i += 400) {            // every 100th pixel: what --audit samples
+            const l = (px[i] + px[i + 1] + px[i + 2]) / 3;
+            litSum += l; if (l > 40) litUp++; litN++;
+          }
           const z = await deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength));
           await sink.add(ty * p.across + tx, z); bytes += z.length; tb += z.length;   // straight to disk under OPFS
         }
@@ -5793,8 +5913,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       expStat(TR('exp.saving'), 0.96); await breathe();
       const { blob } = await sink.finish(expMeta({
         scope: 'render', tiled: true, w: W, h: p.FH, tile: p.store, render: p.ts,
-        tiles: p.tiles, renders: p.renders, bleed: p.bleed,
+        tiles: p.tiles, renders: p.renders, bleed: p.bleed, sigma: Math.round(p.sigma) || 0,
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
+        // The light this master carries, sampled as it was written. 'mean' is the whole-picture average
+        // luma over every 100th pixel — the same statistic `tiff-meta --audit` computes from a full
+        // decode, so the two are comparable and a disagreement is itself a finding.
+        light: litN ? { mean: +(litSum / litN).toFixed(2), lit40: +(100 * litUp / litN).toFixed(2), every: 100 } : undefined,
+        // EVIDENCE, NOT A RULE. The bloom dies above a canvas size that no reported number predicts: one
+        // tablet reported MAX_TEXTURE_SIZE 8192 and matched, the other reported 4096 while rendering a
+        // correct 5670px canvas. Canvas2D and WebGL do not share that limit. Recorded because the next
+        // odd device will be explained by comparing these, and gated on by nothing.
+        maxTexture: maxTextureSize(),
         // the planner's own working: which tile sizes were tried, what each would cost, and which of the
         // two gates refused it. Under a kilobyte, and the only thing that can explain a plan afterwards.
         plan: { budgetMB: p.budgetMB, memDiv: p.memDiv, mem: navigator.deviceMemory || null,

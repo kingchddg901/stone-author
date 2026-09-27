@@ -49,6 +49,7 @@ node tools/check-build.mjs         # the build marker moves when the app does
 node tools/check-render-purity.mjs # nothing that scales the coat may measure the window
 node tools/check-wake-lock.mjs     # every export path takes and drops the screen lock
 node tools/check-device-seal.mjs   # the device identity is sealed under the slab, and fails closed
+node tools/check-bleed.mjs         # every blur has bleed behind it; the bloom is probed, not assumed
 ```
 
 The browser harness (`harness/*.mjs`) needs Playwright and runs in CI; it cannot spawn locally here, so CI

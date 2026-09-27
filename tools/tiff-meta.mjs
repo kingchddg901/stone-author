@@ -147,6 +147,13 @@ for (const path of paths) {
   console.log(`  machine  ${m.cores || '?'} cores, ${m.mem ? m.mem + ' GB reported' : 'memory not recorded'}, dpr ${m.dpr}, toDisk ${m.toDisk ?? '(not recorded)'}`);
   // the planner's working. "budget" means deviceMemory arithmetic refused it; "canvas" means the browser
   // would not allocate the surface despite the memory being there — a device policy, not a shortage.
+  // The light the master recorded about ITSELF, free to read. 31.79 against 60.3 for the same slab is a
+  // lost bloom; the pair only means something by comparison, so print it plainly and let the comparison
+  // be made. sigma is the widest blur the slab applied, which is what a canvas has to be able to carry.
+  if (m.light) console.log(`  light    mean ${m.light.mean}, lit>40 ${m.light.lit40}%  (sampled 1/${m.light.every} as written)` +
+                           `${m.sigma ? `   blur sigma ${m.sigma}px` : '   no blur in this render'}`);
+  if (m.maxTexture) console.log(`           device reports MAX_TEXTURE_SIZE ${m.maxTexture}` +
+                                `${m.bleed && m.render ? `, this render needed ${m.render + 2 * m.bleed}px` : ''}`);
   if (m.plan) console.log(`  plan     budget ${m.plan.budgetMB} MB, tried  ${(m.plan.tried || []).join('   ')}` +
                           `${m.forcedTile ? `   [FORCED to ${m.forcedTile} — floor overridden]` : ''}`);
   if (m.arch || m.engine) console.log(`           ${m.engine || '?'}${m.arch ? ', ' + m.arch : ''}` +
@@ -208,8 +215,15 @@ for (const path of paths) {
     }
     f.close();
     console.log(`  AUDIT    ${f.offs.length} tiles, ${wrong} wrong size, ${dead} never drawn  ->  ${(dead || wrong) ? 'CORRUPT' : 'clean'}`);
-    if (n) console.log(`           whole-picture mean ${(sum / n).toFixed(2)}, lit>40 ${(100 * lit / n).toFixed(2)}%` +
-                       `   (compare against another master of the same slab and spectrum; a dim one has a truncated bloom)`);
+    if (n) {
+      const mean = sum / n;
+      console.log(`           whole-picture mean ${mean.toFixed(2)}, lit>40 ${(100 * lit / n).toFixed(2)}%` +
+                  `   (compare against another master of the same slab and spectrum; a dim one has a truncated bloom)`);
+      // The file records the same statistic as it writes. If a full decode disagrees, one of the two is
+      // wrong and that matters more than either number.
+      if (m.light && Math.abs(mean - m.light.mean) > 0.5)
+        console.log(`           MISMATCH: the file claims mean ${m.light.mean}, this decode says ${mean.toFixed(2)}`);
+    }
     if (dead || wrong) bad++;
   }
   if (RENAME && m.w) plan.push({ path, base: baseOf(path), m });
