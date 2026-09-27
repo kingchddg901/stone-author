@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.9';
+  const BUILD = '2026.09.27.10';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2858,8 +2858,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const w = tcv.width, h = tcv.height;
     if (!f.ident && f.uvMode && !f.backlit) {              // EMISSION BLOOM: fluorescence glows on the black ground
       tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'lighter';
-      tx.globalAlpha = 0.55; blurDraw(tx, tcv, 3 * bs, w, h);
-      tx.globalAlpha = 0.35; blurDraw(tx, tcv, 8 * bs, w, h);
+      // With BLOOM_DRAW the halo was already drawn by each element, so there is nothing left to derive
+      // from the pixels - and nothing to need neighbours for, which is the entire point.
+      if (!BLOOM_DRAW) {
+        tx.globalAlpha = 0.55; blurDraw(tx, tcv, 3 * bs, w, h);
+        tx.globalAlpha = 0.35; blurDraw(tx, tcv, 8 * bs, w, h);
+      }
       tx.globalAlpha = 1; tx.fillStyle = UV_LIFT; tx.fillRect(0, 0, w, h);   // the ground, exact at every edge
       tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.restore();
     }
@@ -2939,7 +2943,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function coatRadius(bs, uv) {
     if (uv === undefined) uv = uvMode;
     let r = 0;
-    if (uv) r = Math.max(r, 8 * bs, 3 * bs);                                      // emission bloom
+    // The bleed is neighbour-sampling margin for a BLUR. Drawn glow reads no neighbours: a shape outside
+    // the canvas still casts its shadow into it (measured), so the whole picture is submitted to every
+    // tile and the canvas clips the result rather than the input. Hence zero, not shadowReach(glowPx).
+    if (uv && !BLOOM_DRAW) r = Math.max(r, 8 * bs, 3 * bs);                      // emission bloom
     else {
       if (G.subsurface > 0) r = Math.max(r, (2 + 3 * G.subsurface) * bs, (1 + 2 * G.subsurface) * bs);
       if (G.specular > 0) r = Math.max(r, 2 * bs, 0.6 * bs);
@@ -2983,7 +2990,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // W-wide canvas, whole slab, no pan/zoom. Shares applyCoat/paintStoneContent/paintBacklit with live draw().
   function renderFull(W) {
     const oc = document.createElement('canvas'); oc.width = W; oc.height = Math.round(W * H);
-    const ox = oc.getContext('2d'), prevG = g2d, bs = W / COAT_REF, backlit = !layTiles && G.backlight > 0;
+    const ox = oc.getContext('2d'), prevG = g2d, bs = W / COAT_REF, backlit = !layTiles && G.backlight > 0; glowPx = BLOOM_DRAW ? 16 * bs : 0;
     ox.setTransform(1, 0, 0, 1, 0, 0); ox.globalAlpha = 1;
     if (backlit) { ox.fillStyle = '#0b0b0e'; ox.fillRect(0, 0, oc.width, oc.height); }
     else if (uvMode) { ox.fillStyle = UV_GROUND; ox.fillRect(0, 0, oc.width, oc.height); }
@@ -3002,6 +3009,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // it applyCoat computes every global gradient against the piece rather than the whole, and each piece
   // restarts them. Nothing needed it until the slab grew past what one canvas can hold.
   function renderSlabTo(w, h, tf, coatScale, spec, tile) {
+    glowPx = BLOOM_DRAW ? 16 * coatScale : 0;
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const cx = c.getContext('2d'), svG = g2d, svS = lightSpectrum, svU = uvMode;
     lightSpectrum = spec; uvMode = spec !== 0;
@@ -3077,7 +3085,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // watch and one that looks wedged. The pixels are the same work in the same sequence either way.
   function tiledPlan(W, tilePx, bleedPx) {
     tilePx = tilePx || 1024;
-    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = bleedPx != null ? bleedPx : coatReach(bs);
+    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = bleedPx != null ? bleedPx : coatReach(bs); glowPx = BLOOM_DRAW ? 16 * bs : 0;
     const fc = document.createElement('canvas'); fc.width = finalW; fc.height = finalH;
     const fx = fc.getContext('2d'), prevG = g2d;
     const baseFill = cx2 => { cx2.setTransform(1, 0, 0, 1, 0, 0); if (uvMode) { cx2.fillStyle = UV_GROUND; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else { cx2.fillStyle = STONE_BG; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); if (layVis('base')) { cx2.globalAlpha = layOp('base'); cx2.fillStyle = COL.ground; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); cx2.globalAlpha = 1; } } };
@@ -3154,7 +3162,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
              peakMB: Math.round(live * FW * (stripH + 2 * bleed) * 4 / 1e6) };
   }
   function renderStrip(W, y0, h, bleed, wins) {
-    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, prevG = g2d;
+    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, prevG = g2d; glowPx = BLOOM_DRAW ? 16 * bs : 0;
     const ey0 = y0 - bleed, eh = h + 2 * bleed;
     const c = document.createElement('canvas'); c.width = finalW; c.height = eh;
     const cx = c.getContext('2d');
@@ -3175,7 +3183,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // already does: same ground fill, same transform, same tile descriptor into applyCoat. Verified equal to
   // renderStrip at bleed 0, and neighbouring tiles join with a mean difference of 0.
   function renderOneTile(W, tx0, ty0, tw, th, bleed) {
-    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, prevG = g2d;
+    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, prevG = g2d; glowPx = BLOOM_DRAW ? 16 * bs : 0;
     const ex0 = tx0 - bleed, ey0 = ty0 - bleed, ew = tw + 2 * bleed, eh = th + 2 * bleed;
     const c = document.createElement('canvas'); c.width = ew; c.height = eh;
     if (c.width !== ew || c.height !== eh) throw new Error('tile canvas clamped to ' + c.width + 'x' + c.height);
@@ -3253,7 +3261,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const backlit = !layTiles && G.backlight > 0;
     if (backlit || typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return renderTiled(W);   // no workers / back light → the single-thread tiled path
     const tilePx = opts.tilePx || 1024, nWorkers = Math.max(1, Math.min(opts.workers || (navigator.hardwareConcurrency || 4), 8));
-    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = coatReach(bs);
+    const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = coatReach(bs); glowPx = BLOOM_DRAW ? 16 * bs : 0;
     // build the shared state + the modulator bitmaps (once)
     const modBitmap = (need, ensure) => need ? createImageBitmap(ensure()) : Promise.resolve(null);
     const [clB, bdB, brB] = await Promise.all([
@@ -3314,6 +3322,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     if (layTiles) { drawTiles(F); paintLive(); if (tool === 'light') drawLightGuide(); ctx.globalAlpha = 1; stat(); return; }
+    glowPx = BLOOM_DRAW ? 16 * (cv.width / COAT_REF) : 0;   // before the paint: the glow is drawn WITH each element
     if (backlit) paintBacklit(); else paintStoneContent(ident, angleView);
     applyCoat(cv, ctx, cv.width / COAT_REF, { ident, uvMode, backlit });   // coat tier: emission bloom · subsurface · specular · lens (shared with renderFull); same reference as the export, so the preview matches
     if (!ident && !layTiles) applyWindowsScreen();                      // reality windows: daylight (or another light) through the islands
@@ -3362,6 +3371,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!ident) { const bl = COL[key + 'Blend'], gl = COL[key + 'Glow'] || 0;
       if (bl && bl !== 'normal') g2d.globalCompositeOperation = bl;
       if (gl > 0) { g2d.shadowColor = colour; g2d.shadowBlur = gl * 6; } }
+    // The bloom, carried by the element instead of derived from the pixels around it. shadowBlur is in
+    // OUTPUT pixels and ignores the transform, which is exactly right: sigma is an output-space quantity.
+    if (BLOOM_DRAW && uvMode && !ident && glowPx > 0) { g2d.shadowColor = colour; g2d.shadowBlur = glowPx; }
     return saved;
   }
   function fxOff(s) { g2d.globalCompositeOperation = s.op; g2d.shadowColor = s.sc; g2d.shadowBlur = s.sb; }
@@ -3408,6 +3420,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const g_ = Math.floor((s.u || 0) * ng), v_ = Math.floor((s.u2 || 0) * nv),
             mkey = nv > 1 ? 'micro:' + g_ + '.' + v_ : (ng > 1 ? 'micro:' + g_ : null),
             mcol = uv ? (emit(null, only, s.x, s.y) || UV_DARK) : (OVR['lay:' + only] || (mkey && COL[mkey] !== undefined ? COL[mkey] : COL.micro));
+      if (BLOOM_DRAW && uv && !ident && glowPx > 0) g2d.shadowColor = mcol;   // per-speck halo, not one hue for the layer
       g2d.fillStyle = !ident ? mcol
         : angleView ? (s.el > 1.3 ? `hsl(${Math.round(((2 * s.ang * 180 / Math.PI) % 360 + 360) % 360)} 78% 58%)` : '#3a3c48')
         : s.ground ? `hsl(${Math.round(210 - 190 * Math.min(1, Math.hypot(s.x - s.x0, s.y - s.y0) / 0.008))} 80% 55%)`
@@ -3485,7 +3498,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const vcol = L => { if (uv) return (beamPts(L.pts) && emit(L.id, L.layer)) || UV_DARK; const o = OVR['id:' + L.id]; if (o) return o; const lc = OVR['lay:' + L.layer]; if (lc) return lc; return L.major ? COL.major : COL.minor; };
     if (!ident && !uv) for (const L of mine) if (L.halo) runs(L, () => halo, L.gauge * 6 * F.soft, 0.12 * layOp(only), true);   // halo: wide pale bleached selvage
     if (!ident && !uv) for (const L of mine) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(only), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }   // shoulder
-    for (const L of mine) { const bk = L.major ? 'major' : 'minor'; const _fx = uv ? null : fxOn(only, vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : strainColour(L, vcol(L), only, bk, t)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(only))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }   // main (per-item adjustments)
+    for (const L of mine) { const bk = L.major ? 'major' : 'minor'; const _fx = (uv && !BLOOM_DRAW) ? null : fxOn(only, vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : strainColour(L, vcol(L), only, bk, t)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(only))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }   // main (per-item adjustments)
   }
   function paintStoneContent(ident, angleView) {
     const uv = uvMode && !ident;                                // black-light: only the UV palette paints; the stone body is dark
@@ -5969,6 +5982,20 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // finished master then carries both the prediction and the outcome, which is the only way to tell
   // whether the gate is calling it right. A canvas that could not be made at all is still refused: this
   // withholds a judgement about LIGHT, not about whether a surface exists.
+  // ?bloom=draw - EMITTER-SPACE GLOW. The emission bloom is image-space today: render the tile, blur the
+  // whole thing twice, add it back. That one decision is the entire bleed - blurReach(8*bs) is 2.4% of the
+  // picture width per side, which at 65535 is 1577px against a 2048 tile, and it is why a tablet has 83
+  // usable pixels per tile under black light.
+  //
+  // Drawn glow asks each element for its own halo instead of deriving one from pixels. Proved at the
+  // reference scale first: 8,050 emitters, drawn against blurred, mean 59.20 vs 58.95 and lit>40 35.31%
+  // vs 33.74%, with the wide pass alone surviving at 94%. The difference is a faint ring on each element,
+  // not a level shift. That was synthetic circles though, so this flag is how it meets real geometry.
+  const BLOOM_DRAW = (() => {
+    try { return /^(draw|1)$/i.test(new URLSearchParams(location.search).get('bloom') || ''); }
+    catch (_) { return false; }
+  })();
+  let glowPx = 0;            // the wide pass as a canvas shadowBlur, in OUTPUT pixels: a shadow's deviation is half its blur
   const DIM_OK = (() => {
     try { return /^(off|allow|1)$/i.test(new URLSearchParams(location.search).get('dim') || ''); }
     catch (_) { return false; }
@@ -6292,7 +6319,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // tiled master silently leaves it out. Recorded rather than hidden until it is done per tile.
         omits: G.lens > 0 ? ['lens'] : undefined,
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
-        dimOverride: DIM_OK || undefined,              // the light veto was withheld: read the light below against a good master
+        dimOverride: DIM_OK || undefined,
+        bloomDraw: BLOOM_DRAW || undefined,           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan              // the light veto was withheld: read the light below against a good master
         // The light this master carries, sampled as it was written. 'mean' is the whole-picture average
         // luma over every 100th pixel — the same statistic `tiff-meta --audit` computes from a full
         // decode, so the two are comparable and a disagreement is itself a finding.

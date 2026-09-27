@@ -208,6 +208,15 @@ if (!app.includes('dimOverride: DIM_OK || undefined'))
 if (!app.includes("get('dim')"))
   fail.push('the dim override is not read from the URL, so it can never be turned on');
 
+// ?bloom=draw MUST NOT LEAK. The flag removes the blur that the entire bleed exists to feed, so if the
+// bleed collapsed while the blur still ran, every tile would be blurred against a transparent edge and
+// every master would come back dim with no other symptom - the exact defect this whole file was written
+// for. The two have to move together, and with the flag off nothing may change at all.
+if (!app.includes('if (uv && !BLOOM_DRAW) r = Math.max(r, 8 * bs, 3 * bs);'))
+  fail.push('coatRadius no longer collapses the bleed under ?bloom=draw, or collapses it unconditionally: the bleed and the blur it feeds must switch together');
+if (!app.includes('if (!BLOOM_DRAW) {'))
+  fail.push('applyCoat runs the image-space bloom regardless of ?bloom=draw, so the drawn glow would be added ON TOP of the blurred one');
+
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size
 // is a different canvas, which Chrome does not rasterise identically. The race runs once per device,
