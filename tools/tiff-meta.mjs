@@ -133,6 +133,10 @@ for (const path of paths) {
               `   state ${m.state || '(not recorded)'}${m.inputs ? ' (session, not the picture)' : ''}`);
   console.log(`  content  ${num(m.marks || 0)} marks, ${num(m.lines || 0)} veins${m.cracks != null ? `, ${num(m.cracks)} cracks, ${num(m.specks)} specks, ${num(m.drusy)} drusy, ${num(m.seams)} seams` : ' (counts not recorded)'}`);
   console.log(`  machine  ${m.cores || '?'} cores, ${m.mem ? m.mem + ' GB reported' : 'memory not recorded'}, dpr ${m.dpr}, toDisk ${m.toDisk ?? '(not recorded)'}`);
+  // the planner's working. "budget" means deviceMemory arithmetic refused it; "canvas" means the browser
+  // would not allocate the surface despite the memory being there — a device policy, not a shortage.
+  if (m.plan) console.log(`  plan     budget ${m.plan.budgetMB} MB, tried  ${(m.plan.tried || []).join('   ')}` +
+                          `${m.forcedTile ? `   [FORCED to ${m.forcedTile} — floor overridden]` : ''}`);
   console.log(`           ${(m.ua || '').slice(0, 100)}`);
   if (ms.render) {
     const raw = (m.tiles || 0) * (m.tile || 0) ** 2 * 4;

@@ -1093,7 +1093,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.12';
+  const BUILD = '2026.09.26.13';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5545,9 +5545,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const budget = Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / 8);
     const floor = !TILE_FORCED && W > TILE_FLOOR_ABOVE ? Math.min(4096, W) : 256;
     let ts = TILE_FORCED ? Math.min(TILE_FORCED, W) : Math.min(W, 8192);
+    // WHY the plan chose what it chose. The outcome was recorded and the reasoning was not, so a tablet
+    // that silently halved its tile after an OS update could not be explained without the device in hand.
+    // There are exactly two gates and they mean different things: the BUDGET is arithmetic on
+    // navigator.deviceMemory, while canvasFits actually allocates, paints a far corner and reads it back.
+    // A budget refusal says the device admits to little memory; a canvas refusal says the browser will not
+    // hand over the surface whatever the memory. Each step names the canvas it wanted, its cost, and which
+    // gate turned it down.
+    const trail = [];
     for (;;) {
-      const ew = ts + 2 * bleed;
-      if (ew * ew * 4 <= budget && canvasFits(ew, ew, 1)) break;
+      const ew = ts + 2 * bleed, need = ew * ew * 4;
+      const inBudget = need <= budget, fits = inBudget && canvasFits(ew, ew, 1);
+      trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:' + (!inBudget ? 'budget' : fits ? 'ok' : 'canvas'));
+      if (fits) break;
       // The floor is checked, not assumed. Refusing here names the real limit; planning a grid whose
       // tiles cannot allocate would fail forty minutes later with nothing to show for it.
       if (ts <= 256) throw new Error(TR('exp.err.tile', { px: W }));
@@ -5557,7 +5567,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     const store = Math.min(ts, TIFF_STORE_MAX), k = ts / store;   // k is 1 or 2: ts halves from 8192
     const across = Math.ceil(W / store), down = Math.ceil(FH / store);
-    return { FH, ts, store, k, bleed,
+    return { FH, ts, store, k, bleed, trail, budgetMB: Math.round(budget / 1e6),
              across, down, tiles: across * down,                  // the STORED grid, what the file declares
              rAcross: Math.ceil(W / ts), rDown: Math.ceil(FH / ts),
              renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
@@ -5628,6 +5638,9 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         scope: 'render', tiled: true, w: W, h: p.FH, tile: p.store, render: p.ts,
         tiles: p.tiles, renders: p.renders, bleed: p.bleed,
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
+        // the planner's own working: which tile sizes were tried, what each would cost, and which of the
+        // two gates refused it. Under a kilobyte, and the only thing that can explain a plan afterwards.
+        plan: { budgetMB: p.budgetMB, mem: navigator.deviceMemory || null, tried: p.trail },
         toDisk: sink.toDisk, bytes,
         ms: { render: msRender, total: Date.now() - expT0 },
         // Paired on purpose: time ALONE cannot say why a tile was slow. Against its own byte count it
