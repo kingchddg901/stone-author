@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.5';
+  const BUILD = '2026.09.27.6';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5367,6 +5367,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // freezing deliberately leaves the finished time on screen -- so without this the second export of a
   // session counts up from the first one's start. Invisible to any test that reloads between runs.
   const expReset = () => { expFreeze(); expT0 = 0; };
+  // WHERE, not just what. A phone cannot be attached to a debugger, so the only thing we learn about a
+  // failure on one is what it PRINTS - and the three export catches printed e.message alone, throwing the
+  // stack away. WebKit's "Cannot access uninitialized variable" names neither the variable nor the line,
+  // so that message on its own is unactionable: it cost a full round of reproduction attempts on Blink
+  // (planner, pyramid, remembered plan, all clean) to establish only that it could not be seen from here.
+  // The first stack frame is enough to name the statement. Both formats: WebKit is "fn@url:line:col",
+  // Blink is "    at fn (url:line:col)".
+  function errWhere(e) {
+    const msg = (e && e.message) || String(e);
+    const st = e && e.stack ? String(e.stack) : '';
+    const at = st.match(/:(\d+):(\d+)/);   // first frame either way: WebKit "fn@url:L:C", Blink "at fn (url:L:C)"
+    return at ? msg + '  [line ' + at[1] + ':' + at[2] + ']' : msg;
+  }
   function expStat(msg, frac) {
     const w = document.getElementById('expprog'); if (!w) return;
     w.hidden = msg == null;
@@ -5502,7 +5515,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       hint(TR('hint.exported-files', { n: files.length }));
       expStat(TR('exp.done-kit', { n: files.length, px: W, t: expElapsed(Date.now() - expT0) }), 1); expFreeze();
     } catch (e) {
-      const msg = TR('hint.export-failed-msg', { err: (e && e.message || e) });
+      const msg = TR('hint.export-failed-msg', { err: errWhere(e) });
       hint(msg); expStat(msg, -1);                         // stays on screen; the hint will not
     }
     finally { btn.disabled = selW.disabled = selWhat.disabled = false; exporting = false; wakeOff(); }
@@ -6275,7 +6288,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1);
       hint(TR('hint.exported-render', { px: W }));
     } catch (e) {
-      expStat(TR('hint.export-failed-msg', { err: (e && e.message) || e }), -1);
+      expStat(TR('hint.export-failed-msg', { err: errWhere(e) }), -1);
     } finally {
       btn.disabled = selW.disabled = selF.disabled = false; exporting = false; wakeOff(); expFreeze();
     }
@@ -6303,7 +6316,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1); expFreeze();
       hint(TR('hint.exported-render', { px: W }));
     } catch (e) {
-      const msg = TR('hint.export-failed-msg', { err: (e && e.message || e) });
+      const msg = TR('hint.export-failed-msg', { err: errWhere(e) });
       hint(msg); expStat(msg, -1);
     } finally { btn.disabled = selW.disabled = false; exporting = false; wakeOff(); applyTiers(); }
   }
