@@ -132,7 +132,13 @@ if (!/proveTile\(p\.ts, W\)/.test(app)) fail.push('a completed render does not r
 // The store is keyed calSig:width:light. forgetTile deleted all[calSig()] for two commits after that
 // change, so a plan that produced an UNDRAWN TILE was refused correctly and then kept, ready to be handed
 // back to the next render. The one path that un-remembers a bad plan had silently stopped working.
-if (!/delete all\[planKey\(W\)\]/.test(app)) fail.push('forgetTile is not using the plan key, so a plan that produced a blank tile is never forgotten');
+// It used to DELETE the record, which was right when the record was a number and wrong once it carried a
+// death list too — deleting the entry erases exactly what a failure just taught the device. It clears the
+// finished plan and keeps the list.
+if (!/planWrite\(W, \{ ok: 0, bad: planRec\(W\)\.bad \|\| \[\] \}\)/.test(app))
+  fail.push('forgetTile does not clear the finished plan while keeping the death list');
+if (!/markAttempt\(p\.ts, W\)/.test(app)) fail.push('nothing is recorded before the first tile, so a device that dies mid-render learns nothing');
+if (!/died\.includes\(ts\)/.test(plan)) fail.push('the plan does not skip a size this device died on');
 // The semicolon matters: without it this matches `function forgetTile(W) {` and passes while the CALL
 // site has stopped passing the width — the definition satisfying a check about its caller.
 if (!/forgetTile\(W\);/.test(app)) fail.push('the blank-tile guard does not pass the width, so it forgets nothing');

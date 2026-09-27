@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.37';
+  const BUILD = '2026.09.27.1';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5817,19 +5817,33 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // quarter cannot reach the 8192 ceiling either. Set once with ?mem=8 and remembered per device,
   // because a setting you must retype is one you will forget on the render that matters. Only 2, 4 and 8
   // are accepted; anything else leaves it alone.
-  const MEM_KEY = 'stone-author:memshare:v1';
-  const MEM_DIV = (() => {
-    const ok = v => v === 2 || v === 4 || v === 8;
+  // HOW MUCH OF THE MACHINE THIS RENDER MAY TAKE, in eighths. Six by default: most of it, with a bit
+  // left on the ground.
+  //
+  // This is a CEILING ON THE ATTEMPT, not a prediction of what will work, and it exists because removing
+  // it entirely was worse. With no ceiling the planner attempted a 515 MB canvas on a 3 GB tablet during
+  // calibration and hard-froze the device - the first time this program has taken a machine down. The old
+  // arithmetic was wrong in the other direction: a fixed eighth refused surfaces the same hardware was
+  // demonstrably holding. Six eighths is generous enough not to refuse real work and mean enough not to
+  // ask for everything.
+  //
+  // It is not sufficient on its own. The render that froze the A7 was 908 MB of counted surfaces against
+  // a 1.61 GB ceiling - well inside it - because the count cannot see Chrome's own overhead, the OPFS
+  // writer or the deflate buffers. What catches that is the device remembering what it died doing: see
+  // the plan store.
+  const MEM_KEY = 'stone-author:memshare:v2';              // v2: EIGHTHS, where v1 held a divisor
+  const MEM_SHARE = (() => {
+    const ok = v => v >= 1 && v <= 8 && v === Math.floor(v);
     try {
       const asked = +new URLSearchParams(location.search).get('mem');
       if (ok(asked)) { try { localStorage.setItem(MEM_KEY, String(asked)); } catch (_) {} return asked; }
     } catch (_) {}
     try { const kept = +localStorage.getItem(MEM_KEY); if (ok(kept)) return kept; } catch (_) {}
-    return 4;
+    return 6;
   })();
   // One source for the figure. The warning quotes what the planner will actually take, or it is not
   // a warning about this program.
-  const memBudget = () => Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / MEM_DIV);
+  const memBudget = () => (navigator.deviceMemory || 4) * 1024 ** 3 * MEM_SHARE / 8;
   // WHAT THIS DEVICE SETTLED ON. Measuring beats predicting, but a planner that MEASURES is not
   // automatically repeatable: candidates are compared on timing, and timings move. Two renders of the
   // same slab on the same machine could pick different tile sizes, and a different tile size is a
@@ -5840,25 +5854,45 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // VERIFIED - one calibration tile, the same check the race used. It still fails safely: if the
   // remembered plan stops calibrating, the memory is dropped and the race runs again. Measurement on the
   // first render, determinism on every one after.
-  const TILE_PROOF_KEY = 'stone-author:plan:v2';
+  // WHAT THIS DEVICE FINISHED, AND WHAT KILLED IT. Two different facts, and the second one only exists
+  // because a plan was recorded on COMPLETION alone: an A7 hard-froze mid-render, learned nothing from
+  // it, and on the next attempt would have raced straight back into the same allocation. A machine that
+  // dies should at least not repeat itself.
+  //
+  // So a size is written as ATTEMPTED before the first tile and promoted to FINISHED at the end. Anything
+  // attempted and never finished is refused next time — not because it is impossible, but because this
+  // device has evidence against it and there is a smaller one to try. A render that completes clears it,
+  // so a size that failed for a passing reason can come back.
+  const TILE_PROOF_KEY = 'stone-author:plan:v3';
   const planKey = W => calSig() + ':' + W + ':' + (uvMode ? 'uv' : 'day');
-  function provenTile(W) {
-    try { return +JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}')[planKey(W)] || 0; } catch (_) { return 0; }
+  function planRec(W) {
+    try { return JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}')[planKey(W)] || {}; } catch (_) { return {}; }
   }
-  function proveTile(ts, W) {
+  function planWrite(W, rec) {
     try {
       const all = JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}');
-      if (all[planKey(W)] !== ts) { all[planKey(W)] = ts; localStorage.setItem(TILE_PROOF_KEY, JSON.stringify(all)); }
+      all[planKey(W)] = rec; localStorage.setItem(TILE_PROOF_KEY, JSON.stringify(all));
     } catch (_) {}
+  }
+  const provenTile = W => +planRec(W).ok || 0;
+  const diedAt = W => planRec(W).bad || [];
+  function markAttempt(ts, W) {                            // before the first tile: if we vanish, this stands
+    const r = planRec(W), bad = r.bad || [];
+    if (!bad.includes(ts)) bad.push(ts);
+    planWrite(W, { ok: r.ok || 0, bad });
+  }
+  function proveTile(ts, W) {                              // finished: promote it, and clear the suspicion
+    const r = planRec(W);
+    planWrite(W, { ok: ts, bad: (r.bad || []).filter(v => v !== ts) });
   }
   // The one path that un-remembers a bad plan. It deleted all[calSig()] while the store had moved to
   // calSig:width:light, so for two commits a plan that produced an UNDRAWN TILE was refused correctly and
   // then remembered anyway, ready to be handed straight back to the next render.
+  // A tile the canvas never drew. Drop the FINISHED plan so it is not trusted again — but keep the bad
+  // list, because markAttempt already recorded this size before the first tile and that record is the
+  // evidence. Deleting the whole entry would erase exactly what the failure just taught the device.
   function forgetTile(W) {
-    try {
-      const all = JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}');
-      delete all[planKey(W)]; localStorage.setItem(TILE_PROOF_KEY, JSON.stringify(all));
-    } catch (_) {}
+    planWrite(W, { ok: 0, bad: planRec(W).bad || [] });
   }
   const TIFF_STORE_MAX = 4096;
   // A TILE CAN BE TOO SMALL TO CARRY THE LIGHT. Bleed is sized at 12 x bs against a widest blur of 8 x bs,
@@ -5980,6 +6014,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (sigma > 0 && !canBlur) trail.push('no ctx.filter - bloomless');
     const budget = memBudget();
     const proven = TILE_FORCED ? 0 : provenTile(W);
+    const died = TILE_FORCED ? [] : diedAt(W);          // sizes this machine started and never came back from
     let ts = Math.min(W, 8192);
     // WHY the plan chose what it chose. The outcome was recorded and the reasoning was not, so a tablet
     // that silently halved its tile after an OS update could not be explained without the device in hand.
@@ -6030,6 +6065,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (; ts > Math.max(256, bleed); ts = Math.floor(ts / 2)) {
         const ew = ts + 2 * bleed, need = ew * ew * 4 * surfaces + TIFF_STORE_MAX * TIFF_STORE_MAX * 4;
         if (ew * ew * 4 > CANVAS_HARD_MAX) { trail.push(ts + '/' + ew + ':over 900MB, not attempted'); continue; }
+        // Two refusals before an attempt, and neither is a prediction about whether it would WORK.
+        // The ceiling stops the absurd ask; the death list stops a repeat of one that took the machine.
+        if (need > budget) { trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:over the ' + Math.round(budget / 1e6) + 'MB ceiling'); continue; }
+        if (died.includes(ts)) { trail.push(ts + '/' + ew + ':DIED HERE BEFORE'); continue; }
         // SAY WHICH ONE. The old planner was arithmetic and answered instantly; this one paints a real
         // tile per candidate, which on a tablet at 65535 is minutes of "Preparing…" with nothing moving.
         // The size is data, not prose, so it needs no pack entry — same argument as the plan trail.
@@ -6062,7 +6101,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!Number.isInteger(k) || store < 256) throw new Error(TR('exp.err.tile', { px: W }));
     trail.push('store ' + store + ' x' + k);
     const across = Math.ceil(W / store), down = Math.ceil(FH / store);
-    return { FH, ts, store, k, bleed, sigma, wins, canBlur, trail, proven, memDiv: MEM_DIV, budgetMB: Math.round(budget / 1e6),
+    return { FH, ts, store, k, bleed, sigma, wins, canBlur, trail, proven, memShare: MEM_SHARE, budgetMB: Math.round(budget / 1e6),
              across, down, tiles: across * down,                  // the STORED grid, what the file declares
              rAcross: Math.ceil(W / ts), rDown: Math.ceil(FH / ts),
              renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
@@ -6089,6 +6128,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // median, while a slow processor is uniform, and a busy PICTURE tracks the tile's own byte count.
       // Reconstructing that from a finished file took a morning of benchmarking; it is under a kilobyte.
       // These sum to msRender by construction, since the clock starts at the top of each iteration.
+      // Written BEFORE the first tile, so a device that never comes back has still left a record.
+      if (!TILE_FORCED) markAttempt(p.ts, W);
       const tileMs = [], tileBytes = [];
       // HOW MUCH LIGHT THE MASTER ACTUALLY CARRIES. A lost bloom leaves a file that is whole, correctly
       // sized, fully drawn, correctly signed and half as bright — the only symptom is the brightness
@@ -6162,7 +6203,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         maxTexture: maxTextureSize(),
         // the planner's own working: which tile sizes were tried, what each would cost, and which of the
         // two gates refused it. Under a kilobyte, and the only thing that can explain a plan afterwards.
-        plan: { budgetMB: p.budgetMB, memDiv: p.memDiv, mem: navigator.deviceMemory || null,
+        plan: { budgetMB: p.budgetMB, memShare: p.memShare, mem: navigator.deviceMemory || null,
                 proven: p.proven || undefined, tried: p.trail },
         toDisk: sink.toDisk, bytes,
         ms: { render: msRender, total: Date.now() - expT0 },
