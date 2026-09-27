@@ -170,6 +170,18 @@ if (!/':m' \+ MEM_EASY/.test(app))
 if (!/\(navigator\.deviceMemory > 0 \? 'k' : 'u'\)/.test(app))
   fail.push('the plan key does not record whether the memory figure was real, so an engine that gains deviceMemory keeps a plan chosen without one');
 
+// AND IT HAS TO NAME THE RIGHT CAUSE. The refusal printed exp.err.tile - "cannot hold a tile big enough",
+// a memory sentence - whatever the reason, including the case where a candidate fitted at 500MB against a
+// 537MB ceiling, rendered, and came back carrying 19% of the light. A diagnostic that asserts the wrong
+// cause is worse than one that says nothing: that message sent a debugging session after memory ceilings
+// while the trail beside it already read DIM 32.0 vs 171.4.
+if (!/bestLit = Math\.max\(bestLit, cal\.got \/ cal\.want\)/.test(plan))
+  fail.push('the plan does not record that a candidate RENDERED and came back dim, so it cannot tell that failure from a memory refusal');
+if (!/bestLit >= 0/.test(plan) || !/exp\.err\.dim/.test(plan))
+  fail.push('the refusal reports exp.err.tile whatever happened, so a tile that fitted and came back dim is reported as a memory limit');
+if (!/!cal\.ok && !cal\.why && cal\.want > 0/.test(plan))
+  fail.push('the dim test does not exclude candidates that could not be made at all, so a canvas that never allocated would be reported as dim');
+
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size
 // is a different canvas, which Chrome does not rasterise identically. The race runs once per device,

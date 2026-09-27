@@ -532,6 +532,7 @@ window.SA_I18N = (() => {
   "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
   "exp.err.tile": "This device cannot hold a tile big enough for {px}px.",
+  "exp.err.dim": "At {px}px every tile this device can hold came back dim — one was rendered and carried {pct}% of the light it should. This is not a memory limit: the blur stops working above a canvas this size. The render was refused rather than saved wrong. A smaller width needs a smaller canvas and should come out right.",
   "exp.err.floor": "At {px}px this device can only manage {tile}px tiles, which are too small to carry the light — a black-light render would come out dim. Choose a smaller width.",
   "exp.err.blank": "Tile {n} of {total} came back unpainted twice, so the render was stopped rather than saved with holes in it. This device is short of memory — try a smaller width.",
   "exp.err.no-download": "This render cannot be saved from here. Sign in, or open the studio from its own page.",
@@ -1095,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.6';
+  const BUILD = '2026.09.27.7';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6101,6 +6102,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const ref = renderFull(CAL_REF_W), refCx = ref.getContext('2d');
       const CANVAS_HARD_MAX = 900e6;
       const ok = [];
+      // WHY IT WAS REFUSED, not a guess at why. The throw below said "cannot hold a tile big enough",
+      // which is a MEMORY sentence, and it was printed whatever the reason - including the case where a
+      // candidate fitted comfortably, was rendered, and came back dim. That message sent a debugging
+      // session after memory ceilings for two rounds while the trail on screen already said DIM 32.0 vs
+      // 171.4. A diagnostic that asserts the wrong cause is worse than one that says nothing.
+      let bestLit = -1;                                    // best got/want among candidates that RENDERED and were dim
       // The remembered plan, verified rather than re-raced. This is what makes two renders of the same
       // thing on the same machine produce the same picture.
       if (proven && proven <= ts) {
@@ -6134,10 +6141,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           (cal.ok ? 'calibrated ' + (cal.got != null ? cal.got.toFixed(1) + ' vs ' + cal.want.toFixed(1) : cal.why) +
                     ' in ' + ms + 'ms, est ' + Math.round(passes * ms / 1000) + 's'
                   : cal.why ? cal.why : 'DIM ' + cal.got.toFixed(1) + ' vs ' + cal.want.toFixed(1)));
+        // A tile that RENDERED and came back short of the light is a different failure from one that was
+        // never attempted: cal.why is set when the tile could not be made at all, so its absence means the
+        // canvas existed, the picture was drawn into it, and the light was not there.
+        if (!cal.ok && !cal.why && cal.want > 0) bestLit = Math.max(bestLit, cal.got / cal.want);
         if (cal.ok) { ok.push({ ts, est: passes * ms, need }); if (ok.length >= 2) break; }
       }
       ref.width = 1; ref.height = 1;
-      if (!ok.length) throw new Error(TR('exp.err.tile', { px: W }) + '  [' + trail.join('  ') + ']');
+      if (!ok.length) throw new Error((bestLit >= 0
+        ? TR('exp.err.dim', { px: W, pct: Math.round(100 * bestLit) })
+        : TR('exp.err.tile', { px: W })) + '  [' + trail.join('  ') + ']');
       const safe = ok.reduce((a, b) => (b.ts < a.ts ? b : a));        // smallest that calibrated
       const fast = ok.reduce((a, b) => (b.est < a.est ? b : a));      // lowest MEASURED total, not the biggest
       const memKnown = navigator.deviceMemory > 0;

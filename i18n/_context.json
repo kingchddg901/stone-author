@@ -359,6 +359,13 @@
   },
   "where": "error when even the smallest tile will not allocate, so a TIFF at this width cannot start"
  },
+ "exp.err.dim": {
+  "placeholders": {
+   "px": "the export width in pixels that was asked for",
+   "pct": "how much of the expected light the best tile actually carried, as a percentage, e.g. 19"
+  },
+  "where": "error when a tile DID fit and was rendered, but came back short of the light, so the render was refused. Distinct from exp.err.tile, which is about memory: this one must not read as a memory message, because the cause is the blur failing above a certain canvas size"
+ },
  "exp.err.floor": {
   "placeholders": {
    "px": "the export width in pixels that was asked for",
