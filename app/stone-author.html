@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.1';
+  const BUILD = '2026.09.27.2';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5863,7 +5863,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // attempted and never finished is refused next time — not because it is impossible, but because this
   // device has evidence against it and there is a smaller one to try. A render that completes clears it,
   // so a size that failed for a passing reason can come back.
-  const TILE_PROOF_KEY = 'stone-author:plan:v3';
+  const TILE_PROOF_KEY = 'stone-author:plan:v4';   // v4: the choice reads headroom, so every v3 plan was picked under a policy that no longer applies
   const planKey = W => calSig() + ':' + W + ':' + (uvMode ? 'uv' : 'day');
   function planRec(W) {
     try { return JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}')[planKey(W)] || {}; } catch (_) { return {}; }
@@ -6041,11 +6041,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // deviceMemory rounds DOWN to a power of two, so arithmetic on it was refusing renders this
       // hardware could do - it put an A7 out of 65535 entirely while the device was never asked.
       //
-      // And the largest workable tile is not automatically the best one. The calibration tile times
-      // itself, so the top two that come back CORRECT are compared on estimated total time and the
-      // better one runs. Fewer passes means less geometry work; a bigger canvas means more bleed and
-      // more memory pressure. The balance between those is a property of the device, so it is measured
-      // rather than assumed.
+      // And the largest workable tile is not automatically the best one - but a time estimate can never
+      // say which is. The estimate is passes x ms; passes falls as ts^2 while a pass's pixels rise as
+      // (ts + 2*bleed)^2, so it goes as (1 + 2*bleed/ts)^2: monotonically better at every step UP.
+      // Measured at 65535 under the black light it is 1.00, 1.63, 3.36 for 8192, 4096, 2048. A race whose
+      // ordering is fixed by its own formula is decoration - it took the biggest that calibrated every
+      // single time, and that is also the candidate nearest the cliff where the bloom stops happening.
+      // What genuinely differs between the two is how much of THIS device's ceiling the winner eats, and
+      // that does vary: a 4096 pass at 65535 is 14% of a desktop's budget and 56% of a 2 GB tablet's -
+      // the same 908 MB named above. So take the faster one where there is real room for it, and the
+      // smaller one where the render is already grazing the cap, because there the master that FINISHES
+      // is the better master. A desktop is unaffected: 8192 sits at a third of its budget and still wins.
+      const MEM_EASY = 0.5;
+      const needOf = t => { const e = t + 2 * bleed; return e * e * 4 * surfaces + TIFF_STORE_MAX * TIFF_STORE_MAX * 4; };
       const ref = renderFull(CAL_REF_W), refCx = ref.getContext('2d');
       const CANVAS_HARD_MAX = 900e6;
       const ok = [];
@@ -6058,12 +6066,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         trail.push(proven + ':remembered, ' + (cal.ok
           ? 'calibrated ' + (cal.got != null ? cal.got.toFixed(1) + ' vs ' + cal.want.toFixed(1) : cal.why) + ' in ' + Math.round(performance.now() - t0) + 'ms'
           : 'NO LONGER VALID (' + (cal.why || 'dim') + '), racing again'));
-        if (cal.ok) ok.push({ ts: proven, est: 0 });
+        if (cal.ok) ok.push({ ts: proven, est: 0, need: needOf(proven) });
         else proveTile(0, W);
       }
       if (!ok.length)
       for (; ts > Math.max(256, bleed); ts = Math.floor(ts / 2)) {
-        const ew = ts + 2 * bleed, need = ew * ew * 4 * surfaces + TIFF_STORE_MAX * TIFF_STORE_MAX * 4;
+        const ew = ts + 2 * bleed, need = needOf(ts);
         if (ew * ew * 4 > CANVAS_HARD_MAX) { trail.push(ts + '/' + ew + ':over 900MB, not attempted'); continue; }
         // Two refusals before an attempt, and neither is a prediction about whether it would WORK.
         // The ceiling stops the absurd ask; the death list stops a repeat of one that took the machine.
@@ -6082,13 +6090,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           (cal.ok ? 'calibrated ' + (cal.got != null ? cal.got.toFixed(1) + ' vs ' + cal.want.toFixed(1) : cal.why) +
                     ' in ' + ms + 'ms, est ' + Math.round(passes * ms / 1000) + 's'
                   : cal.why ? cal.why : 'DIM ' + cal.got.toFixed(1) + ' vs ' + cal.want.toFixed(1)));
-        if (cal.ok) { ok.push({ ts, est: passes * ms }); if (ok.length >= 2) break; }
+        if (cal.ok) { ok.push({ ts, est: passes * ms, need }); if (ok.length >= 2) break; }
       }
       ref.width = 1; ref.height = 1;
       if (!ok.length) throw new Error(TR('exp.err.tile', { px: W }) + '  [' + trail.join('  ') + ']');
-      ok.sort((a, b) => a.est - b.est);
-      ts = ok[0].ts;
-      if (ok.length > 1) trail.push('chose ' + ts + ': ' + Math.round(ok[0].est / 1000) + 's beats ' + Math.round(ok[1].est / 1000) + 's');
+      ok.sort((a, b) => a.ts - b.ts);                      // protective first, fastest last
+      const safe = ok[0], fast = ok[ok.length - 1];
+      const roomy = fast.need <= MEM_EASY * budget;
+      ts = (roomy ? fast : safe).ts;
+      if (ok.length > 1) trail.push('chose ' + ts + ': ' + (roomy
+        ? Math.round(fast.need / 1e6) + 'MB is under half the ' + Math.round(budget / 1e6) + 'MB ceiling, take the speed'
+        : Math.round(fast.need / 1e6) + 'MB of ' + Math.round(budget / 1e6) + 'MB is too close, ' +
+          Math.round(safe.est / 1000) + 's over ' + Math.round(fast.est / 1000) + 's'));
     }
     // The stored tile must DIVIDE the render pass, because the writer reads the pass out in k x k whole
     // stored tiles. `Math.min(ts, MAX)` only holds while ts halves from 8192; a forced ts of 6144 gave

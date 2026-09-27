@@ -121,8 +121,18 @@ if (!/i \+= 4\) \{ s \+= /.test(cal)) fail.push('calibration samples rather than
 // hardware could do. The only pre-attempt refusal left is a single canvas over the browser's own limit.
 if (/const inBudget = need <= budget/.test(plan)) fail.push('the memory veto is back: it refuses on arithmetic over a hint that rounds down by up to half');
 if (!/ew \* ew \* 4 > CANVAS_HARD_MAX/.test(plan)) fail.push('nothing stops an attempt at a canvas past the browser renderer limit');
-// The largest workable tile is not automatically the best one.
-if (!/ok\.sort\(\(a, b\) => a\.est - b\.est\)/.test(plan)) fail.push('the plan takes the first tile that works rather than the fastest that works');
+// The largest workable tile is not automatically the best one, and a time estimate cannot say which is:
+// it goes as (1 + 2*bleed/ts)^2, so its ordering is fixed by its own formula and the biggest candidate
+// won every race. The choice has to read the device's headroom, which is the quantity that actually
+// differs between two tiles that both calibrated - 14% of a desktop's budget against 56% of a tablet's.
+if (/a\.est - b\.est/.test(plan))
+  fail.push('the choice is back on the time estimate alone, whose ordering is fixed by its own formula - it can only ever take the biggest candidate');
+if (!/fast\.need <= MEM_EASY \* budget/.test(plan))
+  fail.push('the choice does not weigh the winner against the memory ceiling, so a tablet grazing its cap takes the same tile as a desktop with 6 GB spare');
+if (!/need: needOf\(proven\)/.test(plan))
+  fail.push('a remembered plan carries no memory figure, so the headroom test reads undefined and silently takes the protective tile every time');
+if (!/const safe = ok\[0\], fast = ok\[ok\.length - 1\]/.test(plan))
+  fail.push('the candidates are not ordered by size before the choice, so safe and fast are whichever way the ladder happened to fill');
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size
 // is a different canvas, which Chrome does not rasterise identically. The race runs once per device,
