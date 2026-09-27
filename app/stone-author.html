@@ -1093,7 +1093,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.14';
+  const BUILD = '2026.09.26.15';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5540,7 +5540,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     try { const v = +new URLSearchParams(location.search).get('tile'); return v >= 256 && v <= 8192 ? v : 0; }
     catch (_) { return 0; }
   })();
-  function tiffPlan(W) {
+  async function tiffPlan(W) {
     const FH = Math.round(W * H), bleed = Math.ceil(12 * (W / COAT_REF));
     const budget = Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / 8);
     const floor = W > TILE_FLOOR_ABOVE ? Math.min(4096, W) : 256;
@@ -5565,8 +5565,23 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       trail.push(ts + '/' + ew + '=' + Math.round(ew * ew * 4 / 1e6) + 'MB:forced');
     } else for (;;) {
       const ew = ts + 2 * bleed, need = ew * ew * 4;
-      const inBudget = need <= budget, fits = inBudget && canvasFits(ew, ew, 1);
-      trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:' + (!inBudget ? 'budget' : fits ? 'ok' : 'canvas'));
+      const inBudget = need <= budget;
+      // A REFUSAL IS ONE SAMPLE, NOT AN ANSWER. canvasFits allocates at a single instant, so a device
+      // busy with something else declines a canvas it will grant a moment later — and halving on that
+      // one reading costs the entire render, silently, for forty minutes. This tablet took 4096 tiles in
+      // the morning and refused them that evening on the same silicon, the same Chrome build to the
+      // version number and the same dpr to fifteen decimal places, while a post-upgrade update storm was
+      // running. So ask again, with a pause, before believing it. Three tries a quarter second apart is
+      // nothing against the render, and the count is recorded either way — an 'ok after 2' in a master
+      // is the evidence that the first reading was noise.
+      let fits = false, tries = 0;
+      while (inBudget && tries < 3) {
+        tries++;
+        if (canvasFits(ew, ew, 1)) { fits = true; break; }
+        if (tries < 3) await new Promise(r => setTimeout(r, 250));   // let it finish whatever it was doing
+      }
+      trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:' +
+        (!inBudget ? 'budget' : fits ? (tries > 1 ? 'ok after ' + tries : 'ok') : 'canvas x' + tries));
       if (fits) break;
       // The floor is checked, not assumed. Refusing here names the real limit; planning a grid whose
       // tiles cannot allocate would fail forty minutes later with nothing to show for it.
@@ -5592,7 +5607,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     hint(TR('hint.exporting-render', { w: W }));
     try {
       expStat(TR('exp.preparing'), null); await breathe();
-      const p = tiffPlan(W);
+      const p = await tiffPlan(W);
       const sink = await tiffSink(W, p.FH, p.store, p.store);
       const tR = Date.now();
       let bytes = 0;
