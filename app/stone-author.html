@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.24';
+  const BUILD = '2026.09.26.25';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5827,7 +5827,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (fits) break;
       // The floor is checked, not assumed. Refusing here names the real limit; planning a grid whose
       // tiles cannot allocate would fail forty minutes later with nothing to show for it.
-      if (ts <= 256) throw new Error(TR('exp.err.tile', { px: W }));
+      // Carry the trail into the refusal. A failed export writes no file, so everything the planner
+      // learned died with it and a phone could only report 'it failed'. The trail is diagnostic data,
+      // not prose, so it needs no translation - it says which sizes were tried and which gate refused
+      // each one, including BLOOM LOST, which is the difference between a memory limit and a device
+      // that will not blur.
+      if (ts <= 256) throw new Error(TR('exp.err.tile', { px: W }) + '  [' + trail.join('  ') + ']');
       ts = Math.floor(ts / 2);
     }
     // The stored tile must DIVIDE the render pass, because the writer reads the pass out in k x k whole
