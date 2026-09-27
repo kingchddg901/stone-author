@@ -84,6 +84,7 @@
  "exp.encoding": "Codifica del PNG…",
  "exp.err.encode": "Questo dispositivo non è riuscito a codificare un'immagine da {px}px.",
  "exp.err.tile": "Questo dispositivo non può contenere un tassello abbastanza grande per {px}px.",
+ "exp.err.floor": "A {px}px questo dispositivo può gestire solo tasselli da {tile}px, troppo piccoli per portare la luce: un render a luce nera risulterebbe spento. Scegli una larghezza inferiore.",
  "exp.err.blank": "Il tassello {n} di {total} è tornato vuoto due volte, quindi il render è stato interrotto invece di essere salvato con dei buchi. Questo dispositivo ha poca memoria: prova una larghezza inferiore.",
  "exp.err.no-download": "Questo render non può essere salvato da qui. Accedi, oppure apri lo studio dalla sua pagina.",
  "exp.err.side-cap": "Questo browser non può creare un'immagine più larga di {px} pixel, quale che sia la memoria.",

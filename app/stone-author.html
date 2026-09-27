@@ -530,6 +530,7 @@ window.SA_I18N = (() => {
   "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
   "exp.err.tile": "This device cannot hold a tile big enough for {px}px.",
+  "exp.err.floor": "At {px}px this device can only manage {tile}px tiles, which are too small to carry the light — a black-light render would come out dim. Choose a smaller width.",
   "exp.err.blank": "Tile {n} of {total} came back unpainted twice, so the render was stopped rather than saved with holes in it. This device is short of memory — try a smaller width.",
   "exp.err.no-download": "This render cannot be saved from here. Sign in, or open the studio from its own page.",
   "exp.err.side-cap": "This browser cannot make an image wider than {px} pixels, whatever the memory.",
@@ -1092,7 +1093,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.11';
+  const BUILD = '2026.09.26.12';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5514,16 +5515,44 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } catch (_) { return false; }                          // a canvas that will not even read back is lost
   }
   const TIFF_STORE_MAX = 4096;
+  // A TILE CAN BE TOO SMALL TO CARRY THE LIGHT. Bleed is sized at 12 x bs against a widest blur of 8 x bs,
+  // which assumes a Gaussian reaches as far as its radius. It does not - the real support is nearer 3
+  // sigma - so every tile has always been blurred against a canvas edge that reads as transparent. In a
+  // bright picture that costs almost nothing. Under a black light the bloom IS the picture, and the loss
+  // is the whole result: a tablet planning 2048 tiles returned a 65535 master at 65% of the light, with a
+  // visible lattice where each tile was darker at its edges than its middle.
+  //
+  // MEASURED, not derived. One tablet's ladder at a fixed 2048 tile, whole-picture mean against its own
+  // smaller renders, which are scale-invariant by design:
+  //     16384  100%     24576   99%     32768   85%     65535   65%
+  // and a second tablet at 4096 tiles returned 65535 at 98.6%, matching a desktop to 0.1%.
+  // So 2048 is sound to 24576 and fails above it, and 4096 is sound at 65535.
+  //
+  // No mechanism explains that boundary. Every scale-invariant ratio is IDENTICAL between the 85% case
+  // and the 98.6% case - canvas/W, canvas/3sigma, tile/3sigma all match - so this is a fit to two
+  // devices, not a law, and tile size and device are not separable with the hardware in hand. It is
+  // written as the narrow rule the evidence supports, and nothing wider.
+  const TILE_FLOOR_ABOVE = 24576;          // beyond this width, a tile under 4096 loses the bloom
+  // An operator who knows the picture is bright can force a size: ?tile=2048. It bypasses the floor, not
+  // the allocation checks, and is recorded in the master so a file rendered that way says so. No prompt:
+  // a dialog would ask a question most people cannot answer, and this one is for someone who already has.
+  const TILE_FORCED = (() => {
+    try { const v = +new URLSearchParams(location.search).get('tile'); return v >= 256 && v <= 8192 ? v : 0; }
+    catch (_) { return 0; }
+  })();
   function tiffPlan(W) {
     const FH = Math.round(W * H), bleed = Math.ceil(12 * (W / COAT_REF));
     const budget = Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / 8);
-    let ts = Math.min(W, 8192);
+    const floor = !TILE_FORCED && W > TILE_FLOOR_ABOVE ? Math.min(4096, W) : 256;
+    let ts = TILE_FORCED ? Math.min(TILE_FORCED, W) : Math.min(W, 8192);
     for (;;) {
       const ew = ts + 2 * bleed;
       if (ew * ew * 4 <= budget && canvasFits(ew, ew, 1)) break;
       // The floor is checked, not assumed. Refusing here names the real limit; planning a grid whose
       // tiles cannot allocate would fail forty minutes later with nothing to show for it.
       if (ts <= 256) throw new Error(TR('exp.err.tile', { px: W }));
+      // Below the light floor the render would COMPLETE and be wrong, which is worse than refusing.
+      if (ts <= floor && floor > 256) throw new Error(TR('exp.err.floor', { px: W, tile: ts }));
       ts = Math.floor(ts / 2);
     }
     const store = Math.min(ts, TIFF_STORE_MAX), k = ts / store;   // k is 1 or 2: ts halves from 8192
@@ -5598,6 +5627,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const { blob } = await sink.finish(expMeta({
         scope: 'render', tiled: true, w: W, h: p.FH, tile: p.store, render: p.ts,
         tiles: p.tiles, renders: p.renders, bleed: p.bleed,
+        forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
         toDisk: sink.toDisk, bytes,
         ms: { render: msRender, total: Date.now() - expT0 },
         // Paired on purpose: time ALONE cannot say why a tile was slow. Against its own byte count it

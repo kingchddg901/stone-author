@@ -351,6 +351,13 @@
   },
   "where": "error when even the smallest tile will not allocate, so a TIFF at this width cannot start"
  },
+ "exp.err.floor": {
+  "placeholders": {
+   "px": "the export width in pixels that was asked for",
+   "tile": "the largest tile this device will allocate, in pixels"
+  },
+  "where": "error when the device can only manage tiles too small to carry the bloom, so the render would finish and be dim rather than fail"
+ },
  "exp.err.blank": {
   "placeholders": {
    "n": "which render tile failed, counting from 1",
