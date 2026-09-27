@@ -157,12 +157,32 @@ through under another light); and a **deterministic load** (`deserialize` is a p
 The offline render bakes the whole pipeline (`renderFull` / tiled), and a **gallery** + Playwright
 **determinism harness** ([`docs/gallery.md`](docs/gallery.md)) show it off and gate it in CI.
 
-A render is not capped by what one canvas can hold. Past 16384 the export **streams the picture in bands**
-straight into a PNG, so the whole image never exists at once: measured in Chrome on a 12-core desktop,
-**65535 × 40959 — 2.68 gigapixels — took 10:56 in a browser tab**, 35 bands, 10.7 GB of scanlines
-compressed into an 841 MB file, and run twice across a build change it came back byte-identical. The
-friction in front of that tier is not decoration: the same slab is **0:14 at 16384 and 3:07 at 32768**,
-because streaming costs roughly three times as much per pixel as the direct path. Full ladder in
+A render is not capped by what one canvas can hold. Past 16384 the export renders a **grid of tiles**
+straight into a tiled BigTIFF, so the whole picture never exists at once and a lost tile costs one tile
+rather than the render. Measured on one slab — `Hero_Psyker`, 666 marks, **65535 × 40959, 2.68
+gigapixels** — across every device to hand. Each master was audited tile by tile and carries a signature
+over its own render inputs, so they are verifiably the same picture and not merely the same size:
+
+| device | engine | daylight | black light |
+| --- | --- | --- | --- |
+| iPhone 14 Pro, 4 cores | Safari | **2.1 min** | **1.1 min** |
+| desktop, 12 cores | Chrome | 2.4 min | 1.4 min |
+| desktop, 12 cores | Firefox | 4.0 min | 10.9 min |
+| Galaxy S23, 8 cores | Firefox | 5.6 min | 5.7 min |
+| Galaxy S23, 8 cores | Chrome | 8.4 min | 3.6 min |
+| Galaxy Tab A7 Lite, 3 GB | Chrome | 29.4 min | — |
+| Galaxy Tab A (2019), 2 GB | Chrome | 104.1 min | 46.8 min |
+
+**A phone beats the workstation**, and a **2019 budget tablet — 2 GB of RAM, four in-order Cortex-A53
+cores — produces a verified 2.68-gigapixel master**, because it never holds more than one tile: 128 MB,
+about an eightieth of the picture. Across that whole range nothing has crashed a machine. What has failed
+is *output*, and each failure found has a guard — a tile the canvas never drew is refused rather than
+written, and a tile too small to carry the bloom is refused rather than finished dim.
+
+The same picture is **188 MB from Firefox and 788 MB from Chrome on Android**: file size is an engine
+property, not a quality one. Blink on x86 and Blink on ARM agree closely enough to farm tiles between
+them; no other pairing does. Measurements and method in
+[`docs/renderer-determinism.md`](docs/renderer-determinism.md), the size ladder in
 [`docs/capabilities.md`](docs/capabilities.md).
 
 **Stone Author is stone-only**: the early Wood family and Knot tool were removed once the stone system
