@@ -152,6 +152,9 @@ for (const path of paths) {
   // be made. sigma is the widest blur the slab applied, which is what a canvas has to be able to carry.
   if (m.light) console.log(`  light    mean ${m.light.mean}, lit>40 ${m.light.lit40}%  (sampled 1/${m.light.every} as written)` +
                            `${m.sigma ? `   blur sigma ${m.sigma}px` : '   no blur in this render'}`);
+  if (m.bloomDraw) console.log(`           drawn glow, lift ${m.glowLift === undefined ? 'NOT RECORDED (build predates the stamp)' : m.glowLift}` +
+                               `${m.glowAuto ? ' from the sigma fit' : ' fixed'}` +
+                               `${m.glowLift === -0.304 ? '   the WebKit constant' : ''}`);
   // A master rendered with ?dim=off exists BECAUSE the light gate refused it, so its light figure is the
   // evidence in a question about that gate. Reading it without knowing that is how a deliberate
   // experiment gets quoted back later as a normal result.

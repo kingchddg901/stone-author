@@ -253,17 +253,39 @@ if (!app.includes('glowPx * 0.00065 - 0.07'))
   fail.push('the automatic lift is not the fitted function of sigma, so it cannot be right at more than one width');
 if (!app.includes('if (t !== liftCached) { liftMap.clear(); liftCached = t; }'))
   fail.push('the lifted-colour cache is not invalidated when the lift changes: a second render at another width would silently reuse the colours from the first');
-if (!app.includes('glowLift: +glowLift().toFixed(3) || undefined'))
+if (!app.includes('glowLift: BLOOM_DRAW ? +glowLift().toFixed(3) : undefined'))
   fail.push('the master records the requested lift rather than the effective one, so an auto render would claim a lift it did not use');
+// A LIFT OF EXACTLY ZERO HAS TO SURVIVE THE STAMP. `|| undefined` deleted it, and zero is not the
+// uninteresting case - it is what WebKit shipped, and the one value that was measurably wrong. Every
+// WebKit master from before the constant carries no glowLift field, which reads as "this build did not
+// record it" rather than "it ran at zero". Nothing else in the file distinguishes the two.
+const stamp = app.split(String.fromCharCode(10)).find(l => l.includes('glowLift:') && l.includes('toFixed')) || '';
+if (stamp.includes('|| undefined'))
+  fail.push('a glow lift of exactly zero is stamped as absent, so a master that ran at the one wrong value is indistinguishable from one whose build never recorded a lift');
 
-// DRAWN GLOW IS THE DEFAULT, AND WEBKIT TAKES NO LIFT. Those two have to ship together. Blink runs -10.2%
-// against its own image-space master at 65535 and wants 0.612; WebKit runs +3.5% and wants none. Applying
-// the Blink number there lands roughly +30% over-bright, so a default without the engine branch breaks
-// Safari on the first render. Discriminated on CAN_FILTER because that is a probe, not a user agent.
+// DRAWN GLOW IS THE DEFAULT, AND WEBKIT TAKES A NEGATIVE LIFT. Those two have to ship together. Blink
+// runs -10.2% against its own image-space master at 65535 and wants 0.612; WebKit OVERSHOOTS and wants
+// -0.304. Applying the Blink number there lands roughly +30% over-bright, and the 0 this branch used to
+// return lands +7.8% - so a default without the engine branch, or with it pinned to zero, ships every
+// Safari master brighter than the set it belongs to. Discriminated on CAN_FILTER because that is a probe,
+// not a user agent.
 if (!app.includes("return !/^(blur|off|0)$/i.test(new URLSearchParams(location.search).get('bloom')"))
   fail.push('drawn glow is not the default, or ?bloom=blur no longer backs it out - one of the two is now wrong');
-if (!app.includes('!CAN_FILTER ? 0'))
+if (!app.includes('!CAN_FILTER ? WEBKIT_LIFT'))
   fail.push('the lift is not engine-aware: WebKit would take the Blink value on a path that already overshoots, landing about +30% over-bright');
+// THE CONSTANT IS A MEASUREMENT, SO IT IS PINNED. -0.304 is the mean of two fitted matches, -0.3045 at
+// 65535 and -0.3036 at 32768, against a reference that is width-invariant. A zero or a positive number
+// here is the old defect returning, and a value drifting far from the measurement means the fit moved
+// without the readings behind it moving.
+const wk = app.match(/const WEBKIT_LIFT = ([-0-9.]+);/);
+if (!wk) fail.push('the WebKit lift is no longer a named constant, so the one number that brings that engine onto the reference cannot be found or checked');
+else if (!(+wk[1] >= -0.4 && +wk[1] <= -0.2))
+  fail.push('the WebKit lift is ' + wk[1] + ', outside the measured -0.3045 to -0.3036 by more than the readings allow: a zero or a positive value is the defect that shipped every Safari master +7.8% over the set');
+// DECLARED BEFORE IT IS READ. The same rule the plan trail broke: a const read from a branch above its
+// declaration is a temporal dead zone that throws only when that branch is taken - and this branch is
+// taken on exactly one engine, the one that cannot be debugged from here.
+else if (app.includes('!CAN_FILTER ? WEBKIT_LIFT') && app.indexOf('const WEBKIT_LIFT =') > app.indexOf('!CAN_FILTER ? WEBKIT_LIFT'))
+  fail.push('WEBKIT_LIFT is read above its own declaration - a temporal dead zone on the one branch only WebKit takes, so it would throw on iOS and nowhere else');
 if (!app.includes("GLOW_RAW === '' || GLOW_RAW === 'auto'"))
   fail.push('the lift does not default to auto, so a default render uses no correction at all and comes back dim at every large width');
 if (!app.includes('glowRatio: glowRatio() || undefined'))

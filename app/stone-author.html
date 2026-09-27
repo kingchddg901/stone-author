@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.18';
+  const BUILD = '2026.09.27.19';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6045,16 +6045,30 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // It reproduces both exactly and falls to zero below sigma ~54, which is what the 8192 measurement
   // wanted - a deficit of -0.3% there, inside noise, so nothing to correct. A straight proportion through
   // the origin would have over-lifted every small width instead.
-  // WEBKIT TAKES NO LIFT. Measured at 65535 on one slab: drawn glow unlifted read +3.5% against WebKit's
-  // OWN image-space master, where Blink read -10.2% against its own. It does not have a smaller deficit,
-  // it has the opposite sign - so applying Blink's 0.612 there would land roughly +30% over-bright.
+  // WEBKIT TAKES A NEGATIVE LIFT, AND IT IS A CONSTANT. Two widths, one slab (a98ab1f5), against the
+  // Blink image-space reference that is itself width-invariant by design (61.33 at 65535, 61.34 at 32768):
   //
-  // Discriminated on CAN_FILTER rather than the user agent, because that is a probe and not a claim: the
-  // engine that lacks ctx.filter is the same one whose shadows put more ink down. PROVISIONAL - it rests
-  // on one width on one device, which is why SHADOW_INK below records what each engine actually does, so
-  // the next version of this is a fitted curve instead of a branch.
+  //     width    lift 0    lifted           fitted match     slope per unit of lift
+  //     65535     66.11     61.40 at -0.30     -0.3045        15.70
+  //     32768     66.12     60.61 at -0.35     -0.3036        15.74
+  //
+  // The unlifted reading is 66.11 and 66.12 - ONE HUNDREDTH APART across a factor of four in pixels. So
+  // WebKit's overshoot does not grow with sigma the way Blink's deficit does, and the correction is a
+  // number rather than a line. That is why this is not the fitted curve the previous note predicted: the
+  // curve came out flat. Blink needs 0.271 at 32768 and 0.612 at 65535 for the same picture; WebKit needs
+  // -0.304 at both.
+  //
+  // The old branch returned 0 here, which was not "no correction needed" - it was the one wrong value,
+  // shipping every WebKit master +7.8% over the reference at every width.
+  //
+  // Still discriminated on CAN_FILTER rather than the user agent, because that is a probe and not a
+  // claim. WHAT IT COVERS: the WebKit that lacks ctx.filter, which is what both readings above came from.
+  // WHAT IT DOES NOT: a filter-capable WebKit falls through to the shared line and takes Blink's lift.
+  // Untested - there is no Mac reading yet - and the first one settles whether this keys on the engine or
+  // on the probe.
+  const WEBKIT_LIFT = -0.304;
   const glowLift = () => GLOW_RAW !== '' && !GLOW_AUTO ? GLOW_SET      // an explicit number wins, including a negative one
-    : !CAN_FILTER ? 0
+    : !CAN_FILTER ? WEBKIT_LIFT
     : GLOW_AUTO ? Math.max(0, Math.min(1, glowPx * 0.00065 - 0.07)) : GLOW_SET;
   const liftCv = document.createElement('canvas');
   const liftMap = new Map();                               // 8,050 specks a tile: parse each colour once, not once per element
@@ -6468,7 +6482,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
         dimOverride: DIM_OK || undefined,
         bloomDraw: BLOOM_DRAW || undefined,
-        glowLift: +glowLift().toFixed(3) || undefined,   // how far the drawn halo was lifted toward white
+        // A LIFT OF EXACTLY ZERO IS A CHOICE, NOT AN ABSENCE. `|| undefined` dropped it, so every WebKit
+        // master written before this carried no glowLift field at all - indistinguishable from a build
+        // that never recorded one, when in fact it had run at the single value that was wrong. Present
+        // whenever a halo was drawn, absent when there was none to lift.
+        glowLift: BLOOM_DRAW ? +glowLift().toFixed(3) : undefined,   // toward white, or negative toward black
         glowAuto: GLOW_AUTO || undefined,                // ...and whether that came from the sigma fit or a fixed number
         glowRatio: glowRatio() || undefined,             // drawn halo against the blur it replaces, at sigma 320: the quantity the per-engine lift IS           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan              // the light veto was withheld: read the light below against a good master
         // The light this master carries, sampled as it was written. 'mean' is the whole-picture average
