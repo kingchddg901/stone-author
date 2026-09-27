@@ -174,8 +174,11 @@ over its own render inputs, so they are verifiably the same picture and not mere
 | Galaxy Tab A (2019), 2 GB | Chrome | 104.1 min | 46.8 min |
 
 **A phone beats the workstation**, and a **2019 budget tablet — 2 GB of RAM, four in-order Cortex-A53
-cores — produces a verified 2.68-gigapixel master**, because it never holds more than one tile: 128 MB,
-about an eightieth of the picture. Across that whole range nothing has crashed a machine. What has failed
+cores — produces a verified 2.68-gigapixel master**, because it never holds more than one render tile.
+The picture is 10.7 GB of raw pixels; a tile is 128 MB where the planner chooses 4096 and 381 MB where it
+chooses 8192 — a twenty-eighth of the picture at the most. Finished tiles go straight to disk, and the
+read-back out of each one is bounded by the *stored* tile rather than the rendered one, so a larger render
+pass does not enlarge the buffer it is read through. Across that whole range nothing has crashed a machine. What has failed
 is *output*, and each failure found has a guard — a tile the canvas never drew is refused rather than
 written, and a tile too small to carry the bloom is refused rather than finished dim.
 
