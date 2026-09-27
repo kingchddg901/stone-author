@@ -88,37 +88,24 @@ if (blurReach) {
 for (const m of app.matchAll(/bleed\s*=\s*[^;\n]*/g))
   if (/12 \* bs|12 \* \(W \/ COAT_REF\)/.test(m[0])) fail.push(`a bleed is back on the old constant: ${m[0].trim()}`);
 
-// ---- 3. the bloom probe, wired where the plan can act on it ----------------------------------------
+// ---- 3. the plan is MEASURED, not predicted --------------------------------------------------------
+// A synthetic probe answers one question about an empty canvas. One real tile at the planned settings
+// answers all of them: allocation, this device's blur ceiling, whether the bloom happened, whether the
+// window composited, whether a tile reads back. The reference it is judged against is the whole picture
+// at 1024 - one canvas, untiled, nothing that can be truncated - and the comparison is sound because the
+// renderer is scale-invariant, measured at 60.61 for the same region at both 20480 and 24576.
 const plan = app.slice(app.indexOf('async function tiffPlan'), app.indexOf('async function exportTiff'));
-if (!/const sigma = coatRadius\(/.test(plan)) fail.push('tiffPlan does not compute the slab blur radius, so it cannot probe for the bloom');
-if (!/canvasFits\(ew, ew, 1, probeSigma\)/.test(plan)) fail.push('the plan probes the canvas without asking whether it BLURS');
-// The proof records that a surface ALLOCATES. Whether it blurs is a different answer — and every one of
-// tonight's bloomless masters read `proven` in its trail, meaning no probe ran at all.
-if (!/proven >= ts && !\(probeSigma > 0\)/.test(plan)) fail.push('the tile proof bypasses the bloom probe: a proven tile must still be blur-tested');
-// A blur cannot happen in place, so a blooming render peaks at about twice its canvas. Counting one
-// surface is what let an 8192 pass through the budget and then fail to allocate on the device.
-// Count what is alive AT ONCE: the tile, and at the peak inside compositeWindow the alternate-light
-// render and the masked copy too, plus one transient scratch if anything blurs. Over-counting is not the
-// safe direction — five surfaces put a tablet four megabytes over budget at 2048 and sent it halving to a
-// 512 tile: 51x overdraw and 10,240 passes.
-if (!/const surfaces = \(wins \? 3 : 1\) \+ \(sigma > 0 \? 1 : 0\)/.test(plan) || !/need = ew \* ew \* 4 \* surfaces/.test(plan))
-  fail.push('the budget no longer counts simultaneous surfaces, so it will either wave through a pass the device cannot hold or halve away from one it can');
-// The canvas is ts + 2 x bleed, so below the bleed halving doubles the passes and barely shrinks the
-// canvas. Derived from the bleed, which is derived from the slab — not a fitted floor.
-if (!/ts <= Math\.max\(256, bleed\)/.test(plan)) fail.push('the halving loop has no efficiency floor: it will grind down to tiles smaller than their own bleed');
-if (!/BLOOM LOST/.test(plan)) fail.push('a bloom refusal is not named in the plan trail, so a master cannot explain itself');
-// A browser with no ctx.filter fails EVERY size, so probing per size only deletes the feature and caps the
-// device. Ask once on a small canvas, then render and declare it rather than refuse.
-if (!/const canBlur = sigma > 0/.test(plan)) fail.push('the plan does not ask whether the browser can blur at all, so a WebKit device is refused at every size instead of told');
-if (!/const probeSigma = canBlur \? sigma : 0/.test(plan)) fail.push('the per-size probe is not skipped when the browser cannot blur at all');
-if (!/bloomless: p\.canBlur \? undefined : true/.test(app)) fail.push('a master rendered without a bloom does not say so');
-
-const probe = app.slice(app.indexOf('function bloomWorks'), app.indexOf('function canvasFits'));
-// Through blurDraw, so it exercises whatever this browser really uses - the filter where there is one,
-// the pyramid where there is not. A probe that tests a path the renderer does not take proves nothing.
-if (!/blurDraw\(x, c, sigma, w, h\)/.test(probe))
-  fail.push('bloomWorks no longer blurs the canvas onto itself through blurDraw, so it tests a path the renderer may not take');
-if (!/data\[3\]/.test(probe)) fail.push('bloomWorks must read ALPHA: a colour test cannot tell a black slab from a dropped blur');
+const cal = app.slice(app.indexOf('function calibrate(W, FH'), app.indexOf('async function tiffPlan'));
+if (!/renderFull\(CAL_REF_W\)/.test(plan)) fail.push('the plan has no untiled reference to judge a tile against');
+if (!/calibrate\(W, FH, ts, bleed, ref, refCx\)/.test(plan)) fail.push('the plan does not calibrate its candidates on a real tile');
+if (!/renderOneTile\(W, pick\.gx \* ts/.test(cal)) fail.push('calibration does not render a REAL tile, so it tests a path the render does not take');
+if (!/got >= CAL_PASS \* want/.test(cal)) fail.push('calibration does not compare the tile against the reference');
+// No memory veto: deviceMemory rounds DOWN to a power of two, so arithmetic on it refused renders the
+// hardware could do. The only pre-attempt refusal left is a single canvas over the browser's own limit.
+if (/const inBudget = need <= budget/.test(plan)) fail.push('the memory veto is back: it refuses on arithmetic over a hint that rounds down by up to half');
+if (!/ew \* ew \* 4 > CANVAS_HARD_MAX/.test(plan)) fail.push('nothing stops an attempt at a canvas past the browser renderer limit');
+// The largest workable tile is not automatically the best one.
+if (!/ok\.sort\(\(a, b\) => a\.est - b\.est\)/.test(plan)) fail.push('the plan takes the first tile that works rather than the fastest that works');
 
 // ---- 3b. the whole-image steps this path has no whole image for ------------------------------------
 // renderFull, the strip path and the worker path all composite reality windows onto an assembled canvas.

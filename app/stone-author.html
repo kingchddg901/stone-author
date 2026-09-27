@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.29';
+  const BUILD = '2026.09.26.30';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5836,12 +5836,76 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     try { const v = +new URLSearchParams(location.search).get('tile'); return v >= 256 && v <= 8192 ? v : 0; }
     catch (_) { return 0; }
   })();
+  // ---- CALIBRATION: prove the plan on one real tile before committing to the render -----------------
+  // Everything the planner used to predict, measured instead. A synthetic probe answers one question
+  // about an empty canvas. ONE REAL TILE at the planned settings answers all of them at once: whether
+  // the surface allocates, whether this device's blur survives a canvas that size, whether the bloom
+  // happened, whether the reality window composited, whether the tile can be read back — and it costs
+  // one tile out of forty to six hundred.
+  //
+  // The reference is the whole picture at 1024: one canvas, no tiling, nothing that can be truncated,
+  // and a fraction of a second on the weakest device here. Comparing the two is sound because the
+  // renderer is scale-invariant by design and a downscaled pixel is the mean of the block it replaces,
+  // so the mean of a region at 1024 is the mean of that region at 65535. Measured: 60.61 at both 20480
+  // and 24576 on one device, 61.15 on a desktop at 65535, against 31.79 for the same picture with its
+  // bloom missing. The signal is a factor of two; the test does not need to be delicate.
+  const CAL_REF_W = 1024;
+  const CAL_PASS = 0.9;                    // a dim tile fails: the light is either there or it is not
+  const CAL_WINDOW = 1024;                 // sample at most this square, so a check never costs a readback
+  function meanOfRegion(cx, x, y, w, h) {
+    if (!(w >= 1 && h >= 1)) return null;
+    try {
+      const d = cx.getImageData(x, y, w, h).data;
+      let s = 0, n = 0;
+      for (let i = 0; i < d.length; i += 400) { s += (d[i] + d[i + 1] + d[i + 2]) / 3; n++; }
+      return n ? s / n : null;
+    } catch (_) { return null; }
+  }
+  // The loudest cell, chosen from the reference itself rather than from the geometry: where the light
+  // actually landed is a better question than where we think the emitters are, and it needs no model.
+  function loudestCell(refCx, W, FH, ts, refW, refH) {
+    const k = refW / W, cw = Math.max(1, Math.round(ts * k));
+    let best = { gx: 0, gy: 0, m: -1 };
+    for (let gy = 0; gy * ts < FH; gy++) for (let gx = 0; gx * ts < W; gx++) {
+      const x = Math.floor(gx * ts * k), y = Math.floor(gy * ts * k);
+      if (x >= refW || y >= refH) continue;
+      const m = meanOfRegion(refCx, x, y, Math.min(cw, refW - x), Math.min(cw, refH - y));
+      if (m != null && m > best.m) best = { gx, gy, m };
+    }
+    return best;
+  }
+  function calibrate(W, FH, ts, bleed, ref, refCx) {
+    const refW = ref.width, refH = ref.height, k = refW / W;
+    const pick = loudestCell(refCx, W, FH, ts, refW, refH);
+    if (pick.m < 0) return { ok: true, why: 'no reference' };
+    let c = null;
+    try {
+      c = renderOneTile(W, pick.gx * ts, pick.gy * ts, ts, ts, bleed);
+      const kw = Math.min(ts, W - pick.gx * ts), kh = Math.min(ts, FH - pick.gy * ts);
+      const sw = Math.min(kw, CAL_WINDOW), sh = Math.min(kh, CAL_WINDOW);
+      const dx = (kw - sw) >> 1, dy = (kh - sh) >> 1;
+      const got = meanOfRegion(c.getContext('2d'), bleed + dx, bleed + dy, sw, sh);
+      const rx = Math.floor((pick.gx * ts + dx) * k), ry = Math.floor((pick.gy * ts + dy) * k);
+      const want = meanOfRegion(refCx, rx, ry, Math.max(1, Math.min(Math.round(sw * k), refW - rx)),
+                                              Math.max(1, Math.min(Math.round(sh * k), refH - ry)));
+      if (got == null || want == null) return { ok: false, why: 'unreadable' };
+      return { ok: !(want > 1) || got >= CAL_PASS * want, got, want, tile: pick.gx + ',' + pick.gy };
+    } catch (e) {
+      return { ok: false, why: 'would not render' };       // allocation, clamp, readback: all one answer
+    } finally {
+      if (c) { c.width = 1; c.height = 1; }                 // toss it: only the number was wanted
+    }
+  }
   async function tiffPlan(W) {
     const FH = Math.round(W * H), bleed = coatReach(W / COAT_REF);
     // The widest blur this slab actually applies, in render pixels. Zero when nothing blurs (Hero in
     // daylight has subsurface 0 and specular 0), and then there is no bloom to lose and nothing to probe.
     const sigma = coatRadius(W / COAT_REF);
     const wins = gatherMasks().filter(m => m.show != null).length;   // each one costs surfaces, per tile
+    // What is alive AT ONCE at the peak: this tile, and inside compositeWindow the alternate-light render
+    // and the masked copy too, plus one transient scratch if anything blurs. Recorded in the trail so a
+    // master can explain its own cost — it no longer REFUSES anything, since the attempt answers better.
+    const surfaces = (wins ? 3 : 1) + (sigma > 0 ? 1 : 0);
     // CAN THIS BROWSER BLUR AT ALL? Two failures wear the same face and want opposite answers. A canvas too
     // big to blur is worth halving away from - the next size down works. A browser with no ctx.filter at
     // all (WebKit, measured 2026-09-27) fails every size, so refusing does not protect the picture, it
@@ -5885,66 +5949,39 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // light survived. Overriding a refusal is a choice; not knowing the outcome is not.
       const bloom = probeSigma > 0 ? (canvasFits(ew, ew, 1, probeSigma) ? 'bloom ok' : 'BLOOM LOST at ' + Math.round(sigma) + 'px') : 'no blur';
       trail.push(ts + '/' + ew + '=' + Math.round(ew * ew * 4 / 1e6) + 'MB:forced, ' + bloom);
-    } else for (;;) {
-      // A BLUR NEEDS A SECOND SURFACE. Skia cannot blur in place, so a render that blooms peaks at about
-      // twice its canvas, plus the stored tile it reads back through. Counting only the canvas is why the
-      // budget waved through an 8192 pass that then had to allocate a gigabyte on a 2 GB tablet - and why
-      // every failure this week was under black light, where the blur is the work.
-      const ew = ts + 2 * bleed;
-      // Count what is alive AT ONCE, not every surface the code touches. At the peak - inside
-      // compositeWindow - three exist together: this tile, the alternate-light render of the whole slab,
-      // and the masked copy; plus one transient scratch if anything blurs, since Skia cannot blur in
-      // place. Four under black light with a window, one in plain daylight. Counting five put a 2 GB
-      // tablet four megabytes over its budget at 2048 and sent it halving to 512 - a 51x overdraw and
-      // 10,240 passes - so the over-count was worse than the thing it guarded against.
-      const surfaces = (wins ? 3 : 1) + (sigma > 0 ? 1 : 0);
-      const need = ew * ew * 4 * surfaces + TIFF_STORE_MAX * TIFF_STORE_MAX * 4;
-      const inBudget = need <= budget;
-      // MEMORY THAT IS BUSY IS STILL THERE. canvasFits allocates at one instant, so a device doing
-      // something else for sixty milliseconds declines a canvas it holds perfectly well — and halving on
-      // that single reading costs the whole render, silently, for the next forty minutes. This tablet
-      // took 4096 tiles in the morning and refused them that evening on the same silicon, the same
-      // Chrome build to the version number and the same dpr to fifteen decimal places, while a
-      // post-upgrade update storm ran on it.
+    } else {
+      // MEASURE, DO NOT PREDICT. Every candidate is rendered for real, once, and judged on what came
+      // back. There is no memory veto any more: the only refusal before an attempt is a single canvas
+      // over 900 MB, which is where Chrome declines a renderer outright and is not a limit of ours.
+      // deviceMemory rounds DOWN to a power of two, so arithmetic on it was refusing renders this
+      // hardware could do - it put an A7 out of 65535 entirely while the device was never asked.
       //
-      // Patience is nearly free here and giving up is not. Anyone asking for an export this size knows
-      // it is heavy and is leaving the machine alone, so spending a few seconds to be sure costs nothing
-      // against the render it protects. Back off rather than poll: a device that is busy needs TIME, not
-      // another question a quarter second later. Five tries over about four seconds, and the count is
-      // recorded either way — 'ok after 4' in a master is the evidence that the first readings were
-      // noise, 'canvas x5' that they were not.
-      const BACKOFF = [250, 500, 1000, 2000];
-      let fits = false, tries = 0, why = 'canvas';
-      // THE PROOF DOES NOT COVER THE BLOOM. What a device proved is that it can hold this surface; whether
-      // it will BLUR it is a different question with a different answer, and the one that cost four masters
-      // tonight. So when the slab has an active blur the probe runs regardless of the proof.
-      if (inBudget && proven >= ts && !(probeSigma > 0)) fits = true;   // already done on this machine
-      else while (inBudget && tries <= BACKOFF.length) {
-        tries++;
-        if (canvasFits(ew, ew, 1, probeSigma)) { fits = true; break; }
-        // Two refusals that must never be confused in the trail: a surface the browser will not hand over,
-        // and a surface it hands over and then quietly declines to blur. Only asked on the failing path.
-        if (probeSigma > 0 && canvasFits(ew, ew, 1)) { why = 'bloom'; break; }
-        if (tries <= BACKOFF.length) await new Promise(r => setTimeout(r, BACKOFF[tries - 1]));
+      // And the largest workable tile is not automatically the best one. The calibration tile times
+      // itself, so the top two that come back CORRECT are compared on estimated total time and the
+      // better one runs. Fewer passes means less geometry work; a bigger canvas means more bleed and
+      // more memory pressure. The balance between those is a property of the device, so it is measured
+      // rather than assumed.
+      const ref = renderFull(CAL_REF_W), refCx = ref.getContext('2d');
+      const CANVAS_HARD_MAX = 900e6;
+      const ok = [];
+      for (; ts > Math.max(256, bleed); ts = Math.floor(ts / 2)) {
+        const ew = ts + 2 * bleed, need = ew * ew * 4 * surfaces + TIFF_STORE_MAX * TIFF_STORE_MAX * 4;
+        if (ew * ew * 4 > CANVAS_HARD_MAX) { trail.push(ts + '/' + ew + ':over 900MB, not attempted'); continue; }
+        const t0 = performance.now();
+        const cal = calibrate(W, FH, ts, bleed, ref, refCx);
+        const ms = Math.round(performance.now() - t0);
+        const passes = Math.ceil(W / ts) * Math.ceil(FH / ts);
+        trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:' +
+          (cal.ok ? 'calibrated ' + (cal.got != null ? cal.got.toFixed(1) + ' vs ' + cal.want.toFixed(1) : cal.why) +
+                    ' in ' + ms + 'ms, est ' + Math.round(passes * ms / 1000) + 's'
+                  : cal.why ? cal.why : 'DIM ' + cal.got.toFixed(1) + ' vs ' + cal.want.toFixed(1)));
+        if (cal.ok) { ok.push({ ts, est: passes * ms }); if (ok.length >= 2) break; }
       }
-      trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:' +
-        (!inBudget ? 'budget' : !fits ? (why === 'bloom' ? 'BLOOM LOST at ' + Math.round(sigma) + 'px' : 'canvas x' + tries + ' over 3.75s')
-          : tries === 0 ? 'proven' : sigma > 0 ? (tries > 1 ? 'bloom ok after ' + tries : 'bloom ok') : tries > 1 ? 'ok after ' + tries : 'ok'));
-      if (fits) break;
-      // The floor is checked, not assumed. Refusing here names the real limit; planning a grid whose
-      // tiles cannot allocate would fail forty minutes later with nothing to show for it.
-      // Carry the trail into the refusal. A failed export writes no file, so everything the planner
-      // learned died with it and a phone could only report 'it failed'. The trail is diagnostic data,
-      // not prose, so it needs no translation - it says which sizes were tried and which gate refused
-      // each one, including BLOOM LOST, which is the difference between a memory limit and a device
-      // that will not blur.
-      // HALVING MUST BUY SOMETHING. The canvas is ts + 2 x bleed, so once the tile is smaller than the
-      // bleed the canvas barely shrinks while the number of passes doubles - each one re-rendering the
-      // whole slab. At 65535 a 512 tile renders 13.4 Mpx to keep 0.26: fifty-one times the work for a
-      // picture no better. This is not a fitted floor; it is the point where the loop stops helping, and
-      // it is derived from the bleed, which is derived from the slab.
-      if (ts <= Math.max(256, bleed)) throw new Error(TR('exp.err.tile', { px: W }) + '  [' + trail.join('  ') + ']');
-      ts = Math.floor(ts / 2);
+      ref.width = 1; ref.height = 1;
+      if (!ok.length) throw new Error(TR('exp.err.tile', { px: W }) + '  [' + trail.join('  ') + ']');
+      ok.sort((a, b) => a.est - b.est);
+      ts = ok[0].ts;
+      if (ok.length > 1) trail.push('chose ' + ts + ': ' + Math.round(ok[0].est / 1000) + 's beats ' + Math.round(ok[1].est / 1000) + 's');
     }
     // The stored tile must DIVIDE the render pass, because the writer reads the pass out in k x k whole
     // stored tiles. `Math.min(ts, MAX)` only holds while ts halves from 8192; a forced ts of 6144 gave
