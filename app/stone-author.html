@@ -1093,7 +1093,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.18';
+  const BUILD = '2026.09.26.19';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5524,16 +5524,21 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Keyed like the export ceiling, so a browser version change starts the evidence over. Forgotten when
   // a tile genuinely comes back undrawn, which is the one signal that the device has really lost ground
   // rather than merely being busy.
-  // HOW MUCH OF THE MACHINE THIS RENDER MAY HAVE. The budget was a fixed eighth of reported memory,
-  // which is right for a page sharing a browsing session and pessimistic for one the operator has
-  // deliberately left alone — the same assumption the probe was making, baked into arithmetic instead of
-  // a measurement. It is the difference between a tablet planning 4096 tiles and 8192: at 65535 an 8192
-  // tile needs 381 MB, which an eighth of 2 GB refuses and a quarter allows, and 8192 is the geometry
-  // measured clean on three devices.
+  // HOW MUCH OF THE MACHINE THIS RENDER MAY HAVE. A QUARTER by default: at render time this is a greedy
+  // program, and it should be. Nobody asks for a 2.7 gigapixel master casually — they know it is heavy
+  // and they leave the machine alone — so budgeting as though it were competing with a browsing session
+  // was our pessimism, not the device's limit.
   //
-  // So it is a dial, not a constant: an eighth to share the machine, a half to own it. Set once with
-  // ?mem=4 and remembered per device, because a setting you must retype is one you will forget on the
-  // render that matters. Only 2, 4 and 8 are accepted; anything else leaves it alone.
+  // It was a fixed eighth, and that one constant is what forced both tablets into the defect that cost
+  // an evening: at 65535 an 8192 tile needs 381 MB, which an eighth of 2 GB refuses and a quarter
+  // allows. Falling back to 4096 there is what truncated the bloom and returned a black-light master at
+  // 65% of the light. 8192 is the geometry measured clean on three separate devices, and a quarter is
+  // what reaches it.
+  //
+  // Still a dial: an eighth to share the machine, a half for hardware weaker than 2 GB, where the
+  // quarter cannot reach the 8192 ceiling either. Set once with ?mem=8 and remembered per device,
+  // because a setting you must retype is one you will forget on the render that matters. Only 2, 4 and 8
+  // are accepted; anything else leaves it alone.
   const MEM_KEY = 'stone-author:memshare:v1';
   const MEM_DIV = (() => {
     const ok = v => v === 2 || v === 4 || v === 8;
@@ -5542,7 +5547,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (ok(asked)) { try { localStorage.setItem(MEM_KEY, String(asked)); } catch (_) {} return asked; }
     } catch (_) {}
     try { const kept = +localStorage.getItem(MEM_KEY); if (ok(kept)) return kept; } catch (_) {}
-    return 8;
+    return 4;
   })();
   const TILE_PROOF_KEY = 'stone-author:tileproof:v1';
   function provenTile() {
