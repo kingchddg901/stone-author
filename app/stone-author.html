@@ -1093,7 +1093,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.15';
+  const BUILD = '2026.09.26.16';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5514,6 +5514,32 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       return false;
     } catch (_) { return false; }                          // a canvas that will not even read back is lost
   }
+  // WHAT THIS DEVICE HAS ACTUALLY DONE. canvasFits asks what the browser will grant at this instant.
+  // This records what the machine has already rendered with and finished. A tablet that produced a 65535
+  // master at 4096 tiles in the morning has PROVEN 4096, and a refusal that evening is weaker evidence
+  // than the master sitting on disk — so at or below the proof the probe is not consulted at all. You
+  // said you could do this; do it. The budget still applies, because that guards against swapping rather
+  // than against allocation failing.
+  //
+  // Keyed like the export ceiling, so a browser version change starts the evidence over. Forgotten when
+  // a tile genuinely comes back undrawn, which is the one signal that the device has really lost ground
+  // rather than merely being busy.
+  const TILE_PROOF_KEY = 'stone-author:tileproof:v1';
+  function provenTile() {
+    try { return +JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}')[calSig()] || 0; } catch (_) { return 0; }
+  }
+  function proveTile(ts) {
+    try {
+      const all = JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}');
+      if (!(all[calSig()] >= ts)) { all[calSig()] = ts; localStorage.setItem(TILE_PROOF_KEY, JSON.stringify(all)); }
+    } catch (_) {}
+  }
+  function forgetTile() {
+    try {
+      const all = JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}');
+      delete all[calSig()]; localStorage.setItem(TILE_PROOF_KEY, JSON.stringify(all));
+    } catch (_) {}
+  }
   const TIFF_STORE_MAX = 4096;
   // A TILE CAN BE TOO SMALL TO CARRY THE LIGHT. Bleed is sized at 12 x bs against a widest blur of 8 x bs,
   // which assumes a Gaussian reaches as far as its radius. It does not - the real support is nearer 3
@@ -5544,6 +5570,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const FH = Math.round(W * H), bleed = Math.ceil(12 * (W / COAT_REF));
     const budget = Math.min(900e6, ((navigator.deviceMemory || 4) * 1024 ** 3) / 8);
     const floor = W > TILE_FLOOR_ABOVE ? Math.min(4096, W) : 256;
+    const proven = TILE_FORCED ? 0 : provenTile();
     let ts = Math.min(W, 8192);
     // WHY the plan chose what it chose. The outcome was recorded and the reasoning was not, so a tablet
     // that silently halved its tile after an OS update could not be explained without the device in hand.
@@ -5575,13 +5602,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // nothing against the render, and the count is recorded either way — an 'ok after 2' in a master
       // is the evidence that the first reading was noise.
       let fits = false, tries = 0;
-      while (inBudget && tries < 3) {
+      if (inBudget && proven >= ts) fits = true;                  // already done on this machine
+      else while (inBudget && tries < 3) {
         tries++;
         if (canvasFits(ew, ew, 1)) { fits = true; break; }
         if (tries < 3) await new Promise(r => setTimeout(r, 250));   // let it finish whatever it was doing
       }
       trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:' +
-        (!inBudget ? 'budget' : fits ? (tries > 1 ? 'ok after ' + tries : 'ok') : 'canvas x' + tries));
+        (!inBudget ? 'budget' : !fits ? 'canvas x' + tries
+          : tries === 0 ? 'proven' : tries > 1 ? 'ok after ' + tries : 'ok'));
       if (fits) break;
       // The floor is checked, not assumed. Refusing here names the real limit; planning a grid whose
       // tiles cannot allocate would fail forty minutes later with nothing to show for it.
@@ -5592,7 +5621,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     const store = Math.min(ts, TIFF_STORE_MAX), k = ts / store;   // k is 1 or 2: ts halves from 8192
     const across = Math.ceil(W / store), down = Math.ceil(FH / store);
-    return { FH, ts, store, k, bleed, trail, budgetMB: Math.round(budget / 1e6),
+    return { FH, ts, store, k, bleed, trail, proven, budgetMB: Math.round(budget / 1e6),
              across, down, tiles: across * down,                  // the STORED grid, what the file declares
              rAcross: Math.ceil(W / ts), rDown: Math.ceil(FH / ts),
              renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
@@ -5640,7 +5669,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           c = renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
           if (tilePainted(c)) break;
           c.width = 1; c.height = 1;                       // hand the failed allocation back first
-          if (attempt >= 2) throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders }));
+          if (attempt >= 2) { forgetTile(); throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders })); }
           expStat(TR('exp.tiles', { done: n + 1, total: p.renders, px: W }), 0.92 * n / p.renders);
           await breathe();                                 // a retry costs one tile; a hole costs the master
         }
@@ -5657,6 +5686,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         c.width = 1; c.height = 1;                         // only now: every quarter has been read
         tileMs.push(Math.round(performance.now() - tTile)); tileBytes.push(tb);
       }
+      proveTile(p.ts);                                     // every tile drew at this size: that is the proof
       const msRender = Date.now() - tR;
       expStat(TR('exp.saving'), 0.96); await breathe();
       const { blob } = await sink.finish(expMeta({
@@ -5665,7 +5695,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
         // the planner's own working: which tile sizes were tried, what each would cost, and which of the
         // two gates refused it. Under a kilobyte, and the only thing that can explain a plan afterwards.
-        plan: { budgetMB: p.budgetMB, mem: navigator.deviceMemory || null, tried: p.trail },
+        plan: { budgetMB: p.budgetMB, mem: navigator.deviceMemory || null, proven: p.proven || undefined, tried: p.trail },
         toDisk: sink.toDisk, bytes,
         ms: { render: msRender, total: Date.now() - expT0 },
         // Paired on purpose: time ALONE cannot say why a tile was slow. Against its own byte count it
