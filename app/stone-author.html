@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.17';
+  const BUILD = '2026.09.27.18';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6032,7 +6032,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     catch (_) { return ''; }
   })();
   const GLOW_AUTO = GLOW_RAW === '' || GLOW_RAW === 'auto';      // auto unless a number is given
-  const GLOW_SET = (() => { const v = parseFloat(GLOW_RAW); return v >= 0 && v <= 1 ? v : 0; })();
+  // -1 to 1. Positive mixes the halo toward WHITE, negative toward BLACK. Negative exists because WebKit
+  // does not under-deliver - it overshoots, +7.8% against the Blink reference with no lift at all - so
+  // there is nothing to add and the only way to bring it onto the same picture is to take light away.
+  const GLOW_SET = (() => { const v = parseFloat(GLOW_RAW); return v >= -1 && v <= 1 ? v : 0; })();
   // ?glow=auto - THE LIFT TRACKS SIGMA, because the deficit does. A fixed number is right at exactly one
   // width: 0.61 matches at 65535 and reads +7.5% over at 32768, which would make a master SET disagree
   // with itself. Fitted through the two values Chris matched by eye, 0.27 at sigma 262 and 0.61 at 524:
@@ -6050,14 +6053,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // engine that lacks ctx.filter is the same one whose shadows put more ink down. PROVISIONAL - it rests
   // on one width on one device, which is why SHADOW_INK below records what each engine actually does, so
   // the next version of this is a fitted curve instead of a branch.
-  const glowLift = () => !CAN_FILTER ? 0
+  const glowLift = () => GLOW_RAW !== '' && !GLOW_AUTO ? GLOW_SET      // an explicit number wins, including a negative one
+    : !CAN_FILTER ? 0
     : GLOW_AUTO ? Math.max(0, Math.min(1, glowPx * 0.00065 - 0.07)) : GLOW_SET;
   const liftCv = document.createElement('canvas');
   const liftMap = new Map();                               // 8,050 specks a tile: parse each colour once, not once per element
   let liftCached = -1;
   function liftCol(css) {
     const t = glowLift();
-    if (!(t > 0)) return css;
+    if (!t) return css;
     if (t !== liftCached) { liftMap.clear(); liftCached = t; }   // auto moves with width: a cached colour from another render is wrong
     const hit = liftMap.get(css);
     if (hit !== undefined) return hit;
@@ -6075,8 +6079,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         r = parseFloat(inner[0]); g = parseFloat(inner[1]); b = parseFloat(inner[2]);
         if (inner.length > 3) a = parseFloat(inner[3]);
       }
-      out = 'rgba(' + Math.round(r + (255 - r) * t) + ',' + Math.round(g + (255 - g) * t) + ',' +
-            Math.round(b + (255 - b) * t) + ',' + a + ')';
+      // toward white by t, or toward black by -t. Not the same expression mirrored: white is a distance
+      // to 255 and black is a fraction of what is there, so a naive negative t would scale by the wrong gap.
+      const mix = t >= 0 ? (v => v + (255 - v) * t) : (v => v * (1 + t));
+      out = 'rgba(' + Math.round(mix(r)) + ',' + Math.round(mix(g)) + ',' + Math.round(mix(b)) + ',' + a + ')';
     } catch (_) { /* leave it as it came */ }
     liftMap.set(css, out);
     return out;
