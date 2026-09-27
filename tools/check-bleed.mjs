@@ -161,6 +161,15 @@ if (!/const memKnown = navigator\.deviceMemory > 0/.test(plan))
   fail.push('the plan does not check whether the memory figure is real, so on Safari and Gecko it spends a fabricated 4 GB ceiling');
 if (!/roomy = memKnown &&/.test(plan))
   fail.push('the speed premium is granted without a measured ceiling to spend it against');
+// A REMEMBERED PLAN IS THE ANSWER TO A RACE, so it is only valid under the rule that ran the race. The
+// remembered path re-calibrates the tile but never re-applies the choice, so a device that settled on a
+// size under a superseded rule would keep taking it. The rule therefore lives IN the key, which makes the
+// invalidation automatic instead of a version bump someone has to remember.
+if (!/':m' \+ MEM_EASY/.test(app))
+  fail.push('the plan key does not carry the choice rule, so a plan settled under a rule that has since changed is reused unchanged');
+if (!/\(navigator\.deviceMemory > 0 \? 'k' : 'u'\)/.test(app))
+  fail.push('the plan key does not record whether the memory figure was real, so an engine that gains deviceMemory keeps a plan chosen without one');
+
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size
 // is a different canvas, which Chrome does not rasterise identically. The race runs once per device,

@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.4';
+  const BUILD = '2026.09.27.5';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5858,6 +5858,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // One source for the figure. The warning quotes what the planner will actually take, or it is not
   // a warning about this program.
   const memBudget = () => (navigator.deviceMemory || 4) * 1024 ** 3 * MEM_SHARE / 8;
+  // How much of that ceiling a render may eat before buying speed stops being worth it. This constant is
+  // part of the PLAN KEY below, not only a threshold, and that is deliberate: a remembered plan is the
+  // ANSWER to a race, so changing the rule changes the answer. Without it in the key, a device that had
+  // already settled on a tile under the previous rule would keep taking it - the remembered path only
+  // re-CALIBRATES, it never re-applies the choice - and bumping the store version by hand is a thing
+  // someone has to remember. Whether deviceMemory exists is in the key for the same reason: the choice
+  // differs on an engine without it, so an engine that gains the figure has to race again.
+  const MEM_EASY = 0.5;
   // WHAT THIS DEVICE SETTLED ON. Measuring beats predicting, but a planner that MEASURES is not
   // automatically repeatable: candidates are compared on timing, and timings move. Two renders of the
   // same slab on the same machine could pick different tile sizes, and a different tile size is a
@@ -5878,7 +5886,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // device has evidence against it and there is a smaller one to try. A render that completes clears it,
   // so a size that failed for a passing reason can come back.
   const TILE_PROOF_KEY = 'stone-author:plan:v4';   // v4: the choice reads headroom, so every v3 plan was picked under a policy that no longer applies
-  const planKey = W => calSig() + ':' + W + ':' + (uvMode ? 'uv' : 'day');
+  const planKey = W => calSig() + ':' + W + ':' + (uvMode ? 'uv' : 'day') + ':m' + MEM_EASY + (navigator.deviceMemory > 0 ? 'k' : 'u');
   function planRec(W) {
     try { return JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}')[planKey(W)] || {}; } catch (_) { return {}; }
   }
@@ -6076,7 +6084,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // to kill a tab, that fabricated 3.2 GB read as 42% used and took the biggest tile. An unknown
       // ceiling is not a generous one: no figure, no speed premium. It costs nothing at the widths where
       // that matters, because there the protective tile is the faster one anyway.
-      const MEM_EASY = 0.5;
       const needOf = t => { const e = t + 2 * bleed; return e * e * 4 * surfaces + TIFF_STORE_MAX * TIFF_STORE_MAX * 4; };
       const ref = renderFull(CAL_REF_W), refCx = ref.getContext('2d');
       const CANVAS_HARD_MAX = 900e6;
