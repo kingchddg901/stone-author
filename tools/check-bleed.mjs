@@ -88,6 +88,17 @@ if (blurReach) {
 for (const m of app.matchAll(/bleed\s*=\s*[^;\n]*/g))
   if (/12 \* bs|12 \* \(W \/ COAT_REF\)/.test(m[0])) fail.push(`a bleed is back on the old constant: ${m[0].trim()}`);
 
+// The harness counts too. tiff.mjs restated the bleed as `Math.ceil(12 * (W / 1000))` under a comment
+// claiming it was what tiffPlan takes, and went on passing for every commit after that stopped being
+// true. A test that hard-codes a derived value is testing its own copy of the past, and this rule only
+// scanned app/, so the copy was never going to be caught.
+for (const f of ['harness/tiff.mjs', 'harness/render.mjs', 'harness/hero.mjs']) {
+  let src = '';
+  try { src = readFileSync(f, 'utf8'); } catch (_) { continue; }
+  if (/12 \* \(W \/ 1000\)|12 \* bs|12 \* \(W \/ COAT_REF\)/.test(src))
+    fail.push(`${f} restates the bleed instead of asking the app for it — it will keep passing after the app changes`);
+}
+
 // ---- 3. the plan is MEASURED, not predicted --------------------------------------------------------
 // A synthetic probe answers one question about an empty canvas. One real tile at the planned settings
 // answers all of them: allocation, this device's blur ceiling, whether the bloom happened, whether the

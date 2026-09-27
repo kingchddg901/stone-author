@@ -39,7 +39,13 @@ await page.waitForFunction(() => !!window.__sa, null, { timeout: 15000 });
 const res = await page.evaluate(async ({ W, H, TS }) => {
   const sa = window.__sa;
   sa.render();
-  const bleed = Math.ceil(12 * (W / 1000));            // the coat's bleed at this width, as tiffPlan takes it
+  // ASK THE APP, do not restate it. This used to be twelve times the coat scale, computed here, under a
+  // comment claiming it was what tiffPlan takes — and it stopped being that the moment the bleed became
+  // analytic. A test that hard-codes a value the code derives keeps passing while the code moves
+  // underneath it, and the gate forbidding the old constant only scanned app/, so this copy of it was
+  // never going to be caught.
+  const plan = await sa.tiffPlan(W);
+  const bleed = plan.bleed;
   const grab = (c, x, y, w, h) => c.getContext('2d').getImageData(x, y, w, h).data;
 
   // (a) the same region rendered as ONE tile and as TWO, to prove the join
