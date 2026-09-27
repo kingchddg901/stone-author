@@ -146,8 +146,21 @@ if (!/fast\.need <= MEM_EASY \* budget/.test(plan))
   fail.push('the choice does not weigh the winner against the memory ceiling, so a tablet grazing its cap takes the same tile as a desktop with 6 GB spare');
 if (!/need: needOf\(proven\)/.test(plan))
   fail.push('a remembered plan carries no memory figure, so the headroom test reads undefined and silently takes the protective tile every time');
-if (!/const safe = ok\[0\], fast = ok\[ok\.length - 1\]/.test(plan))
-  fail.push('the candidates are not ordered by size before the choice, so safe and fast are whichever way the ladder happened to fill');
+if (!/const safe = ok\.reduce\(\(a, b\) => \(b\.ts < a\.ts \? b : a\)\)/.test(plan))
+  fail.push('the protective candidate is not the smallest that calibrated, so it is whichever way the ladder happened to fill');
+// The fast one is the lowest MEASURED estimate, never the biggest tile. (1 + 2*bleed/ts)^2 says bigger is
+// always faster and that holds only where the grid divides: at 16384 a 10240 height needs two rows of
+// 8192, a 60% overshoot, and 8192 draws 0.32 Gpx against 4096's 0.29. ms x passes carries both.
+if (/const fast = ok\[ok\.length - 1\]|const fast = ok\[0\]/.test(plan))
+  fail.push('the fast candidate is taken by position rather than by its measured estimate: at a width where the tile grid does not divide, the biggest tile is the SLOWER one and costs three times the memory');
+if (!/const fast = ok\.reduce\(\(a, b\) => \(b\.est < a\.est \? b : a\)\)/.test(plan))
+  fail.push('the fast candidate is not chosen on its measured estimate');
+// An unknown ceiling is not a generous one. deviceMemory is Chromium-only, so Safari and Gecko fall back
+// to a flat 4 GB that nothing measured - and an iPhone is the device least able to honour it.
+if (!/const memKnown = navigator\.deviceMemory > 0/.test(plan))
+  fail.push('the plan does not check whether the memory figure is real, so on Safari and Gecko it spends a fabricated 4 GB ceiling');
+if (!/roomy = memKnown &&/.test(plan))
+  fail.push('the speed premium is granted without a measured ceiling to spend it against');
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size
 // is a different canvas, which Chrome does not rasterise identically. The race runs once per device,

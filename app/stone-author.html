@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.3';
+  const BUILD = '2026.09.27.4';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3145,6 +3145,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const bleed = Math.max(8, Math.min(coatReach(W / COAT_REF), 256, Math.floor(eh0 / 4)));
     const stripH = Math.max(1, Math.min(opts.stripH || (eh0 - 2 * bleed), FH));
     return { FW, FH, stripH, bleed, live, strips: Math.ceil(FH / stripH),
+             // peakMB is ADVISORY and deliberately unread: the private driver's HUD shows it, nothing
+             // refuses on it. A PNG at 16384 is fine on every device to hand, and above that the format
+             // is the wrong tool - WebKit reset the tab at 20k rather than the app declining, and that is
+             // an accepted outcome for a pathological ask (Chris, 2026-09-27). Do not turn this into a
+             // gate on a later pass: it would newly refuse desktop PNGs that work today.
              peakMB: Math.round(live * FW * (stripH + 2 * bleed) * 4 / 1e6) };
   }
   function renderStrip(W, y0, h, bleed, wins) {
@@ -6050,17 +6055,27 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // deviceMemory rounds DOWN to a power of two, so arithmetic on it was refusing renders this
       // hardware could do - it put an A7 out of 65535 entirely while the device was never asked.
       //
-      // And the largest workable tile is not automatically the best one - but a time estimate can never
-      // say which is. The estimate is passes x ms; passes falls as ts^2 while a pass's pixels rise as
-      // (ts + 2*bleed)^2, so it goes as (1 + 2*bleed/ts)^2: monotonically better at every step UP.
-      // Measured at 65535 under the black light it is 1.00, 1.63, 3.36 for 8192, 4096, 2048. A race whose
-      // ordering is fixed by its own formula is decoration - it took the biggest that calibrated every
-      // single time, and that is also the candidate nearest the cliff where the bloom stops happening.
-      // What genuinely differs between the two is how much of THIS device's ceiling the winner eats, and
-      // that does vary: a 4096 pass at 65535 is 14% of a desktop's budget and 56% of a 2 GB tablet's -
-      // the same 908 MB named above. So take the faster one where there is real room for it, and the
-      // smaller one where the render is already grazing the cap, because there the master that FINISHES
-      // is the better master. A desktop is unaffected: 8192 sits at a third of its budget and still wins.
+      // The largest workable tile is not automatically the best one, on either axis.
+      //
+      // ON SPEED the estimate is sound and does discriminate - but not the way (1 + 2*bleed/ts)^2 alone
+      // suggests. That term is monotonically better at every step up, and where the grid divides cleanly
+      // it decides: at 65535 a 8192 pass overshoots by one pixel in each direction, so bigger genuinely
+      // wins 1.00 / 1.63 / 3.36 over 4096 / 2048. Where it does NOT divide, the ceiling waste dominates
+      // instead - at 16384 a 10240 height needs two rows of 8192, a 60% overshoot, and 8192 draws 0.32
+      // Gpx against 4096's 0.29. So the measured estimate is what to trust for speed, because ms x passes
+      // already carries both the bleed and the out-of-image waste. Do not re-derive it from the tile size.
+      //
+      // ON MEMORY nothing in that estimate appears at all, and it is the axis that varies by DEVICE: a
+      // 4096 pass at 65535 is 14% of a desktop's budget and 56% of a 2 GB tablet's - the same 908 MB
+      // named above. So take the fastest candidate where there is real room for it, and the SMALLEST that
+      // calibrated where the render is already grazing the cap, because there the master that FINISHES is
+      // the better master. A desktop is unaffected: 8192 is a third of its budget and also the fastest.
+      //
+      // And the ceiling has to be KNOWN to be spent. navigator.deviceMemory is Chromium-only, so Safari
+      // and Gecko fall back to a flat 4 GB that nothing measured - on an iPhone, the device most willing
+      // to kill a tab, that fabricated 3.2 GB read as 42% used and took the biggest tile. An unknown
+      // ceiling is not a generous one: no figure, no speed premium. It costs nothing at the widths where
+      // that matters, because there the protective tile is the faster one anyway.
       const MEM_EASY = 0.5;
       const needOf = t => { const e = t + 2 * bleed; return e * e * 4 * surfaces + TIFF_STORE_MAX * TIFF_STORE_MAX * 4; };
       const ref = renderFull(CAL_REF_W), refCx = ref.getContext('2d');
@@ -6103,14 +6118,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
       ref.width = 1; ref.height = 1;
       if (!ok.length) throw new Error(TR('exp.err.tile', { px: W }) + '  [' + trail.join('  ') + ']');
-      ok.sort((a, b) => a.ts - b.ts);                      // protective first, fastest last
-      const safe = ok[0], fast = ok[ok.length - 1];
-      const roomy = fast.need <= MEM_EASY * budget;
+      const safe = ok.reduce((a, b) => (b.ts < a.ts ? b : a));        // smallest that calibrated
+      const fast = ok.reduce((a, b) => (b.est < a.est ? b : a));      // lowest MEASURED total, not the biggest
+      const memKnown = navigator.deviceMemory > 0;
+      const roomy = memKnown && fast.need <= MEM_EASY * budget;
       ts = (roomy ? fast : safe).ts;
       if (ok.length > 1) trail.push('chose ' + ts + ': ' + (roomy
         ? Math.round(fast.need / 1e6) + 'MB is under half the ' + Math.round(budget / 1e6) + 'MB ceiling, take the speed'
-        : Math.round(fast.need / 1e6) + 'MB of ' + Math.round(budget / 1e6) + 'MB is too close, ' +
-          Math.round(safe.est / 1000) + 's over ' + Math.round(fast.est / 1000) + 's'));
+        : !memKnown
+          ? Math.round(budget / 1e6) + 'MB ceiling unmeasured'
+          : Math.round(fast.need / 1e6) + 'MB of ' + Math.round(budget / 1e6) + 'MB is too close, ' +
+            Math.round(safe.est / 1000) + 's over ' + Math.round(fast.est / 1000) + 's'));
     }
     // The stored tile must DIVIDE the render pass, because the writer reads the pass out in k x k whole
     // stored tiles. `Math.min(ts, MAX)` only holds while ts halves from 8192; a forced ts of 6144 gave
