@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.28';
+  const BUILD = '2026.09.26.29';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2683,6 +2683,71 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let live = null, g2d = ctx;
   // LAYER-AWARE BACK LIGHT: light from behind, folded deepest → top; each LAYER declares its own transmittance
   // and scatter. The base bucket is the glowing body (expBaseMask); every other layer occludes + scatters in turn.
+  // ---- blurring where ctx.filter does not exist ----------------------------------------------------
+  // WebKit has no canvas filter (measured on an iPhone, 2026-09-27), so Safari has never drawn the
+  // emission bloom: under black light the bloom IS the picture, and it rendered as hard-edged veins on
+  // flat black, in the studio as well as in exports. Nothing about that is a size or a memory problem.
+  //
+  // A bloom is low-frequency by definition, so it does not need a Gaussian primitive. Halving a canvas
+  // with drawImage IS a box filter; a cascade of halvings converges on a Gaussian, and one smoothed
+  // upscale brings it back — the mip-pyramid bloom every game engine has used for twenty years. It costs
+  // about a third of one surface (a quarter, then a sixteenth, …) plus the result, so it is cheaper than
+  // the real blur it stands in for, and it uses nothing but drawImage.
+  //
+  // Only ever used when the real filter is absent: Blink and Gecko output must not move by a pixel.
+  const CAN_FILTER = (() => {
+    try {
+      const c = document.createElement('canvas'); c.width = c.height = 32;
+      const x = c.getContext('2d');
+      if (!x || !('filter' in x)) return false;
+      x.fillStyle = '#fff'; x.fillRect(12, 12, 8, 8);
+      x.filter = 'blur(4px)'; x.drawImage(c, 0, 0); x.filter = 'none';
+      return x.getImageData(24, 16, 1, 1).data[3] >= 8;    // light landed where only a blur could put it
+    } catch (_) { return false; }
+  })();
+  // Weights and level count are calibrated, not guessed: measured against a real 24px canvas blur on a 1024
+  // canvas, sampling alpha at 0, 1, 2, 3 and 4 deviations from a patch.
+  //     reference   119  82  27   4   0
+  //     one level, 32px box    165 114   7   0   0   too narrow
+  //     one level, 64px box     41  38  29  14   2   too wide, and far too dim at the centre
+  //     three levels .5/.3/.2  156  95   8   3   0   the shape of a Gaussian, near enough for a glow
+  // One box is not a Gaussian and no single level is going to be; three summed is, which is why every
+  // real-time bloom is built this way rather than from one blur.
+  const PYR_W = [0.5, 0.3, 0.2];
+  function pyramidBlur(src, r, w, h) {
+    // A box of width d has deviation d/sqrt(12), so a kernel matching r wants d ~ 3.5r, and k halvings
+    // give a kernel about 2^k wide. Stop while the smallest level still has pixels left to average.
+    const kmax = Math.max(PYR_W.length, Math.min(Math.round(Math.log2(Math.max(2, 3.5 * r))),
+                                                 Math.floor(Math.log2(Math.max(2, Math.min(w, h)) / 2))));
+    let cur = src, cw = w, ch = h;
+    const steps = [];
+    for (let i = 0; i < kmax; i++) {
+      const nw = Math.max(1, cw >> 1), nh = Math.max(1, ch >> 1);
+      const c = document.createElement('canvas'); c.width = nw; c.height = nh;
+      const x = c.getContext('2d');
+      x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+      x.drawImage(cur, 0, 0, cw, ch, 0, 0, nw, nh);
+      steps.push({ c, w: nw, h: nh }); cur = c; cw = nw; ch = nh;
+    }
+    const out = document.createElement('canvas'); out.width = w; out.height = h;
+    const ox = out.getContext('2d');
+    ox.imageSmoothingEnabled = true; ox.imageSmoothingQuality = 'high';
+    PYR_W.forEach((wt, i) => {
+      const lv = steps[kmax - PYR_W.length + i];
+      if (!lv) return;
+      ox.globalAlpha = wt; ox.drawImage(lv.c, 0, 0, lv.w, lv.h, 0, 0, w, h);
+    });
+    ox.globalAlpha = 1;
+    for (const lv of steps) { lv.c.width = 1; lv.c.height = 1; }   // hand the pyramid back before drawing
+    return out;
+  }
+  // Blur `src` and draw it into `tx` under whatever alpha and composite the caller has already set.
+  function blurDraw(tx, src, r, w, h) {
+    if (CAN_FILTER) { tx.filter = `blur(${r}px)`; tx.drawImage(src, 0, 0); tx.filter = 'none'; return; }
+    const b = pyramidBlur(src, r, w, h);
+    tx.drawImage(b, 0, 0);
+    b.width = 1; b.height = 1;
+  }
   function blurCanvas(src, px) {                           // scatter: a layer diffusing the light passing through it
     if (blurC.width !== src.width || blurC.height !== src.height) { blurC.width = src.width; blurC.height = src.height; }
     const t = blurC.getContext('2d'); t.setTransform(1, 0, 0, 1, 0, 0); t.globalAlpha = 1; t.globalCompositeOperation = 'source-over';
@@ -2770,8 +2835,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const w = tcv.width, h = tcv.height;
     if (!f.ident && f.uvMode && !f.backlit) {              // EMISSION BLOOM: fluorescence glows on the black ground
       tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'lighter';
-      tx.globalAlpha = 0.55; tx.filter = `blur(${3 * bs}px)`; tx.drawImage(tcv, 0, 0);
-      tx.globalAlpha = 0.35; tx.filter = `blur(${8 * bs}px)`; tx.drawImage(tcv, 0, 0);
+      tx.globalAlpha = 0.55; blurDraw(tx, tcv, 3 * bs, w, h);
+      tx.globalAlpha = 0.35; blurDraw(tx, tcv, 8 * bs, w, h);
       tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
     }
     if (!f.ident && !f.uvMode && !f.backlit && G.subsurface > 0) {   // SUBSURFACE: feature high-pass, warmed, added back as internal glow
@@ -4216,7 +4281,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       x.clearRect(mx - 4 * S, my - 4 * S, 8 * S, 8 * S);         // nothing but the patch may light the sample
       x.fillStyle = '#fff'; x.fillRect(mx - S, my - S, 2 * S, 2 * S);
       if (x.getImageData(mx, my, 1, 1).data[3] !== 255) return false;   // the patch itself must be there
-      x.filter = `blur(${sigma}px)`; x.drawImage(c, 0, 0); x.filter = 'none';
+      // Through blurDraw, so the probe exercises whatever this browser will really use: the canvas
+      // filter where there is one, the pyramid where there is not. A probe that tests a path the
+      // renderer does not take answers a question nobody asked.
+      blurDraw(x, c, sigma, w, h);
       const a = x.getImageData(mx + 2 * S, my, 1, 1).data[3];    // one deviation past the patch edge
       return a >= 8;                                             // a working blur lands ~26 here; a dropped one, 0
     } catch (_) { return false; }

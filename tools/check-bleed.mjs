@@ -35,6 +35,8 @@ const DECLARED = {
   '11 * bs': 'excluded',
   'px': 'excluded',              // blurCanvas, the back light's scatter scratch
   'sigma': 'excluded',           // bloomWorks probing the device, not rendering a tile
+  'r': 'excluded',               // blurDraw's own filter call: the radius is the caller's, declared there
+  '4': 'excluded',               // CAN_FILTER's fixed 4px support test on a 32px canvas
   "' + b + '": 'output',
 };
 
@@ -45,6 +47,10 @@ const found = new Set();
 for (const m of app.matchAll(/blur\(\$\{(.+?)\}px\)/g)) found.add(m[1].trim());
 for (const m of app.matchAll(/blur\((\d[\d.]*)px\)/g)) found.add(m[1].trim());
 for (const m of app.matchAll(/'blur\('\s*\+\s*([\w$]+)/g)) found.add("' + " + m[1] + " + '");
+// blurDraw is the choke point where a blur happens without naming a filter — WebKit has no ctx.filter,
+// so the bloom goes through a pyramid there instead. Its radius argument counts as a blur in the
+// inventory exactly like a filter string, or moving a blur behind it would hide it from this gate.
+for (const m of app.matchAll(/blurDraw\([^,]+,\s*[^,]+,\s*([^,]+),/g)) found.add(m[1].trim());
 
 for (const r of found) if (!(r in DECLARED)) fail.push(`undeclared blur radius \`${r}\` — is it reachable in a tile, and does coatRadius cover it?`);
 for (const r of Object.keys(DECLARED)) if (!found.has(r)) fail.push(`declared blur \`${r}\` is no longer in the app — this inventory describes code that is gone`);
@@ -108,8 +114,10 @@ if (!/const probeSigma = canBlur \? sigma : 0/.test(plan)) fail.push('the per-si
 if (!/bloomless: p\.canBlur \? undefined : true/.test(app)) fail.push('a master rendered without a bloom does not say so');
 
 const probe = app.slice(app.indexOf('function bloomWorks'), app.indexOf('function canvasFits'));
-if (!/filter = `blur\(\$\{sigma\}px\)`/.test(probe) || !/drawImage\(c, 0, 0\)/.test(probe))
-  fail.push('bloomWorks no longer blurs the canvas onto itself the way applyCoat does');
+// Through blurDraw, so it exercises whatever this browser really uses - the filter where there is one,
+// the pyramid where there is not. A probe that tests a path the renderer does not take proves nothing.
+if (!/blurDraw\(x, c, sigma, w, h\)/.test(probe))
+  fail.push('bloomWorks no longer blurs the canvas onto itself through blurDraw, so it tests a path the renderer may not take');
 if (!/data\[3\]/.test(probe)) fail.push('bloomWorks must read ALPHA: a colour test cannot tell a black slab from a dropped blur');
 
 // ---- 3b. the whole-image steps this path has no whole image for ------------------------------------
