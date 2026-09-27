@@ -218,7 +218,16 @@ if (!/forgetTile\(W\);/.test(app)) fail.push('the blank-tile guard does not pass
 // seven places and declared in one, and `node --check` cannot see a missing declaration — it is a runtime
 // ReferenceError, not a parse error. Nothing else exercises the tiled planner at all, which is the real
 // gap: the harness renders 4096, and the grid path only engages past 16384.
-if (!/const trail = \[\];/.test(plan)) fail.push('the plan trail is never declared: every tiled export would die with a ReferenceError');
+// EXISTING IS NOT THE SAME AS IN SCOPE. This checked only that `const trail = []` was present, and it
+// passed for the whole life of a defect where the declaration sat THIRTEEN LINES BELOW a push to it.
+// The push was guarded by `sigma > 0 && !canBlur` - black light on an engine with no canvas filter - so
+// every other combination short-circuited before touching the dead zone and it fired on one device in
+// the world. node --check cannot see a temporal dead zone, and neither can a test that asks whether a
+// line exists. Ask where it is instead.
+const trailDecl = plan.indexOf('const trail = [];'), trailUse = plan.indexOf('trail.push');
+if (trailDecl < 0) fail.push('the plan trail is never declared: every tiled export would die with a ReferenceError');
+else if (trailUse >= 0 && trailUse < trailDecl)
+  fail.push('the plan trail is pushed to before it is declared - a temporal dead zone, which throws only when the condition guarding that push is true, so it can hide from every engine but one');
 if (!/proveTile\(0, W\)/.test(plan)) fail.push('a remembered plan that stops calibrating is not dropped');
 
 // ---- 3b. the whole-image steps this path has no whole image for ------------------------------------
