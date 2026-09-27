@@ -101,10 +101,13 @@ it in CI. Full detail in [`gallery.md`](gallery.md).
 [`functions.md`](functions.md) (the function reference), [`capabilities.md`](capabilities.md) (the
 verified capability inventory), [`final-render.md`](final-render.md) (the offline render pipeline &
 roadmap), [`colour-layer.md`](colour-layer.md) (the colour engine), [`gallery.md`](gallery.md) (the
-gallery + determinism harness), [`i18n.md`](i18n.md) (translating the studio), `stone-generator.md` (the
+gallery + determinism harness), [`renderer-determinism.md`](renderer-determinism.md) (what may be farmed
+between machines), [`device-seal.md`](device-seal.md) (what a master records about the machine, and what
+it seals), [`i18n.md`](i18n.md) (translating the studio), `stone-generator.md` (the
 Python/panel generator), and this file. Design notes, **not yet implemented**:
 [`input-channels.md`](input-channels.md) (one adapter turning a stroke into named channels) and
-[`moon.md`](moon.md) (Moon as a moving-body event).
+[`moon.md`](moon.md) (Moon as a moving-body event) and [`resumable-render.md`](resumable-render.md) (picking
+a dead render back up).
 
 ---
 

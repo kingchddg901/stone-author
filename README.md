@@ -161,7 +161,10 @@ A render is not capped by what one canvas can hold. Past 16384 the export render
 straight into a tiled BigTIFF, so the whole picture never exists at once and a lost tile costs one tile
 rather than the render. Measured on one slab — `Hero_Psyker`, 666 marks, **65535 × 40959, 2.68
 gigapixels** — across every device to hand. Each master was audited tile by tile and carries a signature
-over its own render inputs, so they are verifiably the same picture and not merely the same size:
+over its own render inputs, so they are verifiably the same picture and not merely the same size. Each also
+records the machine that made it — hardware class in the clear, the identifying part sealed under the
+slab's own bytes, so whoever holds the slab can read it and whoever holds only the picture cannot
+([`docs/device-seal.md`](docs/device-seal.md)):
 
 | device | engine | daylight | black light |
 | --- | --- | --- | --- |
