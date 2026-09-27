@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.31';
+  const BUILD = '2026.09.26.32';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2909,18 +2909,24 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // backlit (the back light forces the whole-image path), never the lens (run once on the assembled
   // picture), never ident. Keep this in step with applyCoat — tools/check-bleed.mjs fails if a blur
   // appears there that is not accounted for here, because that is exactly how this defect was born.
-  function coatRadius(bs) {
+  // `uv` defaults to the light being rendered, but a reality window renders the slab at ANOTHER light
+  // inside its disc, and that render's reach is its own — asking this about the tile's spectrum sized a
+  // daylight window's canvas for a black-light bloom it will never draw.
+  function coatRadius(bs, uv) {
+    if (uv === undefined) uv = uvMode;
     let r = 0;
-    if (uvMode) r = Math.max(r, 8 * bs, 3 * bs);                                  // emission bloom
+    if (uv) r = Math.max(r, 8 * bs, 3 * bs);                                      // emission bloom
     else {
       if (G.subsurface > 0) r = Math.max(r, (2 + 3 * G.subsurface) * bs, (1 + 2 * G.subsurface) * bs);
       if (G.specular > 0) r = Math.max(r, 2 * bs, 0.6 * bs);
     }
     return r;
   }
-  function coatReach(bs) {
-    return Math.max(blurReach(coatRadius(bs)), blurReach(maxAdjBlur()), shadowReach(6 * maxGlow())) + BLEED_MARGIN;
+  function coatReach(bs, uv) {
+    return Math.max(blurReach(coatRadius(bs, uv)), blurReach(maxAdjBlur()), shadowReach(6 * maxGlow())) + BLEED_MARGIN;
   }
+  // A window's own light, which is a spectrum rather than a flag: renderSlabTo reads uvMode = spec !== 0.
+  const coatReachAt = (bs, spec) => coatReach(bs, spec !== 0);
   function applyLens(tcv, tx) {                            // ideal glass relief, per-pixel refraction gather (≤640px, resolution-independent)
     const w = tcv.width, h = tcv.height;
     const gw = Math.min(w, 640), gh = Math.max(1, Math.round(gw * h / w));
@@ -2984,16 +2990,26 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     g2d = svG; lightSpectrum = svS; uvMode = svU;
     return c;
   }
-  function compositeWindow(target, win, w, h, tf, coatScale, cx, cy, kr, tile) {
-    const alt = renderSlabTo(w, h, tf, coatScale, win.show, tile);
-    const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h;
+  // `rect` narrows the alternate render to the region that will actually survive. A tile composites its
+  // windows AFTER its own coat has run, so nothing outside the kept square is ever read again — yet the
+  // alt was being rendered across the tile's full bleed, which is sized for the TILE's light and not for
+  // the window's. Hero's window is daylight, and daylight on that slab blurs nothing, so its bleed is
+  // four pixels: at 65535 with a 2048 tile that is a 2056 square instead of 5202, and the window's two
+  // surfaces fall from 217 MB to 34 MB. Callers with a whole assembled picture pass no rect and are
+  // unaffected.
+  function compositeWindow(target, win, w, h, tf, coatScale, cx, cy, kr, tile, rect) {
+    const R = rect || { x: 0, y: 0, w, h };
+    const altTf = [tf[0], tf[1], tf[2], tf[3], tf[4] - R.x, tf[5] - R.y];
+    const alt = renderSlabTo(R.w, R.h, altTf, coatScale, win.show, tile);
+    const tmp = document.createElement('canvas'); tmp.width = R.w; tmp.height = R.h;
     const tc = tmp.getContext('2d'); tc.drawImage(alt, 0, 0);
     tc.globalCompositeOperation = 'destination-in';                    // keep only the feathered disc of the alt render
     const r0 = win.r * kr, r1 = Math.max(r0 + 1, (win.r + win.feather) * kr);
-    const rg = tc.createRadialGradient(cx, cy, Math.max(0, r0 * 0.6), cx, cy, r1);
+    const rg = tc.createRadialGradient(cx - R.x, cy - R.y, Math.max(0, r0 * 0.6), cx - R.x, cy - R.y, r1);
     rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(0.62, 'rgba(0,0,0,1)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
-    tc.fillStyle = rg; tc.fillRect(0, 0, w, h);
-    target.setTransform(1, 0, 0, 1, 0, 0); target.globalAlpha = 1; target.drawImage(tmp, 0, 0);
+    tc.fillStyle = rg; tc.fillRect(0, 0, R.w, R.h);
+    target.setTransform(1, 0, 0, 1, 0, 0); target.globalAlpha = 1; target.drawImage(tmp, R.x, R.y);
+    alt.width = 1; alt.height = 1; tmp.width = 1; tmp.height = 1;      // both are large; hand them back now
   }
   function applyWindows(canvas, W) {                                    // export path: full-slab transform (0..1 → 0..W)
     const wins = gatherMasks().filter(m => m.show != null); if (!wins.length) return;
@@ -3155,7 +3171,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (win.show == null) continue;
       const wx = win.x * finalW, wy = win.y * finalW, wr = (win.r + win.feather) * finalW;
       if (wx + wr < ex0 || wx - wr > ex0 + ew || wy + wr < ey0 || wy - wr > ey0 + eh) continue;
-      compositeWindow(cx, win, ew, eh, [finalW, 0, 0, finalW, -ex0, -ey0], bs, wx - ex0, wy - ey0, finalW, vp);
+      // The alt needs the KEPT square plus its OWN light's reach — not this tile's bleed, which is sized
+      // for a different spectrum. Clamped to the canvas so an edge tile cannot ask for pixels outside it.
+      const ab = Math.min(bleed, coatReachAt(bs, win.show));
+      const rx = Math.max(0, bleed - ab), ry = Math.max(0, bleed - ab);
+      const R = { x: rx, y: ry, w: Math.min(ew - rx, tw + 2 * ab), h: Math.min(eh - ry, th + 2 * ab) };
+      compositeWindow(cx, win, ew, eh, [finalW, 0, 0, finalW, -ex0, -ey0], bs, wx - ex0, wy - ey0, finalW,
+                      { ox: ex0 + R.x, oy: ey0 + R.y, fw: finalW, fh: finalH }, R);
     }
     g2d = prevG;
     return c;                                              // caller keeps [bleed, bleed+tw) x [bleed, bleed+th)
