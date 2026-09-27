@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.13';
+  const BUILD = '2026.09.27.14';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3009,7 +3009,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // it applyCoat computes every global gradient against the piece rather than the whole, and each piece
   // restarts them. Nothing needed it until the slab grew past what one canvas can hold.
   function renderSlabTo(w, h, tf, coatScale, spec, tile) {
-    glowPx = BLOOM_DRAW ? 16 * coatScale : 0;
+    glowPx = (BLOOM_DRAW && !glowSuppress) ? 16 * coatScale : 0;
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const cx = c.getContext('2d'), svG = g2d, svS = lightSpectrum, svU = uvMode;
     lightSpectrum = spec; uvMode = spec !== 0;
@@ -3050,8 +3050,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   function applyWindowsScreen() {                                       // interactive path: the live view transform
     const wins = gatherMasks().filter(m => m.show != null); if (!wins.length) return;
+    const prevSuppress = glowSuppress; glowSuppress = true;             // the preview never draws per-element glow
+    try {
     const k = Wc * V.z * dpr, ex = (Wc / 2 - V.cx * Wc * V.z) * dpr, ey = (Hc / 2 - V.cy * Wc * V.z) * dpr;
-    for (const win of wins) compositeWindow(ctx, win, cv.width, cv.height, [k, 0, 0, k, ex, ey], cv.width / COAT_REF, win.x * k + ex, win.y * k + ey, k);
+      for (const win of wins) compositeWindow(ctx, win, cv.width, cv.height, [k, 0, 0, k, ex, ey], cv.width / COAT_REF, win.x * k + ex, win.y * k + ey, k);
+    } finally { glowSuppress = prevSuppress; }
   }
   // The islands, drawn as dashed rings while the Mask tool is active (never exported): solid ring at r, a fainter
   // ring at r+feather. Colour carries both bits at once — amber = protects, rose = window into chaos; the lit pair
@@ -6048,7 +6051,13 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     liftMap.set(css, out);
     return out;
   }
-  let glowPx = 0;            // the wide pass as a canvas shadowBlur, in OUTPUT pixels: a shadow's deviation is half its blur
+  let glowPx = 0;
+  // A reality window renders the WHOLE SLAB again at another light, and on the live path that happens
+  // every frame. Setting glowPx = 0 in the live paint was not enough: applyWindowsScreen goes through
+  // compositeWindow into renderSlabTo, which set it straight back on, so the preview kept paying 8,050
+  // per-element shadows inside the island and a tablet could not open the studio. Suppressed here rather
+  // than by zeroing glowPx at the call site, because renderSlabTo sets it on entry.
+  let glowSuppress = false;            // the wide pass as a canvas shadowBlur, in OUTPUT pixels: a shadow's deviation is half its blur
   const DIM_OK = (() => {
     try { return /^(off|allow|1)$/i.test(new URLSearchParams(location.search).get('dim') || ''); }
     catch (_) { return false; }

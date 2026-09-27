@@ -228,6 +228,17 @@ if (!app.includes("removeEntry('stone-master.tif')"))
     fail.push('the scratch master is removed AFTER its handle is taken, which either deletes the file being written or does nothing at all');
 }
 
+// THE PREVIEW NEVER DRAWS PER-ELEMENT GLOW, INCLUDING INSIDE AN ISLAND. Zeroing glowPx in the live paint
+// was not enough: a reality window renders the WHOLE SLAB again at another light, every frame, and it
+// goes through renderSlabTo which sets glowPx back on. The preview kept paying 8,050 per-element shadows
+// inside the island and a 2 GB tablet could not open the studio.
+if (!app.includes('glowPx = (BLOOM_DRAW && !glowSuppress) ? 16 * coatScale : 0;'))
+  fail.push('renderSlabTo enables drawn glow unconditionally, so the live view pays for it inside every reality window, every frame');
+if (!app.includes('const prevSuppress = glowSuppress; glowSuppress = true;'))
+  fail.push('the interactive window path does not suppress drawn glow, so the preview renders the whole slab again with per-element shadows');
+if (!app.includes('} finally { glowSuppress = prevSuppress; }'))
+  fail.push('the glow suppression is not restored in a finally, so a throw mid-window would leave every later export without its drawn glow');
+
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size
 // is a different canvas, which Chrome does not rasterise identically. The race runs once per device,
