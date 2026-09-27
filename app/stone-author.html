@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.22';
+  const BUILD = '2026.09.26.23';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5732,18 +5732,18 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // visible lattice where each tile was darker at its edges than its middle.
   //
   // MEASURED, not derived. One tablet's ladder at a fixed 2048 tile, whole-picture mean against its own
-  // smaller renders, which are scale-invariant by design:
-  //     16384  100%     24576   99%     32768   85%     65535   65%
-  // and a second tablet at 4096 tiles returned 65535 at 98.6%, matching a desktop to 0.1%.
-  // So 2048 is sound to 24576 and fails above it, and 4096 is sound at 65535.
+  // THE LIGHT FLOOR IS RETIRED, 2026-09-27. It refused a tile under 4096 above 24576 because such a
+  // render completed and came back dim - 65% of the light at 65535 - and refusing beat finishing wrong.
+  // That was a fit to two devices and the code said so. The cause was the BLEED: sized at 12 x bs against
+  // a blur whose reach is ~3 x bs, so a small tile was blurred against a transparent edge. With the bleed
+  // sized to the reach, a small tile is no longer dim, and the floor now refuses renders that would be
+  // correct - it stopped an A7 from rendering 65535 at all, which is how it was caught.
   //
-  // No mechanism explains that boundary. Every scale-invariant ratio is IDENTICAL between the 85% case
-  // and the 98.6% case - canvas/W, canvas/3sigma, tile/3sigma all match - so this is a fit to two
-  // devices, not a law, and tile size and device are not separable with the hardware in hand. It is
-  // written as the narrow rule the evidence supports, and nothing wider.
-  const TILE_FLOOR_ABOVE = 24576;          // beyond this width, a tile under 4096 loses the bloom
-  // An operator who knows the picture is bright can force a size: ?tile=2048. It bypasses the floor, not
-  // the allocation checks, and is recorded in the master so a file rendered that way says so. No prompt:
+  // What the floor could never see is the opposite failure: a LARGE canvas that paints perfectly and
+  // silently declines to blur, losing the bloom entirely. That is what the probe is for. Small tiles are
+  // guarded by arithmetic, large ones by measurement, and neither by a constant.
+  // An operator who knows this device can do it can force a size: ?tile=2048. It bypasses the budget and
+  // both probes, and is recorded in the master so a file rendered that way says so. No prompt:
   // a dialog would ask a question most people cannot answer, and this one is for someone who already has.
   const TILE_FORCED = (() => {
     try { const v = +new URLSearchParams(location.search).get('tile'); return v >= 256 && v <= 8192 ? v : 0; }
@@ -5755,7 +5755,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // daylight has subsurface 0 and specular 0), and then there is no bloom to lose and nothing to probe.
     const sigma = coatRadius(W / COAT_REF);
     const budget = memBudget();
-    const floor = W > TILE_FLOOR_ABOVE ? Math.min(4096, W) : 256;
     const proven = TILE_FORCED ? 0 : provenTile();
     let ts = Math.min(W, 8192);
     // WHY the plan chose what it chose. The outcome was recorded and the reasoning was not, so a tablet
@@ -5782,7 +5781,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const bloom = sigma > 0 ? (canvasFits(ew, ew, 1, sigma) ? 'bloom ok' : 'BLOOM LOST at ' + Math.round(sigma) + 'px') : 'no blur';
       trail.push(ts + '/' + ew + '=' + Math.round(ew * ew * 4 / 1e6) + 'MB:forced, ' + bloom);
     } else for (;;) {
-      const ew = ts + 2 * bleed, need = ew * ew * 4;
+      // A BLUR NEEDS A SECOND SURFACE. Skia cannot blur in place, so a render that blooms peaks at about
+      // twice its canvas, plus the stored tile it reads back through. Counting only the canvas is why the
+      // budget waved through an 8192 pass that then had to allocate a gigabyte on a 2 GB tablet - and why
+      // every failure this week was under black light, where the blur is the work.
+      const ew = ts + 2 * bleed;
+      const need = ew * ew * 4 * (sigma > 0 ? 2 : 1) + TIFF_STORE_MAX * TIFF_STORE_MAX * 4;
       const inBudget = need <= budget;
       // MEMORY THAT IS BUSY IS STILL THERE. canvasFits allocates at one instant, so a device doing
       // something else for sixty milliseconds declines a canvas it holds perfectly well — and halving on
@@ -5818,8 +5822,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // The floor is checked, not assumed. Refusing here names the real limit; planning a grid whose
       // tiles cannot allocate would fail forty minutes later with nothing to show for it.
       if (ts <= 256) throw new Error(TR('exp.err.tile', { px: W }));
-      // Below the light floor the render would COMPLETE and be wrong, which is worse than refusing.
-      if (ts <= floor && floor > 256) throw new Error(TR('exp.err.floor', { px: W, tile: ts }));
       ts = Math.floor(ts / 2);
     }
     // The stored tile must DIVIDE the render pass, because the writer reads the pass out in k x k whole

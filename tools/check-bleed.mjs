@@ -89,6 +89,9 @@ if (!/canvasFits\(ew, ew, 1, sigma\)/.test(plan)) fail.push('the plan probes the
 // The proof records that a surface ALLOCATES. Whether it blurs is a different answer — and every one of
 // tonight's bloomless masters read `proven` in its trail, meaning no probe ran at all.
 if (!/proven >= ts && !\(sigma > 0\)/.test(plan)) fail.push('the tile proof bypasses the bloom probe: a proven tile must still be blur-tested');
+// A blur cannot happen in place, so a blooming render peaks at about twice its canvas. Counting one
+// surface is what let an 8192 pass through the budget and then fail to allocate on the device.
+if (!/sigma > 0 \? 2 : 1/.test(plan)) fail.push('the budget counts one surface: a blur needs a second, and the plan will wave through a pass the device cannot hold');
 if (!/BLOOM LOST/.test(plan)) fail.push('a bloom refusal is not named in the plan trail, so a master cannot explain itself');
 
 const probe = app.slice(app.indexOf('function bloomWorks'), app.indexOf('function canvasFits'));
