@@ -91,10 +91,15 @@ if (!/canvasFits\(ew, ew, 1, probeSigma\)/.test(plan)) fail.push('the plan probe
 if (!/proven >= ts && !\(probeSigma > 0\)/.test(plan)) fail.push('the tile proof bypasses the bloom probe: a proven tile must still be blur-tested');
 // A blur cannot happen in place, so a blooming render peaks at about twice its canvas. Counting one
 // surface is what let an 8192 pass through the budget and then fail to allocate on the device.
-if (!/const surfaces = 1 \+ \(sigma > 0 \? 1 : 0\)/.test(plan) || !/need = ew \* ew \* 4 \* surfaces/.test(plan))
-  fail.push('the budget no longer counts surfaces: a blur needs a scratch and a window needs three more, and the plan will wave through a pass the device cannot hold');
-// A window costs surfaces PER TILE, so a plan that ignores them allocates five and budgets for two.
-if (!/wins \? 2 \+ \(sigma > 0 \? 1 : 0\) : 0/.test(plan)) fail.push('the budget does not count a reality window\'s surfaces');
+// Count what is alive AT ONCE: the tile, and at the peak inside compositeWindow the alternate-light
+// render and the masked copy too, plus one transient scratch if anything blurs. Over-counting is not the
+// safe direction — five surfaces put a tablet four megabytes over budget at 2048 and sent it halving to a
+// 512 tile: 51x overdraw and 10,240 passes.
+if (!/const surfaces = \(wins \? 3 : 1\) \+ \(sigma > 0 \? 1 : 0\)/.test(plan) || !/need = ew \* ew \* 4 \* surfaces/.test(plan))
+  fail.push('the budget no longer counts simultaneous surfaces, so it will either wave through a pass the device cannot hold or halve away from one it can');
+// The canvas is ts + 2 x bleed, so below the bleed halving doubles the passes and barely shrinks the
+// canvas. Derived from the bleed, which is derived from the slab — not a fitted floor.
+if (!/ts <= Math\.max\(256, bleed\)/.test(plan)) fail.push('the halving loop has no efficiency floor: it will grind down to tiles smaller than their own bleed');
 if (!/BLOOM LOST/.test(plan)) fail.push('a bloom refusal is not named in the plan trail, so a master cannot explain itself');
 // A browser with no ctx.filter fails EVERY size, so probing per size only deletes the feature and caps the
 // device. Ask once on a small canvas, then render and declare it rather than refuse.
