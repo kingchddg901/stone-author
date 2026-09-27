@@ -61,6 +61,19 @@ boundary. Measured at that location under black light, on a field whose mean is 
 | Blink ARM vs Blink x86 | **0.15** | 0.36 | 1.31 |
 | WebKit vs Blink x86 | **−16.53** | 18.10 | 38.07 |
 
+Those figures are **local to that one boundary**, which is the right statistic for "is this join visible"
+and the wrong one for "is the picture mixable". Scanning **every** tile edge of the same two masters — 640
+strips of 64px, the whole picture rather than the studied crossing — the Blink pair reads **median 0.66,
+worst 1.88**, at tile 120 on a field of 82. Larger than the local numbers, as a worst-of-640 must be, and
+still inside the band that was confirmed invisible by eye. The verdict rests on the whole picture, not on
+the one place it was looked at.
+
+**Which masters.** The x86 side is Chrome on the Windows workstation, the only x86 Blink master in the set
+(12 cores, dpr 1). The ARM side is Chrome on a Galaxy S23 (8 cores, dpr 2). Identify a master by the
+`cores` and `dpr` in its own metadata, never by the platform word in its filename: `engineTag()` reports
+the UA platform, and Chrome in desktop-site mode sends `X11; Linux x86_64` from an Android phone — so the
+ARM masters here are named `linux-chrome`, and the token that is false is `x86_64`, not `Linux`.
+
 A 16.5-level step on a field of 63 is a 26% brightness drop across the boundary. In daylight it is worse
 and in the same direction: mean luma on one tile reads Blink 22.0, Gecko 28.5, WebKit 37.2.
 
