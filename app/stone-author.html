@@ -1093,7 +1093,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.16';
+  const BUILD = '2026.09.26.17';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5593,23 +5593,29 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } else for (;;) {
       const ew = ts + 2 * bleed, need = ew * ew * 4;
       const inBudget = need <= budget;
-      // A REFUSAL IS ONE SAMPLE, NOT AN ANSWER. canvasFits allocates at a single instant, so a device
-      // busy with something else declines a canvas it will grant a moment later — and halving on that
-      // one reading costs the entire render, silently, for forty minutes. This tablet took 4096 tiles in
-      // the morning and refused them that evening on the same silicon, the same Chrome build to the
-      // version number and the same dpr to fifteen decimal places, while a post-upgrade update storm was
-      // running. So ask again, with a pause, before believing it. Three tries a quarter second apart is
-      // nothing against the render, and the count is recorded either way — an 'ok after 2' in a master
-      // is the evidence that the first reading was noise.
+      // MEMORY THAT IS BUSY IS STILL THERE. canvasFits allocates at one instant, so a device doing
+      // something else for sixty milliseconds declines a canvas it holds perfectly well — and halving on
+      // that single reading costs the whole render, silently, for the next forty minutes. This tablet
+      // took 4096 tiles in the morning and refused them that evening on the same silicon, the same
+      // Chrome build to the version number and the same dpr to fifteen decimal places, while a
+      // post-upgrade update storm ran on it.
+      //
+      // Patience is nearly free here and giving up is not. Anyone asking for an export this size knows
+      // it is heavy and is leaving the machine alone, so spending a few seconds to be sure costs nothing
+      // against the render it protects. Back off rather than poll: a device that is busy needs TIME, not
+      // another question a quarter second later. Five tries over about four seconds, and the count is
+      // recorded either way — 'ok after 4' in a master is the evidence that the first readings were
+      // noise, 'canvas x5' that they were not.
+      const BACKOFF = [250, 500, 1000, 2000];
       let fits = false, tries = 0;
       if (inBudget && proven >= ts) fits = true;                  // already done on this machine
-      else while (inBudget && tries < 3) {
+      else while (inBudget && tries <= BACKOFF.length) {
         tries++;
         if (canvasFits(ew, ew, 1)) { fits = true; break; }
-        if (tries < 3) await new Promise(r => setTimeout(r, 250));   // let it finish whatever it was doing
+        if (tries <= BACKOFF.length) await new Promise(r => setTimeout(r, BACKOFF[tries - 1]));
       }
       trail.push(ts + '/' + ew + '=' + Math.round(need / 1e6) + 'MB:' +
-        (!inBudget ? 'budget' : !fits ? 'canvas x' + tries
+        (!inBudget ? 'budget' : !fits ? 'canvas x' + tries + ' over 3.75s'
           : tries === 0 ? 'proven' : tries > 1 ? 'ok after ' + tries : 'ok'));
       if (fits) break;
       // The floor is checked, not assumed. Refusing here names the real limit; planning a grid whose
