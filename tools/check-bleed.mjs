@@ -246,7 +246,7 @@ if (!app.includes('} finally { glowSuppress = prevSuppress; }'))
 // The cache is the silent one. liftCol memoises by colour string because a tile paints 8,050 specks; if
 // the lift moves between renders and the map is not cleared, the next width paints the previous width's
 // colours and nothing anywhere says so.
-if (!app.includes("const GLOW_AUTO = GLOW_RAW === 'auto';"))
+if (!app.includes("GLOW_RAW === 'auto'"))
   fail.push('?glow=auto is not recognised, so a mass render across widths has no way to stay consistent with itself');
 if (!app.includes('glowPx * 0.00065 - 0.07'))
   fail.push('the automatic lift is not the fitted function of sigma, so it cannot be right at more than one width');
@@ -254,6 +254,19 @@ if (!app.includes('if (t !== liftCached) { liftMap.clear(); liftCached = t; }'))
   fail.push('the lifted-colour cache is not invalidated when the lift changes: a second render at another width would silently reuse the colours from the first');
 if (!app.includes('glowLift: +glowLift().toFixed(3) || undefined'))
   fail.push('the master records the requested lift rather than the effective one, so an auto render would claim a lift it did not use');
+
+// DRAWN GLOW IS THE DEFAULT, AND WEBKIT TAKES NO LIFT. Those two have to ship together. Blink runs -10.2%
+// against its own image-space master at 65535 and wants 0.612; WebKit runs +3.5% and wants none. Applying
+// the Blink number there lands roughly +30% over-bright, so a default without the engine branch breaks
+// Safari on the first render. Discriminated on CAN_FILTER because that is a probe, not a user agent.
+if (!app.includes("return !/^(blur|off|0)$/i.test(new URLSearchParams(location.search).get('bloom')"))
+  fail.push('drawn glow is not the default, or ?bloom=blur no longer backs it out - one of the two is now wrong');
+if (!app.includes('const glowLift = () => !CAN_FILTER ? 0'))
+  fail.push('the lift is not engine-aware: WebKit would take the Blink value on a path that already overshoots, landing about +30% over-bright');
+if (!app.includes("GLOW_RAW === '' || GLOW_RAW === 'auto'"))
+  fail.push('the lift does not default to auto, so a default render uses no correction at all and comes back dim at every large width');
+if (!app.includes('shadowInk: SHADOW_INK || undefined'))
+  fail.push('a master does not record how much ink the engine shadow lays down: the per-engine branch can then never be replaced by a fitted curve');
 
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size

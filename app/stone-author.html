@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.15';
+  const BUILD = '2026.09.27.16';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6008,9 +6008,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // reference scale first: 8,050 emitters, drawn against blurred, mean 59.20 vs 58.95 and lit>40 35.31%
   // vs 33.74%, with the wide pass alone surviving at 94%. The difference is a faint ring on each element,
   // not a level shift. That was synthetic circles though, so this flag is how it meets real geometry.
+  // DEFAULT since 2026-09-27, measured against a nine-width image-space control set on one slab and one
+  // engine. Mean tracked the old path within 1.6% at every width from 1024 to 65535 and within 0.4%
+  // above 24576; the bleed went from 1577px to 4; and every defect found in a day of hunting lived in the
+  // image-space path - the bleed that locked a tablet out entirely, the canvas ceilings that truncated
+  // tiles into miniatures, WebKit having no ctx.filter so Safari drew no bloom at all.
+  //
+  // ?bloom=blur goes back to it. It is still the path a master uses if this one ever has to be backed out.
   const BLOOM_DRAW = (() => {
-    try { return /^(draw|1)$/i.test(new URLSearchParams(location.search).get('bloom') || ''); }
-    catch (_) { return false; }
+    try { return !/^(blur|off|0)$/i.test(new URLSearchParams(location.search).get('bloom') || ''); }
+    catch (_) { return true; }
   })();
   // ?glow=N - LIFT THE HALO TOWARD WHITE, 0 to 1. Drawn glow gives each element a halo in the element's
   // OWN colour. The image-space bloom does not: it blurs the composite, where overlapping light sums under
@@ -6024,7 +6031,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     try { return (new URLSearchParams(location.search).get('glow') || '').trim().toLowerCase(); }
     catch (_) { return ''; }
   })();
-  const GLOW_AUTO = GLOW_RAW === 'auto';
+  const GLOW_AUTO = GLOW_RAW === '' || GLOW_RAW === 'auto';      // auto unless a number is given
   const GLOW_SET = (() => { const v = parseFloat(GLOW_RAW); return v >= 0 && v <= 1 ? v : 0; })();
   // ?glow=auto - THE LIFT TRACKS SIGMA, because the deficit does. A fixed number is right at exactly one
   // width: 0.61 matches at 65535 and reads +7.5% over at 32768, which would make a master SET disagree
@@ -6035,7 +6042,16 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // It reproduces both exactly and falls to zero below sigma ~54, which is what the 8192 measurement
   // wanted - a deficit of -0.3% there, inside noise, so nothing to correct. A straight proportion through
   // the origin would have over-lifted every small width instead.
-  const glowLift = () => GLOW_AUTO ? Math.max(0, Math.min(1, glowPx * 0.00065 - 0.07)) : GLOW_SET;
+  // WEBKIT TAKES NO LIFT. Measured at 65535 on one slab: drawn glow unlifted read +3.5% against WebKit's
+  // OWN image-space master, where Blink read -10.2% against its own. It does not have a smaller deficit,
+  // it has the opposite sign - so applying Blink's 0.612 there would land roughly +30% over-bright.
+  //
+  // Discriminated on CAN_FILTER rather than the user agent, because that is a probe and not a claim: the
+  // engine that lacks ctx.filter is the same one whose shadows put more ink down. PROVISIONAL - it rests
+  // on one width on one device, which is why SHADOW_INK below records what each engine actually does, so
+  // the next version of this is a fitted curve instead of a branch.
+  const glowLift = () => !CAN_FILTER ? 0
+    : GLOW_AUTO ? Math.max(0, Math.min(1, glowPx * 0.00065 - 0.07)) : GLOW_SET;
   const liftCv = document.createElement('canvas');
   const liftMap = new Map();                               // 8,050 specks a tile: parse each colour once, not once per element
   let liftCached = -1;
@@ -6071,7 +6087,27 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // compositeWindow into renderSlabTo, which set it straight back on, so the preview kept paying 8,050
   // per-element shadows inside the island and a tablet could not open the studio. Suppressed here rather
   // than by zeroing glowPx at the call site, because renderSlabTo sets it on entry.
-  let glowSuppress = false;            // the wide pass as a canvas shadowBlur, in OUTPUT pixels: a shadow's deviation is half its blur
+  let glowSuppress = false;
+  // HOW MUCH INK DOES THIS ENGINE'S SHADOW PUT DOWN? The whole per-engine lift question is this one
+  // quantity, and nothing reports it - so measure it. One opaque disc, thrown off-canvas with its shadow
+  // offset back into place, because a transparent fill casts NO shadow (the alpha of what you draw is
+  // what the shadow is drawn from - an hour was lost to that today). Recorded in every master so the
+  // engine branch above can be replaced by a curve once there are readings from more than one.
+  const SHADOW_INK = (() => {
+    try {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const x = c.getContext('2d');
+      if (!x) return 0;
+      x.fillStyle = '#000'; x.fillRect(0, 0, 64, 64);
+      x.globalCompositeOperation = 'lighter';
+      x.shadowBlur = 24; x.shadowOffsetX = 50000; x.shadowColor = 'rgba(255,255,255,1)';
+      x.fillStyle = '#fff'; x.beginPath(); x.arc(32 - 50000, 32, 4, 0, 6.2832); x.fill();
+      const d = x.getImageData(0, 0, 64, 64).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
+      return +(sum / 4096).toFixed(2);
+    } catch (_) { return 0; }
+  })();            // the wide pass as a canvas shadowBlur, in OUTPUT pixels: a shadow's deviation is half its blur
   const DIM_OK = (() => {
     try { return /^(off|allow|1)$/i.test(new URLSearchParams(location.search).get('dim') || ''); }
     catch (_) { return false; }
@@ -6398,7 +6434,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         dimOverride: DIM_OK || undefined,
         bloomDraw: BLOOM_DRAW || undefined,
         glowLift: +glowLift().toFixed(3) || undefined,   // how far the drawn halo was lifted toward white
-        glowAuto: GLOW_AUTO || undefined,                // ...and whether that came from the sigma fit or a fixed number           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan              // the light veto was withheld: read the light below against a good master
+        glowAuto: GLOW_AUTO || undefined,                // ...and whether that came from the sigma fit or a fixed number
+        shadowInk: SHADOW_INK || undefined,              // what this engine's shadow lays down: the quantity the per-engine lift is really about           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan              // the light veto was withheld: read the light below against a good master
         // The light this master carries, sampled as it was written. 'mean' is the whole-picture average
         // luma over every 100th pixel — the same statistic `tiff-meta --audit` computes from a full
         // decode, so the two are comparable and a disagreement is itself a finding.
