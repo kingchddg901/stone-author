@@ -37,6 +37,7 @@ const DECLARED = {
   'sigma': 'excluded',           // bloomWorks probing the device, not rendering a tile
   'r': 'excluded',               // blurDraw's own filter call: the radius is the caller's, declared there
   '4': 'excluded',               // CAN_FILTER's fixed 4px support test on a 32px canvas
+  'sig': 'excluded',             // glowRatio measuring this engine against itself on its own canvas, never a tile
   "' + b + '": 'output',
 };
 
@@ -265,8 +266,8 @@ if (!app.includes('const glowLift = () => !CAN_FILTER ? 0'))
   fail.push('the lift is not engine-aware: WebKit would take the Blink value on a path that already overshoots, landing about +30% over-bright');
 if (!app.includes("GLOW_RAW === '' || GLOW_RAW === 'auto'"))
   fail.push('the lift does not default to auto, so a default render uses no correction at all and comes back dim at every large width');
-if (!app.includes('shadowInk: SHADOW_INK || undefined'))
-  fail.push('a master does not record how much ink the engine shadow lays down: the per-engine branch can then never be replaced by a fitted curve');
+if (!app.includes('glowRatio: glowRatio() || undefined'))
+  fail.push('a master does not record the drawn-against-blurred ratio, so the per-engine branch can never be replaced by a fitted curve');
 
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size
