@@ -54,8 +54,28 @@ That faint distributed haze is not a detail — it is a large part of what the b
 - the **narrow** pass (`3 × bs`) is probably safe: less spread, more alpha per element
 - the **wide** pass (`8 × bs`) is the one at risk, and it is the one that carries the field
 
-A hybrid is the likely answer: **drawn glow for the narrow pass, image-space for the wide one.** That keeps
-the bleed at the wide pass's reach only — still a large reduction — and keeps the haze.
+### The obvious hybrid buys nothing — corrected 2026-09-27
+
+An earlier draft of this page proposed drawn glow for the narrow pass and image-space for the wide one, and
+claimed that cut the bleed to roughly a third. **It cuts it by zero.** `coatReach` is a `Math.max` over its
+contributors, not a sum, and under the black light the **wide** pass is already the one setting it:
+`blurReach(8 bs)` is 1,573 px against `blurReach(3 bs)`'s 590. Measured at 65535:
+
+| what moves to drawn glow | bleed | a 2048 tile keeps | a 4096 tile keeps |
+| --- | --- | --- | --- |
+| today, all image-space | 1,577 px | 15.5% | 31.9% |
+| narrow pass only (`3 × bs`) | **1,577 px — no change at all** | 15.5% | 31.9% |
+| wide pass only (`8 × bs`) | **594 px (0.38×)** | 40.1% | 60.1% |
+| both | the output-space floor — the per-artifact adjustment blurs and artifact glows, which do not grow with the render | — | — |
+
+So the pass that carries the field haze, and the one at risk of quantising to nothing, is also **the only
+pass that buys any bleed**. The safe half of the hybrid is the worthless half. That inverts the staging
+below: the wide pass is not an optional last step, it is the whole decision.
+
+It also bounds what a bleed fix can do for the tile choice. The planner's floor is `ts > bleed`, so at
+65535 today the smallest legal tile is 2048; at 594 it would be 1024, and at 594 a 2048 pass draws 2.6×
+fewer pixels than it does now. That is the number the memory-versus-speed balance turns on — with the
+bleed at 594 a protective tile costs about 1.5× the fast one instead of 3.4×.
 
 ## The other look difference
 
@@ -76,12 +96,16 @@ scope rather than a commit.
 
 ## Staging, each step useful alone
 
-1. **Verify off-canvas shadows in Gecko and WebKit.** If either culls, stop and rethink.
-2. **Measure the quantisation floor properly**: at 65535, what fraction of the current wide-pass light
-   comes from elements whose individual glow lands under one level? That decides hybrid versus pure.
-3. **Narrow pass only, behind a flag.** `?bloom=draw`. Compare against the current build on one device.
-4. **If it holds, drop the bleed to the wide pass's reach alone** — roughly a third of today's.
-5. Wide pass, only if step 2 says the haze survives.
+1. **Measure the quantisation floor on the WIDE pass.** At 65535, what fraction of the current wide-pass
+   light comes from elements whose individual glow lands under one level? Nothing below matters until this
+   is answered, because the narrow pass on its own changes the bleed by nothing.
+2. **Verify off-canvas shadows in Gecko and WebKit.** If either culls, stop and rethink.
+3. **Wide pass behind a flag.** `?bloom=draw`, compared against the current build on one device — and
+   judged on the field by eye, not on the mean. A haze that quantised away reads as a mean that barely
+   moved, which is the shape of every defect this renderer has had.
+4. **If it holds, drop the bleed to the narrow pass's reach** — 594 px at 65535, and a 2048 tile goes from
+   keeping 15.5% of its pixels to keeping 40.1%.
+5. Narrow pass too, only if it reads right, which takes the bleed to the output-space floor.
 
 ## What would kill it
 
