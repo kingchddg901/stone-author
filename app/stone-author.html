@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.14';
+  const BUILD = '2026.09.27.15';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6020,14 +6020,29 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // 0 is the element's own colour, which is where the measured deficit was -10.2% of the mean at 65535.
   // It is a dial and not a fitted constant because the right value is a look, not an arithmetic answer.
-  const GLOW_LIFT = (() => {
-    try { const v = parseFloat(new URLSearchParams(location.search).get('glow')); return v >= 0 && v <= 1 ? v : 0; }
-    catch (_) { return 0; }
+  const GLOW_RAW = (() => {
+    try { return (new URLSearchParams(location.search).get('glow') || '').trim().toLowerCase(); }
+    catch (_) { return ''; }
   })();
+  const GLOW_AUTO = GLOW_RAW === 'auto';
+  const GLOW_SET = (() => { const v = parseFloat(GLOW_RAW); return v >= 0 && v <= 1 ? v : 0; })();
+  // ?glow=auto - THE LIFT TRACKS SIGMA, because the deficit does. A fixed number is right at exactly one
+  // width: 0.61 matches at 65535 and reads +7.5% over at 32768, which would make a master SET disagree
+  // with itself. Fitted through the two values Chris matched by eye, 0.27 at sigma 262 and 0.61 at 524:
+  //
+  //     lift = sigma * 0.0013 - 0.07          (sigma is glowPx / 2, a shadow's deviation being half its blur)
+  //
+  // It reproduces both exactly and falls to zero below sigma ~54, which is what the 8192 measurement
+  // wanted - a deficit of -0.3% there, inside noise, so nothing to correct. A straight proportion through
+  // the origin would have over-lifted every small width instead.
+  const glowLift = () => GLOW_AUTO ? Math.max(0, Math.min(1, glowPx * 0.00065 - 0.07)) : GLOW_SET;
   const liftCv = document.createElement('canvas');
   const liftMap = new Map();                               // 8,050 specks a tile: parse each colour once, not once per element
+  let liftCached = -1;
   function liftCol(css) {
-    if (!(GLOW_LIFT > 0)) return css;
+    const t = glowLift();
+    if (!(t > 0)) return css;
+    if (t !== liftCached) { liftMap.clear(); liftCached = t; }   // auto moves with width: a cached colour from another render is wrong
     const hit = liftMap.get(css);
     if (hit !== undefined) return hit;
     let out = css;
@@ -6044,7 +6059,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         r = parseFloat(inner[0]); g = parseFloat(inner[1]); b = parseFloat(inner[2]);
         if (inner.length > 3) a = parseFloat(inner[3]);
       }
-      const t = GLOW_LIFT;
       out = 'rgba(' + Math.round(r + (255 - r) * t) + ',' + Math.round(g + (255 - g) * t) + ',' +
             Math.round(b + (255 - b) * t) + ',' + a + ')';
     } catch (_) { /* leave it as it came */ }
@@ -6383,7 +6397,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
         dimOverride: DIM_OK || undefined,
         bloomDraw: BLOOM_DRAW || undefined,
-        glowLift: GLOW_LIFT || undefined,             // how far the drawn halo was lifted toward white           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan              // the light veto was withheld: read the light below against a good master
+        glowLift: +glowLift().toFixed(3) || undefined,   // how far the drawn halo was lifted toward white
+        glowAuto: GLOW_AUTO || undefined,                // ...and whether that came from the sigma fit or a fixed number           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan              // the light veto was withheld: read the light below against a good master
         // The light this master carries, sampled as it was written. 'mean' is the whole-picture average
         // luma over every 100th pixel — the same statistic `tiff-meta --audit` computes from a full
         // decode, so the two are comparable and a disagreement is itself a finding.

@@ -239,6 +239,22 @@ if (!app.includes('const prevSuppress = glowSuppress; glowSuppress = true;'))
 if (!app.includes('} finally { glowSuppress = prevSuppress; }'))
   fail.push('the glow suppression is not restored in a finally, so a throw mid-window would leave every later export without its drawn glow');
 
+// ?glow=auto MUST TRACK SIGMA AND MUST NOT SERVE A STALE COLOUR. The deficit it corrects grows with the
+// blur, so a fixed lift is right at exactly one width - 0.61 matches at 65535 and reads +7.5% over at
+// 32768. A master SET rendered across widths on one number would disagree with itself.
+//
+// The cache is the silent one. liftCol memoises by colour string because a tile paints 8,050 specks; if
+// the lift moves between renders and the map is not cleared, the next width paints the previous width's
+// colours and nothing anywhere says so.
+if (!app.includes("const GLOW_AUTO = GLOW_RAW === 'auto';"))
+  fail.push('?glow=auto is not recognised, so a mass render across widths has no way to stay consistent with itself');
+if (!app.includes('glowPx * 0.00065 - 0.07'))
+  fail.push('the automatic lift is not the fitted function of sigma, so it cannot be right at more than one width');
+if (!app.includes('if (t !== liftCached) { liftMap.clear(); liftCached = t; }'))
+  fail.push('the lifted-colour cache is not invalidated when the lift changes: a second render at another width would silently reuse the colours from the first');
+if (!app.includes('glowLift: +glowLift().toFixed(3) || undefined'))
+  fail.push('the master records the requested lift rather than the effective one, so an auto render would claim a lift it did not use');
+
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size
 // is a different canvas, which Chrome does not rasterise identically. The race runs once per device,
