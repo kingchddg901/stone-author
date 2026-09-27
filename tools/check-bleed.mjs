@@ -217,6 +217,17 @@ if (!app.includes('if (uv && !BLOOM_DRAW) r = Math.max(r, 8 * bs, 3 * bs);'))
 if (!app.includes('if (!(BLOOM_DRAW && glowPx > 0)) {'))
   fail.push('applyCoat runs the image-space bloom regardless of ?bloom=draw, so the drawn glow would be added ON TOP of the blurred one');
 
+// THE SCRATCH MASTER IS DROPPED BEFORE THE NEXT ONE IS WRITTEN. Nothing ever removed it, so a finished
+// render left a master-sized block of site data behind - and because createWritable swaps at close(), the
+// old file and the new one coexisted for the whole run. 1.5 GB of a tablet's storage to make 744 MB.
+if (!app.includes("removeEntry('stone-master.tif')"))
+  fail.push('the OPFS scratch master is never removed: every render leaves one behind, and the old one is still there while the next is written');
+{
+  const rm = app.indexOf("removeEntry('stone-master.tif')"), mk = app.indexOf("getFileHandle('stone-master.tif'");
+  if (rm >= 0 && mk >= 0 && rm > mk)
+    fail.push('the scratch master is removed AFTER its handle is taken, which either deletes the file being written or does nothing at all');
+}
+
 // MEASURING IS NOT REPEATABLE ON ITS OWN. Candidates are compared on timing and timings move, so two
 // renders of the same slab on one machine could pick different tile sizes - and a different tile size
 // is a different canvas, which Chrome does not rasterise identically. The race runs once per device,

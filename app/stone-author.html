@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.12';
+  const BUILD = '2026.09.27.13';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5163,6 +5163,15 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     try {
       if (navigator.storage && navigator.storage.getDirectory) {
         const dir = await navigator.storage.getDirectory();
+        // DROP THE LAST ONE FIRST. The name is fixed, so masters do not accumulate across renders - but
+        // nothing ever removed this file either, so a finished render leaves a master-sized block of site
+        // data parked until someone clears it by hand. Worse while rendering: Chrome implements
+        // createWritable with a swap file that is exchanged at close(), so the OLD master and the new one
+        // both exist for the whole run. At 65535 that is 1.5 GB of a tablet's storage to produce 744 MB.
+        //
+        // Here and not after the download, because the blob handed to the caller IS this file - removing
+        // it at the end would pull the floor out from under a save still in flight.
+        try { await dir.removeEntry('stone-master.tif'); } catch (_) { /* not there yet, or in use */ }
         handle = await dir.getFileHandle('stone-master.tif', { create: true });
         w = await handle.createWritable({ keepExistingData: false });
         await w.write(new Uint8Array(16));                 // a placeholder; the real header goes in at the end
