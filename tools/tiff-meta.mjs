@@ -11,7 +11,8 @@
 //   node tools/tiff-meta.mjs <file> [file...]
 //   node tools/tiff-meta.mjs --rename <file> [file...]        what it WOULD rename, changing nothing
 //   node tools/tiff-meta.mjs --rename --go <file> [file...]   do it
-import { openSync, readSync, closeSync, statSync, existsSync, renameSync } from 'fs';
+import { openSync, readSync, closeSync, statSync, existsSync, renameSync, readFileSync } from 'fs';
+import { openSeal } from './lib/device-seal.mjs';
 import { inflateSync } from 'zlib';
 
 const WINDOW = 4 << 20;                                  // the block sits in the IFD tail; head is a fallback
@@ -52,6 +53,7 @@ const lightOf = m => m.spectrum === 0 ? 'day' : m.spectrum === -1 ? 'uv'
   : 'spx' + String(Math.round(m.spectrum * 100)).replace('-', 'm');
 
 function engineOf(m) {
+  if (m.engine) return m.engine;                 // recorded since the device seal: the UA may not be readable
   const u = m.ua || '';
   const plat = /Android/.test(u) ? 'android' : /iPhone|iPad|iPod/.test(u) ? 'ios'
     : /Windows/.test(u) ? 'win' : /Mac OS X/.test(u) ? 'mac' : /Linux|X11/.test(u) ? 'linux' : 'web';
@@ -106,10 +108,20 @@ function openTiff(path) {
   return { at, close: () => closeSync(fd), tw: g(322), th: g(323), offs: tags[324], cnts: tags[325] };
 }
 
+// The device identity is sealed under SHA-256 of the slab's own bytes (see sealDevice in the app, and
+// tools/lib/device-seal.mjs for the reader). Hand this the slab and it opens; hand it the wrong slab and
+// AES-GCM refuses rather than returning nonsense.
+const SLAB = (() => {
+  const i = process.argv.indexOf('--slab');
+  return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : null;
+})();
+const slabBytes = SLAB && existsSync(SLAB) ? readFileSync(SLAB) : null;
+if (SLAB && !slabBytes) { console.error('no such slab: ' + SLAB); process.exit(2); }
+const openDev = dev => openSeal(dev, slabBytes);
 const RENAME = process.argv.includes('--rename'), GO = process.argv.includes('--go');
 const AUDIT = process.argv.includes('--audit');
 const paths = process.argv.slice(2).filter(a => !a.startsWith('--'));
-if (!paths.length) { console.error('usage: node tools/tiff-meta.mjs [--rename [--go]] <file> [file...]'); process.exit(2); }
+if (!paths.length) { console.error('usage: node tools/tiff-meta.mjs [--audit] [--slab <file.json>] [--rename [--go]] <file> [file...]'); process.exit(2); }
 
 let bad = 0;
 const plan = [];
@@ -137,7 +149,15 @@ for (const path of paths) {
   // would not allocate the surface despite the memory being there — a device policy, not a shortage.
   if (m.plan) console.log(`  plan     budget ${m.plan.budgetMB} MB, tried  ${(m.plan.tried || []).join('   ')}` +
                           `${m.forcedTile ? `   [FORCED to ${m.forcedTile} — floor overridden]` : ''}`);
-  console.log(`           ${(m.ua || '').slice(0, 100)}`);
+  if (m.arch || m.engine) console.log(`           ${m.engine || '?'}${m.arch ? ', ' + m.arch : ''}` +
+    `${m.arch ? '' : ' (architecture not recorded)'}`);
+  const seal = openDev(m.dev);
+  if (seal && seal.id) console.log(`  device   ${seal.id.model || 'model not reported'}${seal.id.platformVersion ? ', platform ' + seal.id.platformVersion : ''}` +
+                                   `
+           ${(seal.id.ua || '').slice(0, 100)}`);
+  else if (seal) console.log(`  device   ${seal.why}`);
+  else if (m.dev && !m.dev.sealed) console.log(`  device   withheld — ${m.dev.withheld || 'not sealed'}`);
+  else if (m.ua) console.log(`           ${m.ua.slice(0, 100)}`);
   if (ms.render) {
     const raw = (m.tiles || 0) * (m.tile || 0) ** 2 * 4;
     console.log(`  render   ${secs(ms.render)}${ms.total ? `  (total ${secs(ms.total)})` : ''}` +

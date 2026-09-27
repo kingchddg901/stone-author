@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.20';
+  const BUILD = '2026.09.26.21';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4731,6 +4731,64 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }))).toString(16);
     } catch (_) { return null; }
   };
+  // ---- the device seal ----------------------------------------------------------------------------
+  // A master records hardware CLASS in the clear — cores, memory, dpr — because the audit needs it and it
+  // identifies nobody: "8 cores, dpr 1.33125" fits both tablets here, which is exactly why a whole evening
+  // went on attributing masters to the wrong one. What is no longer in the clear is the device IDENTITY:
+  // the UA string, and on Chromium the real model. That is a fingerprint of whoever made the picture.
+  //
+  // It is sealed under SHA-256 of the SLAB'S OWN BYTES — the same string the Save button writes and the kit
+  // writes as source.json. Whoever holds the slab opens it; someone holding only the TIFF does not. The
+  // threat model is casual poking, not an adversary, and the key is deliberately almost free to rotate: one
+  // space in the JSON is a different digest and the same picture, so a slab published in a gallery never
+  // opens a master sealed under a private twin of itself. Rotation runs FORWARD only — a master already
+  // written stays under the bytes it was sealed with — which is why `kid` travels in the clear. It says
+  // which file opens this one, so a reader can answer "wrong slab" rather than fail cryptically.
+  //
+  // No crypto.subtle (any plain-http origin, so the LAN harness) means no seal: it then records the
+  // identity in the clear and says so, because silently dropping the datum is worse than writing it on a
+  // box that is already yours.
+  let uaHigh = null;                                       // UA-CH: Chromium only, secure context only
+  (async () => {
+    try {
+      const d = navigator.userAgentData;
+      if (d && d.getHighEntropyValues) uaHigh = await d.getHighEntropyValues(['model', 'architecture', 'bitness', 'platformVersion']);
+    } catch (_) { uaHigh = null; }
+  })();
+  const DEV_INFO = 'stone-author/device/v1';
+  const b64 = u8 => { let s = ''; for (const b of u8) s += String.fromCharCode(b); return btoa(s); };
+  let devSeal = null;
+  async function sealDevice() {
+    // FAIL CLOSED. If the identity cannot be sealed it is not written — withheld, and the master says so.
+    // The structure is what enforces that rather than care: `devSeal` is set to the withheld block FIRST,
+    // and the identity is not even assembled until inside the try, so no path exists that can emit it in
+    // the clear. An earlier cut of this fell back to writing it plainly on a non-secure origin, reasoning
+    // that the LAN harness is his own box. That is fail-open: the reasoning has to hold for every origin
+    // the page can be served from, and it does not.
+    devSeal = { v: 1, sealed: false, withheld: 'no crypto.subtle on this origin' };
+    const sub = typeof crypto !== 'undefined' && crypto.subtle;
+    if (!sub) return;
+    devSeal = { v: 1, sealed: false, withheld: 'sealing failed' };
+    try {
+      const id = {
+        ua: navigator.userAgent,
+        model: (uaHigh && uaHigh.model) || null,
+        platformVersion: (uaHigh && uaHigh.platformVersion) || null,
+      };
+      const te = new TextEncoder();
+      const slab = new Uint8Array(await sub.digest('SHA-256', te.encode(JSON.stringify(serialize()))));
+      // kid is the first four bytes of the SLAB digest. The key is a SECOND digest, over a domain string,
+      // so publishing kid hands out no part of the key it is a label for.
+      const kid = Array.from(slab.slice(0, 4), b => b.toString(16).padStart(2, '0')).join('');
+      const dom = te.encode(DEV_INFO), seed = new Uint8Array(dom.length + slab.length);
+      seed.set(dom); seed.set(slab, dom.length);
+      const raw = new Uint8Array(await sub.digest('SHA-256', seed));
+      const key = await sub.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt']);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = new Uint8Array(await sub.encrypt({ name: 'AES-GCM', iv }, key, te.encode(JSON.stringify(id))));
+      devSeal = { v: 1, sealed: true, kid, iv: b64(iv), ct: b64(ct) };
+    } catch (_) { /* the withheld block set above stands: nothing identifying is written */ }
+  }
   const expMeta = o => JSON.stringify(Object.assign({
     tool: 'stone-author', at: new Date().toISOString(),
     slab: fileStem(), marks: marks.length, lines: geo.lines.length, family: fam,
@@ -4741,7 +4799,14 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // deviceMemory is what the tile plan budgets against, so without it the plan cannot be explained
     // after the fact: an A7 Lite chose 4096 tiles on Android 11 and 2048 on Android 13, and nothing in
     // the file says whether the budget shrank or the canvas probe refused the larger one.
-    ua: navigator.userAgent, mem: navigator.deviceMemory || null,
+    mem: navigator.deviceMemory || null,
+    // The identity, sealed under the slab (see sealDevice). Architecture stays in the clear: it decides
+    // whether two machines may be farmed together, and "arm/64" names nobody — while the UA's own
+    // platform token lies about it, since desktop-site mode reports X11 x86_64 from an Android phone.
+    dev: devSeal, arch: uaHigh && uaHigh.architecture ? uaHigh.architecture + '/' + (uaHigh.bitness || '?') : null,
+    // The engine family stays in the clear because it is already in the file's own NAME, so sealing it
+    // would hide nothing while breaking every reader that groups masters by engine.
+    engine: engineTag(),
     state: stateSig(), inputs: renderSig(), G: Object.assign({}, G),
   }, o));
   function zipStore(files) {
@@ -5112,7 +5177,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     download(fn, blob);
   }
   async function exportAll(W, only) {
-    if (exporting) return; exporting = true; wakeOn();
+    if (exporting) return; exporting = true; wakeOn(); await sealDevice();
     // The MENUS go dead too, not just the button. Leaving them live means you can pick a different width
     // or scope mid-export, watch nothing happen, and reasonably conclude the app ignored you.
     const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
@@ -5665,7 +5730,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
              tileMB: Math.round((ts + 2 * bleed) ** 2 * 4 / 1e6) };
   }
   async function exportTiff(W) {
-    if (exporting) return; exporting = true; wakeOn();
+    if (exporting) return; exporting = true; wakeOn(); await sealDevice();
     const btn = document.getElementById('export'), selW = document.getElementById('expres');
     const selF = document.getElementById('expfmt');
     btn.disabled = selW.disabled = selF.disabled = true;
@@ -5765,7 +5830,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Render-only, streamed in bands. Shares the progress line, the clock and the failure handling with
   // the ordinary export; what differs is that nothing the size of the picture is ever allocated.
   async function exportStreamed(W) {
-    if (exporting) return; exporting = true; wakeOn();
+    if (exporting) return; exporting = true; wakeOn(); await sealDevice();
     const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
     btn.disabled = selW.disabled = true;
     expReset();
