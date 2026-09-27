@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.36';
+  const BUILD = '2026.09.26.37';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6017,6 +6017,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // The remembered plan, verified rather than re-raced. This is what makes two renders of the same
       // thing on the same machine produce the same picture.
       if (proven && proven <= ts) {
+        expStat(TR('exp.preparing') + "  " + proven, null); await breathe();
         const t0 = performance.now();
         const cal = calibrate(W, FH, proven, bleed, ref, refCx);
         trail.push(proven + ':remembered, ' + (cal.ok
@@ -6029,6 +6030,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (; ts > Math.max(256, bleed); ts = Math.floor(ts / 2)) {
         const ew = ts + 2 * bleed, need = ew * ew * 4 * surfaces + TIFF_STORE_MAX * TIFF_STORE_MAX * 4;
         if (ew * ew * 4 > CANVAS_HARD_MAX) { trail.push(ts + '/' + ew + ':over 900MB, not attempted'); continue; }
+        // SAY WHICH ONE. The old planner was arithmetic and answered instantly; this one paints a real
+        // tile per candidate, which on a tablet at 65535 is minutes of "Preparing…" with nothing moving.
+        // The size is data, not prose, so it needs no pack entry — same argument as the plan trail.
+        expStat(TR('exp.preparing') + '  ' + ts, null);
+        await breathe();                                   // let the line paint before the tile blocks
         const t0 = performance.now();
         const cal = calibrate(W, FH, ts, bleed, ref, refCx);
         const ms = Math.round(performance.now() - t0);
