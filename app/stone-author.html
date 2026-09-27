@@ -1095,7 +1095,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.26.32';
+  const BUILD = '2026.09.26.33';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1137,6 +1137,19 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // BLACK LIGHT: a parallel override store (the UV palette). uvMode flips the render + editor to it; non-fluorescent
   // stuff falls to UV_DARK (invisible on the black ground), UV-coloured artifacts glow (bloom). The palette saves with the slab.
   let uvMode = false, lightSpectrum = 0, spotOn = false; const OVR_uv = {}, UV_DARK = '#0a0a0e', SPX_TOL = 0.12;
+  // THE GROUND IS NOT BLOOMED, IT IS ADDED. Blurring a constant returns the constant, so the old ground
+  // reached the picture twice: once as itself and once through the two bloom passes, 1 + 0.55 + 0.35.
+  // That doubling was 36% of the light and every bit of it was recovered by smearing a flat colour
+  // across ninety-five megapixels — and, worse, it FAILED AT TILE EDGES, where the blur samples
+  // transparency and under-adds it. The lattice was that constant going missing at the joins.
+  // So the ground goes black, the bloom carries only real emission, and the ground arrives at full
+  // strength as a flat term afterwards: exact everywhere, including one pixel from a tile boundary.
+  const UV_GROUND = '#000000';
+  const UV_LIFT = (() => {                       // UV_DARK x (1 + 0.55 + 0.35), the two bloom alphas
+    const n = parseInt(UV_DARK.slice(1), 16), k = 1.9;
+    const c = v => Math.min(255, Math.round(v * k));
+    return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
+  })();
   // SPECTRUM: the light sits at a scalar value (lightSpectrum; 0 = daylight, e.g. −1 = UV). Each OVR_uv entry is
   // {v, c} — the artifact lights with colour c when the light's value is within SPX_TOL of its activation value
   // v. With the SPOTLIGHT on it must also fall inside the beam (spotR around G.lightX,lightY). uvMode = a light is on.
@@ -2837,7 +2850,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'lighter';
       tx.globalAlpha = 0.55; blurDraw(tx, tcv, 3 * bs, w, h);
       tx.globalAlpha = 0.35; blurDraw(tx, tcv, 8 * bs, w, h);
-      tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
+      tx.globalAlpha = 1; tx.fillStyle = UV_LIFT; tx.fillRect(0, 0, w, h);   // the ground, exact at every edge
+      tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.restore();
     }
     if (!f.ident && !f.uvMode && !f.backlit && G.subsurface > 0) {   // SUBSURFACE: feature high-pass, warmed, added back as internal glow
       const ss = G.subsurface;
@@ -2962,7 +2976,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const ox = oc.getContext('2d'), prevG = g2d, bs = W / COAT_REF, backlit = !layTiles && G.backlight > 0;
     ox.setTransform(1, 0, 0, 1, 0, 0); ox.globalAlpha = 1;
     if (backlit) { ox.fillStyle = '#0b0b0e'; ox.fillRect(0, 0, oc.width, oc.height); }
-    else if (uvMode) { ox.fillStyle = UV_DARK; ox.fillRect(0, 0, oc.width, oc.height); }
+    else if (uvMode) { ox.fillStyle = UV_GROUND; ox.fillRect(0, 0, oc.width, oc.height); }
     else { ox.fillStyle = STONE_BG; ox.fillRect(0, 0, oc.width, oc.height); if (layVis('base')) { ox.globalAlpha = layOp('base'); ox.fillStyle = COL.ground; ox.fillRect(0, 0, oc.width, oc.height); ox.globalAlpha = 1; } }
     ox.setTransform(W, 0, 0, W, 0, 0); ox.lineCap = 'round'; ox.lineJoin = 'round'; g2d = ox;
     if (backlit) paintBacklit(oc, bs); else paintStoneContent(false, false);
@@ -2982,7 +2996,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const cx = c.getContext('2d'), svG = g2d, svS = lightSpectrum, svU = uvMode;
     lightSpectrum = spec; uvMode = spec !== 0;
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;
-    if (uvMode) { cx.fillStyle = UV_DARK; cx.fillRect(0, 0, w, h); }
+    if (uvMode) { cx.fillStyle = UV_GROUND; cx.fillRect(0, 0, w, h); }
     else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, w, h); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, w, h); cx.globalAlpha = 1; } }
     cx.setTransform(tf[0], tf[1], tf[2], tf[3], tf[4], tf[5]); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
     paintStoneContent(false, false);
@@ -3056,7 +3070,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = bleedPx != null ? bleedPx : coatReach(bs);
     const fc = document.createElement('canvas'); fc.width = finalW; fc.height = finalH;
     const fx = fc.getContext('2d'), prevG = g2d;
-    const baseFill = cx2 => { cx2.setTransform(1, 0, 0, 1, 0, 0); if (uvMode) { cx2.fillStyle = UV_DARK; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else { cx2.fillStyle = STONE_BG; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); if (layVis('base')) { cx2.globalAlpha = layOp('base'); cx2.fillStyle = COL.ground; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); cx2.globalAlpha = 1; } } };
+    const baseFill = cx2 => { cx2.setTransform(1, 0, 0, 1, 0, 0); if (uvMode) { cx2.fillStyle = UV_GROUND; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else { cx2.fillStyle = STONE_BG; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); if (layVis('base')) { cx2.globalAlpha = layOp('base'); cx2.fillStyle = COL.ground; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); cx2.globalAlpha = 1; } } };
     baseFill(fx);                                          // fill the assembly canvas so any sub-pixel gaps read as base, not transparent
     const tc = document.createElement('canvas'), tcx = tc.getContext('2d');
     const jobs = [];
@@ -3130,7 +3144,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const c = document.createElement('canvas'); c.width = finalW; c.height = eh;
     const cx = c.getContext('2d');
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;
-    if (uvMode) { cx.fillStyle = UV_DARK; cx.fillRect(0, 0, finalW, eh); }
+    if (uvMode) { cx.fillStyle = UV_GROUND; cx.fillRect(0, 0, finalW, eh); }
     else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, finalW, eh); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, finalW, eh); cx.globalAlpha = 1; } }
     const tile = { ox: 0, oy: ey0, fw: finalW, fh: finalH };
     cx.setTransform(finalW, 0, 0, finalW, 0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
@@ -3152,7 +3166,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (c.width !== ew || c.height !== eh) throw new Error('tile canvas clamped to ' + c.width + 'x' + c.height);
     const cx = c.getContext('2d');
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;
-    if (uvMode) { cx.fillStyle = UV_DARK; cx.fillRect(0, 0, ew, eh); }
+    if (uvMode) { cx.fillStyle = UV_GROUND; cx.fillRect(0, 0, ew, eh); }
     else {
       cx.fillStyle = STONE_BG; cx.fillRect(0, 0, ew, eh);
       if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, ew, eh); cx.globalAlpha = 1; }
@@ -3276,7 +3290,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
     if (ident) { ctx.fillStyle = '#0c0d11'; ctx.fillRect(0, 0, cv.width, cv.height); }
     else if (backlit) { ctx.fillStyle = '#0b0b0e'; ctx.fillRect(0, 0, cv.width, cv.height); }   // dark surround behind the transilluminated slab
-    else if (uvMode) { ctx.fillStyle = UV_DARK; ctx.fillRect(0, 0, cv.width, cv.height); }   // BLACK LIGHT: the stone body goes dark, only fluorescence glows
+    else if (uvMode) { ctx.fillStyle = UV_GROUND; ctx.fillRect(0, 0, cv.width, cv.height); }   // BLACK LIGHT: the stone body goes dark, only fluorescence glows
     else {                                               // base layer is the ground: neutral behind it, ground on top at its opacity
       ctx.fillStyle = STONE_BG; ctx.fillRect(0, 0, cv.width, cv.height);
       if (layVis('base')) { ctx.globalAlpha = layOp('base'); ctx.fillStyle = COL.ground; ctx.fillRect(0, 0, cv.width, cv.height); ctx.globalAlpha = 1; }
