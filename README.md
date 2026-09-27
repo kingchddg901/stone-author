@@ -176,6 +176,11 @@ slab's own bytes, so whoever holds the slab can read it and whoever holds only t
 | Galaxy Tab A7 Lite, 3 GB | Chrome | 29.4 min | — |
 | Galaxy Tab A (2019), 2 GB | Chrome | 104.1 min | 46.8 min |
 
+These times were measured on 2026-09-26, before the bleed was sized to the blur's reach and before
+reality windows were composited per tile, so the planner now chooses smaller render passes than it did
+for these runs and the figures will move when the set is re-rendered. The black-light masters behind
+them were also missing their island. Times, not light: each master was audited for dead tiles.
+
 **A phone beats the workstation**, and a **2019 budget tablet — 2 GB of RAM, four in-order Cortex-A53
 cores — produces a verified 2.68-gigapixel master**, because it never holds more than one render tile.
 The picture is 10.7 GB of raw pixels; a tile is 128 MB where the planner chooses 4096 and 381 MB where it

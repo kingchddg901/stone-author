@@ -13,7 +13,11 @@ seam at every device boundary. That needs two things the earlier work did not co
 join** rather than merely present in the bytes.
 
 Measured 26 September 2026 on one slab (`Hero_Psyker`, 666 marks) at 65535 × 40959 into 160 stored tiles
-of 4096. Every master was audited tile by tile before being compared: all tiles inflate to full size and
+of 4096. Those masters were made **before** the bleed was sized to the blur's reach and before
+reality windows were composited per tile, so every figure on this page describes renders whose bloom was
+truncated at each tile join and whose islands were missing. The CONCLUSIONS are about how two engines
+differ from each other, which both masters in a pair shared, so they are expected to hold — but the
+numbers need re-measuring on the new set before they are quoted as current. Every master was audited tile by tile before being compared: all tiles inflate to full size and
 every tile contains drawn pixels.
 
 ## The result
