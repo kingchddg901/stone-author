@@ -61,6 +61,10 @@ for (const m of markup.matchAll(/data-i18n(?:-html)?="([^"]+)"/g)) asked.add(m[1
 for (const m of markup.matchAll(/data-i18n-attr="([^"]+)"/g))
   for (const pair of m[1].split(';')) { const j = pair.indexOf('='); if (j > 0) asked.add(pair.slice(j + 1).trim()); }
 for (const m of js.matchAll(/(?<![\w.])TR\('([^']+)'/g)) asked.add(m[1]);
+// AND THE SAME WITH DOUBLE QUOTES. The scanner above matched single-quoted calls only, so TR("a.key")
+// was invisible to it - the key could be missing from every pack and this gate would pass while the UI
+// rendered the raw key name. Found by writing two such calls on 2026-09-28 and being told i18n was OK.
+for (const m of js.matchAll(/(?<![\w.])TR\("([^"]+)"/g)) asked.add(m[1]);
 // A key built by concatenation — TR('cal.phase.' + ph) — reaches here as its literal prefix. That is not
 // a missing key, but it is not nothing either: the prefix must have at least one entry, or every lookup
 // through it renders the key name. Check the family instead of the literal.

@@ -1127,6 +1127,12 @@
  "a11y.tile-size": {
   "where": "tile probe control in the Render section"
  },
+ "ui.tile-shortlist": {
+  "where": "tile probe readout in the Render section"
+ },
+ "ui.tile-none": {
+  "where": "tile probe readout in the Render section"
+ },
  "ui.tile-proven": {
   "where": "tile probe control in the Render section"
  },

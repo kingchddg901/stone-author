@@ -259,6 +259,8 @@
  "btn.tileprobe": "Sonda",
  "a11y.tile-size": "Dimensione tile",
  "ui.tile-proven": "superate:",
+ "ui.tile-shortlist": "il pianificatore considererebbe:",
+ "ui.tile-none": "nessuna",
  "ui.tile-probing": "sondaggio...",
  "ui.tile-probe-note": "Tile: il pianificatore mette in gara le dimensioni candidate e ne sceglie una. Sonda misura quali dimensioni questo dispositivo riesce davvero a disegnare alla larghezza scelta — alloca ciascuna, marca l’angolo più lontano e lo rilegge, ed è così che si scopre una canvas che smette silenziosamente di disegnare. Vengono offerte solo le dimensioni superate.",
  "a11y.render": "Render",
