@@ -508,6 +508,8 @@ window.SA_I18N = (() => {
   "btn.granite-reseed": "Reseed",
   "btn.guides": "Guides",
   "btn.laytiles": "Lay tiles",
+  "btn.hide-colour-editor": "Hide colour editor",
+  "btn.show-colour-editor": "Show colour editor",
   "btn.load": "Load",
   "btn.pen-pressure": "Pressure",
   "btn.pen-tilt": "Tilt",
@@ -1124,7 +1126,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.28.4';
+  const BUILD = '2026.09.28.5';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1152,10 +1154,25 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // values). Values live in the stone SOURCE and are seeded from a family's palette, but do NOT follow a
   // family switch - colour is decoupled, as designed; a "From family" button re-adopts a palette on demand.
   const rgbHex = (r, g, b) => '#' + [r, g, b].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join('');
+  // LAYER NAMES ARE PRESENTATION; THE SLAB CARRIES THE ENGLISH ONE. `label` is written into the slab and
+  // the slab is hashed into `inputs`, so a translated label would make the picture signature depend on
+  // the UI language and a master set rendered in two languages would not compare. `label` therefore
+  // stays exactly as it was - resolved once, in English, because the pack has not loaded yet - and this
+  // map is what the SCREEN reads. Nothing here reaches a file.
+  const LAY_KEY = {
+    base: 'lay.base-ground', ground: 'lay.base-ground', breccia: 'lay.breccia-clasts',
+    clouds: 'lay.clouds-mottling', bands: 'lay.banding', fog: 'lay.fog-resin-core',
+    web: 'lay.fracture-web', micro: 'lay.micro-specks', drusy: 'lay.drusy-sparkle',
+    styl: 'lay.stylolites', minor: 'lay.minor-veins', major: 'lay.major-veins',
+    halo: 'lay.vein-halo',
+  };
+  // A user who renames a layer owns that name, so a stored label that differs from the built-in English
+  // is theirs and is shown untouched. Only an untouched built-in resolves through the pack.
+  const layName = L => (L && L.labelKey && TR(L.labelKey)) || (L && L.label) || (L && L.key) || '';
   const COLOUR_TOKENS = [
-    { key: 'ground', label: TR('lay.base-ground') }, { key: 'major', label: TR('lay.major-veins') }, { key: 'minor', label: TR('lay.minor-veins') },
-    { key: 'web', label: TR('lay.fracture-web') }, { key: 'micro', label: TR('lay.micro-specks') }, { key: 'styl', label: TR('lay.stylolite-seam') },
-    { key: 'drusy', label: TR('lay.drusy-sparkle') }, { key: 'halo', label: TR('lay.vein-halo') },
+    { key: 'ground', labelKey: 'lay.base-ground', label: TR('lay.base-ground') }, { key: 'major', label: TR('lay.major-veins') }, { key: 'minor', label: TR('lay.minor-veins') },
+    { key: 'web', labelKey: 'lay.fracture-web', label: TR('lay.fracture-web') }, { key: 'micro', label: TR('lay.micro-specks') }, { key: 'styl', label: TR('lay.stylolite-seam') },
+    { key: 'drusy', labelKey: 'lay.drusy-sparkle', label: TR('lay.drusy-sparkle') }, { key: 'halo', label: TR('lay.vein-halo') },
   ];
   // COL = RESOLVED values the renderer paints from. OVR = the overrides the editor edits and we
   // persist. perItem = id -> layer bucket, for per-id (per-item) colour tokens that inherit their
@@ -1286,11 +1303,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // adds web and the ids/t-maps). Order is paint order, back to front. A rendered element's layer:
   //   ground fill -> base | web crack -> web | speck -> micro | vein line -> L.major ? major : minor
   const LAYERS = [
-    { key: 'base', label: TR('lay.base-ground') },
-    { key: 'web', label: TR('lay.fracture-web') },
-    { key: 'micro', label: TR('lay.micro-specks') },
-    { key: 'minor', label: TR('lay.minor-veins') },
-    { key: 'major', label: TR('lay.major-veins') },
+    { key: 'base', labelKey: 'lay.base-ground', label: TR('lay.base-ground') },
+    { key: 'web', labelKey: 'lay.fracture-web', label: TR('lay.fracture-web') },
+    { key: 'micro', labelKey: 'lay.micro-specks', label: TR('lay.micro-specks') },
+    { key: 'minor', labelKey: 'lay.minor-veins', label: TR('lay.minor-veins') },
+    { key: 'major', labelKey: 'lay.major-veins', label: TR('lay.major-veins') },
   ];
   // LIVE layer controls (preview art-direction over the canonical set). Each render layer flattens into
   // a consumer BUCKET (what VA/dashboard export by key); today it is 1:1, but this shape lets step 3 add
@@ -1301,17 +1318,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // flattens into on export; today mostly 1:1, but step 3 adds primitives as new render layers sharing a
   // bucket (clouds -> base). Consumers ALWAYS read by bucket, so visibility/opacity here are preview-only.
   const layers = [
-    { key: 'base',   label: TR('lay.base-ground'),    bucket: 'base',  on: true, op: 1, warp: 1 },
-    { key: 'breccia', label: TR('lay.breccia-clasts'),  bucket: 'base',  on: true, op: 1, warp: 1 },
-    { key: 'clouds', label: TR('lay.clouds-mottling'), bucket: 'base', on: true, op: 1, warp: 1 },
-    { key: 'bands',  label: TR('lay.banding'),          bucket: 'base',  on: true, op: 1, warp: 1 },
-    { key: 'fog',    label: TR('lay.fog-resin-core'), bucket: 'base',  on: true, op: 1, warp: 1, field: 'fog', haze: 0, size: 1, density: 1, seed: 770511 },
-    { key: 'web',    label: TR('lay.fracture-web'),     bucket: 'web',   on: true, op: 1, warp: 1 },
-    { key: 'micro',  label: TR('lay.micro-specks'),   bucket: 'micro', on: true, op: 1, warp: 1, field: 'specks', density: 1, size: 1, seed: 7070 },
-    { key: 'drusy',  label: TR('lay.drusy-sparkle'),    bucket: 'micro', on: true, op: 1, warp: 1 },
-    { key: 'styl',   label: TR('lay.stylolites'),       bucket: 'minor', on: true, op: 1, warp: 1 },
-    { key: 'minor',  label: TR('lay.minor-veins'),      bucket: 'minor', on: true, op: 1, warp: 1 },
-    { key: 'major',  label: TR('lay.major-veins'),      bucket: 'major', on: true, op: 1, warp: 1 },
+    { key: 'base',   labelKey: 'lay.base-ground', label: TR('lay.base-ground'),    bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'breccia', labelKey: 'lay.breccia-clasts', label: TR('lay.breccia-clasts'),  bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'clouds', labelKey: 'lay.clouds-mottling', label: TR('lay.clouds-mottling'), bucket: 'base', on: true, op: 1, warp: 1 },
+    { key: 'bands',  labelKey: 'lay.banding', label: TR('lay.banding'),          bucket: 'base',  on: true, op: 1, warp: 1 },
+    { key: 'fog',    labelKey: 'lay.fog-resin-core', label: TR('lay.fog-resin-core'), bucket: 'base',  on: true, op: 1, warp: 1, field: 'fog', haze: 0, size: 1, density: 1, seed: 770511 },
+    { key: 'web',    labelKey: 'lay.fracture-web', label: TR('lay.fracture-web'),     bucket: 'web',   on: true, op: 1, warp: 1 },
+    { key: 'micro',  labelKey: 'lay.micro-specks', label: TR('lay.micro-specks'),   bucket: 'micro', on: true, op: 1, warp: 1, field: 'specks', density: 1, size: 1, seed: 7070 },
+    { key: 'drusy',  labelKey: 'lay.drusy-sparkle', label: TR('lay.drusy-sparkle'),    bucket: 'micro', on: true, op: 1, warp: 1 },
+    { key: 'styl',   labelKey: 'lay.stylolites', label: TR('lay.stylolites'),       bucket: 'minor', on: true, op: 1, warp: 1 },
+    { key: 'minor',  labelKey: 'lay.minor-veins', label: TR('lay.minor-veins'),      bucket: 'minor', on: true, op: 1, warp: 1 },
+    { key: 'major',  labelKey: 'lay.major-veins', label: TR('lay.major-veins'),      bucket: 'major', on: true, op: 1, warp: 1 },
   ];
   // Back-light optical declaration per layer: transmit = how much light passes where the layer covers
   // (0 opaque → 1 clear), scatter = how much it diffuses the light through it. Defaults per identity; the
@@ -3984,7 +4001,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     kit = TTK.createThemeKit({ prefix: '--stone-' });
     kit.registerTokenGroup({ id: 'colour', label: TR('lay.colour-per-layer'), tokens: COLOUR_TOKENS.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: CARRARA_COL[tk.key] })) });
     kit.registerTokenGroup({ id: 'effects', label: TR('lay.effects-per-layer'), tokens: FX_LAYERS.flatMap(k => {
-      const lbl = (COLOUR_TOKENS.find(t => t.key === k) || {}).label || k;
+      const lbl = layName(COLOUR_TOKENS.find(t => t.key === k)) || k;
       return [
         { key: k + 'Blend', label: lbl + ' — blend', type: 'select', default: 'normal', options: BLENDS.map(b => ({ value: b, label: b })) },
         { key: k + 'Glow', label: lbl + ' — glow', type: 'number', default: 0, min: 0, max: 3, step: 0.1 },
@@ -4007,7 +4024,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // bound to colour, and inherit from WHERE it lives (its bucket). Nothing is hand-authored: adding a layer
   // is authoring its colour token. Only the SELECTED layers are registered for the editor, so the token list
   // stays parseable no matter how many layers exist (values persist in OVR either way and the render reads them).
-  const layToken = L => ({ key: 'lay:' + L.key, label: L.label, type: 'color', inherit: L.bucket });
+  const layToken = L => ({ key: 'lay:' + L.key, label: layName(L), type: 'color', inherit: L.bucket });
   // The render-time adjustment set applied to ANY target (layer or artifact) by token: colour is the bare
   // key; these six are `<key>:<name>` number tokens. Five are canvas filters, weight is a line-width mult.
   const ADJ = [
@@ -4100,10 +4117,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
             : '<span class="mv-sp"></span>')                  // base body + the 3 ground setters can't be reordered
         + '<button type="button" class="sel" data-act="sel" aria-pressed="' + selected.has('lay:' + L.key) + '" title="' + TR('tip.select-effects-and-the-force-tools') + '"></button>'
         + '<button type="button" class="eye" data-act="eye" aria-pressed="' + L.on + '" title="' + TR('tip.show-or-hide') + '"></button>'
-        + '<span class="nm" data-act="active" title="' + TR('tip.tap-make-active-double-tap-rename') + '"><span class="tag">' + tagOf[L.key] + '</span>' + L.label + '</span>'
+        + '<span class="nm" data-act="active" title="' + TR('tip.tap-make-active-double-tap-rename') + '"><span class="tag">' + tagOf[L.key] + '</span>' + layName(L) + '</span>'
         + '<button type="button" class="solo" data-act="solo" aria-pressed="' + (soloLay === L.key) + '" title="' + TR('tip.solo-this-layer') + '">S</button>'
         + '<button type="button" class="warp" data-act="warp" aria-pressed="' + (L.warp > 0) + '" title="' + TR('tip.w-lit-this-layer-follows-warp') + '">W</button>'
-        + '<input type="range" min="0" max="1" step="0.01" value="' + L.op + '" data-act="op" aria-label="' + L.label + ' opacity">'
+        + '<input type="range" min="0" max="1" step="0.01" value="' + L.op + '" data-act="op" aria-label="' + layName(L) + ' opacity">'
         + '<output>' + Math.round(L.op * 100) + '</output>'
         + (L.key.includes('#')
             ? '<button type="button" class="del" data-act="del" title="Delete this layer — and everything drawn into it">×</button>'
@@ -4116,9 +4133,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       row.querySelector('[data-act=active]').addEventListener('click', () => setActiveLayer(L.key));
       row.querySelector('[data-act=active]').addEventListener('dblclick', () => {           // double-tap the name to rename (edits the label; the key/tag are untouched)
         const cell = row.querySelector('[data-act=active]');
-        const inp = document.createElement('input'); inp.type = 'text'; inp.value = L.label; inp.className = 'nm-edit';
+        const inp = document.createElement('input'); inp.type = 'text'; inp.value = layName(L); inp.className = 'nm-edit';
         cell.replaceWith(inp); inp.focus(); inp.select();
-        const done = () => { const v = inp.value.trim(); if (v) L.label = v; buildLayerUI(); saveLocal(); };
+        // Renaming makes the layer THEIRS: the built-in key stops applying, so the name they typed is
+        // shown in every language rather than being overwritten by a translation of what it used to be.
+        const done = () => { const v = inp.value.trim(); if (v) { L.label = v; delete L.labelKey; } buildLayerUI(); saveLocal(); };
         inp.addEventListener('blur', done);
         inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); else if (e.key === 'Escape') buildLayerUI(); });
       });
@@ -4128,10 +4147,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const db = row.querySelector('[data-act=del]');
       if (db) db.addEventListener('click', () => {             // empty layer deletes at once; a non-empty one arms, and the second tap deletes (no bulk undo)
         const n = marks.filter(m => m.layer === L.key).length;
-        if (!n) { deleteLayer(L.key); hint(TR('hint.deleted-layer', { name: L.label })); return; }
+        if (!n) { deleteLayer(L.key); hint(TR('hint.deleted-layer', { name: layName(L) })); return; }
         if (db.dataset.armed) { clearTimeout(+db.dataset.t); const r = deleteLayer(L.key); hint(TR('hint.deleted-layer-marks', { name: L.label, n: r })); return; }
         db.dataset.armed = '1'; db.classList.add('arm'); db.title = TR('tip.tap-again-to-delete-no-undo');
-        hint(TR('hint.confirm-delete-layer', { name: L.label, n: n }));
+        hint(TR('hint.confirm-delete-layer', { name: layName(L), n: n }));
         db.dataset.t = setTimeout(() => { db.dataset.armed = ''; db.classList.remove('arm'); db.title = TR('tip.delete-this-layer-and-everything-drawn'); }, 3500);
       });
       layEl.appendChild(row);
@@ -5628,7 +5647,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-mwin]')) b.addEventListener('click', () => { NEXT.maskWin = +b.dataset.mwin; press('[data-mwin]', b); hint(NEXT.maskWin ? TR('hint.show-through-on-the-next-island') : TR('hint.show-through-off-the-next-island')); });
   for (const b of document.querySelectorAll('[data-minv]')) b.addEventListener('click', () => { NEXT.maskInvert = +b.dataset.minv; press('[data-minv]', b); redraw(false); hint(NEXT.maskInvert ? TR('hint.window-into-chaos-the-next-island') : TR('hint.protects-the-next-island-freezes-the')); });
   for (const b of document.querySelectorAll('[data-lens]')) b.addEventListener('click', () => { G.lensType = b.dataset.lens; press('[data-lens]', b); redraw(true); });   // lens profile — whole slab, at once
-  document.getElementById('colour-toggle').addEventListener('click', () => { const p = document.getElementById('colour-panel'), b = document.getElementById('colour-toggle'), show = p.hidden; p.hidden = !show; b.setAttribute('aria-pressed', show); b.textContent = show ? 'Hide colour editor' : 'Show colour editor'; });
+  document.getElementById('colour-toggle').addEventListener('click', () => { const p = document.getElementById('colour-panel'), b = document.getElementById('colour-toggle'), show = p.hidden; p.hidden = !show; b.setAttribute('aria-pressed', show); b.textContent = TR(show ? 'btn.hide-colour-editor' : 'btn.show-colour-editor'); });
   document.getElementById('colour-fromfam').addEventListener('click', () => { seedColours(fam); recolour(); mountEditor(); redraw(true); });   // adopt the current family's palette
   document.getElementById('warp-holdmajor').addEventListener('click', () => { const L = layAt('major'); L.warp = L.warp === 0 ? 1 : 0; document.getElementById('warp-holdmajor').setAttribute('aria-pressed', L.warp === 0); redraw(true); });
   const mh = document.getElementById('m-hover');

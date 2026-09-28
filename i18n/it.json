@@ -49,6 +49,8 @@
  "btn.granite-reseed": "Rigenera",
  "btn.guides": "Guide",
  "btn.laytiles": "Posa le piastrelle",
+ "btn.hide-colour-editor": "Nascondi l’editor dei colori",
+ "btn.show-colour-editor": "Mostra l’editor dei colori",
  "btn.load": "Carica",
  "btn.pen-pressure": "Pressione",
  "btn.pen-tilt": "Inclinazione",

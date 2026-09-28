@@ -205,6 +205,12 @@
  "btn.laytiles": {
   "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
+ "btn.hide-colour-editor": {
+  "where": "text on the colour editor toggle when the editor is open"
+ },
+ "btn.show-colour-editor": {
+  "where": "text on the colour editor toggle when the editor is closed"
+ },
  "btn.load": {
   "where": "in the \"File\" group/panel, under the \"file\" section"
  },
