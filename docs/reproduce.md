@@ -40,6 +40,9 @@ inputs   a98ab1f5          black light  (spectrum -1)
 inputs   2259e26a          daylight     (spectrum 0)
 ```
 
+A crossfade master carries `cross: {a, b, t}` and hashes a six-member light; without it the tuple is the
+original three, so every figure below is unaffected by the feature existing.
+
 `inputs` is a signature over the picture **and** the light. If yours differs, something upstream is
 different and the light figures below are not comparable — check step 3 before anything else.
 

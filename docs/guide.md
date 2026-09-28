@@ -106,6 +106,11 @@ veins continuous tile to tile; *Shuffled* cuts each tile at a random point.
 
 - **Spectrum.** `0` is daylight. Sweep it and only the artifacts whose emission you authored near that
   value light up. **Black light is −1.**
+- **Crossfade** blends between two stops you pick and ignores everything between them. With stops at
+  −1, 0 and +1, *sweeping* from −1 to +1 passes through 0 and picks up its colour; a *crossfade* from
+  −1 to +1 asks each artifact how it looks at each end and mixes those two answers, so 0 is never
+  consulted. Something authored at only one of the two ends fades to the dark rather than vanishing.
+  The stops offered are the ones you actually authored, named after a folder where one claims the value.
 - **Spotlight** turns the light into a beam — drag it with the Light tool.
 - **Back light** lights from behind. Each bucket occludes by its own transmittance — veins nearly opaque,
   specks semi, the matrix glowing — folded deepest to top. Tint it with Light temperature.
@@ -176,6 +181,12 @@ your view, or your export settings.
 
 **Big renders are slow on small devices, and that is fine.** A 2019 tablet with 2 GB produces a 65,535 px
 master in about half an hour. Leave it alone and let it run; it does not need watching.
+
+**A long crossfade dims in the middle.** The blend is a straight line through RGB, so two distant
+colours meet at half intensity: red to blue peaks at 128 per channel where each end peaks at 255. Between
+neighbouring colours you will never notice. Across the whole spectrum the emission visibly sags and comes
+back up. This is how stops have always blended into each other; the crossfade is just the first thing that
+gave it room to show.
 
 **Nothing leaves your machine.** The render happens in your browser and the file is written by your
 browser. There is no server.
