@@ -262,7 +262,7 @@
  "ui.tile-shortlist": "entro il budget di memoria:",
  "ui.tile-none": "nessuna",
  "ui.tile-probing": "sondaggio...",
- "ui.tile-probe-note": "Tile: il pianificatore mette in gara le dimensioni candidate e ne sceglie una. Sonda misura quali dimensioni questo dispositivo riesce davvero a disegnare alla larghezza scelta — alloca ciascuna, marca l’angolo più lontano e lo rilegge, ed è così che si scopre una canvas che smette silenziosamente di disegnare. Vengono offerte solo le dimensioni superate.",
+ "ui.tile-probe-note": "Tile: il pianificatore mette in gara le dimensioni candidate e ne sceglie una. Sonda misura quali dimensioni questo dispositivo riesce davvero a disegnare alla larghezza scelta — alloca ciascuna, marca l’angolo più lontano e lo rilegge, ed è così che si scopre una canvas che smette silenziosamente di disegnare. Vengono offerte solo le dimensioni superate. Su un dispositivo con poca memoria conviene spesso scegliere una dimensione INFERIORE a quella su cui si assesta il pianificatore: un tile grande può perdere luce alle giunzioni in un modo che un singolo tile di calibrazione non può mostrare, e sull’hardware più lento qui il tile più piccolo era anche il più veloce. Un suggerimento, non una regola — su una macchina capace costa velocità per nulla.",
  "a11y.render": "Render",
  "sl.glowlift": "Intensità alone",
  "lbl.glow-auto": "Alone",

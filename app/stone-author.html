@@ -412,7 +412,7 @@
       <label class="tgl" id="tier-extreme-row" hidden><input type="checkbox" id="tier-extreme"><span data-i18n="big.extreme">Extreme</span></label>
       <span class="stat" id="tier-note"></span>
     </div>
-    <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.tile-probe-note">Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width - it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered.</span></div>
+    <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.tile-probe-note">Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width - it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered. On a device short of memory it is often worth taking one size BELOW what the planner settles on: a large tile can lose light at the joins in a way a single calibration tile cannot show, and on the slowest hardware here the smaller tile was also the faster one. A suggestion, not a rule — it costs a capable machine speed for nothing.</span></div>
     <div class="sl"><span class="lbl" data-i18n="lbl.tile">Tile</span><div class="grp">
       <button id="tileprobe" type="button" data-i18n="btn.tileprobe">Probe</button>
       <select id="tileforce" aria-label="Tile size" data-i18n-attr="aria-label=a11y.tile-size"><option value="0" data-i18n="big.glow-auto">Auto</option></select>
@@ -715,7 +715,7 @@ window.SA_I18N = (() => {
   "ui.tile-shortlist": "within the memory budget:",
   "ui.tile-none": "none",
   "ui.tile-probing": "probing...",
-  "ui.tile-probe-note": "Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width — it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered.",
+  "ui.tile-probe-note": "Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width — it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered. On a device short of memory it is often worth taking one size BELOW what the planner settles on: a large tile can lose light at the joins in a way a single calibration tile cannot show, and on the slowest hardware here the smaller tile was also the faster one. A suggestion, not a rule — it costs a capable machine speed for nothing.",
   "a11y.render": "Render",
   "sl.glowlift": "Glow lift",
   "lbl.glow-auto": "Glow",
@@ -1124,7 +1124,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.28.3';
+  const BUILD = '2026.09.28.4';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
