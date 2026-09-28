@@ -28,7 +28,13 @@
     "hover": { "means": "in 'hover traces': letting a pen or mouse work on the slab from ABOVE, without contact — the tool still acts, at reduced strength", "notThe": "a hover state in a user interface, i.e. the mouse merely being over something", "ruling": "translate", "hint": "the physical sense of holding the tool off the surface. It is an authoring mode, not a UI state" },
     "comb": { "means": "as a verb, what the magnet does when laid over: draws specks into parallel alignment along the direction the pen leans", "notThe": "a comb for hair, as a noun", "ruling": "translate", "hint": "the verb sense of combing fibres or filings into parallel order" },
     "tilt": { "means": "how far the pen is leaned over from upright, read from the stylus. On the magnet it sets the magnet's AXIS: upright fans the specks from the pole, laid flat combs them along the lean. On a vein it softens the edge", "notThe": "tilting a screen, or a pinball tilt", "ruling": "translate" },
-    "pressure": { "means": "how hard the pen is pressed, read from the stylus. It sets a vein's width and a pour's flow; on the magnet it brings the magnet CLOSER to the slab", "notThe": "social or time pressure", "ruling": "translate", "hint": "stylus pressure, as in a graphics tablet" }
+    "pressure": { "means": "how hard the pen is pressed, read from the stylus. It sets a vein's width and a pour's flow; on the magnet it brings the magnet CLOSER to the slab", "notThe": "social or time pressure", "ruling": "translate", "hint": "stylus pressure, as in a graphics tablet" },
+    "token": {
+     "means": "one named, editable value in the theme editor - a colour, a number, a choice - which can be overridden and reset independently",
+     "notThe": "a security or access token, a transit token, or a token gesture",
+     "ruling": "keep",
+     "hint": "design-system vocabulary, kept as \"token\" in IT/FR/DE; the sense is a named setting the user can change and reset"
+    }
   },
 
   "termsOfArt": {

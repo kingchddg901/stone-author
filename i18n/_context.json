@@ -235,6 +235,18 @@
  "btn.reroll": {
   "where": "in the \"Edit\" group/panel"
  },
+ "btn.reset": {
+  "where": "small button in a group heading inside the colour and Coat & light editors - clears every value in that group back to its default",
+  "terms": [
+   "token"
+  ]
+ },
+ "btn.reset-all": {
+  "where": "button at the foot of the colour and Coat & light editors - clears every value in the editor",
+  "terms": [
+   "token"
+  ]
+ },
  "btn.save": {
   "where": "in the \"File\" group/panel, under the \"file\" section"
  },
@@ -1586,6 +1598,30 @@
  },
  "tip.select-effects-and-the-force-tools": {
   "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "tip.reset-all": {
+  "where": "tooltip on the \"Reset all to defaults\" button at the foot of the colour and Coat & light editors",
+  "terms": [
+   "token"
+  ]
+ },
+ "tip.reset-group": {
+  "where": "tooltip on the small reset button in a group heading, inside the colour and Coat & light editors. {name} is the group heading, e.g. \"Coat & light\"",
+  "placeholders": {
+   "name": "the group heading"
+  },
+  "terms": [
+   "token"
+  ]
+ },
+ "tip.reset-token": {
+  "where": "tooltip on the per-control reset arrow in the colour and Coat & light editors. {name} is that control’s own label, e.g. \"Light angle\"",
+  "placeholders": {
+   "name": "the control’s own label"
+  },
+  "terms": [
+   "token"
+  ]
  },
  "tip.selected-layers-follow-warp": {
   "terms": [

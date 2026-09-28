@@ -72,7 +72,8 @@ else if (!mountCalls.some(c => c > resetAt)) fail.push('the load path replaces G
 
 // A language change must re-register the group, or every label freezes in whatever pack loaded first.
 // `/onChange([^)]*registerCoatGroup/` could never match: [^)] stops at the ")" in "onChange(() =>".
-const onChangeLine = app.split(NEWLINE).find(L => L.indexOf('SA_I18N.onChange(') >= 0) || '';
+const ocAt = app.indexOf('SA_I18N.onChange(');
+const onChangeLine = ocAt < 0 ? '' : app.slice(ocAt, ocAt + 600);   // the handler, however it is wrapped
 if (onChangeLine.indexOf('registerCoatGroup') < 0)
   fail.push('a language change does not re-register the coat group - the labels resolve at registration and would freeze');
 
