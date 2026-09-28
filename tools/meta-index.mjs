@@ -109,6 +109,78 @@ function buildTable(rows) {
   return out.join(NL);
 }
 
+// WHAT THIS HAS BEEN PROVEN TO RUN ON. Also handed rows, never a path - the coverage claim has to be a
+// view of the published data for the same reason the table is. A hardware CLASS, never an identity:
+// the device identity is sealed, and these fields are the ones a master carries in the clear.
+// THE ONE FILE THIS TOOL DOES NOT GENERATE. devices.json in the OUTPUT folder carries what only a human
+// knows: the real models behind each hardware class, their published specs, and the conditions a run was
+// made under. A master seals its identity by design, so none of it can be derived. Regenerating must not
+// destroy it, which is why it is READ from the output folder and never written there.
+function loadDevices(dir) {
+  if (!dir) return [];
+  try { return JSON.parse(readFileSync(join(dir, 'devices.json'), 'utf8')).devices || []; }
+  catch (_) { return []; }                        // absent is normal: the tables just say (unmapped)
+}
+function deviceFor(list, r) {
+  for (const d of list) {
+    let hit = true;
+    for (const k of Object.keys(d.match || {})) if (r[k] !== d.match[k]) { hit = false; break; }
+    if (hit) return d;
+  }
+  return null;
+}
+function specSheet(known) {
+  if (!known.length) return '';
+  const seen = new Set(), out = [NL + '## The devices behind those classes' + NL];
+  out.push('From `devices.json`, maintained by hand: a master seals its identity, so none of this can be');
+  out.push('derived from the data above.' + NL);
+  for (const d of known) {
+    if (seen.has(d.name + d.model)) continue;
+    seen.add(d.name + d.model);
+    out.push('### ' + d.name + (d.model ? '  (' + d.model + ')' : ''));
+    for (const [label, k] of [['SoC', 'soc'], ['GPU', 'gpu'], ['RAM', 'ram'],
+                              ['Storage', 'storage'], ['Display', 'display'], ['OS', 'os'],
+                              ['Sender IP', 'ip'], ['Model read from the seal', 'sealed_model']])
+      if (d[k]) out.push('- **' + label + '** ' + d[k]);
+    if (d.note) out.push(NL + d.note);
+    out.push('');
+  }
+  return out.join(NL);
+}
+function buildDevices(rows, known) {
+  const by = new Map();
+  for (const r of rows) {
+    if (!r.engine) continue;
+    const k = [r.engine, r.arch || String.fromCharCode(45), r.cores, r.memoryGB === null ? String.fromCharCode(45) : r.memoryGB,
+               r.dpr === null ? String.fromCharCode(45) : Number(r.dpr).toFixed(3), r.maxTexture].join(String.fromCharCode(124));
+    if (!by.has(k)) by.set(k, { n: 0, maxW: 0, tiles: new Set(), sample: r });
+    const e = by.get(k);
+    e.n++;
+    if (r.w > e.maxW) e.maxW = r.w;
+    if (r.renderTile) e.tiles.add(r.renderTile);
+  }
+  const head = ["device", "engine", "cores", "mem GB", "dpr", "maxTexture", "masters", "largest", "render tiles"];
+  const wid = [26, 16, 6, 7, 7, 11, 8, 9, 26];
+  const out = [head.map((h, i) => (i ? padL(h, wid[i]) : padR(h, wid[i]))).join("  "),
+               wid.map(n => "-".repeat(n)).join("  ")];
+  for (const [k, e] of [...by.entries()].sort()) {
+    const f = k.split(String.fromCharCode(124));
+    const d = deviceFor(known, e.sample);
+    out.push([padR(d ? d.name : "(unmapped)", wid[0]), padL(f[0], wid[1]), padL(f[2], wid[2]), padL(f[3], wid[3]),
+              padL(f[4], wid[4]), padL(f[5], wid[5]), padL(e.n, wid[6]), padL(e.maxW, wid[7]),
+              padL([...e.tiles].sort((a, b) => a - b).join(", "), wid[8])].join("  "));
+  }
+  out.push("");
+  // CLASSES OVERCOUNT DEVICES, and a reader will take the number as machines. One tablet reports its
+  // texture limit on some runs and not on others; the desktop appears at two display scalings. Both
+  // splits are findings in themselves, so the table keeps them and the count states the difference.
+  const names = new Set();
+  for (const e of by.values()) { const d = deviceFor(known, e.sample); if (d) names.add(d.name + '|' + d.model); }
+  out.push("distinct hardware classes: " + by.size +
+    (names.size ? "   physical devices behind them: " + names.size : ""));
+  return out.join(NL);
+}
+
 const files = [];
 for (const t of targets) walk(t, files);
 const rows = [], skipped = [], blocks = new Map();
@@ -120,6 +192,7 @@ for (const f of files) {
   blocks.set(f, m);
 }
 
+const known = loadDevices(OUT);
 if (OUT) {
   mkdirSync(OUT, { recursive: true });
   const seen = new Map();
@@ -153,7 +226,10 @@ if (OUT) {
     'Extracted from each master by `findMeta` in `tools/tiff-meta.mjs`, written by' + NL +
     '`tools/meta-index.mjs`. `index.json` is the source of truth; this table is a view of it.' + NL +
     'The masters themselves are not published — render the slab yourself and compare.' + NL + NL +
-    '```' + NL + buildTable(published) + NL + '```' + NL);
+    '```' + NL + buildTable(published) + NL + '```' + NL + NL +
+    '## Proven to run on' + NL + NL +
+    'Hardware CLASS, in the clear on every master. The device identity is sealed and is not here.' + NL + NL +
+    '```' + NL + buildDevices(published, known) + NL + '```' + NL + specSheet(known));
   console.log('wrote ' + wrote + ' sidecar(s), index.json (' + published.length + ' rows) and index.md to ' + OUT);
 } else {
   console.log(buildTable(rows));
