@@ -202,6 +202,11 @@ as their own future systems that reuse this producer/consumer spine. Next up is 
 pipeline** and **layered PSD/PSB export** (one file-layer per authoring layer) — see the roadmap in
 [`docs/architecture.md`](docs/architecture.md) and [`docs/final-render.md`](docs/final-render.md).
 
+**What it runs on.** Five machines have each produced a 65,535 x 40,959 master in both lights — a 2019
+budget tablet with 2 GB through to a desktop — and four Blink devices agree to 0.41% on the same
+picture. The slowest is 19x the fastest and both land within 0.5% of one reference. Models, timings,
+throughput and what each device taught are in [`docs/devices.md`](docs/devices.md).
+
 **Check it yourself.** The app, one slab and a reader are all here, so every figure published about the
 renderer can be reproduced rather than taken on trust — load
 [`gallery/slabs/HERO-MASTER-sealkey.json`](gallery/slabs/HERO-MASTER-sealkey.json), **set `Light spectrum`
