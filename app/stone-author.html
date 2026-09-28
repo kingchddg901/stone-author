@@ -53,7 +53,16 @@
   .hint.flash { color: #f0c46a; }
   /* One rule for both panes: as many slider columns as fit, never one too narrow to aim. */
   .sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px 18px; }
-  .sl { display: grid; gap: 2px; }
+  /* A GRID TRACK SIZED TO CONTENT WILL NOT SHRINK. A range input carries an intrinsic minimum width of
+     about 170px, and width:100% does not reduce what it contributes to an auto track - so on a narrow
+     phone the track grew past its own container and the page scrolled sideways by a few pixels.
+     minmax(0, 1fr) is what lets it give way, and min-width:0 is the same fix for every flexible cell.
+     Found at 375px with the UI in Italian, where the longer strings made it obvious. */
+  .sl { display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); }
+  .sl label { min-width: 0; }
+  .sl label > span { min-width: 0; overflow-wrap: anywhere; }
+  .rail, .rail > *, .sec, .sec .body, .sliders, .sliders > * { min-width: 0; }
+  input[type=range] { min-width: 0; }
   .sl label { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; letter-spacing: .08em;
               text-transform: uppercase; color: var(--dim); }
   .sl output { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--text);
@@ -86,6 +95,9 @@
   .layers { display: grid; gap: 5px; width: 100%; }
   .lay { display: grid; grid-template-columns: 16px 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch 18px;
          align-items: center; gap: 6px; padding: 0 4px; }
+  /* On a phone the row spent its width on controls and left the NAME 52px, which wrapped a translated
+     label onto three lines. Tightening the fixed columns and the gaps gives the name about 70% more
+     room without removing anything from the row. */
   .lay .mv { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
   .lay .mv button { font: 500 9px/1 ui-monospace, Consolas, monospace; padding: 2px 3px; color: var(--dim); border: 1px solid transparent; background: none; cursor: pointer; border-radius: 3px; }
   .lay .mv button:hover:not(:disabled) { color: var(--text); border-color: var(--line); }
@@ -95,7 +107,7 @@
   .lay .del.arm { color: #e06a6a; font-weight: 700; }        /* armed: one more tap deletes the layer and its marks */
   .lay .del-sp { }                                           /* the five bucket defaults are permanent — no delete control */
   .lay.sel-on { background: rgba(138, 141, 224, 0.12); border-radius: 6px; }   /* row in the current selection */
-  .lay .nm { font-size: 13px; color: var(--text); cursor: pointer; }
+  .lay .nm { font-size: 13px; color: var(--text); cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
   .lay .tag { font: 500 10px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim); background: var(--btn);
               border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; margin-inline-end: 5px; letter-spacing: 0; }
   .nm-edit { font: inherit; font-size: 13px; width: 100%; background: var(--btn); color: var(--text); border: 1px solid var(--on-line); border-radius: 4px; padding: 1px 4px; }
@@ -1126,7 +1138,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.28.5';
+  const BUILD = '2026.09.28.6';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
