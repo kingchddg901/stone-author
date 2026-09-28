@@ -202,6 +202,13 @@ as their own future systems that reuse this producer/consumer spine. Next up is 
 pipeline** and **layered PSD/PSB export** (one file-layer per authoring layer) — see the roadmap in
 [`docs/architecture.md`](docs/architecture.md) and [`docs/final-render.md`](docs/final-render.md).
 
+**Check it yourself.** The app, one slab and a reader are all here, so every figure published about the
+renderer can be reproduced rather than taken on trust — load
+[`gallery/slabs/HERO-MASTER-sealkey.json`](gallery/slabs/HERO-MASTER-sealkey.json), **set `Light spectrum`
+to −1** (the light is not stored in the slab, and daylight is the default), render at 65535 and read the
+result with `tools/tiff-meta.mjs`. Three engines agree to within 0.3%. Steps, expected figures and the
+ways an attempt can fail for the wrong reason are in [`docs/reproduce.md`](docs/reproduce.md).
+
 **Licence.** [CC0 1.0 Universal](LICENSE) — public domain. To the extent possible under law, Chris King
 has waived all copyright and related rights to `stone-author`, including the gallery slabs and renders.
 **No attribution required** — use it, fork it, print it, sell it. The vendored `token-theme-kit` is CC0
