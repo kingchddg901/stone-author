@@ -1163,7 +1163,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.28.15';
+  const BUILD = '2026.09.28.16';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4204,6 +4204,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // keeps the elements. The kit's editor model forwards a fixed set of token members (options, min,
   // max, step, help), so a `fmt` declared on a token would be dropped on the way through - which is
   // why the formatter is closed over here instead of being declared beside the bounds.
+  // Digits, a point, a minus, a space - nothing else. "0.00" and "-1.00" are bare; "135°", "1.40×",
+  // "0%", "neutral" and "daylight" are not.
+  const bareNumber = t => t.length > 0 && [...t].every(c => (c >= '0' && c <= '9') || c === '.' || c === '-' || c === ' ');
+
   const sliderBox = (fmt, keep) => function (control, { onChange, document }) {
     const wrap = document.createElement('span');
     wrap.setAttribute('part', 'sl-wrap');
@@ -4214,16 +4218,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // The editor wraps ONE <label> around both the name and the widget, so the implicit association lands
     // on the first control and leaves the box unnamed to a screen reader. Name it.
     num.setAttribute('aria-label', control.label);
+    // THE SLIDER is what needs a number box - a number does not need a second number. So the readout
+    // is drawn only when the formatted value says something the box cannot: a unit (135 vs 135°, 1.4
+    // vs 1.40×, 0 vs 0%) or a word (neutral, warm 0.40, daylight). When the format is bare digits the
+    // box already is the readout, and two of them side by side was just noise.
     const out = document.createElement('span');
     out.setAttribute('part', 'sl-out');
-    out.textContent = fmt(control.key, control.value);
+    const show = v => { const t = fmt(control.key, v); return bareNumber(t) ? '' : t; };
+    out.textContent = show(control.value);
     const emit = (raw, from) => {
       const v = Number(raw);
       if (!Number.isFinite(v)) return;                        // "" or "-" mid-typing: hold the last good value
       const n = Math.max(control.min, Math.min(control.max, v));
       range.value = n;
       if (from !== 'num') num.value = n;                       // don't fight the caret while it is being typed into
-      out.textContent = fmt(control.key, n);
+      out.textContent = show(n);
       onChange(n);                                             // a NUMBER reaches the adapter, never a string
     };
     range.addEventListener('input', () => emit(range.value, 'range'));
@@ -4282,7 +4291,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // the editor's values, so switching language does not quietly reset the coat.
   function registerCoatGroup() {
     coatKit.registerTokenGroup({
-      id: 'coat', label: TR('sec.coat-and-light'),
+      id: 'coat', label: '',                     // the section summary above already says it
       tokens: COAT_TOKENS.map(t => ({
         key: t.key, type: 'coatNum', label: TR(t.labelKey), default: coatDefault(t.key),
         min: t.min, max: t.max, step: t.step, help: t.helpKey ? TR(t.helpKey) : undefined,
@@ -4335,12 +4344,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // light. tools/ablate-state-sig.mjs covers that: "a layer deleted with its marks" and "a layer
   // switched off" both move the hash.
   const LAYER_PANELS = [
-    { id: 'fog-panel', slot: 'fog', labelKey: 'sec.fog-and-resin', tokens: [
+    { id: 'fog-panel', slot: 'fog', tokens: [
       { key: 'haze', def: 0, min: 0, max: 0.06, step: 0.005, labelKey: 'sl.fogHaze', pct: true },
       { key: 'size', def: 1, min: 0.3, max: 2.5, step: 0.05, labelKey: 'sl.fogSize' },
       { key: 'density', def: 1, min: 0.2, max: 2.5, step: 0.05, labelKey: 'sl.fogDensity' },
     ] },
-    { id: 'granite-panel', slot: 'micro', labelKey: 'sec.granite-ground', tokens: [
+    { id: 'granite-panel', slot: 'micro', tokens: [
       { key: 'density', def: 1, min: 0.2, max: 1.8, step: 0.05, labelKey: 'sl.gspecks' },
       { key: 'size', def: 1, min: 0.4, max: 2, step: 0.05, labelKey: 'sl.gsize' },
     ] },
@@ -4385,7 +4394,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function registerLayerGroup(id) {
     const e = layerKits.get(id); if (!e) return;
     e.kit.registerTokenGroup({
-      id: 'layer', label: TR(e.panel.labelKey),
+      id: 'layer', label: '',                    // ditto - the <summary> names the panel
       tokens: e.panel.tokens.map(t => ({
         key: t.key, type: 'slNum', label: TR(t.labelKey), default: t.def,
         min: t.min, max: t.max, step: t.step,

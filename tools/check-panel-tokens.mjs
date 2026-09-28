@@ -93,13 +93,11 @@ else {
   const panels = lpDecl.split(NEWLINE).filter(L => L.indexOf("{ id: '") >= 0).map(L => ({
     id: L.split("id: '")[1].split("'")[0],
     slot: L.split("slot: '")[1].split("'")[0],
-    labelKey: L.split("labelKey: '")[1].split("'")[0],
   }));
   if (!panels.length) fail.push('LAYER_PANELS parsed as empty - its shape moved');
   for (const p of panels) {
     if (!slots.has(p.slot)) fail.push('LAYER_PANELS ' + p.id + ' has slot "' + p.slot + '", which is not a slot of activeLayer - the target resolves to undefined and the panel writes nothing, silently');
     if (app.indexOf('id="' + p.id + '"') < 0) fail.push('LAYER_PANELS ' + p.id + ' has no element with that id - the panel never mounts and the section renders a gap');
-    if (!has(p.labelKey)) fail.push('LAYER_PANELS ' + p.id + ' labelKey "' + p.labelKey + '" is not in the English pack');
   }
   const lTokens = lpDecl.split(NEWLINE).filter(L => L.indexOf("key: '") >= 0 && L.indexOf("id: '") < 0);
   for (const L of lTokens) {
