@@ -1122,7 +1122,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.27';
+  const BUILD = '2026.09.27.28';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6515,7 +6515,23 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // judgement about LIGHT, not about whether a surface can be made.
         const dimmed = !cal.ok && !cal.why && cal.got != null;
         if (dimmed && DIM_OK) trail.push(ts + ':dim accepted anyway (?dim=off)');
-        if (cal.ok || (dimmed && DIM_OK)) { ok.push({ ts, est: passes * ms, need }); if (ok.length >= 2) break; }
+        // THE QUOTA COUNTS CHOICES, NOT ATTEMPTS. A candidate the memory test will not PREFER is not a
+        // choice, and it used to consume one of the two slots anyway - so a device starting from the top
+        // could only ever see 8192 and 4096, and if 8192 failed on memory the "smaller of the two" was
+        // 4096 whether or not 4096 was any good. That is how a tablet took a tile that damaged its own
+        // joins, twice, while every rule in here worked exactly as written.
+        //
+        // It still does not REFUSE on arithmetic over a hint that rounds down by up to half: a heavy
+        // candidate stays in ok and stays selectable if nothing lighter clears. It simply does not stop
+        // the search, so the ladder keeps descending until TWO viable sizes exist. The cost is one more
+        // calibration tile on a device that is tight, which is the device that most needs the choice.
+        if (cal.ok || (dimmed && DIM_OK)) {
+          ok.push({ ts, est: passes * ms, need });
+          const viable = navigator.deviceMemory > 0
+            ? ok.filter(c => c.need <= MEM_EASY * budget).length
+            : ok.length;                                   // no figure to judge by: every clear one counts
+          if (viable >= 2) break;
+        }
       }
       ref.width = 1; ref.height = 1;
       if (!ok.length) throw new Error((bestLit >= 0

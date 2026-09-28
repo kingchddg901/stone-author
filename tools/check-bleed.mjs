@@ -298,6 +298,17 @@ if (!app.includes('IS_GECKO ? glowPx * 0.000692 + 0.054 :'))
   fail.push('the Gecko lift is not the fitted line through its two measured matches, so Firefox cannot agree with the set at more than one width');
 if (app.slice(app.indexOf('const WEBKIT_LIFT'), app.indexOf('const liftCv')).includes('userAgent'))
   fail.push('the engine branch reads a user agent instead of probing a capability, which is a claim and not a measurement');
+// THE CANDIDATE QUOTA COUNTS CHOICES, NOT ATTEMPTS. A size the memory test will not prefer cannot be
+// selected, so admitting it to the shortlist and stopping the search there leaves a device with one
+// real option and no alternative. Measured on a 2 GB tablet: 8192 cleared calibration and failed on
+// memory, 4096 became the only survivor, and 4096 damaged that device at its tile joins. The rule that
+// was supposed to protect it - take the smaller of the two that cleared - worked perfectly and could
+// not reach 2048, because 2048 was never a candidate.
+if (!app.includes('const viable = navigator.deviceMemory > 0'))
+  fail.push('the tile ladder stops on any two sizes that calibrate rather than two the memory test would prefer, so a device whose larger candidate fails on memory is left with exactly one option and takes it whether or not it is sound');
+if (app.includes('if (ok.length >= 2) break;'))
+  fail.push('the raw candidate count is stopping the ladder again: a size that can never be chosen consumes a slot, which is how a tablet took a tile that damaged its own joins twice');
+
 // A PROBE IS NOT A FINISHED RENDER. `ok` in the tile-proof record means this device rendered a master
 // at that tile and came back; `probe` means a canvas allocated, kept its size and returned the pixel
 // written into its far corner. The second is much weaker evidence and must never be written into the
