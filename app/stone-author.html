@@ -87,20 +87,20 @@
      IDENTICALLY - because a control that spans its whole row never contends for a track, so there is
      nothing to let give way. Put the range back in a shared track and the guard becomes necessary
      again. (The 38px of page wiggle at 320px is the rail, and predates this panel.) */
-  #coat-panel theme-kit-editor::part(group) { border-color: var(--line); margin: 0; padding: 2px 10px 10px; }
-  #coat-panel theme-kit-editor::part(group-label) { color: var(--dim); font-size: 11px; letter-spacing: .08em; }
-  #coat-panel theme-kit-editor::part(row) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 10px 0 0; }
-  #coat-panel theme-kit-editor::part(label) { font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  .tk theme-kit-editor::part(group) { border-color: var(--line); margin: 0; padding: 2px 10px 10px; }
+  .tk theme-kit-editor::part(group-label) { color: var(--dim); font-size: 11px; letter-spacing: .08em; }
+  .tk theme-kit-editor::part(row) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 10px 0 0; }
+  .tk theme-kit-editor::part(label) { font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
                                               color: var(--dim); overflow-wrap: anywhere; }
-  #coat-panel theme-kit-editor::part(coat-wrap) { display: grid; grid-template-columns: auto minmax(0, 1fr);
+  .tk theme-kit-editor::part(sl-wrap) { display: grid; grid-template-columns: auto minmax(0, 1fr);
                                                   gap: 3px 8px; align-items: center; }
-  #coat-panel theme-kit-editor::part(coat-range) { grid-column: 1 / -1; width: 100%; accent-color: #8a8de0; }
-  #coat-panel theme-kit-editor::part(coat-num) { width: 5.5em; background: var(--btn); color: var(--text);
+  .tk theme-kit-editor::part(sl-range) { grid-column: 1 / -1; width: 100%; accent-color: #8a8de0; }
+  .tk theme-kit-editor::part(sl-num) { width: 5.5em; background: var(--btn); color: var(--text);
                                                  border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px;
                                                  font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; }
-  #coat-panel theme-kit-editor::part(coat-out) { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  .tk theme-kit-editor::part(sl-out) { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace;
                                                  color: var(--text); overflow-wrap: anywhere; }
-  #coat-panel theme-kit-editor::part(coat-help) { grid-column: 1 / -1; color: var(--dim); font-size: 13px;
+  .tk theme-kit-editor::part(sl-help) { grid-column: 1 / -1; color: var(--dim); font-size: 13px;
                                                   max-width: 68ch; overflow-wrap: anywhere; }
   /* Export progress. A big export blocks the main thread for minutes, and the only previous signal was
      a hint that removes itself after 2.6 s, so the page read as dead. */
@@ -358,7 +358,7 @@
            brings a number box beside each slider and a reset arrow per control. The two button groups
            below are still hand-written: they are not numbers, and turning a Beam button into a kit
            checkbox is an appearance decision, not a plumbing one. -->
-      <div id="coat-panel" style="grid-column:1/-1"></div>
+      <div id="coat-panel" class="tk" style="grid-column:1/-1"></div>
       <div class="sl"><span class="lbl" data-i18n="lbl.spotlight">Spotlight</span><div class="grp"><button id="spot-toggle" type="button" aria-pressed="false" data-i18n="btn.spot-toggle">Beam</button></div></div>
       <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.lens-type">Lens type</span><div class="grp" role="group" aria-label="Lens type" data-i18n-attr="aria-label=a11y.lens-type"><button data-lens="fresnel" type="button" data-i18n="lens.fresnel">Fresnel</button><button data-lens="reeded" type="button" data-i18n="lens.reeded">Reeded</button><button data-lens="water" type="button" data-i18n="lens.water">Water</button></div></div>
     </div>
@@ -400,17 +400,14 @@
     </div></details>
     <details class="sec"><summary data-i18n="sec.fog-and-resin">Fog & resin</summary><div class="body">
     <div class="sliders" id="g-fog">
-      <div class="sl"><label for="fogHaze"><span data-i18n="sl.fogHaze">Fog / resin</span> <output id="fogHazeV"></output></label><input id="fogHaze" type="range" min="0" max="0.06" step="0.005"></div>
-      <div class="sl"><label for="fogSize"><span data-i18n="sl.fogSize">Fog size</span> <output id="fogSizeV"></output></label><input id="fogSize" type="range" min="0.3" max="2.5" step="0.05"></div>
-      <div class="sl"><label for="fogDensity"><span data-i18n="sl.fogDensity">Fog density</span> <output id="fogDensityV"></output></label><input id="fogDensity" type="range" min="0.2" max="2.5" step="0.05"></div>
+      <div id="fog-panel" class="tk" style="grid-column:1/-1"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.to-sculpt-the-haze-select">To sculpt the haze: select the Fog layer, then use Gravity (push clears a window, pull pools) or Magnet.</span></div>
     </div>
     </div></details>
     <details class="sec" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
     <div class="sliders">
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.specks-size-reseed-act-on">Specks / size / reseed act on the ACTIVE granite layer. Add more with "+ Granite layer" — each its own field + colour.</span></div>
-      <div class="sl"><label for="gspecks"><span data-i18n="sl.gspecks">Specks</span> <output id="gspecksV"></output></label><input id="gspecks" type="range" min="0.2" max="1.8" step="0.05"></div>
-      <div class="sl"><label for="gsize"><span data-i18n="sl.gsize">Speck size</span> <output id="gsizeV"></output></label><input id="gsize" type="range" min="0.4" max="2" step="0.05"></div>
+      <div id="granite-panel" class="tk" style="grid-column:1/-1"></div>
       <div class="sl"><span class="lbl" data-i18n="lbl.scatter">Scatter</span><div class="grp"><button id="granite-reseed" type="button" data-i18n="btn.granite-reseed">Reseed</button></div></div>
       <div class="sl"><label for="speckGroups"><span data-i18n="sl.speckGroups">Speck colours</span> <output id="speckGroupsV"></output></label><input id="speckGroups" type="range" min="1" max="5" step="1"></div>
       <div class="sl"><label for="speckSubs"><span data-i18n="sl.speckSubs">Speck variants</span> <output id="speckSubsV"></output></label><input id="speckSubs" type="range" min="1" max="4" step="1"></div>
@@ -1166,7 +1163,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.28.12';
+  const BUILD = '2026.09.28.15';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1429,7 +1426,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (bucket === 'micro') { L.field = 'specks'; L.density = 1; L.size = 1; L.seed = (Math.random() * 2147483647) | 0; }   // a new granite field: own density/size/seed
     if (isFog) { L.field = 'fog'; L.haze = 0.03; L.size = 1; L.density = 1; L.seed = (Math.random() * 2147483647) | 0; }     // a new haze plane: own haze/size/density/seed
     let idx = -1; for (let i = 0; i < layers.length; i++) if (sameKind(layers[i])) idx = i;   // group after the last layer of the same KIND
-    layers.splice(idx + 1, 0, L); activeLayer[isFog ? 'fog' : realBucket] = key;
+    // THROUGH setActiveLayer, not past it. Assigning activeLayer directly made the new layer active
+    // without telling anything that displays it, so the fog and granite controls kept showing the
+    // PREVIOUS plane while edits landed on the new one. That was true of the old sliders too - it is
+    // not a cost of the token panels, it is a defect they made visible, because a panel that rebuilds
+    // from its target either shows the right layer or obviously does not.
+    layers.splice(idx + 1, 0, L); setActiveLayer(key);
     if (typeof buildLayerUI === 'function') buildLayerUI();
     return key;
   }
@@ -1498,19 +1500,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     saveLocal();
   }
   function setActiveLayer(key) { const L = layAt(key); if (L) { const slot = L.field === 'fog' ? 'fog' : L.bucket; activeLayer[slot] = key; if (typeof syncLayerUI === 'function') syncLayerUI(); if (L.field === 'fog') { if (typeof syncFog === 'function') syncFog(); } else if (L.bucket === 'micro' && typeof syncGranite === 'function') syncGranite(); } }
-  function syncGranite() {                                // reflect the ACTIVE granite layer's density/size in the ground sliders
-    const L = layAt(activeLayer.micro); if (!L) return;
-    const gs = document.getElementById('gspecks'), gz = document.getElementById('gsize');
-    if (gs) { gs.value = L.density ?? 1; document.getElementById('gspecksV').textContent = (+(L.density ?? 1)).toFixed(2) + '×'; }
-    if (gz) { gz.value = L.size ?? 1; document.getElementById('gsizeV').textContent = (+(L.size ?? 1)).toFixed(2) + '×'; }
-  }
-  function syncFog() {                                    // reflect the ACTIVE fog layer's haze/size/density in the fog sliders
-    const L = layAt(activeLayer.fog); if (!L) return;
-    const set = (id, v, txt) => { const el = document.getElementById(id); if (el) { el.value = v; const o = document.getElementById(id + 'V'); if (o) o.textContent = txt; } };
-    set('fogHaze', L.haze ?? 0, Math.round((L.haze ?? 0) * 100) + '%');
-    set('fogSize', L.size ?? 1, (+(L.size ?? 1)).toFixed(2) + '×');
-    set('fogDensity', L.density ?? 1, (+(L.density ?? 1)).toFixed(2) + '×');
-  }
+  // The ACTIVE layer changed, so the panel is pointed at a different object. Rebuild rather than
+  // nudge: the adapter reads its target fresh, so a remount is all it takes.
+  function syncGranite() { mountLayerPanel('granite-panel'); }
+  function syncFog() { mountLayerPanel('fog-panel'); }
   // Solo keeps the BASE ground under the soloed layer, so an isolated feature shows ON the marble
   // (a dark seam on a near-black neutral was invisible); everything else drops away.
   const layVis = k => soloLay ? (k === soloLay || k === 'base') : (layAt(k) ? layAt(k).on : true);
@@ -4206,26 +4199,31 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // these numbers set the coat's blur radii, coatReach() sizes a tile's bleed from them, and a value past
   // the declared maximum would ask for more bleed than the tile was given - which lands as a visible seam
   // at every tile join in a 65,535 px master, not as an error.
-  function coatWidget(control, { onChange, document }) {
+  // A slider, a number box and a readout, on one value. Built as a FACTORY because two things
+  // differ per panel and neither can travel through the kit: the formatter, and whether the caller
+  // keeps the elements. The kit's editor model forwards a fixed set of token members (options, min,
+  // max, step, help), so a `fmt` declared on a token would be dropped on the way through - which is
+  // why the formatter is closed over here instead of being declared beside the bounds.
+  const sliderBox = (fmt, keep) => function (control, { onChange, document }) {
     const wrap = document.createElement('span');
-    wrap.setAttribute('part', 'coat-wrap');
+    wrap.setAttribute('part', 'sl-wrap');
     const range = document.createElement('input'), num = document.createElement('input');
     range.type = 'range'; num.type = 'number';
     for (const el of [range, num]) { el.min = control.min; el.max = control.max; el.step = control.step; el.value = control.value; }
-    range.setAttribute('part', 'coat-range'); num.setAttribute('part', 'coat-num');
+    range.setAttribute('part', 'sl-range'); num.setAttribute('part', 'sl-num');
     // The editor wraps ONE <label> around both the name and the widget, so the implicit association lands
     // on the first control and leaves the box unnamed to a screen reader. Name it.
     num.setAttribute('aria-label', control.label);
     const out = document.createElement('span');
-    out.setAttribute('part', 'coat-out');
-    out.textContent = coatFmt(control.key, control.value);
+    out.setAttribute('part', 'sl-out');
+    out.textContent = fmt(control.key, control.value);
     const emit = (raw, from) => {
       const v = Number(raw);
       if (!Number.isFinite(v)) return;                        // "" or "-" mid-typing: hold the last good value
       const n = Math.max(control.min, Math.min(control.max, v));
       range.value = n;
       if (from !== 'num') num.value = n;                       // don't fight the caret while it is being typed into
-      out.textContent = coatFmt(control.key, n);
+      out.textContent = fmt(control.key, n);
       onChange(n);                                             // a NUMBER reaches the adapter, never a string
     };
     range.addEventListener('input', () => emit(range.value, 'range'));
@@ -4237,12 +4235,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     wrap.append(range, num, out);
     if (control.help) {
       const h = document.createElement('span');
-      h.setAttribute('part', 'coat-help'); h.textContent = control.help;
+      h.setAttribute('part', 'sl-help'); h.textContent = control.help;
       wrap.appendChild(h);
     }
-    coatEls.set(control.key, { range, num, out });
+    if (keep) keep(control.key, { range, num, out });
     return wrap;
-  }
+  };
 
   function setupCoat() {
     if (!window.TTK || !document.getElementById('coat-panel')) return;   // no kit: the markup fallback below stands
@@ -4297,7 +4295,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const host = document.getElementById('coat-panel'); if (!host) return;
     host.textContent = ''; coatEls.clear();
     coatEd = document.createElement('theme-kit-editor');
-    coatEd.registerWidget('coatNum', coatWidget);            // BEFORE the kit: assigning .kit starts the render
+    coatEd.registerWidget('coatNum', sliderBox(coatFmt, (k, els) => coatEls.set(k, els)));   // BEFORE the kit: assigning .kit starts the render
     coatEd.labels = tkLabels();
     host.appendChild(coatEd);
     coatEd.kit = coatKit;
@@ -4319,6 +4317,99 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     coatEd.values = o;
   }
+
+  // ---- PER-LAYER PANELS: the same kit, against a target that MOVES.
+  //
+  // The coat panel closes over G - one object, always there. These five controls edit whichever layer is
+  // ACTIVE in their slot, and that changes under them when you pick a different fog plane or granite
+  // layer. So the adapter resolves its target INSIDE load and save rather than capturing it, which is
+  // the whole question this panel was built to answer: does one adapter shape serve a fixed object and a
+  // moving one, or does the moving one need its own?
+  //
+  // It does serve both, and two details are the evidence. First, the same factory builds both panels
+  // from a declaration - fog and granite differ only in their slot and their tokens. Second, the token
+  // keys are bare (`size`, `density` appear in both) and need no namespacing, because a kit's editor
+  // renders one kit's registry: a panel per kit means a key only has to be unique within its own panel.
+  //
+  // These values are part of the picture, so they ARE in the render signature via `layers` - unlike the
+  // light. tools/ablate-state-sig.mjs covers that: "a layer deleted with its marks" and "a layer
+  // switched off" both move the hash.
+  const LAYER_PANELS = [
+    { id: 'fog-panel', slot: 'fog', labelKey: 'sec.fog-and-resin', tokens: [
+      { key: 'haze', def: 0, min: 0, max: 0.06, step: 0.005, labelKey: 'sl.fogHaze', pct: true },
+      { key: 'size', def: 1, min: 0.3, max: 2.5, step: 0.05, labelKey: 'sl.fogSize' },
+      { key: 'density', def: 1, min: 0.2, max: 2.5, step: 0.05, labelKey: 'sl.fogDensity' },
+    ] },
+    { id: 'granite-panel', slot: 'micro', labelKey: 'sec.granite-ground', tokens: [
+      { key: 'density', def: 1, min: 0.2, max: 1.8, step: 0.05, labelKey: 'sl.gspecks' },
+      { key: 'size', def: 1, min: 0.4, max: 2, step: 0.05, labelKey: 'sl.gsize' },
+    ] },
+  ];
+  const layerKits = new Map();                   // panel id -> { kit, el, panel }
+
+  function setupLayerPanels() {
+    if (!window.TTK) return;
+    for (const panel of LAYER_PANELS) {
+      if (!document.getElementById(panel.id)) continue;
+      const kit = TTK.createThemeKit();
+      kit.registerControlType('slNum', { input: 'slNum', coerce: v => Number(v), defaultValue: 0 });
+      const byKey = new Map(panel.tokens.map(t => [t.key, t]));
+      const target = () => layAt(activeLayer[panel.slot]);        // resolved on every call, never captured
+      kit.setAdapter({
+        load: async () => {
+          const L = target(); if (!L) return {};
+          const o = {};
+          for (const t of panel.tokens) { const v = L[t.key]; if (v !== undefined && v !== t.def) o[t.key] = v; }
+          return o;
+        },
+        save: async v => {
+          const L = target();
+          if (!L) return;                                          // no layer in this slot: nothing to write to
+          for (const t of panel.tokens) {
+            const raw = Object.prototype.hasOwnProperty.call(v, t.key) ? v[t.key] : t.def;
+            const n = Number(raw);
+            if (!Number.isFinite(n)) continue;
+            L[t.key] = Math.max(t.min, Math.min(t.max, n));
+          }
+          saveLocal(); redraw(true);
+        },
+      });
+      layerKits.set(panel.id, { kit, el: null, panel, byKey });
+      registerLayerGroup(panel.id);
+      mountLayerPanel(panel.id);
+    }
+  }
+
+  // Re-registered on a language change, for the same reason the coat group is: the labels resolve
+  // through TR() at registration, so registering once freezes them.
+  function registerLayerGroup(id) {
+    const e = layerKits.get(id); if (!e) return;
+    e.kit.registerTokenGroup({
+      id: 'layer', label: TR(e.panel.labelKey),
+      tokens: e.panel.tokens.map(t => ({
+        key: t.key, type: 'slNum', label: TR(t.labelKey), default: t.def,
+        min: t.min, max: t.max, step: t.step,
+      })),
+    });
+  }
+
+  // A REMOUNT, not a sync. The coat panel syncs in place because the Light tool drags it on every
+  // pointer-move; picking a different layer is a click, and it replaces the target wholesale - which is
+  // the same situation as a slab load, and gets the same answer.
+  function mountLayerPanel(id) {
+    const e = layerKits.get(id); if (!e) return;
+    const host = document.getElementById(id); if (!host) return;
+    host.textContent = '';
+    const el = document.createElement('theme-kit-editor');
+    const fmt = (k, v) => (e.byKey.get(k) || {}).pct ? Math.round(v * 100) + '%' : (+v).toFixed(2) + '\u00d7';
+    el.registerWidget('slNum', sliderBox(fmt));
+    el.labels = tkLabels();
+    host.appendChild(el);
+    el.kit = e.kit;
+    e.el = el;
+  }
+
+  const mountLayerPanels = () => { for (const p of LAYER_PANELS) mountLayerPanel(p.id); };
 
   // ---- LAYERS PANEL: eye + solo + opacity per canonical layer, shown front-to-back (major on top) so it
   // reads like a stack. Toggling only repaints; when tiles are laid it also re-bakes the slab offscreen.
@@ -4602,6 +4693,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     registerSpeckGroups(); registerSelectedColours(); recolour();
     if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor
     mountCoat();                                              // and the restored coat + a light back at daylight
+    mountLayerPanels();                                       // ...and the panels that point at a layer
     marks = o.marks.filter(m => m.kind !== 'knot').map(m => ({ ...m }));   // drop retired knot marks
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
     stoneReady = false; buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
@@ -5886,16 +5978,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   for (const id of ['speckGroups', 'speckSubs', 'drusyGroups', 'drusySubs'])   // add/remove the group + sub-variant colour tokens
     document.getElementById(id).addEventListener('input', () => { registerSpeckGroups(); recolour(); mountEditor(); });
-  // Granite density/size/reseed act on the ACTIVE granite layer (not global) — each field has its own.
-  { const gs = document.getElementById('gspecks'), gz = document.getElementById('gsize');
-    gs.addEventListener('input', () => { const L = layAt(activeLayer.micro); if (L) { L.density = +gs.value; document.getElementById('gspecksV').textContent = (+gs.value).toFixed(2) + '×'; redraw(true); } });
-    gz.addEventListener('input', () => { const L = layAt(activeLayer.micro); if (L) { L.size = +gz.value; document.getElementById('gsizeV').textContent = (+gz.value).toFixed(2) + '×'; redraw(true); } });
-    document.getElementById('granite-reseed').addEventListener('click', () => { const L = layAt(activeLayer.micro); if (L) { L.seed = (Math.random() * 2147483647) | 0; redraw(true); hint(TR('hint.reseeded-layer', { name: L.label })); } }); }
-  // Fog haze/size/density act on the ACTIVE fog plane (each plane has its own), like granite.
-  { const fh = document.getElementById('fogHaze'), fz = document.getElementById('fogSize'), fd = document.getElementById('fogDensity'), af = () => layAt(activeLayer.fog);
-    if (fh) fh.addEventListener('input', () => { const L = af(); if (L) { L.haze = +fh.value; document.getElementById('fogHazeV').textContent = Math.round(L.haze * 100) + '%'; redraw(true); } });
-    if (fz) fz.addEventListener('input', () => { const L = af(); if (L) { L.size = +fz.value; document.getElementById('fogSizeV').textContent = (+fz.value).toFixed(2) + '×'; redraw(true); } });
-    if (fd) fd.addEventListener('input', () => { const L = af(); if (L) { L.density = +fd.value; document.getElementById('fogDensityV').textContent = (+fd.value).toFixed(2) + '×'; redraw(true); } }); }
+  // Reseed still acts on the ACTIVE granite layer. Its density and size are tokens now, so the two
+  // sliders that used to sit here are gone; this is not.
+  document.getElementById('granite-reseed').addEventListener('click', () => { const L = layAt(activeLayer.micro); if (L) { L.seed = (Math.random() * 2147483647) | 0; redraw(true); hint(TR('hint.reseeded-layer', { name: L.label })); } });
   for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => { view = b.dataset.view; press('[data-view]', b); redraw(false); });
   function setSpectrum(v) {                               // move the light to a spectrum value; 0 = daylight, else a light is on
     lightSpectrum = v; uvMode = v !== 0;
@@ -5931,6 +6016,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     fill(); buildLayerUI(); syncUI();
     if (coatKit) registerCoatGroup();
     for (const e of [ed, coatEd]) if (e) e.labels = tkLabels();   // the setter rebuilds, and keeps the values
+    for (const p of LAYER_PANELS) { registerLayerGroup(p.id); const e = layerKits.get(p.id); if (e && e.el) e.el.labels = tkLabels(); }
   });
   }
   const pp = document.getElementById('pen-pressure');
@@ -7071,6 +7157,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   buildLayerUI();
   setupColour();
   setupCoat();
+  setupLayerPanels();
   if (!tryLoadLocal()) {                                // restore the last session on this device, else the demo
     marks = demo; nextId = 5; seedColours(fam); recolour(); mountEditor();
     for (const m of marks) { m.p = { ...NEXT }; m.fam = fam; }

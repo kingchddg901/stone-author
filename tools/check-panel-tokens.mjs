@@ -1,4 +1,4 @@
-// THE COAT & LIGHT DECLARATION, CHECKED AGAINST THE THINGS IT CLAIMS TO DESCRIBE.
+// THE TOKEN-PANEL DECLARATIONS, CHECKED AGAINST THE THINGS THEY CLAIM TO DESCRIBE.
 //
 // COAT_TOKENS moved this panel's bounds out of the HTML and its labels out of data-i18n attributes. Both
 // moves cost a check that used to happen for free:
@@ -15,7 +15,7 @@
 //   clamped the first time anything on the panel moved, silently changing the picture from the default
 //   the rest of the app believes in.
 //
-//   node tools/check-coat-tokens.mjs
+//   node tools/check-panel-tokens.mjs
 import { readFileSync } from 'fs';
 
 const NEWLINE = String.fromCharCode(10);
@@ -76,6 +76,48 @@ const ocAt = app.indexOf('SA_I18N.onChange(');
 const onChangeLine = ocAt < 0 ? '' : app.slice(ocAt, ocAt + 600);   // the handler, however it is wrapped
 if (onChangeLine.indexOf('registerCoatGroup') < 0)
   fail.push('a language change does not re-register the coat group - the labels resolve at registration and would freeze');
+
+// ---- LAYER_PANELS: the same declaration shape, against a target that MOVES -------------------
+//
+// These edit whichever layer is active in their slot, so the things that can be wrong are different
+// from the coat panel's. A slot that is not a slot of activeLayer resolves to undefined forever and
+// the panel silently writes nothing. A host id with no element means the panel never mounts at all,
+// and nothing says so - it is the quietest failure here, because the section still renders its other
+// rows and simply has a gap where the controls were.
+const lpAt = app.indexOf('const LAYER_PANELS = [');
+if (lpAt < 0) fail.push('LAYER_PANELS not found - the per-layer panels are declared somewhere else now');
+else {
+  const lpDecl = app.slice(lpAt, app.indexOf(NEWLINE + '  ];', lpAt));
+  const slotSrc = app.slice(app.indexOf('activeLayer = {'), app.indexOf('}', app.indexOf('activeLayer = {')));
+  const slots = new Set(slotSrc.split(',').map(p => p.split(':')[0].trim().split(' ').pop()).filter(Boolean));
+  const panels = lpDecl.split(NEWLINE).filter(L => L.indexOf("{ id: '") >= 0).map(L => ({
+    id: L.split("id: '")[1].split("'")[0],
+    slot: L.split("slot: '")[1].split("'")[0],
+    labelKey: L.split("labelKey: '")[1].split("'")[0],
+  }));
+  if (!panels.length) fail.push('LAYER_PANELS parsed as empty - its shape moved');
+  for (const p of panels) {
+    if (!slots.has(p.slot)) fail.push('LAYER_PANELS ' + p.id + ' has slot "' + p.slot + '", which is not a slot of activeLayer - the target resolves to undefined and the panel writes nothing, silently');
+    if (app.indexOf('id="' + p.id + '"') < 0) fail.push('LAYER_PANELS ' + p.id + ' has no element with that id - the panel never mounts and the section renders a gap');
+    if (!has(p.labelKey)) fail.push('LAYER_PANELS ' + p.id + ' labelKey "' + p.labelKey + '" is not in the English pack');
+  }
+  const lTokens = lpDecl.split(NEWLINE).filter(L => L.indexOf("key: '") >= 0 && L.indexOf("id: '") < 0);
+  for (const L of lTokens) {
+    const key = L.split("key: '")[1].split("'")[0];
+    const num = n => { const p = L.split(n + ": ")[1]; return p === undefined ? undefined : Number(p.split(",")[0]); };
+    const def = num('def'), min = num('min'), max = num('max'), step = num('step');
+    const lk = L.indexOf("labelKey: '") >= 0 ? L.split("labelKey: '")[1].split("'")[0] : undefined;
+    const where = 'LAYER_PANELS token ' + key;
+    if (!(def >= min && def <= max)) fail.push(where + ' default ' + def + ' lies outside [' + min + ', ' + max + '] - the widget clamps, so the panel would change the layer on first use');
+    if (!(min < max)) fail.push(where + ' has min ' + min + ' >= max ' + max);
+    if (!(step > 0)) fail.push(where + ' has a step of ' + step);
+    if (!lk) fail.push(where + ' has no labelKey');
+    else if (!has(lk)) fail.push(where + ' labelKey "' + lk + '" is not in the English pack');
+  }
+  if (app.indexOf('mountLayerPanels()') < 0) fail.push('nothing ever remounts the layer panels wholesale - a slab load would leave them pointing at the previous slab');
+  if (onChangeLine.indexOf('registerLayerGroup') < 0) fail.push('a language change does not re-register the layer groups - their labels would freeze');
+  console.log('layer panels: ' + panels.length + ', ' + lTokens.length + ' tokens');
+}
 
 console.log('coat tokens: ' + tokens.length + ' (' + tokens.filter(t => t.session).length + ' session, ' + tokens.filter(t => !t.session).length + ' in G)');
 if (fail.length) { for (const f of fail) console.error('  ' + f); process.exit(1); }
