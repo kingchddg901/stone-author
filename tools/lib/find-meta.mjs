@@ -9,6 +9,7 @@
 // question, and the two would drift.
 import { openSync, readSync, closeSync, statSync } from 'fs';
 
+const QUOTE = String.fromCharCode(34), BACKSLASH = String.fromCharCode(92);
 const WINDOW = 4 << 20;                                  // the block sits in the IFD tail; head is a fallback
 const RE = /\{"tool":"stone-author"[\s\S]*/;
 
@@ -22,8 +23,23 @@ export function findMeta(path) {
       readSync(fd, b, 0, len, off);
       const m = RE.exec(b.toString('latin1'));
       if (!m) continue;
-      for (let cut = Math.min(m[0].length, 1 << 16); cut > 40; cut--) {   // the block is not delimited
-        try { return JSON.parse(m[0].slice(0, cut)); } catch (_) {}
+      // BRACE-MATCH THE END, do not guess it. This used to walk a cut DOWN from 64 KB and try to parse
+      // each prefix, which silently failed on any block bigger than that - and `perTile` is ~9.2 bytes
+      // per tile, so the cap was reached at about 6,950 tiles. A 65,535 px master at a 1024 tile has
+      // 2,560 and reads fine; at a 512 tile it has 10,240, the block is 96,151 bytes, and the whole
+      // file became invisible to the evidence pipeline. Nothing said so: findMeta just returned null,
+      // which is indistinguishable from a file that carries no metadata at all.
+      const text = m[0];
+      let depth = 0, inStr = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inStr) { if (c === BACKSLASH) i++; else if (c === QUOTE) inStr = false; continue; }
+        if (c === QUOTE) inStr = true;
+        else if (c === "{") depth++;
+        else if (c === "}") {
+          depth--;
+          if (depth === 0) { try { return JSON.parse(text.slice(0, i + 1)); } catch (_) { break; } }
+        }
       }
     }
     return null;
