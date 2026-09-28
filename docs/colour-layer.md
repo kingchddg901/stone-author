@@ -29,7 +29,7 @@ migrate into `OVR` on load. A "Palette from family" button re-seeds `OVR` on dem
 ## The engine: token-theme-kit (vendored)
 
 The [token-theme-kit](https://github.com/kingchddg901/token-theme-kit) is **vendored into the
-artifact** — bundled with esbuild to an IIFE global `TTK` (~17 KB, CC0, `@f9e798b`),
+artifact** — bundled with esbuild to an IIFE global `TTK` (~17 KB, CC0, `@dd05ad3`),
 inlined as `<script id="ttk-vendor">`. Re-vendor by re-bundling `src/index.js` + `src/element.js`
 and replacing that block.
 
