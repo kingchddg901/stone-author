@@ -303,6 +303,11 @@ if (app.includes('IS_GECKO ? glowPx') && app.indexOf('const IS_GECKO =') > app.i
   fail.push('IS_GECKO is read above its own declaration - a temporal dead zone that throws on Firefox and nowhere else');
 // AND THE MASTER HAS TO SAY WHICH RULE RAN. A lift of 0.271 alone does not distinguish Blink taking its
 // own line from Gecko wrongly taking Blink's - the number is identical, the picture is not.
+// THE BUILD HAS TO REACH THE FILE. It was on screen and nowhere in a master, so a set rendered across
+// today's builds could never be attributed - and it cannot be retrofitted, because a file written
+// without it can never learn its own build. Three builds today moved drawn output.
+if (!app.includes('build: BUILD,'))
+  fail.push('a master does not record which build drew it, so a set rendered across builds cannot be attributed and never can be, since this cannot be added to a file after the fact');
 if (!app.includes("glowRule: GLOW_AUTO && BLOOM_DRAW ?"))
   fail.push('a master does not record WHICH engine rule produced its lift, so a Gecko render that silently took the Blink line is indistinguishable from a Blink one');
 if (!app.includes("GLOW_RAW === '' || GLOW_RAW === 'auto'"))

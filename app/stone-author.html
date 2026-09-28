@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.22';
+  const BUILD = '2026.09.27.23';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5035,6 +5035,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   const expMeta = o => JSON.stringify(Object.assign({
     tool: 'stone-author', at: new Date().toISOString(),
+    // WHICH BUILD DREW THIS. It was on screen and nowhere in the file, so a master could not say
+    // which renderer made it - and the renderer changed three times today in ways that move output.
+    // Cannot be retrofitted: a file written without it can never learn its own build.
+    build: BUILD,
     slab: fileStem(), marks: marks.length, lines: geo.lines.length, family: fam,
     // The element counts the stat line shows. Recorded because a master's cost is dominated by how
     // much is IN it, and without these a later reader cannot tell a slow machine from a busy picture.

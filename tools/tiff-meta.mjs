@@ -13,28 +13,9 @@
 //   node tools/tiff-meta.mjs --rename --go <file> [file...]   do it
 import { openSync, readSync, closeSync, statSync, existsSync, renameSync, readFileSync } from 'fs';
 import { openSeal } from './lib/device-seal.mjs';
+import { findMeta } from './lib/find-meta.mjs';   // one reader, shared with meta-index.mjs
 import { inflateSync } from 'zlib';
 
-const WINDOW = 4 << 20;                                  // the block sits in the IFD tail; head is a fallback
-const RE = /\{"tool":"stone-author"[\s\S]*/;
-
-function findMeta(path) {
-  const fd = openSync(path, 'r');
-  try {
-    const size = statSync(path).size;
-    for (const off of [Math.max(0, size - WINDOW), 0]) {
-      const len = Math.min(WINDOW, size - off);
-      const b = Buffer.alloc(len);
-      readSync(fd, b, 0, len, off);
-      const m = RE.exec(b.toString('latin1'));
-      if (!m) continue;
-      for (let cut = Math.min(m[0].length, 1 << 16); cut > 40; cut--) {   // the block is not delimited
-        try { return JSON.parse(m[0].slice(0, cut)); } catch (_) {}
-      }
-    }
-    return null;
-  } finally { closeSync(fd); }
-}
 
 const num = n => n.toLocaleString('en-GB');
 const secs = ms => (ms / 1000 < 90 ? (ms / 1000).toFixed(1) + ' s' : (ms / 60000).toFixed(1) + ' min');
