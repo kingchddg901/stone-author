@@ -395,18 +395,26 @@
     <div class="grp" role="group" aria-label="File" data-i18n-attr="aria-label=a11y.file">
       <button id="save" type="button" data-i18n="btn.save">Save</button>
       <button id="load" type="button" data-i18n="btn.load">Load</button>
+      <input id="slabname" type="text" maxlength="80" placeholder="stone" aria-label="Slab name" data-i18n-attr="aria-label=a11y.slab-name;placeholder=a11y.slab-name-ph">
+      <input id="loadfile" type="file" hidden><!-- no accept: it locks iOS out entirely, see the change handler -->
+    </div>
+  </div></details>
+  <details class="sec" id="rendersec"><summary data-i18n="sec.render">Render</summary><div class="body">
+    <div class="grp" role="group" aria-label="Render" data-i18n-attr="aria-label=a11y.render">
       <button id="export" type="button" data-i18n="btn.export">Export</button>
       <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option></select>
       <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select><select id="expfmt" aria-label="Export format" title="Export format" data-i18n-attr="aria-label=a11y.export-format;title=a11y.export-format"><option value="png" data-i18n="opt.fmt-png">PNG</option><option value="tiff" data-i18n="opt.fmt-tiff">TIFF</option></select>
-      <input id="slabname" type="text" maxlength="80" placeholder="stone" aria-label="Slab name" data-i18n-attr="aria-label=a11y.slab-name;placeholder=a11y.slab-name-ph">
       <span class="stat" id="expcap"></span>
-      <input id="loadfile" type="file" hidden><!-- no accept: it locks iOS out entirely, see the change handler --></div>
+    </div>
     <div class="expprog" id="expprog" hidden><div class="expbar" id="expbar"><i id="expfill"></i></div><div class="exprow"><span class="stat" id="expstat"></span><span class="stat" id="expclock"></span></div></div>
     <div class="tiers" id="tiers" hidden>
       <label class="tgl"><input type="checkbox" id="tier-large"><span data-i18n="big.large">Large render</span></label>
       <label class="tgl" id="tier-extreme-row" hidden><input type="checkbox" id="tier-extreme"><span data-i18n="big.extreme">Extreme</span></label>
       <span class="stat" id="tier-note"></span>
     </div>
+    <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.glow-lift-note">Glow lift: under black light each element draws its own halo, and this mixes that halo toward white (or, negative, toward black). Auto uses the value measured for this browser engine so a set rendered across machines agrees. Turn Auto off to leave it deliberately — engine character is a choice, not a fault.</span></div>
+    <div class="sl"><label for="glowlift"><span data-i18n="sl.glowlift">Glow lift</span> <output id="glowliftV"></output></label><input id="glowlift" type="range" min="-1" max="1" step="0.01" disabled></div>
+    <div class="sl"><span class="lbl" data-i18n="lbl.glow-auto">Glow</span><div class="grp"><label class="tgl"><input type="checkbox" id="glow-auto" checked><span data-i18n="big.glow-auto">Auto</span></label></div></div>
     <dialog id="bigdlg"><form method="dialog">
       <p class="note" id="bigdlg-text"></p>
       <div class="grp"><button value="cancel" data-i18n="btn.cancel">Cancel</button><button value="go" id="bigdlg-go" class="warn" data-i18n="btn.start-giant">Start giant render</button></div>
@@ -694,6 +702,13 @@ window.SA_I18N = (() => {
   "sec.colour": "Colour",
   "sec.drusy": "Drusy",
   "sec.file": "File",
+  "sec.render": "Render",
+  "a11y.render": "Render",
+  "sl.glowlift": "Glow lift",
+  "lbl.glow-auto": "Glow",
+  "big.glow-auto": "Auto",
+  "ui.auto": "auto",
+  "ui.glow-lift-note": "Glow lift: under black light each element draws its own halo, and this mixes that halo toward white (or, negative, toward black). Auto uses the value measured for this browser engine so a set rendered across machines agrees. Turn Auto off to leave it deliberately — engine character is a choice, not a fault.",
   "sec.fog-and-resin": "Fog & resin",
   "sec.granite-ground": "Granite ground",
   "sec.how-the-tools-read": "How the tools read",
@@ -1096,7 +1111,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.25';
+  const BUILD = '2026.09.27.26';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1137,6 +1152,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const COL = {}, OVR = {}, perItem = {};
   // BLACK LIGHT: a parallel override store (the UV palette). uvMode flips the render + editor to it; non-fluorescent
   // stuff falls to UV_DARK (invisible on the black ground), UV-coloured artifacts glow (bloom). The palette saves with the slab.
+  // HOISTED, not declared beside the code that uses them. Both are read by listeners registered around
+  // line 4700, and a user who opens the Render section while the page is still initialising reaches
+  // them first - a temporal dead zone that throws only on that race. glowKnob was a fresh instance of
+  // it, written tonight; tierLarge was already there and the same browser probe found it.
+  let glowKnob = null;                                   // null = auto; a number = the knob was moved
+  let tierLarge = false, tierExtreme = false, fmtChosen = false;
   let uvMode = false, lightSpectrum = 0, spotOn = false; const OVR_uv = {}, UV_DARK = '#0a0a0e', SPX_TOL = 0.12;
   // THE GROUND IS NOT BLOOMED, IT IS ADDED. Blurring a constant returns the constant, so the old ground
   // reached the picture twice: once as itself and once through the two bloom passes, 1 + 0.55 + 0.35.
@@ -4682,7 +4703,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // Probed when the File section is opened — a deliberate act — never on load, because the probe itself
   // allocates the sizes it is testing and there is no reason to spend that on someone who never exports.
-  { const fs = document.getElementById('filesec');
+  { const fs = document.getElementById('rendersec');            // the probe follows the controls it sizes
     if (fs) fs.addEventListener('toggle', () => { if (fs.open) applyExportCeiling(); });
   }
   { const s = document.getElementById('cal-start'), c = document.getElementById('cal-cancel'),
@@ -5707,7 +5728,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // above 16384 the format defaults to TIFF, so reaching the band path from a phone now takes arming a
   // tier, overriding that default, and accepting the dialogue.
   const TIER_KEY = 'stone-author:tiers:v1', STRIP_FROM = 16384;
-  let tierLarge = false, tierExtreme = false, fmtChosen = false;
   try { tierLarge = JSON.parse(localStorage.getItem(TIER_KEY) || '{}').large === true; } catch (_) {}
 
   // Deliberately does NOT wait on the dialog's `close` event. Measured in an embedded Chromium: the
@@ -6116,7 +6136,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const IS_GECKO = (() => {
     try { return CSS.supports('-moz-appearance', 'none'); } catch (_) { return false; }
   })();
+  // THE KNOB is declared with the other session state near the top, because listeners registered around
+  // line 4700 read it and a user can reach them first. null means auto - the engine line below decides.
+  // A number means the user stepped off it deliberately, which is a look and not a correction, so it
+  // wins over the engine line but still loses to an explicit ?glow= in the URL.
   const glowLift = () => GLOW_RAW !== '' && !GLOW_AUTO ? GLOW_SET      // an explicit number wins, including a negative one
+    : glowKnob !== null ? glowKnob
     : !CAN_FILTER ? WEBKIT_LIFT
     : GLOW_AUTO ? Math.max(0, Math.min(1, IS_GECKO ? glowPx * 0.000692 + 0.054 : glowPx * 0.00065 - 0.07)) : GLOW_SET;
   const liftCv = document.createElement('canvas');
@@ -6157,6 +6182,32 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // per-element shadows inside the island and a tablet could not open the studio. Suppressed here rather
   // than by zeroing glowPx at the call site, because renderSlabTo sets it on entry.
   let glowSuppress = false;
+
+  // The glow knob, wired HERE and not with the other listeners because it calls glowLift, which is
+  // declared just above. Registering it at line 4700 put the call 1,450 lines before the function
+  // it calls, inside one IIFE - a temporal dead zone that threw on every interaction.
+  { const sl = document.getElementById('glowlift'), au = document.getElementById('glow-auto');
+    // WHAT IT WILL BE AT THE EXPORT WIDTH, not what it is right now. glowPx is only set while a render
+    // is running, so at rest the auto value computes to zero and the readout says nothing useful. This
+    // evaluates the same function against the width the user has chosen, restoring glowPx afterwards
+    // so a running preview is never disturbed by a readout.
+    const liftAt = px => { const keep = glowPx; glowPx = px; try { return glowLift(); } finally { glowPx = keep; } };
+    const show = () => { const o = document.getElementById('glowliftV');
+      const sel = document.getElementById('expres');
+      const W = sel && +sel.value > 0 ? +sel.value : 1024;
+      if (o) o.textContent = (glowKnob === null ? TR('ui.auto') + ' ' : '') + liftAt(16 * W / COAT_REF).toFixed(3); };
+    if (sl && au) {
+      au.addEventListener('change', () => {
+        glowKnob = au.checked ? null : +sl.value;
+        sl.disabled = au.checked;
+        if (au.checked) sl.value = glowLift();          // leaving auto, the slider starts where auto had it
+        show(); redraw(false);
+      });
+      sl.addEventListener('input', () => { glowKnob = +sl.value; show(); redraw(false); });
+      { const ex = document.getElementById('expres'); if (ex) ex.addEventListener('change', show); }   // the lift moves with the width
+      sl.value = 0; show();
+    }
+  }
   // WHAT THIS ENGINE'S DRAWN HALO IS WORTH, against the blur it replaces. The per-engine lift question is
   // this one ratio and nothing reports it.
   //

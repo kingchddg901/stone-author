@@ -298,6 +298,37 @@ if (!app.includes('IS_GECKO ? glowPx * 0.000692 + 0.054 :'))
   fail.push('the Gecko lift is not the fitted line through its two measured matches, so Firefox cannot agree with the set at more than one width');
 if (app.slice(app.indexOf('const WEBKIT_LIFT'), app.indexOf('const liftCv')).includes('userAgent'))
   fail.push('the engine branch reads a user agent instead of probing a capability, which is a claim and not a measurement');
+// DECLARED BEFORE READ, FOR A LIST OF NAMES. Two temporal dead zones landed in one evening and the
+// check below only knew two constants by name, so a third slipped past: a listener registered at line
+// 4700 read state declared at 6100, inside one IIFE, and threw on every interaction. A fourth
+// (tierLarge) was already there and had never been noticed.
+//
+// LIMIT, stated because it decides what may be added here: this flags a bare use ABOVE the
+// declaration, ignoring comment lines. That is only a defect when the use runs at LOAD - top level, or
+// a listener registered there. A reference inside a function that is merely called later is legal, so
+// this is a curated list and never a sweep.
+const IDCH = c => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") || c === "_" || c === "$";
+function usedBefore(lines, name, upTo) {
+  for (let i = 0; i < upTo; i++) {
+    const t = lines[i];
+    if (t.trim().startsWith("//")) continue;
+    for (let at = t.indexOf(name); at >= 0; at = t.indexOf(name, at + 1)) {
+      const b = at === 0 ? " " : t[at - 1], a = t[at + name.length] || " ";
+      if (!IDCH(b) && !IDCH(a)) return i + 1;
+    }
+  }
+  return 0;
+}
+{ const lines = app.split(String.fromCharCode(10));
+  for (const name of ["WEBKIT_LIFT", "IS_GECKO", "glowKnob", "tierLarge", "glowLift"]) {
+    const decl = lines.findIndex(l => l.includes("let " + name) || l.includes("const " + name));
+    if (decl < 0) { fail.push("the declaration of " + name + " is gone, so its order cannot be checked"); continue; }
+    const use = usedBefore(lines, name, decl);
+    if (use) fail.push(name + " is read at line " + use + " but declared at line " + (decl + 1) +
+      ": a temporal dead zone, which throws only when that earlier code runs - for a listener, whenever the user gets there first");
+  }
+}
+
 // DECLARED BEFORE READ, same rule the plan trail broke and on a branch only one engine takes.
 if (app.includes('IS_GECKO ? glowPx') && app.indexOf('const IS_GECKO =') > app.indexOf('IS_GECKO ? glowPx'))
   fail.push('IS_GECKO is read above its own declaration - a temporal dead zone that throws on Firefox and nowhere else');

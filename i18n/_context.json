@@ -1115,6 +1115,27 @@
  "sec.file": {
   "where": "title of a collapsible section in the right-hand rail"
  },
+ "sec.render": {
+  "where": "title of a collapsible section in the right-hand rail"
+ },
+ "a11y.render": {
+  "where": "accessible name for the group of render controls"
+ },
+ "sl.glowlift": {
+  "where": "label for a slider in the Render section"
+ },
+ "lbl.glow-auto": {
+  "where": "label beside a toggle in the Render section"
+ },
+ "big.glow-auto": {
+  "where": "text on a checkbox that puts the glow lift back on the value measured for this engine"
+ },
+ "ui.auto": {
+  "where": "shown beside the glow lift value when the engine default is in use"
+ },
+ "ui.glow-lift-note": {
+  "where": "explanatory note above the glow lift slider in the Render section"
+ },
  "sec.fog-and-resin": {
   "where": "title of a collapsible section in the right-hand rail"
  },
