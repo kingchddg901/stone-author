@@ -21,7 +21,7 @@ because it is already in the file's name.
 Nothing here is secret. The secret is the slab.
 
 ```
-digest = SHA-256(the slab's exact bytes)          # JSON.stringify(serialize()), what Save writes
+digest = SHA-256(the slab bytes, name member removed)   # v2; v1 hashed the bytes as they stood
 kid    = first 4 bytes of digest, hex             # travels in the clear
 key    = SHA-256("stone-author/device/v1" || digest)
 block  = AES-256-GCM(key, random 12-byte IV, JSON of the identity)
@@ -29,6 +29,24 @@ block  = AES-256-GCM(key, random 12-byte IV, JSON of the identity)
 
 The ciphertext carries its authentication tag appended, which is what WebCrypto produces. The key is a
 *second* digest over a domain string, so publishing `kid` hands out no part of the key it labels.
+
+### v2 — the slab name is not part of the key
+
+It used to be. A slab records a name, the name is a label you edit freely, and it sat inside the digest —
+so renaming a slab made every master sealed under the old name unopenable, reporting `wrong slab` as
+though you had handed it the wrong file.
+
+That is not hypothetical. A picture loaded from a slab saved before names existed carried an empty name;
+the first Save typed one in; and a day of masters could then only be opened by reconstructing the
+original bytes with the name set back to empty. **v2 strips the name member and nothing else.**
+
+The block records its own version, and the reader branches on it. **Rotation runs forward only** — a
+master already written keeps the scheme it was written with, so both readers have to stay.
+
+It strips the member *textually*, leaving every other byte alone. Parsing and re-serialising would be
+simpler and would destroy the property the next section depends on: whitespace would stop mattering, and
+with it the twin. The seal gate feeds a copy differing by one trailing space, and the first attempt at
+v2 went red on exactly that.
 
 Read one back with the slab that made it:
 
@@ -70,5 +88,11 @@ so you can always check which file a master expects before you send anything.
 Rotation runs forward only, so do this **before** the master you want sealed, not after. A master already
 written stays under the bytes it was written with.
 
-The slabs published in this repo's `gallery/` are the public twins. Masters rendered from them by anyone
+Most slabs published in this repo's `gallery/` are public twins. Masters rendered from them by anyone
 else are sealed under bytes that are already public, so for those the lock is nominal — as it should be.
+
+`gallery/slabs/HERO-MASTER-sealkey.json` is **not** a twin: it is the exact key to the 2026-09-27 master
+set, published deliberately. Those masters are 400–800 MB each and are not distributed, so there is
+nothing in circulation for the key to unlock — the lock guards files that only ever existed on one desk.
+What is published is the evidence extracted from them, and the slab is there so a reader can render the
+same picture rather than take the figures on trust.

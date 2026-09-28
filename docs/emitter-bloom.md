@@ -1,4 +1,24 @@
-# Emitter-space bloom — a scope, not a build
+# Emitter-space bloom — scoped here, shipped 2026-09-27
+
+> **STATUS: this is no longer a proposal.** The drawn halo is the default path. `?bloom=blur` restores
+> the image-space bloom described below as "today", and a gate keeps that escape hatch working. The
+> current behaviour, the per-engine corrections it needed and the one configuration it cannot reach are
+> in [`renderer-determinism.md`](renderer-determinism.md) and [`devices.md`](devices.md).
+>
+> **What this page predicted, against what shipped:**
+>
+> | scoped | measured |
+> | --- | --- |
+> | no bleed | **4 px**, from 1,577 — the margin is now geometry, not blur reach |
+> | no joins | true on four devices; **one tablet truncates the halo at 4104 px** and needs a forced tile |
+> | `shadowBlur` works everywhere | true, but **not identically** — three engines needed a fitted lift, and Gecko on Android cannot be corrected at all |
+> | a different mechanism, so a different disagreement | correct, and the disagreement is now **tunable**, which the blur never was |
+>
+> The cost it did not anticipate: the drawn halo is per element, so it has to be *colour-matched* per
+> engine. That calibration took a day and is the reason `glowRule` and `glowLift` are stamped into every
+> master.
+
+## The original scope, kept for the reasoning
 
 The bloom is currently **image-space**: render the tile, blur the whole thing twice, add it back. That one
 decision is upstream of most of what went wrong in September 2026 — the bleed, the tile-edge truncation,

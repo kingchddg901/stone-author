@@ -54,6 +54,28 @@ The same engine difference reverses in daylight, where the glow is inactive: Gec
 Blink's 730 MB for the identical picture. So file size is an engine property, not a quality measure, and
 the spread across engines is 4.2×.
 
+#### Re-measured 2026-09-28, and the lit-fraction figure inverted
+
+Everything above was measured against the **image-space** bloom, which has since been replaced by a halo
+drawn per element. That changed which engine lights more, so the 2.14× no longer describes the shipping
+renderer. On slab `a98ab1f5` at 65,535 under black light, each engine at its own fitted correction:
+
+| engine | mean | lit>40 |
+| --- | --- | --- |
+| Blink | 61.50 | **47.00%** |
+| Gecko | 61.34 | **44.85%** |
+| WebKit | 61.32 | **40.23%** |
+
+Gecko now lights **fewer** pixels than Blink, not more. The means agree to 0.3% because a per-engine lift
+is fitted to make them; the **distributions do not**, and a one-parameter correction can only pin one
+statistic. Do not read matched brightness as a matched picture.
+
+What did survive is the performance claim, now confirmed on a second platform. Firefox is paint-bound
+where Blink is compression-bound: on one handset running both, time against bytes per tile reads **0.44**
+under Gecko and **0.86** under Blink. Daylight costs Gecko *more* than black light — 11.2 min against 9.6
+— where Blink shows the opposite, which is what a paint-bound renderer does when the field it must cover
+grows. See [`devices.md`](devices.md) for the timings.
+
 ### WebKit cannot be mixed with Blink, in either light
 
 Checked the same way as the ARM/x86 pair — a vein crossing a tile boundary, one engine either side,
