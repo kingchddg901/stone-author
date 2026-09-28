@@ -412,6 +412,11 @@
       <label class="tgl" id="tier-extreme-row" hidden><input type="checkbox" id="tier-extreme"><span data-i18n="big.extreme">Extreme</span></label>
       <span class="stat" id="tier-note"></span>
     </div>
+    <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.tile-probe-note">Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width - it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered.</span></div>
+    <div class="sl"><span class="lbl" data-i18n="lbl.tile">Tile</span><div class="grp">
+      <button id="tileprobe" type="button" data-i18n="btn.tileprobe">Probe</button>
+      <select id="tileforce" aria-label="Tile size" data-i18n-attr="aria-label=a11y.tile-size"><option value="0" data-i18n="big.glow-auto">Auto</option></select>
+      <span class="stat" id="tilestat"></span></div></div>
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.glow-lift-note">Glow lift: under black light each element draws its own halo, and this mixes that halo toward white (or, negative, toward black). Auto uses the value measured for this browser engine so a set rendered across machines agrees. Turn Auto off to leave it deliberately — engine character is a choice, not a fault.</span></div>
     <div class="sl"><label for="glowlift"><span data-i18n="sl.glowlift">Glow lift</span> <output id="glowliftV"></output></label><input id="glowlift" type="range" min="-1" max="1" step="0.01" disabled></div>
     <div class="sl"><span class="lbl" data-i18n="lbl.glow-auto">Glow</span><div class="grp"><label class="tgl"><input type="checkbox" id="glow-auto" checked><span data-i18n="big.glow-auto">Auto</span></label></div></div>
@@ -703,6 +708,12 @@ window.SA_I18N = (() => {
   "sec.drusy": "Drusy",
   "sec.file": "File",
   "sec.render": "Render",
+  "lbl.tile": "Tile",
+  "btn.tileprobe": "Probe",
+  "a11y.tile-size": "Tile size",
+  "ui.tile-proven": "passed:",
+  "ui.tile-probing": "probing...",
+  "ui.tile-probe-note": "Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width — it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered.",
   "a11y.render": "Render",
   "sl.glowlift": "Glow lift",
   "lbl.glow-auto": "Glow",
@@ -1111,7 +1122,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.26';
+  const BUILD = '2026.09.27.27';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1157,6 +1168,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // them first - a temporal dead zone that throws only on that race. glowKnob was a fresh instance of
   // it, written tonight; tierLarge was already there and the same browser probe found it.
   let glowKnob = null;                                   // null = auto; a number = the knob was moved
+  let tilePick = 0;                                      // 0 = let the planner race; a size = the user chose
   let tierLarge = false, tierExtreme = false, fmtChosen = false;
   let uvMode = false, lightSpectrum = 0, spotOn = false; const OVR_uv = {}, UV_DARK = '#0a0a0e', SPX_TOL = 0.12;
   // THE GROUND IS NOT BLOOMED, IT IS ADDED. Blurring a constant returns the constant, so the old ground
@@ -6016,6 +6028,10 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // An operator who knows this device can do it can force a size: ?tile=2048. It bypasses the budget and
   // both probes, and is recorded in the master so a file rendered that way says so. No prompt:
   // a dialog would ask a question most people cannot answer, and this one is for someone who already has.
+  // THE FORCE, from either source. ?tile= is for a reproduction that must pin the plan; the Render
+  // panel is for daily use. One reader so the two can never disagree, and the URL wins because a
+  // reproduction has to be able to override whatever the machine remembers.
+  const forcedTile = () => TILE_FORCED || tilePick;
   const TILE_FORCED = (() => {
     try { const v = +new URLSearchParams(location.search).get('tile'); return v >= 256 && v <= 8192 ? v : 0; }
     catch (_) { return 0; }
@@ -6208,6 +6224,45 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       sl.value = 0; show();
     }
   }
+  // THE TILE PROBE. canvasFits is the honest primitive here: it allocates, checks the size was not
+  // silently clamped, paints the FAR CORNER and reads it back, and with a sigma also proves the bloom
+  // survives. That corner read is what catches a canvas that allocates and then stops painting - the
+  // failure one tablet had for a whole evening while every reported number said it was fine.
+  //
+  // Recorded as `probe`, NEVER as `ok`. A finished master is stronger evidence than a probe, so the two
+  // must not be stored in the same field: `ok` means this device rendered with that tile and came back.
+  { const btn = document.getElementById("tileprobe"), sel = document.getElementById("tileforce"),
+          stat = document.getElementById("tilestat");
+    const widthNow = () => { const e = document.getElementById("expres"); return e && +e.value > 0 ? +e.value : 1024; };
+    const fill = () => {
+      if (!sel) return;
+      const W = widthNow(), rec = planRec(W), pass = (rec.probe || []).slice().sort((a, b) => a - b);
+      const keep = sel.value;
+      sel.length = 1;                                    // option 0 is Auto and always stays
+      for (const t of pass) { const o = document.createElement("option"); o.value = String(t); o.textContent = String(t); sel.appendChild(o); }
+      sel.value = pass.includes(+keep) ? keep : "0";
+      tilePick = +sel.value || 0;
+      if (stat) stat.textContent = pass.length ? TR("ui.tile-proven") + " " + pass.join(", ") : "";
+    };
+    if (btn && sel) {
+      sel.addEventListener("change", () => { tilePick = +sel.value || 0; });
+      btn.addEventListener("click", async () => {
+        const W = widthNow(), bs = W / COAT_REF, bleed = coatReach(bs, uvMode), sigma = coatReachAt(bs, lightSpectrum) > 0 ? bs * 3 : 0;
+        btn.disabled = true; if (stat) stat.textContent = TR("ui.tile-probing");
+        const pass = [];
+        for (const ts of [512, 1024, 2048, 4096, 8192]) {
+          if (ts > W) break;
+          const side = ts + 2 * bleed;
+          await new Promise(r => setTimeout(r, 0));      // let the panel paint between allocations
+          if (canvasFits(side, side, EXP_PEAK, sigma)) pass.push(ts);
+        }
+        const rec = planRec(W); rec.probe = pass; rec.probedAt = Date.now(); planWrite(W, rec);
+        btn.disabled = false; fill();
+      });
+      fill();
+      { const ex = document.getElementById('expres'); if (ex) ex.addEventListener('change', fill); }
+    }
+  }
   // WHAT THIS ENGINE'S DRAWN HALO IS WORTH, against the blur it replaces. The per-engine lift question is
   // this one ratio and nothing reports it.
   //
@@ -6353,8 +6408,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     })() : true;
     const probeSigma = canBlur ? sigma : 0;                  // nothing to learn from asking again per size
     const budget = memBudget();
-    const proven = TILE_FORCED ? 0 : provenTile(W);
-    const died = TILE_FORCED ? [] : diedAt(W);          // sizes this machine started and never came back from
+    const proven = forcedTile() ? 0 : provenTile(W);
+    const died = forcedTile() ? [] : diedAt(W);          // sizes this machine started and never came back from
     let ts = Math.min(W, 8192);
     // WHY the plan chose what it chose. The outcome was recorded and the reasoning was not, so a tablet
     // that silently halved its tile after an OS update could not be explained without the device in hand.
@@ -6372,8 +6427,8 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // forces CAN_FILTER; canBlur is a SEPARATE probe, which is why the repro came back clean). It threw
     // "Cannot access uninitialized variable" on an iPhone and nowhere else.
     if (sigma > 0 && !canBlur) trail.push('no ctx.filter - bloomless');
-    if (TILE_FORCED) {
-      ts = Math.min(TILE_FORCED, W);
+    if (forcedTile()) {
+      ts = Math.min(forcedTile(), W);
       const ew = ts + 2 * bleed;
       // The force stays a force: neither gate may refuse it, because the whole point is to run the
       // configuration the planner would decline — which is how the bloom limit was found at all. But the
@@ -6517,7 +6572,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // Reconstructing that from a finished file took a morning of benchmarking; it is under a kilobyte.
       // These sum to msRender by construction, since the clock starts at the top of each iteration.
       // Written BEFORE the first tile, so a device that never comes back has still left a record.
-      if (!TILE_FORCED) markAttempt(p.ts, W);
+      if (!forcedTile()) markAttempt(p.ts, W);
       const tileMs = [], tileBytes = [];
       // HOW MUCH LIGHT THE MASTER ACTUALLY CARRIES. A lost bloom leaves a file that is whole, correctly
       // sized, fully drawn, correctly signed and half as bright — the only symptom is the brightness
@@ -6579,7 +6634,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // KNOWN OMISSION. The lens is a whole-image step and this path has no whole image, so a
         // tiled master silently leaves it out. Recorded rather than hidden until it is done per tile.
         omits: G.lens > 0 ? ['lens'] : undefined,
-        forcedTile: TILE_FORCED || undefined,          // present only when the floor was overridden
+        forcedTile: forcedTile() || undefined,          // present only when the floor was overridden
         dimOverride: DIM_OK || undefined,            // the light veto was withheld: read the light below against a good master
         bloomDraw: BLOOM_DRAW || undefined,           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan
         // A LIFT OF EXACTLY ZERO IS A CHOICE, NOT AN ABSENCE. `|| undefined` dropped it, so every WebKit

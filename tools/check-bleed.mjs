@@ -298,6 +298,15 @@ if (!app.includes('IS_GECKO ? glowPx * 0.000692 + 0.054 :'))
   fail.push('the Gecko lift is not the fitted line through its two measured matches, so Firefox cannot agree with the set at more than one width');
 if (app.slice(app.indexOf('const WEBKIT_LIFT'), app.indexOf('const liftCv')).includes('userAgent'))
   fail.push('the engine branch reads a user agent instead of probing a capability, which is a claim and not a measurement');
+// A PROBE IS NOT A FINISHED RENDER. `ok` in the tile-proof record means this device rendered a master
+// at that tile and came back; `probe` means a canvas allocated, kept its size and returned the pixel
+// written into its far corner. The second is much weaker evidence and must never be written into the
+// first, or one button press would tell the planner a size is proven that has never produced a tile.
+if (!app.includes('rec.probe = pass'))
+  fail.push('the tile probe no longer records its result as probe evidence, so it cannot be told apart from a tile this device actually finished a render with');
+if (app.includes('rec.ok =') || app.includes('rec.ok='))
+  fail.push('the tile probe writes into ok, which means a passing canvas probe would be recorded as a finished render - the planner then trusts a size nothing has ever rendered');
+
 // DECLARED BEFORE READ, FOR A LIST OF NAMES. Two temporal dead zones landed in one evening and the
 // check below only knew two constants by name, so a third slipped past: a listener registered at line
 // 4700 read state declared at 6100, inside one IIFE, and threw on every interaction. A fourth

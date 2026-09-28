@@ -1118,6 +1118,24 @@
  "sec.render": {
   "where": "title of a collapsible section in the right-hand rail"
  },
+ "lbl.tile": {
+  "where": "tile probe control in the Render section"
+ },
+ "btn.tileprobe": {
+  "where": "tile probe control in the Render section"
+ },
+ "a11y.tile-size": {
+  "where": "tile probe control in the Render section"
+ },
+ "ui.tile-proven": {
+  "where": "tile probe control in the Render section"
+ },
+ "ui.tile-probing": {
+  "where": "tile probe control in the Render section"
+ },
+ "ui.tile-probe-note": {
+  "where": "tile probe control in the Render section"
+ },
  "a11y.render": {
   "where": "accessible name for the group of render controls"
  },
