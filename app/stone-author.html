@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.21';
+  const BUILD = '2026.09.27.22';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6077,9 +6077,34 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Untested - there is no Mac reading yet - and the first one settles whether this keys on the engine or
   // on the probe.
   const WEBKIT_LIFT = -0.304;
+  // GECKO WANTS ITS OWN LINE, AND IT IS NOT BLINK PLUS AN OFFSET. Fitted through two matches measured on
+  // slab a98ab1f5 against the Blink image-space reference - 0.417 at 32768, 0.780 at 65535 - and it
+  // reproduces both exactly:
+  //
+  //     Gecko   lift = glowPx * 0.000692 + 0.054
+  //     Blink   lift = glowPx * 0.00065  - 0.07
+  //
+  // THE INTERCEPT SIGN FLIPS, which is the whole finding. Gecko's residual against the reference is FLAT
+  // at about -3% across 64x in width - -4.9% at 1024, -2.5% at 65535 - so its shortfall is already there
+  // where the drawn glow contributes almost nothing. The lift still has to grow with width because the
+  // SLOPE falls (Gecko 12.07 per unit at 32768, 9.31 at 65535), and a constant percentage over a falling
+  // slope rises. Cross-check: 0.0254*61.33/9.31 = 0.167 against a measured 0.168.
+  //
+  // SAY WHAT THIS IS. Measured at radii that register, Gecko's drawn halo delivers 1.002 of what its OWN
+  // blur delivers, at every radius - its two paths look like one code path. So this is NOT repairing a
+  // drawn-glow deficit; there is not one. It forces Gecko's MEAN onto Blink's, because a master set has
+  // to agree. It will not make the pictures the same, and docs/renderer-determinism.md says so.
+  //
+  // Discriminated on a CSS property only Gecko has, never a user agent, and confirmed on all three
+  // engines rather than assumed: Blink false, Gecko true, WebKit false. The DOM-property form
+  // ('MozAppearance' in style) reads FALSE on Firefox 156 and would have classified Gecko as Blink -
+  // measured, which is the only reason it is not the one used here.
+  const IS_GECKO = (() => {
+    try { return CSS.supports('-moz-appearance', 'none'); } catch (_) { return false; }
+  })();
   const glowLift = () => GLOW_RAW !== '' && !GLOW_AUTO ? GLOW_SET      // an explicit number wins, including a negative one
     : !CAN_FILTER ? WEBKIT_LIFT
-    : GLOW_AUTO ? Math.max(0, Math.min(1, glowPx * 0.00065 - 0.07)) : GLOW_SET;
+    : GLOW_AUTO ? Math.max(0, Math.min(1, IS_GECKO ? glowPx * 0.000692 + 0.054 : glowPx * 0.00065 - 0.07)) : GLOW_SET;
   const liftCv = document.createElement('canvas');
   const liftMap = new Map();                               // 8,050 specks a tile: parse each colour once, not once per element
   let liftCached = -1;
@@ -6497,6 +6522,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // that never recorded one, when in fact it had run at the single value that was wrong. Present
         // whenever a halo was drawn, absent when there was none to lift.
         glowLift: BLOOM_DRAW ? +glowLift().toFixed(3) : undefined,   // toward white, or negative toward black
+        glowRule: GLOW_AUTO && BLOOM_DRAW ? (!CAN_FILTER ? 'webkit' : IS_GECKO ? 'gecko' : 'blink') : undefined,
         glowAuto: GLOW_AUTO || undefined,                // ...and whether that came from the sigma fit or a fixed number
         // Drawn halo against the blur it replaces, at sigma 320. MEASURED 2026-09-27 AND IT READS ZERO ON
         // EVERY ENGINE: a radius-6 disc spread over sigma 320 puts its whole energy across ~2.9M pixels,

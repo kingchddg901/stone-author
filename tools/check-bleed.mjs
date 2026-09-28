@@ -286,6 +286,25 @@ else if (!(+wk[1] >= -0.4 && +wk[1] <= -0.2))
 // taken on exactly one engine, the one that cannot be debugged from here.
 else if (app.includes('!CAN_FILTER ? WEBKIT_LIFT') && app.indexOf('const WEBKIT_LIFT =') > app.indexOf('!CAN_FILTER ? WEBKIT_LIFT'))
   fail.push('WEBKIT_LIFT is read above its own declaration - a temporal dead zone on the one branch only WebKit takes, so it would throw on iOS and nowhere else');
+// GECKO HAS ITS OWN LINE, AND IT IS SELECTED BY A CAPABILITY, NOT A NAME. Gecko wants 0.417 at 32768
+// and 0.780 at 65535 where Blink wants 0.271 and 0.612; running Blink numbers there leaves every Firefox
+// master about 3% under the set. The discriminator is a CSS property only Gecko has, confirmed on all
+// three engines - the DOM-property form reads false on Firefox 156 and would classify Gecko as Blink.
+if (!app.includes("CSS.supports('-moz-appearance', 'none')"))
+  fail.push('Gecko is no longer detected by a capability only Gecko has, so Firefox takes the Blink lift and lands about 3 percent under the rest of the set');
+// TARGETED AT THE EXECUTABLE FORM, not the coefficients: the comment above it quotes the same two
+// numbers, so a check for the bare expression passed with the code deleted. Caught by ablation.
+if (!app.includes('IS_GECKO ? glowPx * 0.000692 + 0.054 :'))
+  fail.push('the Gecko lift is not the fitted line through its two measured matches, so Firefox cannot agree with the set at more than one width');
+if (app.slice(app.indexOf('const WEBKIT_LIFT'), app.indexOf('const liftCv')).includes('userAgent'))
+  fail.push('the engine branch reads a user agent instead of probing a capability, which is a claim and not a measurement');
+// DECLARED BEFORE READ, same rule the plan trail broke and on a branch only one engine takes.
+if (app.includes('IS_GECKO ? glowPx') && app.indexOf('const IS_GECKO =') > app.indexOf('IS_GECKO ? glowPx'))
+  fail.push('IS_GECKO is read above its own declaration - a temporal dead zone that throws on Firefox and nowhere else');
+// AND THE MASTER HAS TO SAY WHICH RULE RAN. A lift of 0.271 alone does not distinguish Blink taking its
+// own line from Gecko wrongly taking Blink's - the number is identical, the picture is not.
+if (!app.includes("glowRule: GLOW_AUTO && BLOOM_DRAW ?"))
+  fail.push('a master does not record WHICH engine rule produced its lift, so a Gecko render that silently took the Blink line is indistinguishable from a Blink one');
 if (!app.includes("GLOW_RAW === '' || GLOW_RAW === 'auto'"))
   fail.push('the lift does not default to auto, so a default render uses no correction at all and comes back dim at every large width');
 if (!app.includes('glowRatio: BLOOM_DRAW ? glowRatio() : undefined'))
