@@ -62,6 +62,19 @@ else if (+kid[1] !== KID_BYTES) fail.push(`key-id is ${kid[1]} bytes in the app 
 
 // 4 — the lock locks. One slab opens it; a slab differing by ONE SPACE does not, and says so.
 const slab = Buffer.from(JSON.stringify({ v: 1, marks: [1, 2, 3] }), 'utf8');
+// THE APP AND THE READER MUST AGREE ON THE SCHEME VERSION. This file already warns that a silent
+// drift reads as "wrong slab" for every master ever written; the version is a second way to drift,
+// and it arrived with the v2 rotation. makeSeal defaults to the version the reader considers current,
+// and the app stamps a literal, so the two are compared directly.
+const appV = app.match(/devSeal = [{] v: (\d+), sealed: true/);
+if (!appV) fail.push('the app no longer stamps a seal version literal, so the reader cannot tell which scheme a master used');
+else if (+appV[1] !== makeSeal({ ua: 'x' }, slab).v)
+  fail.push('the app seals as v' + appV[1] + ' but the reader writes v' + makeSeal({ ua: 'x' }, slab).v + ': one of them is rotating without the other, and every new master would read as the wrong slab');
+// AND THE NAME MUST BE OUT OF THE KEY. That is what v2 IS. If the hash goes back to hashing the whole
+// of serialize(), renaming a slab silently orphans every master sealed under the old name.
+if (!app.includes('const { name: _unsealedName, ...sealable } = serialize();'))
+  fail.push('the slab name is back inside the seal key, so renaming a slab would silently make every master sealed under the old name unopenable');
+
 const twin = Buffer.from(slab.toString('utf8') + ' ', 'utf8');            // the free rekey: one space
 const id = { ua: 'Mozilla/5.0 (Linux; Android 10; K) Chrome/154', model: 'SM-T510', platformVersion: '13' };
 const dev = makeSeal(id, slab);

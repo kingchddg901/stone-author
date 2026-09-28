@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.23';
+  const BUILD = '2026.09.27.24';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5020,7 +5020,17 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         platformVersion: (uaHigh && uaHigh.platformVersion) || null,
       };
       const te = new TextEncoder();
-      const slab = new Uint8Array(await sub.digest('SHA-256', te.encode(JSON.stringify(serialize()))));
+      // SEAL v2: THE SLAB NAME IS NOT PART OF THE KEY. It was, and a name is a label the user edits
+      // freely - so renaming a slab silently made every master sealed under the old name unopenable.
+      // That is exactly how a day of masters went unopenable: the picture was loaded from a slab saved
+      // before names existed, so the name was empty, and the first Save typed one in. Same picture,
+      // different key, and the error read 'wrong slab'.
+      //
+      // FORWARD ONLY. A v1 master stays sealed under the bytes it was written with, name included, and
+      // the reader branches on dev.v. Rotating rather than patching, because a key cannot be changed
+      // retroactively for a file already on disk.
+      const { name: _unsealedName, ...sealable } = serialize();
+      const slab = new Uint8Array(await sub.digest('SHA-256', te.encode(JSON.stringify(sealable))));
       // kid is the first four bytes of the SLAB digest. The key is a SECOND digest, over a domain string,
       // so publishing kid hands out no part of the key it is a label for.
       const kid = Array.from(slab.slice(0, 4), b => b.toString(16).padStart(2, '0')).join('');
@@ -5030,7 +5040,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const key = await sub.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt']);
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const ct = new Uint8Array(await sub.encrypt({ name: 'AES-GCM', iv }, key, te.encode(JSON.stringify(id))));
-      devSeal = { v: 1, sealed: true, kid, iv: b64(iv), ct: b64(ct) };
+      devSeal = { v: 2, sealed: true, kid, iv: b64(iv), ct: b64(ct) };
     } catch (_) { /* the withheld block set above stands: nothing identifying is written */ }
   }
   const expMeta = o => JSON.stringify(Object.assign({
