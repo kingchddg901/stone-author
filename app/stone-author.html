@@ -71,6 +71,37 @@
   .stat { font: 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; color: var(--dim);
           font-variant-numeric: tabular-nums; }
   .note { margin: 0; color: var(--dim); font-size: 14px; max-width: 68ch; }
+
+  /* ---- COAT & LIGHT: the token kit renders this panel into a SHADOW ROOT, so the only way in is
+     ::part(), and every rule below names a part the widget sets.
+
+     THE SLIDER GETS ITS OWN ROW, and that is the whole of the layout. The kit lays a control row out as
+     `1fr auto` - name in the first track, widget in the second - which squeezes a range input into
+     whatever is left. Restacking the row to a single column and letting the range span it is worth 46%
+     of the slider at 320px: MEASURED 195px against 133px, with the number box and readout on the line
+     beneath.
+
+     AND NOT A min-width: 0 IN SIGHT, which is the interesting part. That is the fix everywhere else in
+     this file, because a range input carries a ~170px intrinsic minimum that an auto-sized grid track
+     will not shrink below. It is not needed here and four attempts to make it matter all measured
+     IDENTICALLY - because a control that spans its whole row never contends for a track, so there is
+     nothing to let give way. Put the range back in a shared track and the guard becomes necessary
+     again. (The 38px of page wiggle at 320px is the rail, and predates this panel.) */
+  #coat-panel theme-kit-editor::part(group) { border-color: var(--line); margin: 0; padding: 2px 10px 10px; }
+  #coat-panel theme-kit-editor::part(group-label) { color: var(--dim); font-size: 11px; letter-spacing: .08em; }
+  #coat-panel theme-kit-editor::part(row) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 10px 0 0; }
+  #coat-panel theme-kit-editor::part(label) { font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+                                              color: var(--dim); overflow-wrap: anywhere; }
+  #coat-panel theme-kit-editor::part(coat-wrap) { display: grid; grid-template-columns: auto minmax(0, 1fr);
+                                                  gap: 3px 8px; align-items: center; }
+  #coat-panel theme-kit-editor::part(coat-range) { grid-column: 1 / -1; width: 100%; accent-color: #8a8de0; }
+  #coat-panel theme-kit-editor::part(coat-num) { width: 5.5em; background: var(--btn); color: var(--text);
+                                                 border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px;
+                                                 font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+  #coat-panel theme-kit-editor::part(coat-out) { font: 500 12px "IBM Plex Mono", ui-monospace, Consolas, monospace;
+                                                 color: var(--text); overflow-wrap: anywhere; }
+  #coat-panel theme-kit-editor::part(coat-help) { grid-column: 1 / -1; color: var(--dim); font-size: 13px;
+                                                  max-width: 68ch; overflow-wrap: anywhere; }
   /* Export progress. A big export blocks the main thread for minutes, and the only previous signal was
      a hint that removes itself after 2.6 s, so the page read as dead. */
   .expprog { display: grid; gap: 6px; margin-top: 10px; }
@@ -323,19 +354,12 @@
   <div id="ground" class="rail">
     <details class="sec" open><summary data-i18n="sec.coat-and-light">Coat & light</summary><div class="body">
     <div class="sliders" id="g-coat">
-      <div class="sl"><label for="subsurface"><span data-i18n="sl.subsurface">Subsurface</span> <output id="subsurfaceV"></output></label><input id="subsurface" type="range" min="0" max="2" step="0.02"></div>
-      <div class="sl"><label for="specular"><span data-i18n="sl.specular">Specular / polish</span> <output id="specularV"></output></label><input id="specular" type="range" min="0" max="1" step="0.02"></div>
-      <div class="sl"><label for="lightAngle"><span data-i18n="sl.lightAngle">Light angle</span> <output id="lightAngleV"></output></label><input id="lightAngle" type="range" min="-180" max="180" step="1"></div>
-      <div class="sl"><label for="lightTemp"><span data-i18n="sl.lightTemp">Light temperature</span> <output id="lightTempV"></output></label><input id="lightTemp" type="range" min="-1" max="1" step="0.02"></div>
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.spectrum-0-daylight-sweep-to">Spectrum: 0 = daylight; sweep to light up only the artifacts whose emission you authored near that value (Black light = −1). Spotlight makes the light a beam — drag it with the Light tool.</span></div>
-      <div class="sl"><label for="lightSpectrum"><span data-i18n="sl.lightSpectrum">Light spectrum</span> <output id="lightSpectrumV"></output></label><input id="lightSpectrum" type="range" min="-1" max="1" step="0.02"></div>
+      <!-- The nine numeric controls are declared in COAT_TOKENS and rendered by the token kit, which
+           brings a number box beside each slider and a reset arrow per control. The two button groups
+           below are still hand-written: they are not numbers, and turning a Beam button into a kit
+           checkbox is an appearance decision, not a plumbing one. -->
+      <div id="coat-panel" style="grid-column:1/-1"></div>
       <div class="sl"><span class="lbl" data-i18n="lbl.spotlight">Spotlight</span><div class="grp"><button id="spot-toggle" type="button" aria-pressed="false" data-i18n="btn.spot-toggle">Beam</button></div></div>
-      <div class="sl"><label for="spotR"><span data-i18n="sl.spotR">Beam size</span> <output id="spotRV"></output></label><input id="spotR" type="range" min="0.05" max="0.6" step="0.01"></div>
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.back-light-light-from-behind">Back light: light from behind. Each bucket occludes by its own transmittance (veins nearly opaque, specks semi, the matrix glows), folded deepest → top. Tint it with Light temperature.</span></div>
-      <div class="sl"><label for="backlight"><span data-i18n="sl.backlight">Back light</span> <output id="backlightV"></output></label><input id="backlight" type="range" min="0" max="2" step="0.02"></div>
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.lens-an-ideal-glass-relief">Lens: an ideal glass relief on the very top. Flat and perfect, so head-on it does almost nothing — it refracts what lies beneath as it steepens, and it's built to pair with a back light.</span></div>
-      <div class="sl"><label for="lens"><span data-i18n="sl.lens">Lens</span> <output id="lensV"></output></label><input id="lens" type="range" min="0" max="1" step="0.02"></div>
-      <div class="sl"><label for="lensPitch"><span data-i18n="sl.lensPitch">Lens grooves</span> <output id="lensPitchV"></output></label><input id="lensPitch" type="range" min="2" max="40" step="1"></div>
       <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.lens-type">Lens type</span><div class="grp" role="group" aria-label="Lens type" data-i18n-attr="aria-label=a11y.lens-type"><button data-lens="fresnel" type="button" data-i18n="lens.fresnel">Fresnel</button><button data-lens="reeded" type="button" data-i18n="lens.reeded">Reeded</button><button data-lens="water" type="button" data-i18n="lens.water">Water</button></div></div>
     </div>
     </div></details>
@@ -1138,7 +1162,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.28.6';
+  const BUILD = '2026.09.28.10';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1294,6 +1318,40 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}`,
                  lens: v => (+v).toFixed(2), lensPitch: v => `${Math.round(v)}`, backlight: v => (+v).toFixed(2) };
+  // ---- COAT TOKENS: the coat and the light, DECLARED ONCE.
+  //
+  // Before this, every control here was three separate facts that nothing checked against each other: its
+  // BOUNDS lived in the HTML as min/max/step attributes, its FORMAT in GFMT, and its DEFAULT in G0. The
+  // bounds move here; the format and the default are still read from GFMT and G0 rather than copied, so
+  // this adds one place and removes one rather than adding a fourth.
+  //
+  // `help` is the explanatory note that used to sit in its own row ABOVE the slider it described. The
+  // vendored editor passes help through its model and does not render it, so the widget below draws it -
+  // which puts each note beside its own control instead of floating above a group of them.
+  //
+  // WHY THE SPECTRUM IS IN HERE. It is the one value on this panel that is NOT in G: the light is session
+  // state and resets on load, deliberately. It is here because a number box is what it wants - black light
+  // is exactly -1, and finding -1 by dragging a 0.02-step slider is a fight. The adapter routes it to
+  // setSpectrum() rather than to G, which is what an adapter is for.
+  const COAT_TOKENS = [
+    { key: 'subsurface',    min: 0,    max: 2,   step: 0.02, labelKey: 'sl.subsurface' },
+    { key: 'specular',      min: 0,    max: 1,   step: 0.02, labelKey: 'sl.specular' },
+    { key: 'lightAngle',    min: -180, max: 180, step: 1,    labelKey: 'sl.lightAngle' },
+    { key: 'lightTemp',     min: -1,   max: 1,   step: 0.02, labelKey: 'sl.lightTemp' },
+    { key: 'lightSpectrum', min: -1,   max: 1,   step: 0.02, labelKey: 'sl.lightSpectrum', session: true,
+      helpKey: 'ui.spectrum-0-daylight-sweep-to' },
+    { key: 'spotR',         min: 0.05, max: 0.6, step: 0.01, labelKey: 'sl.spotR' },
+    { key: 'backlight',     min: 0,    max: 2,   step: 0.02, labelKey: 'sl.backlight',
+      helpKey: 'ui.back-light-light-from-behind' },
+    { key: 'lens',          min: 0,    max: 1,   step: 0.02, labelKey: 'sl.lens',
+      helpKey: 'ui.lens-an-ideal-glass-relief' },
+    { key: 'lensPitch',     min: 2,    max: 40,  step: 1,    labelKey: 'sl.lensPitch' },
+  ];
+  const COAT_BY_KEY = new Map(COAT_TOKENS.map(t => [t.key, t]));
+  // The default a reset returns to. G0 for a stored value; daylight for the one session value, because a
+  // slab opens in daylight and "reset the light" can only sensibly mean that.
+  const coatDefault = k => COAT_BY_KEY.get(k).session ? 0 : G0[k];
+  const coatCurrent = k => COAT_BY_KEY.get(k).session ? lightSpectrum : G[k];
   const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
   const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen };
   let guidesOn = true;
@@ -3656,8 +3714,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     G.lightX = f[0]; G.lightY = f[1];                     // the light's position (drives the spotlight beam)
     const dx = f[0] - 0.5, dy = f[1] - H / 2;
     G.lightAngle = Math.round(Math.atan2(-dy, dx) * 180 / Math.PI);   // and its direction (drives the specular sheen + tile edges)
-    const el = document.getElementById('lightAngle');
-    if (el) { el.value = G.lightAngle; document.getElementById('lightAngleV').textContent = GFMT.lightAngle(G.lightAngle); }
+    syncCoat();                                           // show the panel where the light now points
   }
   function drawLightGuide() {                             // a little sun at the slab edge in the light's direction
     const px = 1 / (Wc * V.z);
@@ -4112,6 +4169,134 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     host.textContent = ''; ed = document.createElement('theme-kit-editor'); host.appendChild(ed); ed.kit = kit;
   }
 
+  // ---- COAT & LIGHT: routed through the token kit. A SECOND kit instance, not the colour one - a kit's
+  // editor renders every group in its registry, so sharing one would put the coat sliders inside the
+  // colour editor. The kit owns the DECLARATION, the WIDGETS and the reset controls; G still owns the
+  // values, which is what keeps a master's `inputs` signature where it is. tools/ablate-state-sig.mjs is
+  // the gate on that: it fails if a value arrives as a string, or if a key appears that G did not have.
+  let coatKit = null, coatEd = null;
+  const coatEls = new Map();                     // key -> the live inputs, so a Light-tool drag syncs in place
+
+  const coatFmt = (k, v) => k === 'lightSpectrum'
+    ? (+v === 0 ? TR('ui.daylight') : (+v).toFixed(2))        // 0 is not a number here, it is "daylight"
+    : (GFMT[k] ? GFMT[k](v) : (+v).toFixed(2));
+
+  // A slider AND a number box, on one value. The slider is what this panel always had; the box is the
+  // point of the exercise - black light is exactly -1, and finding -1 by dragging in 0.02 steps is a
+  // fight with the instrument. Typed values are CLAMPED, and that is load-bearing rather than tidiness:
+  // these numbers set the coat's blur radii, coatReach() sizes a tile's bleed from them, and a value past
+  // the declared maximum would ask for more bleed than the tile was given - which lands as a visible seam
+  // at every tile join in a 65,535 px master, not as an error.
+  function coatWidget(control, { onChange, document }) {
+    const wrap = document.createElement('span');
+    wrap.setAttribute('part', 'coat-wrap');
+    const range = document.createElement('input'), num = document.createElement('input');
+    range.type = 'range'; num.type = 'number';
+    for (const el of [range, num]) { el.min = control.min; el.max = control.max; el.step = control.step; el.value = control.value; }
+    range.setAttribute('part', 'coat-range'); num.setAttribute('part', 'coat-num');
+    // The editor wraps ONE <label> around both the name and the widget, so the implicit association lands
+    // on the first control and leaves the box unnamed to a screen reader. Name it.
+    num.setAttribute('aria-label', control.label);
+    const out = document.createElement('span');
+    out.setAttribute('part', 'coat-out');
+    out.textContent = coatFmt(control.key, control.value);
+    const emit = (raw, from) => {
+      const v = Number(raw);
+      if (!Number.isFinite(v)) return;                        // "" or "-" mid-typing: hold the last good value
+      const n = Math.max(control.min, Math.min(control.max, v));
+      range.value = n;
+      if (from !== 'num') num.value = n;                       // don't fight the caret while it is being typed into
+      out.textContent = coatFmt(control.key, n);
+      onChange(n);                                             // a NUMBER reaches the adapter, never a string
+    };
+    range.addEventListener('input', () => emit(range.value, 'range'));
+    num.addEventListener('input', () => emit(num.value, 'num'));
+    num.addEventListener('change', () => {                    // on blur, snap the box to what was actually taken
+      if (num.value === '') { num.value = range.value; return; }
+      num.value = Math.max(control.min, Math.min(control.max, Number(num.value)));
+    });
+    wrap.append(range, num, out);
+    if (control.help) {
+      const h = document.createElement('span');
+      h.setAttribute('part', 'coat-help'); h.textContent = control.help;
+      wrap.appendChild(h);
+    }
+    coatEls.set(control.key, { range, num, out });
+    return wrap;
+  }
+
+  function setupCoat() {
+    if (!window.TTK || !document.getElementById('coat-panel')) return;   // no kit: the markup fallback below stands
+    coatKit = TTK.createThemeKit({ prefix: '--coat-' });
+    coatKit.registerControlType('coatNum', { input: 'coatNum', coerce: v => Number(v), toCss: v => String(v), defaultValue: 0 });
+    registerCoatGroup();
+    coatKit.setAdapter({
+      // OVERRIDES ONLY, the same shape the colour editor's OVR has: a key present means "moved off its
+      // default", which is what makes the per-token reset arrow light up and mean something.
+      load: async () => {
+        const o = {};
+        for (const t of COAT_TOKENS) { const v = coatCurrent(t.key); if (v !== coatDefault(t.key)) o[t.key] = v; }
+        return o;
+      },
+      // A RESET DELETES THE KEY instead of writing the default, so an absent key here means "back to
+      // default". A plain Object.assign(G, v) would leave the old value in place - the arrow would animate,
+      // the panel would redraw, and nothing would change.
+      save: async v => {
+        for (const t of COAT_TOKENS) {
+          const raw = Object.prototype.hasOwnProperty.call(v, t.key) ? v[t.key] : coatDefault(t.key);
+          const n = Number(raw);
+          if (!Number.isFinite(n)) continue;
+          if (t.session) { if (n !== lightSpectrum) setSpectrum(n); }
+          else G[t.key] = n;                                   // Number(), so the slab's shape cannot drift to strings
+        }
+        saveLocal(); redraw(true);
+      },
+    });
+    TTK.defineThemeKitEditor();
+    mountCoat();
+  }
+
+  // Every label and note here is resolved through TR() AS THE GROUP IS REGISTERED, so registering once
+  // freezes the panel in the language that happened to be loaded first. Re-registering a group under the
+  // same id replaces it and notifies the kit's subscribers, which re-renders the editor - and it keeps
+  // the editor's values, so switching language does not quietly reset the coat.
+  function registerCoatGroup() {
+    coatKit.registerTokenGroup({
+      id: 'coat', label: TR('sec.coat-and-light'),
+      tokens: COAT_TOKENS.map(t => ({
+        key: t.key, type: 'coatNum', label: TR(t.labelKey), default: coatDefault(t.key),
+        min: t.min, max: t.max, step: t.step, help: t.helpKey ? TR(t.helpKey) : undefined,
+      })),
+    });
+  }
+
+  function mountCoat() {
+    if (!coatKit) return;
+    const host = document.getElementById('coat-panel'); if (!host) return;
+    host.textContent = ''; coatEls.clear();
+    coatEd = document.createElement('theme-kit-editor');
+    coatEd.registerWidget('coatNum', coatWidget);            // BEFORE the kit: assigning .kit starts the render
+    host.appendChild(coatEd);
+    coatEd.kit = coatKit;
+  }
+
+  // THE LIGHT TOOL DRAGS, so this may not remount: setLight() fires on every pointer-move and rebuilding a
+  // shadow tree per frame would make the drag crawl. It writes into the live inputs instead - and into the
+  // editor's own values, which is the half that is easy to miss: the editor sends its WHOLE value object on
+  // every change, so a stale lightAngle in there would be written back over the drag the moment any other
+  // control on the panel moved.
+  function syncCoat() {
+    if (!coatEd) return;
+    const o = {};
+    for (const t of COAT_TOKENS) {
+      const v = coatCurrent(t.key);
+      if (v !== coatDefault(t.key)) o[t.key] = v;
+      const els = coatEls.get(t.key);
+      if (els) { els.range.value = v; els.num.value = v; els.out.textContent = coatFmt(t.key, v); }
+    }
+    coatEd.values = o;
+  }
+
   // ---- LAYERS PANEL: eye + solo + opacity per canonical layer, shown front-to-back (major on top) so it
   // reads like a stack. Toggling only repaints; when tiles are laid it also re-bakes the slab offscreen.
   const layEl = document.getElementById('layers');
@@ -4348,7 +4533,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     uvMode = false; lightSpectrum = 0; spotOn = false;                       // a loaded slab opens in daylight, light off
     { const ub = document.getElementById('uv-toggle'); if (ub) ub.setAttribute('aria-pressed', 'false');
       const so = document.getElementById('spot-toggle'); if (so) so.setAttribute('aria-pressed', 'false');
-      const sp = document.getElementById('lightSpectrum'); if (sp) { sp.value = 0; document.getElementById('lightSpectrumV').textContent = TR('ui.daylight'); } }
+    }
     const reset = (dst, def, src) => { for (const k in dst) delete dst[k]; Object.assign(dst, JSON.parse(JSON.stringify(def))); if (src) Object.assign(dst, JSON.parse(JSON.stringify(src))); };
     reset(G, G0, o.G); reset(T, T0, o.T); reset(NEXT, NEXT0, o.NEXT);   // HARD reset to defaults, THEN apply the slab — a load never inherits the previous slab's non-saved keys
     cloudSig = bandSig = brecSig = ''; last = null;                     // invalidate the render caches so nothing survives a load
@@ -4393,6 +4578,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const k in perItem) delete perItem[k]; if (o.perItem) Object.assign(perItem, o.perItem);
     registerSpeckGroups(); registerSelectedColours(); recolour();
     if (typeof mountEditor === 'function') mountEditor();     // reflect restored colours in the editor
+    mountCoat();                                              // and the restored coat + a light back at daylight
     marks = o.marks.filter(m => m.kind !== 'knot').map(m => ({ ...m }));   // drop retired knot marks
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
     stoneReady = false; buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
@@ -5691,7 +5877,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function setSpectrum(v) {                               // move the light to a spectrum value; 0 = daylight, else a light is on
     lightSpectrum = v; uvMode = v !== 0;
     document.getElementById('uv-toggle').setAttribute('aria-pressed', uvMode);
-    const sp = document.getElementById('lightSpectrum'); if (sp) { sp.value = v; document.getElementById('lightSpectrumV').textContent = v === 0 ? 'daylight' : (+v).toFixed(2); }
+    syncCoat();                                            // whatever moved the light, the panel agrees with it
     if (uvMode && view !== 'stone') { view = 'stone'; press('[data-view]', document.getElementById('v-stone')); }
   }
   document.getElementById('uv-toggle').addEventListener('click', () => {   // Black light = jump the light to the UV end (−1), or back to daylight
@@ -5699,8 +5885,6 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     hint(uvMode ? TR('hint.black-light-spectrum-1-only-artifacts') : null);
     saveLocal(); redraw(false);
   });
-  { const sp = document.getElementById('lightSpectrum');   // the continuous spectrum dial: sweep it and different sets light up
-    if (sp) sp.addEventListener('input', () => { setSpectrum(+sp.value); saveLocal(); redraw(false); }); }
   { const so = document.getElementById('spot-toggle');     // SPOTLIGHT: the light becomes a movable beam (drag it with the Light tool)
     if (so) so.addEventListener('click', () => { spotOn = !spotOn; so.setAttribute('aria-pressed', spotOn); hint(spotOn ? TR('hint.spotlight-on-only-artifacts-inside-the') : null); saveLocal(); redraw(false); }); }
   for (const id of Object.keys(NEXT)) {
@@ -5720,7 +5904,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     sel.addEventListener('change', () => SA_I18N.setLang(sel.value));
     // The panels the studio GENERATES (layers, folders, the colour editor) hold no markup to re-label,
     // so they are rebuilt rather than patched.
-    SA_I18N.onChange(() => { fill(); buildLayerUI(); syncUI(); });
+    SA_I18N.onChange(() => { fill(); buildLayerUI(); syncUI(); if (coatKit) registerCoatGroup(); });
   }
   const pp = document.getElementById('pen-pressure');
   pp.addEventListener('click', () => {
@@ -6859,6 +7043,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   size();
   buildLayerUI();
   setupColour();
+  setupCoat();
   if (!tryLoadLocal()) {                                // restore the last session on this device, else the demo
     marks = demo; nextId = 5; seedColours(fam); recolour(); mountEditor();
     for (const m of marks) { m.p = { ...NEXT }; m.fam = fam; }

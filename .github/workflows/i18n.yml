@@ -53,6 +53,8 @@ jobs:
         run: node tools/check-wake-lock.mjs
       - name: The device identity is sealed under the slab, and fails closed
         run: node tools/check-device-seal.mjs
+      - name: Every coat token names a key of G, inside its own bounds, with a string in the pack
+        run: node tools/check-coat-tokens.mjs
       - name: The render signature moves on the picture and the light, and holds on bookkeeping
         run: node tools/ablate-state-sig.mjs
       - name: Every blur a tile can meet has bleed behind it, and the bloom is probed
