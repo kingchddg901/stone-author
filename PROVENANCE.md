@@ -12,12 +12,12 @@ record of each.
 ## Build — Claude Code
 
 The build is **two continuous Claude Code sessions**, back to back — the second one opened 23 seconds after
-the first closed — running from 2026-09-20 20:03 UTC to 2026-09-27 01:42 UTC: six days and five hours of
-wall-clock span, 9,178 tool calls, all 202 commits in this repo. Both are archived: every message, every tool
+the first closed — running from 2026-09-20 20:03 UTC to 2026-09-28 05:37 UTC: seven days, nine hours and
+thirty-four minutes of wall-clock span, 10,600 tool calls, all 258 commits in this repo. Both are archived: every message, every tool
 call *with its arguments*, and every tool result. That record is the provenance oracle — the one source that
 can answer "why is this the way it is?" down to the exact call that made it.
 
-The raw material is ~574 MB across the two, so it is **not committed here** — it lives as compressed archives
+The raw material is ~658 MB across the two, so it is **not committed here** — it lives as compressed archives
 kept privately and, if ever published, attached to a GitHub Release. These tables are the pointer to them.
 
 ### Session 1 — the studio
@@ -31,7 +31,7 @@ kept privately and, if ever published, attached to a GitHub Release. These table
 | Tool calls | 4,384 (arguments recorded verbatim) |
 | Tool results | 4,383 (full output; 145 errors) |
 | Sidecars | 51 files, 35.6 MB (large results offloaded from the transcript) |
-| Commits here | 41 of 202 — the marble studio itself, from the repo split on Sep 21 |
+| Commits here | 41 of 258 — the marble studio itself, from the repo split on Sep 21 |
 | Archive | `stone-author-session-698bc007-76d7-4c9f-8f93-ad00bf28ca5c.tar.xz` (113.8 MB, xz) |
 | SHA-256 | `8365ee337924e61da2f5efb22a38b04d5ae31619e855febb008fc3f6957f9c2a` |
 
@@ -39,15 +39,22 @@ kept privately and, if ever published, attached to a GitHub Release. These table
 
 | | |
 |---|---|
-| Session ID | `28da307f-5ea7-4449-815d-ae43b7b0ba89` |
-| Span | 2026-09-23 06:55:35Z → 2026-09-27 01:42:24Z (90h 47m) |
-| Captured | 2026-09-27 01:42:24Z, **while the session was still live** — a prefix, to be re-cut at close |
-| Transcript | 233.3 MB, 38,557 lines |
-| Tool calls | 4,794 (arguments recorded verbatim) |
-| Tool results | 4,793 (full output; 154 errors) |
-| Sidecars | 76 files, 57.1 MB — 66 offloaded results plus 10 subagent transcripts (5 runs) |
-| Commits here | 161 of 202 — the coat tier, the layer system, and the master export path |
+| Session ID | `28da307f-5ea7-4449-815d-ae43b7b0ba89` (still open) |
+| Span so far | 2026-09-23 06:55:35Z → 2026-09-28 05:37:28Z (118h 42m) |
+| Transcript | 316.7 MB, 52,703 lines |
+| Tool calls | 6,216 (arguments recorded verbatim) |
+| Tool results | 6,215 (full output; 195 errors) |
+| Sidecars | 78 files, 58.5 MB — 68 offloaded results plus 10 subagent transcripts (5 runs) |
+| Commits here | 217 of 258 — the coat tier, the layer system, the master export path, and the render calibration |
+
+The figures above are the session **as it stands**, read from the live transcript on 2026-09-28. The archive
+below is a different thing: a **prefix**, cut while the session was running, and it describes itself rather
+than the rows above. It will be re-cut when the session closes.
+
+| | |
+|---|---|
 | Archive | `stone-author-session-28da307f-5ea7-4449-815d-ae43b7b0ba89.tar.xz` (95.5 MB, xz) |
+| Cut at | 2026-09-27 01:42:24Z — 4,794 tool calls, 233.3 MB, 38,557 lines |
 | SHA-256 | `aaf6f59d69190da0b2cbe778c35d2d1af197c16dd437a879fefae46aa851f49a` |
 
 The second session is the larger part of this repo's history: the coat tier (subsurface, specular, the one
@@ -56,6 +63,21 @@ and the layer-aware back-light fold), the layer system (Fog, layer delete, rende
 layer-select sculpt, protected warp islands, the Mask tool), the two-pane workbench, the gallery heroes,
 `renderFull` and `renderTiled`, off-thread PNG encode, strips, the large render tiers, the whole tiled-BigTIFF
 master path with its export guards, and the refactor that removed Wood and made this stone-only.
+
+Its last day is the render calibration, and it is the part of the record that most rewards replay, because
+almost all of it is wrong answers corrected by measurement. The image-space bloom was found to reach 2.41%
+of the image width per side — 1,577 px against a 2,048 px tile at 65535, which made a black-light master
+arithmetically impossible on a tablet. It was replaced with a halo drawn per element, taking the bleed from
+1,577 px to 4. That correction then had to be measured for each browser engine, because each draws a
+different halo: Blink wants the lift raised with width, Gecko wants its own steeper line, WebKit wants light
+taken away. Three engines and six devices now land within 0.3% of one reference, and the transcript holds
+every wrong mechanism proposed on the way — four of them for one tablet's truncation alone, each killed by a
+measurement Chris sent back.
+
+It also holds the failures of the checks themselves, which is the less flattering half: gates written that
+could not fail, a probe that had never once produced a reading while appearing to work, escape sequences
+mangled three separate times in generated code, and a temporal dead zone written and shipped green past six
+gates before a browser found it in ten seconds.
 
 **Contents of each archive:** the transcript `.jsonl` (one JSON object per line: messages, tool calls +
 arguments, tool results) and the sidecar files it references — results too large to inline were offloaded and
