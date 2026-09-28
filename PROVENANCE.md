@@ -64,13 +64,14 @@ layer-select sculpt, protected warp islands, the Mask tool), the two-pane workbe
 `renderFull` and `renderTiled`, off-thread PNG encode, strips, the large render tiers, the whole tiled-BigTIFF
 master path with its export guards, and the refactor that removed Wood and made this stone-only.
 
-Its last day is the render calibration, and it is the part of the record that most rewards replay, because
-almost all of it is wrong answers corrected by measurement. The image-space bloom was found to reach 2.41%
+Its last day is the render calibration, and most of it is wrong answers corrected by measurement. The image-space bloom was found to reach 2.41%
 of the image width per side — 1,577 px against a 2,048 px tile at 65535, which made a black-light master
 arithmetically impossible on a tablet. It was replaced with a halo drawn per element, taking the bleed from
 1,577 px to 4. That correction then had to be measured for each browser engine, because each draws a
 different halo: Blink wants the lift raised with width, Gecko wants its own steeper line, WebKit wants light
-taken away. Three engines and six devices now land within 0.3% of one reference, and the transcript holds
+taken away. Three engines on five devices now land within 0.3% of one reference — with one configuration that does
+NOT, Gecko on Android, which cannot be brought there by the correction at all and is recorded as what it is.
+The transcript holds
 every wrong mechanism proposed on the way — four of them for one tablet's truncation alone, each killed by a
 measurement Chris sent back.
 
