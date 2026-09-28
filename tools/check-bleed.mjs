@@ -298,6 +298,14 @@ if (!app.includes('IS_GECKO ? glowPx * 0.000692 + 0.054 :'))
   fail.push('the Gecko lift is not the fitted line through its two measured matches, so Firefox cannot agree with the set at more than one width');
 if (app.slice(app.indexOf('const WEBKIT_LIFT'), app.indexOf('const liftCv')).includes('userAgent'))
   fail.push('the engine branch reads a user agent instead of probing a capability, which is a claim and not a measurement');
+// A LOAD DISARMS THE BRUSH. A slab records the tool that was active when it was written, and the
+// gallery slab records "moon" - so loading it hands back a picture the user asked to be unchanged with
+// a drawing tool live. One tap on a tablet put a 667th mark into a 65535 master on 2026-09-27; the only
+// thing that caught it was the render signature refusing to match the rest of the set, after the render
+// had already run for 28 minutes.
+if (!app.includes("tool = 'move';"))
+  fail.push('loading a slab no longer disarms the drawing tool, so a slab saved mid-stroke hands back a live brush over a picture the user asked to be restored unchanged');
+
 // THE CANDIDATE QUOTA COUNTS CHOICES, NOT ATTEMPTS. A size the memory test will not prefer cannot be
 // selected, so admitting it to the shortlist and stopping the search there leaves a device with one
 // real option and no alternative. Measured on a 2 GB tablet: 8192 cleared calibration and failed on

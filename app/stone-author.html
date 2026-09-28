@@ -1122,7 +1122,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.28';
+  const BUILD = '2026.09.28.1';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4295,7 +4295,21 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     slabName = typeof o.name === 'string' ? o.name : '';   // absent on a slab saved before names existed
     { const el = document.getElementById('slabname'); if (el) el.value = slabName; }
     fam = FAM[o.fam] ? o.fam : 'carrara';                 // a retired family (e.g. wood) falls back to Carrara
+    // LOADING ARMS MOVE, WHATEVER THE SLAB SAVED. A slab records the tool that was active when it was
+    // written, and the gallery slab here records "moon" - so loading it leaves a drawing tool armed on a
+    // picture the user has just declared they want unchanged. On a tablet one stray tap while scrolling
+    // the rail draws a mark, the picture is silently no longer the one on disk, and nothing on screen
+    // says so. That is not hypothetical: it put a 667th mark into a 65535 master on 2026-09-27 and the
+    // only thing that caught it was the render signature refusing to match the rest of the set.
+    //
+    // Fixed on LOAD rather than on save, deliberately. Saving `move` instead would leave every slab
+    // already written - including the published one, whose bytes are a seal key and must not change -
+    // still carrying a live brush. `tool` is not part of renderSig, so this alters no signature.
     tool = document.querySelector('[data-tool="' + o.tool + '"]') ? o.tool : 'vein';   // a retired tool (e.g. knot) falls back to Vein
+    tool = 'move';                                       // ...and then disarmed, because a load is not an invitation to draw
+    // and the rail has to AGREE. Setting the variable alone leaves whichever tool was highlighted still
+    // looking armed, which is a worse lie than the one being fixed: the user would trust the button.
+    { const mv = document.querySelector('[data-tool="move"]'); if (mv) press('[data-tool]', mv); }
     view = o.view; layTiles = !!o.layTiles; guidesOn = o.guidesOn !== false;
     uvMode = false; lightSpectrum = 0; spotOn = false;                       // a loaded slab opens in daylight, light off
     { const ub = document.getElementById('uv-toggle'); if (ub) ub.setAttribute('aria-pressed', 'false');
