@@ -1096,7 +1096,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.27.24';
+  const BUILD = '2026.09.27.25';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6535,8 +6535,11 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // master written before this carried no glowLift field at all - indistinguishable from a build
         // that never recorded one, when in fact it had run at the single value that was wrong. Present
         // whenever a halo was drawn, absent when there was none to lift.
-        glowLift: BLOOM_DRAW ? +glowLift().toFixed(3) : undefined,   // toward white, or negative toward black
-        glowRule: GLOW_AUTO && BLOOM_DRAW ? (!CAN_FILTER ? 'webkit' : IS_GECKO ? 'gecko' : 'blink') : undefined,
+        glowLift: BLOOM_DRAW && uvMode ? +glowLift().toFixed(3) : undefined,   // toward white, or negative toward black
+        // ONLY WHEN A HALO WAS ACTUALLY DRAWN. fxOn gates the glow on uvMode, so a DAYLIGHT master draws
+        // none - and the first daylight ladder came back stamped 'webkit, -0.304, auto' for nine renders
+        // in which the lift did nothing whatever. Metadata records what happened, not what would have.
+        glowRule: GLOW_AUTO && BLOOM_DRAW && uvMode ? (!CAN_FILTER ? 'webkit' : IS_GECKO ? 'gecko' : 'blink') : undefined,
         glowAuto: GLOW_AUTO || undefined,                // ...and whether that came from the sigma fit or a fixed number
         // Drawn halo against the blur it replaces, at sigma 320. MEASURED 2026-09-27 AND IT READS ZERO ON
         // EVERY ENGINE: a radius-6 disc spread over sigma 320 puts its whole energy across ~2.9M pixels,
@@ -6551,7 +6554,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // radius would decide the answer. On a 2048 canvas a radius that clears the floor cannot also
         // contain 3 sigma, so this needs a bigger sheet or a smaller sigma - a real choice, not a tweak.
         // Left recording honestly until then: 0 now means "the probe ran and could not see anything".
-        glowRatio: BLOOM_DRAW ? glowRatio() : undefined,
+        glowRatio: BLOOM_DRAW && uvMode ? glowRatio() : undefined,
         // The light this master carries, sampled as it was written. 'mean' is the whole-picture average
         // luma over every 100th pixel — the same statistic `tiff-meta --audit` computes from a full
         // decode, so the two are comparable and a disagreement is itself a finding.

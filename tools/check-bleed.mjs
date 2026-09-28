@@ -253,7 +253,7 @@ if (!app.includes('glowPx * 0.00065 - 0.07'))
   fail.push('the automatic lift is not the fitted function of sigma, so it cannot be right at more than one width');
 if (!app.includes('if (t !== liftCached) { liftMap.clear(); liftCached = t; }'))
   fail.push('the lifted-colour cache is not invalidated when the lift changes: a second render at another width would silently reuse the colours from the first');
-if (!app.includes('glowLift: BLOOM_DRAW ? +glowLift().toFixed(3) : undefined'))
+if (!app.includes('glowLift: BLOOM_DRAW && uvMode ? +glowLift().toFixed(3) : undefined'))
   fail.push('the master records the requested lift rather than the effective one, so an auto render would claim a lift it did not use');
 // A LIFT OF EXACTLY ZERO HAS TO SURVIVE THE STAMP. `|| undefined` deleted it, and zero is not the
 // uninteresting case - it is what WebKit shipped, and the one value that was measurably wrong. Every
@@ -308,11 +308,13 @@ if (app.includes('IS_GECKO ? glowPx') && app.indexOf('const IS_GECKO =') > app.i
 // without it can never learn its own build. Three builds today moved drawn output.
 if (!app.includes('build: BUILD,'))
   fail.push('a master does not record which build drew it, so a set rendered across builds cannot be attributed and never can be, since this cannot be added to a file after the fact');
-if (!app.includes("glowRule: GLOW_AUTO && BLOOM_DRAW ?"))
+// AND ONLY WHEN ONE WAS DRAWN. The glow is gated on uvMode, so a daylight master draws no halo at all
+// and a lift stamped there is a claim about a render that did not happen.
+if (!app.includes('GLOW_AUTO && BLOOM_DRAW && uvMode ?'))
   fail.push('a master does not record WHICH engine rule produced its lift, so a Gecko render that silently took the Blink line is indistinguishable from a Blink one');
 if (!app.includes("GLOW_RAW === '' || GLOW_RAW === 'auto'"))
   fail.push('the lift does not default to auto, so a default render uses no correction at all and comes back dim at every large width');
-if (!app.includes('glowRatio: BLOOM_DRAW ? glowRatio() : undefined'))
+if (!app.includes('glowRatio: BLOOM_DRAW && uvMode ? glowRatio() : undefined'))
   fail.push('a master does not record the drawn-against-blurred ratio, so the per-engine branch can never be replaced by a fitted curve');
 // THE PROBE READING ZERO HAS TO REACH THE FILE. It reads zero on every engine today - the blurred branch
 // quantises away below half a level - and the old stamp deleted that zero, so a probe that never saw
