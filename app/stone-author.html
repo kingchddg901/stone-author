@@ -712,7 +712,7 @@ window.SA_I18N = (() => {
   "btn.tileprobe": "Probe",
   "a11y.tile-size": "Tile size",
   "ui.tile-proven": "passed:",
-  "ui.tile-shortlist": "planner would shortlist:",
+  "ui.tile-shortlist": "within the memory budget:",
   "ui.tile-none": "none",
   "ui.tile-probing": "probing...",
   "ui.tile-probe-note": "Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width — it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered.",
@@ -1124,7 +1124,7 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.28.2';
+  const BUILD = '2026.09.28.3';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6280,10 +6280,12 @@ var TTK=(()=>{var x=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           if (canvasFits(side, side, EXP_PEAK, sigma)) pass.push(ts);
         }
         const rec = planRec(W); rec.probe = pass; rec.probedAt = Date.now(); planWrite(W, rec);
-        // WHAT THE PLANNER WOULD SHORTLIST, from the same arithmetic it uses. NOT what it would pick:
-        // the winner among the shortlist is decided by MEASURED time per tile, which only a real
-        // calibration tile gives and this probe does not do. Saying "would choose" here would be a
-        // guess wearing a number.
+        // WHICH CLEARED SIZES FIT THE MEMORY BUDGET, using the planner's own arithmetic. That is all this
+        // is, and the label says so. It is NOT the planner's shortlist and must not be read as one: the
+        // planner descends from 8192 and STOPS once two viable sizes exist, so it never reaches the
+        // small end of this list - and it admits a size on `calibrate`, one real tile, where this probe
+        // demands two canvases through canvasFits and refuses sizes calibrate accepts. The two disagree
+        // by design, in both directions, so neither predicts the other.
         const wins = gatherMasks().filter(m => m.show != null).length;
         const surfaces = (wins ? 3 : 1) + (sigma > 0 ? 1 : 0);
         const cap = MEM_EASY * memBudget();
