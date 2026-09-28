@@ -12,8 +12,8 @@ record of each.
 ## Build — Claude Code
 
 The build is **two continuous Claude Code sessions**, back to back — the second one opened 23 seconds after
-the first closed — running from 2026-09-20 20:03 UTC to 2026-09-28 05:37 UTC: seven days, nine hours and
-thirty-four minutes of wall-clock span, 10,600 tool calls, all 258 commits in this repo. Both are archived: every message, every tool
+the first closed — running from 2026-09-20 20:03 UTC to 2026-09-28 09:11 UTC: seven days, thirteen hours
+and eight minutes of wall-clock span, 10,712 tool calls, all 267 commits in this repo. Both are archived: every message, every tool
 call *with its arguments*, and every tool result. That record is the provenance oracle — the one source that
 can answer "why is this the way it is?" down to the exact call that made it.
 
@@ -40,14 +40,14 @@ kept privately and, if ever published, attached to a GitHub Release. These table
 | | |
 |---|---|
 | Session ID | `28da307f-5ea7-4449-815d-ae43b7b0ba89` (still open) |
-| Span so far | 2026-09-23 06:55:35Z → 2026-09-28 05:37:28Z (118h 42m) |
-| Transcript | 316.7 MB, 52,703 lines |
-| Tool calls | 6,216 (arguments recorded verbatim) |
-| Tool results | 6,215 (full output; 195 errors) |
+| Span so far | 2026-09-23 06:55:35Z → 2026-09-28 09:11:10Z (122h 16m) |
+| Transcript | 327.8 MB, 54,217 lines |
+| Tool calls | 6,328 (arguments recorded verbatim) |
+| Tool results | 6,327 (full output; 197 errors) |
 | Sidecars | 78 files, 58.5 MB — 68 offloaded results plus 10 subagent transcripts (5 runs) |
-| Commits here | 217 of 258 — the coat tier, the layer system, the master export path, and the render calibration |
+| Commits here | 226 of 267 — the coat tier, the layer system, the master export path, and the render calibration |
 
-The figures above are the session **as it stands**, read from the live transcript on 2026-09-28. The archive
+The figures above are the session **as it stands**, read from the live transcript on 2026-09-28 at 09:11Z. The archive
 below is a different thing: a **prefix**, cut while the session was running, and it describes itself rather
 than the rows above. It will be re-cut when the session closes.
 
@@ -74,6 +74,11 @@ NOT, Gecko on Android, which cannot be brought there by the correction at all an
 The transcript holds
 every wrong mechanism proposed on the way — four of them for one tablet's truncation alone, each killed by a
 measurement Chris sent back.
+
+The set it produced is documented in [`docs/devices.md`](docs/devices.md): five machines, each rendering
+a 65,535 × 40,959 master in both lights, from a 2019 budget tablet with 2 GB through to a desktop. Four
+Blink devices agree to 0.41% on the same picture, the slowest is 19× the fastest, and the fastest is a
+phone. A reader can check any of it without the masters — see [`docs/reproduce.md`](docs/reproduce.md).
 
 It also holds the failures of the checks themselves, which is the less flattering half: gates written that
 could not fail, a probe that had never once produced a reading while appearing to work, escape sequences
