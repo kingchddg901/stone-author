@@ -30,7 +30,9 @@ function correlate(a, b) {                               // Pearson, to say whet
   return sa && sb ? sab / Math.sqrt(sa * sb) : null;
 }
 
-const lightOf = m => m.spectrum === 0 ? 'day' : m.spectrum === -1 ? 'uv'
+// A crossfade never sits at one spectrum value, so it is named for the move rather than the dial.
+const lightOf = m => m.cross ? 'x' + String(m.cross.a).replace('-', 'm') + '_' + String(m.cross.b).replace('-', 'm')
+  : m.spectrum === 0 ? 'day' : m.spectrum === -1 ? 'uv'
   : 'spx' + String(Math.round(m.spectrum * 100)).replace('-', 'm');
 
 function engineOf(m) {
@@ -120,6 +122,7 @@ for (const path of paths) {
   console.log(`  ${m.w ? num(m.w) + ' x ' + num(m.h) : '?'}  ${geom}`);
   console.log(`  rendered ${m.at}  scope=${m.scope}  slab=${m.slab || '(not recorded)'}  family=${m.family}`);
   console.log(`  spectrum ${m.spectrum}${m.spectrum === -1 ? ' (black light)' : m.spectrum === 0 ? ' (daylight)' : ''}   back light ${G.backlight ?? '?'}`);
+  if (m.cross) console.log(`  crossfade ${m.cross.a} -> ${m.cross.b} at ${m.cross.t}   (the spectrum value above is where the dial was parked; the light was never read there)`);
   // inputs is the signature that answers "same picture"; state is kept only so older masters still read,
   // and it is labelled here because reading it as an answer is exactly the mistake it invites.
   console.log(`  inputs   ${m.inputs || '(not recorded — master predates the render signature)'}` +

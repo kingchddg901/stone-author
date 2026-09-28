@@ -8,6 +8,18 @@
  "a11y.choose-the-interface-language": {
   "where": "accessibility label (aria-label), not visible on screen"
  },
+ "a11y.crossfade-from": {
+  "where": "accessibility label (aria-label) on the \"from\" stop picker in Coat & light, not visible on screen",
+  "terms": [
+   "spectrum"
+  ]
+ },
+ "a11y.crossfade-to": {
+  "where": "accessibility label (aria-label) on the \"to\" stop picker in Coat & light, not visible on screen",
+  "terms": [
+   "spectrum"
+  ]
+ },
  "a11y.edit": {
   "where": "accessibility label (aria-label), not visible on screen"
  },
@@ -183,6 +195,13 @@
  },
  "btn.colour-toggle": {
   "where": "under the \"colour\" section"
+ },
+ "btn.crossfade": {
+  "where": "toggle button in the Coat & light panel; turns on a blend between two chosen spectrum stops",
+  "terms": [
+   "spectrum",
+   "light"
+  ]
  },
  "btn.export": {
   "where": "in the \"File\" group/panel, under the \"file\" section"
@@ -950,6 +969,12 @@
  "lbl.lens-type": {
   "where": "under the \"coat-and-light\" section"
  },
+ "lbl.crossfade": {
+  "where": "label beside the crossfade toggle in Coat & light",
+  "terms": [
+   "spectrum"
+  ]
+ },
  "lbl.magnet": {
   "terms": [
    "magnet"
@@ -1255,6 +1280,13 @@
  },
  "sl.cloudX": {
   "where": "under the \"clouds-and-warp\" section"
+ },
+ "sl.crossT": {
+  "where": "slider in Coat & light: how far along the crossfade the light sits, 0 at the first stop and 1 at the second",
+  "terms": [
+   "light",
+   "spectrum"
+  ]
  },
  "sl.cloudY": {
   "where": "under the \"clouds-and-warp\" section"
@@ -1794,6 +1826,13 @@
  },
  "ui.daylight": {
   "where": "text on a generated control"
+ },
+ "ui.crossfade-note": {
+  "where": "explanatory note above the crossfade controls in the Coat & light panel",
+  "terms": [
+   "spectrum",
+   "light"
+  ]
  },
  "ui.enter": {
   "where": "text on a generated control"

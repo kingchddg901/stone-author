@@ -359,6 +359,13 @@
            below are still hand-written: they are not numbers, and turning a Beam button into a kit
            checkbox is an appearance decision, not a plumbing one. -->
       <div id="coat-panel" class="tk" style="grid-column:1/-1"></div>
+      <div class="sl" style="grid-column:1/-1"><span class="note" style="margin:0" data-i18n="ui.crossfade-note">Crossfade: blend between two stops you pick, ignoring everything between them. Sweeping the spectrum walks the whole line, so stops at −1, 0 and +1 mean 0 interrupts a −1 → +1 move; this asks each artifact how it looks at each end and mixes those two answers.</span></div>
+      <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.crossfade">Crossfade</span><div class="grp"><button id="cross-toggle" type="button" aria-pressed="false" data-i18n="btn.crossfade">Between two stops</button></div></div>
+      <div class="sl" id="cross-pick" hidden style="grid-column:1/-1"><div class="grp">
+        <select id="crossA" aria-label="Crossfade from" data-i18n-attr="aria-label=a11y.crossfade-from"></select>
+        <select id="crossB" aria-label="Crossfade to" data-i18n-attr="aria-label=a11y.crossfade-to"></select>
+      </div></div>
+      <div class="sl" id="cross-blend" hidden><label for="crossT"><span data-i18n="sl.crossT">Blend</span> <output id="crossTV"></output></label><input id="crossT" type="range" min="0" max="1" step="0.01"></div>
       <div class="sl"><span class="lbl" data-i18n="lbl.spotlight">Spotlight</span><div class="grp"><button id="spot-toggle" type="button" aria-pressed="false" data-i18n="btn.spot-toggle">Beam</button></div></div>
       <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.lens-type">Lens type</span><div class="grp" role="group" aria-label="Lens type" data-i18n-attr="aria-label=a11y.lens-type"><button data-lens="fresnel" type="button" data-i18n="lens.fresnel">Fresnel</button><button data-lens="reeded" type="button" data-i18n="lens.reeded">Reeded</button><button data-lens="water" type="button" data-i18n="lens.water">Water</button></div></div>
     </div>
@@ -493,6 +500,8 @@ window.SA_I18N = (() => {
   const PACKS = { en: {
   "a11y.black-light-only-the-uv": "Black light — only the UV palette glows",
   "a11y.choose-the-interface-language": "Choose the interface language",
+  "a11y.crossfade-from": "Crossfade from",
+  "a11y.crossfade-to": "Crossfade to",
   "a11y.edit": "Edit",
   "a11y.export-what": "What to export",
   "a11y.export-format": "Export format",
@@ -536,6 +545,7 @@ window.SA_I18N = (() => {
   "btn.clear": "Clear",
   "btn.colour-fromfam": "Palette from family",
   "btn.colour-toggle": "Show colour editor",
+  "btn.crossfade": "Between two stops",
   "btn.export": "Export",
   "btn.fwd": "Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein’s width along its length and a pour’s flow; with tilt on, leaning the pen further than you normally hold it softens the vein’s edge along its length.",
   "btn.granite-reseed": "Reseed",
@@ -704,6 +714,7 @@ window.SA_I18N = (() => {
   "lbl.language": "Language",
   "lbl.layout": "Layout",
   "lbl.lens-type": "Lens type",
+  "lbl.crossfade": "Crossfade",
   "lbl.magnet": "Magnet",
   "lbl.pen": "Pen",
   "lbl.scatter": "Scatter",
@@ -779,6 +790,7 @@ window.SA_I18N = (() => {
   "sl.cloudScale": "Cloud scale",
   "sl.cloudStrength": "Clouds",
   "sl.cloudX": "Cloud X",
+  "sl.crossT": "Blend",
   "sl.cloudY": "Cloud Y",
   "sl.defl": "Deflection",
   "sl.density": "Density",
@@ -902,6 +914,7 @@ window.SA_I18N = (() => {
   "ui.back-light-light-from-behind": "Back light: light from behind. Each bucket occludes by its own transmittance (veins nearly opaque, specks semi, the matrix glows), folded deepest → top. Tint it with Light temperature.",
   "ui.colour-editor-unavailable": "Colour editor unavailable",
   "ui.daylight": "daylight",
+  "ui.crossfade-note": "Crossfade: blend between two stops you pick, ignoring everything between them. Sweeping the spectrum walks the whole line, so stops at −1, 0 and +1 mean 0 interrupts a −1 → +1 move; this asks each artifact how it looks at each end and mixes those two answers.",
   "ui.enter": "enter",
   "ui.folder-from-selected-layers": "+ folder from selected layers",
   "ui.folders-spectrum-workspaces": "Folders · spectrum workspaces",
@@ -1163,7 +1176,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.28.16';
+  const BUILD = '2026.09.28.17';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1228,6 +1241,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let shortlist = null;                                  // sizes the planner would consider, from the last probe
   let tierLarge = false, tierExtreme = false, fmtChosen = false;
   let uvMode = false, lightSpectrum = 0, spotOn = false; const OVR_uv = {}, UV_DARK = '#0a0a0e', SPX_TOL = 0.12;
+  // CROSSFADE: two chosen stops and a blend between them, with everything in between IGNORED. Sweeping
+  // the spectrum walks the number line, so stops at -1, 0 and +1 mean 0 always interrupts a -1 -> +1
+  // move. This asks each artifact what it looks like AT -1 and AT +1 and mixes those two answers, so
+  // the light is never evaluated at 0 and 0 is never consulted. Session state, like the rest of the
+  // light: it is not serialised, so nothing on disk changes and no slab migrates.
+  let crossOn = false, crossA = -1, crossB = 0, crossT = 0;
   // THE GROUND IS NOT BLOOMED, IT IS ADDED. Blurring a constant returns the constant, so the old ground
   // reached the picture twice: once as itself and once through the two bloom passes, 1 + 0.55 + 0.35.
   // That doubling was 36% of the light and every bit of it was recovered by smearing a flat colour
@@ -1269,11 +1288,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const en = arr.find(e => Math.abs(v - e.v) <= SPX_TOL);                    // past the ends: the old rule
     return en ? en.c : null;
   };
+  // Each side is resolved by the ORDINARY rule at its own stop - blend, tolerance, everything - and
+  // only then are the two results mixed. That is what keeps this six lines: emitAt is untouched, and an
+  // artifact behaves at t=0 exactly as it does with the light parked at A.
+  const emitCross = (arr, a, b, t) => {
+    const A = emitAt(arr, a), B = emitAt(arr, b);
+    if (!A && !B) return null;                                                // lit at neither end
+    if (!A) return mixHexAt(UV_DARK, B, t);                                   // fades IN across the move
+    if (!B) return mixHexAt(A, UV_DARK, t);                                   // and out
+    return mixHexAt(A, B, t);
+  };
   const emit = (id, layer, x, y) => {
     const arr = (id != null && OVR_uv['id:' + id]) || OVR_uv['lay:' + layer];   // a LIST of {v,c} — an artifact can glow in several spectra
     if (!arr) return null;
     if (spotOn && x != null && Math.hypot(x - G.lightX, y - G.lightY) > G.spotR) return null;   // spatial: inside the beam
-    return emitAt(arr, lightSpectrum);
+    return crossOn ? emitCross(arr, crossA, crossB, crossT) : emitAt(arr, lightSpectrum);
   };
   const beamPts = pts => !spotOn || pts.some(p => Math.hypot(p[0] - G.lightX, p[1] - G.lightY) <= G.spotR);   // does a line/edge touch the beam?
   const hidden = new Set();   // 7th dimension: MARKS tagged "don't render" (one mark = one vein/web/seam, whatever its sub-lines) — skipped by the renderer AND the hit-test, recovered only from the Hidden list
@@ -5345,7 +5374,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         fam: s.fam, G: s.G, T: s.T, layTiles: s.layTiles,
         layers: s.layers, soloLay: s.soloLay,
         OVR: s.OVR, OVR_uv: s.OVR_uv, perItem: s.perItem, hidden: s.hidden, marks: s.marks,
-        light: [lightSpectrum, uvMode, spotOn],          // never serialised, and it changes everything
+        light: crossOn                                  // never serialised, and it changes everything
+          ? ['cross', crossA, crossB, crossT, uvMode, spotOn]
+          : [lightSpectrum, uvMode, spotOn],            // unchanged shape when off, so old masters still match
       }))).toString(16);
     } catch (_) { return null; }
   };
@@ -5445,6 +5476,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // much is IN it, and without these a later reader cannot tell a slow machine from a busy picture.
     cracks: geo.web.length, specks: geo.specks.length, drusy: geo.drusy.length, seams: geo.styl.length,
     spectrum: lightSpectrum, dpr: dpr || 1, cores: navigator.hardwareConcurrency || null,
+    // A CROSSFADE render never evaluates the light at `spectrum` above - that is just where the dial
+    // was parked. This is what the light actually did, and its absence means the spectrum value is
+    // the whole story. Kept alongside rather than replacing it: tiff-meta derives a light tag from
+    // `spectrum`, and blanking it would have produced "spxNaN" on every crossfade master.
+    cross: crossOn ? { a: crossA, b: crossB, t: +crossT.toFixed(3) } : undefined,
     // deviceMemory is what the tile plan budgets against, so without it the plan cannot be explained
     // after the fact: an A7 Lite chose 4096 tiles on Android 11 and 2048 on Android 13, and nothing in
     // the file says whether the budget shrank or the canvas probe refused the larger one.
@@ -6002,6 +6038,55 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     hint(uvMode ? TR('hint.black-light-spectrum-1-only-artifacts') : null);
     saveLocal(); redraw(false);
   });
+  // THE STOPS YOU CAN STAND ON: every value anything was actually authored at, named by a folder where
+  // one claims it. Derived, never stored - so the list cannot drift from the artwork, and adding it
+  // costs no persisted key and no migration.
+  function spectrumStops() {
+    const seen = new Map();
+    for (const F of folders) if (typeof F.v === 'number' && !seen.has(F.v)) seen.set(F.v, F.name);
+    for (const k in OVR_uv) for (const e of OVR_uv[k] || []) if (!seen.has(e.v)) seen.set(e.v, null);
+    if (!seen.has(0)) seen.set(0, null);                    // daylight is always somewhere you can stand
+    return [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([v, name]) => ({ v, name }));
+  }
+  const stopLabel = st => st.name || (st.v === 0 ? TR('ui.daylight') : (+st.v).toFixed(2));
+  function fillCrossPickers() {
+    const stops = spectrumStops(), A = document.getElementById('crossA'), B = document.getElementById('crossB');
+    if (!A || !B) return;
+    for (const [sel, cur] of [[A, crossA], [B, crossB]]) {
+      sel.textContent = '';
+      for (const st of stops) {
+        const o = document.createElement('option');
+        o.value = String(st.v); o.textContent = stopLabel(st);
+        sel.appendChild(o);
+      }
+      sel.value = String(cur);
+      if (sel.selectedIndex < 0 && stops.length) sel.selectedIndex = sel === A ? 0 : stops.length - 1;
+    }
+    crossA = +A.value; crossB = +B.value;
+  }
+  { const ct = document.getElementById('cross-toggle');
+    const show = () => {
+      document.getElementById('cross-pick').hidden = !crossOn;
+      document.getElementById('cross-blend').hidden = !crossOn;
+      ct.setAttribute('aria-pressed', crossOn);
+    };
+    if (ct) ct.addEventListener('click', () => {
+      crossOn = !crossOn;
+      if (crossOn) { fillCrossPickers(); uvMode = true; }    // a crossfade is a light being on, throughout
+      else { uvMode = lightSpectrum !== 0; }
+      document.getElementById('uv-toggle').setAttribute('aria-pressed', uvMode);
+      show(); saveLocal(); redraw(false);
+    });
+    for (const [id, set] of [['crossA', v => { crossA = v; }], ['crossB', v => { crossB = v; }]]) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', () => { set(+el.value); redraw(false); });
+    }
+    const tEl = document.getElementById('crossT');
+    if (tEl) tEl.addEventListener('input', () => {
+      crossT = +tEl.value; document.getElementById('crossTV').textContent = crossT.toFixed(2);
+      redraw(false);
+    });
+  }
   { const so = document.getElementById('spot-toggle');     // SPOTLIGHT: the light becomes a movable beam (drag it with the Light tool)
     if (so) so.addEventListener('click', () => { spotOn = !spotOn; so.setAttribute('aria-pressed', spotOn); hint(spotOn ? TR('hint.spotlight-on-only-artifacts-inside-the') : null); saveLocal(); redraw(false); }); }
   for (const id of Object.keys(NEXT)) {

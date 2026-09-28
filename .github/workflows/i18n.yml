@@ -53,6 +53,8 @@ jobs:
         run: node tools/check-wake-lock.mjs
       - name: The device identity is sealed under the slab, and fails closed
         run: node tools/check-device-seal.mjs
+      - name: A crossfade never evaluates the light between its two ends
+        run: node tools/check-crossfade.mjs
       - name: Every panel token names something real, inside its own bounds, with a string in the pack
         run: node tools/check-panel-tokens.mjs
       - name: The render signature moves on the picture and the light, and holds on bookkeeping
