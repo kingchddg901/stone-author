@@ -1176,7 +1176,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.28.17';
+  const BUILD = '2026.09.28.18';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4781,17 +4781,38 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       return a >= 8;                                             // a working blur lands ~26 here; a dropped one, 0
     } catch (_) { return false; }
   }
-  function canvasFits(w, h, n, sigma) {
+  // A DEVICE THAT TAKES TOO LONG HAS ANSWERED NO.
+  //
+  // This probes by allocating, and an allocation that is merely SLOW has no natural end: a Gecko phone
+  // preparing an 8192 candidate at a 24576 render width locked the page with no error and no timeout.
+  // Both quantities that size the surface scale with the RENDER WIDTH rather than the tile - bs is
+  // W/COAT_REF, the blur is 3*bs and the bleed is coatReach(bs) - so the same candidate is a larger
+  // canvas and a wider blur at every width up, and the last rung of the ladder is where a phone gives
+  // out. The memory budget does not catch it: at 24576 that candidate needs about 770 MB against a
+  // 1.5 GB cap, so it is affordable and still unusable.
+  //
+  // WHAT THIS CAN AND CANNOT DO. A canvas allocation is synchronous and cannot be interrupted, so the
+  // FIRST one can still block. What it can do is decline to do it AGAIN: EXP_PEAK is 2, so bailing after
+  // a slow first surface halves the worst case and returns the answer the probe exists to give. A size
+  // this device needs seconds to allocate is not a size it can render with.
+  const FITS_MS = 1500;                                     // one surface, allocated and read back
+  function canvasFits(w, h, n, sigma, budgetMs) {
     const held = [];
+    const now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const t0 = now(), cap = budgetMs > 0 ? budgetMs : 0;
+    const spent = () => cap > 0 && (now() - t0) > cap;
     try {
       for (let k = 0; k < (n || 1); k++) {
         const c = document.createElement('canvas'); c.width = w; c.height = h;
         held.push(c);
         if (c.width !== w || c.height !== h) return false;        // silently clamped
+        if (spent()) return false;                                // the allocation alone blew the budget
         const x = c.getContext('2d'); if (!x) return false;
         x.fillStyle = '#fff'; x.fillRect(w - 2, h - 2, 2, 2);     // the FAR CORNER: a clamped canvas fails here
         if (x.getImageData(w - 1, h - 1, 1, 1).data[0] !== 255) return false;
+        if (spent()) return false;
         if (sigma > 0 && !bloomWorks(c, x, w, h, sigma)) return false;
+        if (spent()) return false;
       }
       return true;
     } catch (_) { return false; }
@@ -4801,7 +4822,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     try { const v = +JSON.parse(localStorage.getItem(EXP_KEY) || '{}')[calSig()]; if (v) return v; } catch (_) {}
     let best = 1024;
     for (const w of [2048, 4096, 8192, 16384]) {
-      if (!canvasFits(w, Math.round(w * H), EXP_PEAK)) break;     // what the EXPORT needs, not one canvas
+      if (!canvasFits(w, Math.round(w * H), EXP_PEAK, 0, FITS_MS)) break;   // what the EXPORT needs, not one canvas
       best = w;
     }
     try {
@@ -6689,17 +6710,38 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         : TR("ui.tile-proven") + " " + pass.join(", ") +
           (shortlist ? "   " + TR("ui.tile-shortlist") + " " + (shortlist.length ? shortlist.join(", ") : TR("ui.tile-none")) : "");
     };
+    let untested = [];
     if (btn && sel) {
       sel.addEventListener("change", () => { tilePick = +sel.value || 0; });
       btn.addEventListener("click", async () => {
         const W = widthNow(), bs = W / COAT_REF, bleed = coatReach(bs, uvMode), sigma = coatReachAt(bs, lightSpectrum) > 0 ? bs * 3 : 0;
         btn.disabled = true; if (stat) stat.textContent = TR("ui.tile-probing");
-        const pass = [];
+        // THE TEST ITSELF HAS TO FIT, and this is checked BEFORE anything is allocated.
+        //
+        // canvasFits holds EXP_PEAK surfaces at once, so probing the 8192 candidate costs two of them.
+        // On the A7 Lite - 2 GB reported, memShare 2, a 537 MB budget - that is 537 MB of test on a
+        // device with about a gigabyte free, and it kept reaching for an 8196 canvas until Android
+        // killed the tab. The arithmetic that would have refused it already existed twenty lines below,
+        // in the shortlist, and ran AFTER the allocation that crashed.
+        //
+        // The time budget in canvasFits does not catch this one: the allocation is not slow, it is
+        // simply fatal. The two guards cover different devices on purpose - time for a Gecko phone that
+        // hangs at 24576, size for a tablet that dies at 8192.
+        //
+        // APPLIED EVEN WITHOUT navigator.deviceMemory, where the shortlist below deliberately is not.
+        // That is not an inconsistency: the shortlist is a RECOMMENDATION, and refusing a size on a
+        // guessed budget would mislead. This is a SAFETY check on an allocation about to happen, where
+        // the guess costs an untested size and being wrong the other way costs the tab.
+        const probeWins = gatherMasks().filter(m => m.show != null).length;
+        const probeSurf = (probeWins ? 3 : 1) + (sigma > 0 ? 1 : 0);
+        const probeCap = MEM_EASY * memBudget();
+        const pass = [], tooBig = [];
         for (const ts of [512, 1024, 2048, 4096, 8192]) {
           if (ts > W) break;
           const side = ts + 2 * bleed;
+          if (side * side * 4 * EXP_PEAK > probeCap) { tooBig.push(ts); continue; }
           await new Promise(r => setTimeout(r, 0));      // let the panel paint between allocations
-          if (canvasFits(side, side, EXP_PEAK, sigma)) pass.push(ts);
+          if (canvasFits(side, side, EXP_PEAK, sigma, FITS_MS)) pass.push(ts);
         }
         const rec = planRec(W); rec.probe = pass; rec.probedAt = Date.now(); planWrite(W, rec);
         // WHICH CLEARED SIZES FIT THE MEMORY BUDGET, using the planner's own arithmetic. That is all this
@@ -6708,10 +6750,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // small end of this list - and it admits a size on `calibrate`, one real tile, where this probe
         // demands two canvases through canvasFits and refuses sizes calibrate accepts. The two disagree
         // by design, in both directions, so neither predicts the other.
-        const wins = gatherMasks().filter(m => m.show != null).length;
-        const surfaces = (wins ? 3 : 1) + (sigma > 0 ? 1 : 0);
-        const cap = MEM_EASY * memBudget();
+        const surfaces = probeSurf, cap = probeCap;
         shortlist = navigator.deviceMemory > 0 ? pass.filter(t => tileNeed(t, bleed, surfaces) <= cap) : pass.slice();
+        // A size refused before it was tested is not the same as a size that failed, and the readout
+        // must not present them alike - "not offered" with no reason is how a planner earns blame for
+        // a device's limits.
+        untested = tooBig;
         btn.disabled = false; fill();
       });
       fill();
