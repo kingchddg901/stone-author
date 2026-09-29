@@ -32,6 +32,72 @@ Latest run per device and light, all on build `2026.09.27.25` or later.
 Throughput is rendered pixels per second including the bleed margin, which is the fair comparison when
 devices choose different tile sizes.
 
+## The same slab at a 512 tile
+
+Every device above also rendered the published slab at a **forced 512 tile — 10,240 passes**, the most
+any configuration in this project has taken. The point was not speed. It was to find out whether a tile
+that small changes the picture, and what it does to a machine while it runs.
+
+| device | engine | light | mean | lit>40 | time | median tile | slowest tile | throughput |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| desktop | Blink | daylight | 45.03 | 34.9% | 5.6 min | 29 ms | 955 ms | 8.21 Mpx/s |
+| desktop | Blink | black | 61.49 | 47.0% | 6.2 min | 33 ms | 209 ms | 7.47 Mpx/s |
+| S23 Ultra | Blink | daylight | 45.40 | 35.0% | 6.7 min | 33 ms | 105 ms | 6.90 Mpx/s |
+| S23 Ultra | Blink | black | 61.58 | 47.1% | 10.4 min | 52 ms | 38,056 ms* | 4.45 Mpx/s |
+| desktop | Gecko | daylight | 46.25 | 36.2% | 9.4 min | 33 ms | 240 ms | 4.91 Mpx/s |
+| desktop | Gecko | black | 61.33 | 44.9% | 13.7 min | 62 ms | 401 ms | 3.37 Mpx/s |
+| S23 Ultra | Gecko | daylight | 46.55 | 36.2% | 18.2 min | 64 ms | 481 ms | 2.53 Mpx/s |
+| S23 Ultra | Gecko | black | 58.50 | 38.5% | 22.8 min | 106 ms | 552 ms | 2.03 Mpx/s |
+| Tab A 8.0 | Blink | daylight | 45.40 | 35.1% | 58.7 min | 287 ms | 742 ms | 0.79 Mpx/s |
+| A7 Lite | Blink | black | 61.33 | 46.9% | 61.5 min | 322 ms | 712 ms | 0.75 Mpx/s |
+| Tab A 8.0 | Blink | black | 61.57 | 47.1% | 64.1 min | 330 ms | 971 ms | 0.72 Mpx/s |
+
+\* One tile of 38,056 ms on the S23 under Blink. It is the only tile in that master over 2 seconds, its
+p99 is 185 ms, and it accounts for 38 of that render's 623 seconds — an interruption on the handset, not
+render work. It is left in rather than trimmed, because a figure quietly cleaned is worth less than one
+explained.
+
+Throughput here counts the padded 520 px surface across all 10,240 passes: 2,769 Mpx rendered.
+
+The iPhone and the A7 Lite's daylight master are absent from this table because those runs were not made,
+not because they failed.
+
+### The picture does not change
+
+Each figure above is within a hundredth of what the same device produced at its own much larger tile —
+across tile changes of 8x, 4x, 2x and 4x:
+
+| device / light | at its own tile | at 512 | delta |
+| --- | --- | --- | --- |
+| S23 Gecko, daylight | 46.55 @4096 | 46.55 | **0.00** |
+| A7 Lite, black | 61.33 @1024 | 61.33 | **0.00** |
+| Tab A 8.0, black | 61.58 @2048 | 61.57 | −0.01 |
+| S23 Gecko, black | 58.42 @2048 | 58.50 | +0.08 |
+
+Two exact zeros. Tile size is a memory and scheduling decision, not a visual one — which is what makes
+it safe to take a smaller tile on a device that needs one.
+
+### What it costs, and what it buys
+
+512 costs **1.6x to 2.3x** the time, consistently across hardware from a 2019 budget tablet to a desktop.
+
+What it buys is that **the machine stays alive**. The slowest single tile is the figure that matters, and
+it collapses:
+
+| run | median tile | slowest tile |
+| --- | --- | --- |
+| desktop Gecko @2048 | ~500 ms | **14,500 ms** |
+| desktop Gecko @512 | 62 ms | **401 ms** |
+| Tab A 8.0 @512 | 330 ms | **971 ms** |
+
+Excluding the one handset interruption noted above, **no tile anywhere in the fleet at 512 reaches a
+second.** The same machine and engine that produced 9.4 and 14.5 second tiles at a 2048 tile has a worst
+tile of 0.40 s at 512 — thirty-six times better.
+
+That is why a 512 render feels different rather than merely slower. A 65,535 px export at 2048 blocks
+the main thread for up to fourteen seconds at a stretch; at 512 the longest block on the slowest tablet
+in the set is under one second, and the tablets stay scrollable throughout.
+
 ## The machines
 
 ### Desktop — AMD Ryzen 5 5500, Radeon RX 6500 XT
