@@ -15,8 +15,16 @@
 param(
   [string]$Out = "perf.jsonl",
   [int]$IntervalMs = 1000,
-  [string]$Browser = ""          # chrome | firefox | msedge; empty = whichever of them is running
+  [string]$Browser = "",         # chrome | firefox | msedge; empty = whichever of them is running
+  [switch]$Gpu,                  # GPU engine + memory counters. OFF by default: see below.
+  [switch]$Force                 # overwrite an existing trace instead of refusing
 )
+
+# -Gpu IS OFF BY DEFAULT BECAUSE IT COSTS MORE THAN THE INTERVAL. \GPU Engine(*) enumerates every
+# engine instance of every process on the machine, and at four concurrent Chrome renders one sample
+# took 3,979 ms against a requested 3,000 - so the sampler ran flat out with no gap at all and its
+# own cost rose with the load it was measuring. Turn it on when the GPU is the question and you can
+# afford a coarse trace; leave it off when you want dependable spacing under heavy load.
 
 $ErrorActionPreference = "Continue"
 $names = @(
@@ -36,16 +44,29 @@ function Get-BrowserStats([string]$want) {
   if (-not $all) { return $null }
   $sum = ($all | Measure-Object -Property WorkingSet64 -Sum).Sum
   $max = ($all | Sort-Object WorkingSet64 -Descending | Select-Object -First 1)
+  # PER-PROCESS, not just the sum. Chrome's own task manager (Shift+Esc) does this properly and
+  # labels each row by tab; Get-Process cannot see a tab title, so this is the nearest thing from
+  # outside. It matters because the sum cannot answer the question a multi-render run asks - does
+  # EACH render hold its own ~60 MB, or is one process holding all of it. With N renders in N
+  # windows the N heaviest renderers are the N renders, so the top slice is readable as per-render.
+  $top = @($all | Sort-Object WorkingSet64 -Descending | Select-Object -First 12 |
+    ForEach-Object { @{ pid = $_.Id; mb = [math]::Round($_.WorkingSet64 / 1MB, 1) } })
   return @{
     name      = $max.ProcessName
     procs     = $all.Count
     totalMB   = [math]::Round($sum / 1MB, 1)
     biggestMB = [math]::Round($max.WorkingSet64 / 1MB, 1)
     biggestPid = $max.Id
+    top       = $top
   }
 }
 
-Write-Output ("perfmon -> {0}   every {1} ms   (Ctrl+C to stop)" -f $Out, $IntervalMs)
+if ((Test-Path $Out) -and -not $Force) {
+  Write-Output ("REFUSING: {0} already exists. A trace is raw measured data and the run it describes" -f $Out)
+  Write-Output  "is over, so it cannot be regenerated. Pass -Force to overwrite, or choose another name."
+  exit 2
+}
+Write-Output ("perfmon -> {0}   every {1} ms   gpu {2}   (Ctrl+C to stop)" -f $Out, $IntervalMs, $(if ($Gpu) { "on" } else { "off" }))
 if (Test-Path $Out) { Remove-Item $Out }
 
 while ($true) {
@@ -59,6 +80,7 @@ while ($true) {
     $line.pagePct   = [math]::Round($s[3].CookedValue, 2)
   } catch { $line.counterError = $_.Exception.Message }
   # GPU: 3D engine across every process, and the total across all engine types.
+  if ($Gpu) {
   try {
     $g = (Get-Counter '\GPU Engine(*)\Utilization Percentage' -ErrorAction Stop).CounterSamples
     $line.gpu3d  = [math]::Round((($g | Where-Object { $_.InstanceName -like '*engtype_3D*' } | Measure-Object -Property CookedValue -Sum).Sum), 1)
@@ -68,11 +90,13 @@ while ($true) {
     $gm = (Get-Counter '\GPU Process Memory(*)\Local Usage' -ErrorAction Stop).CounterSamples
     $line.gpuMemMB = [math]::Round((($gm | Measure-Object -Property CookedValue -Sum).Sum) / 1MB, 0)
   } catch { }
+  }
   $b = Get-BrowserStats $Browser
   if ($b) { $line.browser = $b }
   $line.sampleMs = [math]::Round(((Get-Date) - $t0).TotalMilliseconds, 0)
+  $sleep = $IntervalMs - $line.sampleMs
+  if ($sleep -le 0) { $line.overran = $true }
   $json = ($line | ConvertTo-Json -Compress -Depth 4)
   [System.IO.File]::AppendAllText($Out, $json + [Environment]::NewLine, (New-Object System.Text.UTF8Encoding $false))
-  $sleep = $IntervalMs - $line.sampleMs
   if ($sleep -gt 0) { Start-Sleep -Milliseconds $sleep }
 }
