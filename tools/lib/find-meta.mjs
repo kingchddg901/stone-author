@@ -13,7 +13,19 @@ const QUOTE = String.fromCharCode(34), BACKSLASH = String.fromCharCode(92);
 const WINDOW = 4 << 20;                                  // the block sits in the IFD tail; head is a fallback
 const RE = /\{"tool":"stone-author"[\s\S]*/;
 
+// findMeta answers WHAT the block says. locateMeta also answers WHERE it is, which is what a
+// byte comparison of two masters needs: everything before `start` is image data, and everything from
+// `start` on is the self-description, which MUST differ between two renders (it carries `at`,
+// `ms.render` and 10,240 per-tile timings). Two functions, ONE scanner - the header above is explicit
+// that a second reader would be a second answer to the same question and the two would drift.
 export function findMeta(path) {
+  const loc = locateMeta(path);
+  return loc ? loc.meta : null;
+}
+
+// Returns { meta, start, end } with absolute byte offsets, or null. Offsets are exact because the
+// window is decoded as latin1, which is one byte per code unit, so a string index IS a byte offset.
+export function locateMeta(path) {
   const fd = openSync(path, 'r');
   try {
     const size = statSync(path).size;
@@ -30,6 +42,7 @@ export function findMeta(path) {
       // file became invisible to the evidence pipeline. Nothing said so: findMeta just returned null,
       // which is indistinguishable from a file that carries no metadata at all.
       const text = m[0];
+      const absStart = off + m.index;
       let depth = 0, inStr = false;
       for (let i = 0; i < text.length; i++) {
         const c = text[i];
@@ -38,7 +51,12 @@ export function findMeta(path) {
         else if (c === "{") depth++;
         else if (c === "}") {
           depth--;
-          if (depth === 0) { try { return JSON.parse(text.slice(0, i + 1)); } catch (_) { break; } }
+          if (depth === 0) {
+            try {
+              const meta = JSON.parse(text.slice(0, i + 1));
+              return { meta, start: absStart, end: absStart + i + 1 };
+            } catch (_) { break; }
+          }
         }
       }
     }
