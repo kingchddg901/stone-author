@@ -217,7 +217,18 @@ if (OUT) {
     }
     wrote++;
   }
-  writeFileSync(join(OUT, 'index.json'), JSON.stringify(rows, null, 2));
+  // MERGE, NEVER REPLACE. Sidecars are written per file and accumulate; the index used to be written
+  // from THIS RUN's rows alone, so harvesting two more masters into an archive of 341 left an index of
+  // two. The sidecars survived and the table did not, and nothing said so — the run even reported
+  // "index.json (2 rows)" as though that were the whole archive.
+  // Keyed on `file`, so re-harvesting the same master updates its row instead of duplicating it.
+  const prior = (() => {
+    try { return JSON.parse(readFileSync(join(OUT, 'index.json'), 'utf8')); } catch (_) { return []; }
+  })();
+  const merged = new Map();
+  for (const r of Array.isArray(prior) ? prior : []) if (r && r.file) merged.set(r.file, r);
+  for (const r of rows) merged.set(r.file, r);
+  writeFileSync(join(OUT, 'index.json'), JSON.stringify([...merged.values()], null, 2));
   // Built from what index.json HOLDS, re-read from disk - so the table is provably a view of the file
   // that is published beside it, not of the masters that are not.
   const published = JSON.parse(readFileSync(join(OUT, 'index.json'), 'utf8'));
