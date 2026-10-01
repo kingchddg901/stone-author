@@ -79,18 +79,38 @@ does not render the reality window at all — so the raw pair did not match the 
 2×2 that replaced it renders the window as a real mask mark, which is what makes "put the burn on top of
 this one" true rather than approximately true.
 
-**A known defect still ships in `hero-uv.png`.** The master behind it carries a tone step at a vertical
-render-pass boundary: at x = 16384 the columns run …49.46, 49.41 │ 50.58, 50.55… — **+1.17 on a base of 50,
-2.4%, and it persists** rather than spiking. x = 24576 is the same sign and size; x = 32768 is negligible.
-The step is visible at 1:1, with speck geometry crossing the edge unbroken while the ground tone changes,
-so it is exposure and not geometry. Shipped knowingly.
+**Nothing on this page carries the pass-join artifact.** An earlier version of this section said
+`hero-uv.png` did, with figures attached. Those figures were real but they came from a *different file* —
+an S23 master — and were attributed to this one on the strength of a 1:1 crop that looked the same. The
+master behind `hero-uv.png` measures **0.8×** on the test below, i.e. its pass joins are quieter than its
+ordinary columns. The claim is withdrawn.
 
-Measure this carefully if you revisit it: an **adjacent-column** difference cannot tell a persistent step
-from a one-column spike, and the 2026-10-01 desktop master has a column-pair oscillation (±3–4 of 255,
-every other column, picture-wide) that makes every boundary look catastrophic to that statistic — it is
-what made a first pass at this report wrong. Use a short baseline either side (16 columns), against the
-same statistic at non-boundary control points, and stay inside one pass row: a 2000-row strip from y=8000
-straddles the horizontal pass boundary at y=8192.
+**The artifact is real, and it is in one master.** `S23-uv-run1-65535.tif` discontinues at its vertical
+pass joins **18× more than at control columns in the same picture** (median |step| 0.395 against 0.022,
+n=280 against 400). It is a *pass* effect, not a tile one: in the same file, tile joins that are not pass
+joins measure 0.039 against a control of 0.029 — indistinguishable. Everything else tested is clean:
+`desktop-daylight-65535.tif` 1.2×, `HERO-65535-uv.png` 0.8×, and all four of the 2026-10-01 masters on
+this page between 1.0× and 1.4×. So it belongs to that render — that device or that older build — and not
+to black light as such.
+
+**How to measure it, and four ways not to.** The step's **sign varies from join to join**, so every test
+built on consistency cancels it to nothing. These all failed against a master that has it:
+
+| probe | why it fails |
+| --- | --- |
+| adjacent-column difference, globally | cannot tell a persistent step from a one-column spike |
+| short baseline (16 cols) against a content control | a real step is tiny next to a vein crossing, so it ranks unremarkable |
+| per-block sign consistency | a vertical vein is also consistent down a long run of rows |
+| jump against local roughness | fires on a clean master and misses a known one |
+| any signed mean over joins | the varying sign cancels; injecting a *constant* step to prove power is testing the wrong shape |
+
+What works is **magnitude, within one file**: per join column, take the adjacent-column difference in each
+of 40 bands down the full height, take the absolute value, and compare that distribution against the same
+statistic at control columns of the same picture. Absolute magnitudes mean nothing across pictures — a
+busy picture jumps more everywhere — which is why the control must come from the same file. Two further
+traps: a 2000-row strip from y=8000 straddles the horizontal pass join at y=8192, and a local brightness
+ramp of −0.086 per column moves a 16-column baseline estimator by 1.4, which is larger than the step
+being hunted.
 
 The page is dedicated to the public domain under **CC0 1.0** — as is the whole repo, studio included;
 see [`architecture.md`](architecture.md#licensing).
