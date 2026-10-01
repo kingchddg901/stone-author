@@ -96,3 +96,36 @@ set, published deliberately. Those masters are 400–800 MB each and are not dis
 nothing in circulation for the key to unlock — the lock guards files that only ever existed on one desk.
 What is published is the evidence extracted from them, and the slab is there so a reader can render the
 same picture rather than take the figures on trust.
+
+### The other direction is harder, and it has already caught one set
+
+Publishing a twin and sealing under the original works, because you control the original's bytes. Sealing
+**under a slab you publish** does not work the same way, and the reason is in the method above: the digest
+is over `JSON.stringify(serialize())` — the app's serialisation at export time — with the `name` member
+removed *and nothing else*. The file on disk is not the input. It is only one way of reproducing those
+bytes, and it stops matching the moment the app's state does.
+
+What `serialize()` carries alongside the picture: `tool`, `view`, `guidesOn`, `layTiles`, `soloLay`,
+`activeLayer`, `nextId`, and the whole `NEXT` block of tool parameters. **None of those change a pixel.**
+Every one of them changes the key.
+
+Measured on 2026-10-01. Two masters were rendered from a copy of `HERO-MASTER-sealkey.json` that is
+byte-identical to the published one — same SHA-256 — and sealed under `df62304e` rather than the slab's
+own `19d7bd46`. The difference between the key that was used and the key that was published is one field:
+
+```
+"tool":"moon"     the slab as saved and published
+"tool":"move"     the serialisation at export, after the Move tool was selected
+```
+
+**Recovery is cheap when the drift is enumerable, and impossible when it is not.** `kid` is four bytes and
+travels in the clear, so candidate serialisations can be *tested* without decrypting anything: 320
+combinations of tool x view x `guidesOn` x `layTiles` found that one in a second. The same week's other
+pair sealed under `40e0022e`, which no combination of those four fields reaches from any published slab —
+its drift is in `activeLayer`, `nextId` or a `NEXT` slider, which is not a searchable space. Those two
+masters cannot be opened, and rotation runs forward only, so nothing can be done about it now.
+
+**The practice, then.** If a master is meant to be openable with a slab you hand out, Save the slab and
+export **without touching a tool in between** — or treat the slab you exported from as the key and keep
+it, rather than assuming the one on disk still matches. `kid` is the check: compare the master's against
+the slab's before relying on either.
