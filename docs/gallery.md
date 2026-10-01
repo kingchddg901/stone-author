@@ -102,24 +102,45 @@ and the emission bloom is not:
 
 | what blurs | radius | pixels differing at an 8192 offset |
 | --- | --- | --- |
-| nothing | — | 0%, bit-identical |
-| specular 0.6 | 131 px | 0% |
+| specular 0.6 | 131 px | 0%, bit-identical |
+| subsurface 0.05 | 141 px | 0% |
 | subsurface 0.1 | 151 px | 0% |
 | subsurface 0.5 | 229 px | 0% |
+| subsurface 0.6 | 249 px | 0% |
+| subsurface 0.7 | 269 px | 0% |
+| subsurface 0.8 | 288 px | 0% |
+| subsurface 0.9 | 308 px | **58.4%** |
 | subsurface 1.0 | 328 px | 13.4% |
+| subsurface 1.2 | 367 px | 7.9% |
 | image-space emission bloom | 196 + 524 px | **51.0%** |
 
-The break sits between 229 and 328 px. Do not read that as a general threshold: against *arbitrary*
-offsets a blur disagrees with itself at nearly every radius above about 8 px, and which offsets agree
-changes with the radius. Only the pass offset matters here, which is why every row above is measured at
-8192 and nothing else.
+Six bit-identical points from 131 to 288 px, then a break between **288 and 308**. Above it the
+disagreement does **not** scale — 58.4%, then 13.4%, then 7.9% — so invariance is not monotone in the
+radius and a recorded radius past the break says "unknown", not "worse".
 
-**Every slab on this page is far inside that.** `before.json` sets `subsurface 0.05`, which is
-`coatRadius = (2 + 3 × 0.05) × bs` = **141 px** at 65535 — the figure its masters record as
-`blur sigma 141px`, and the same quantity the table above is indexed by. `warped.json` and
-`Hero_Psyker.json` set `subsurface 0` and `specular 0`, so they blur nothing in the coat at all. All four
-`raw-*` masters additionally record `drawn glow`. The two `hero-*` images come from masters with no
-metadata block, so neither their radius nor their bloom path can be read back.
+Two caveats that must travel with this table. First, do not read it as a general property of blur:
+against *arbitrary* offsets a blur disagrees with itself at nearly every radius above about 8 px, and
+which offsets agree changes with the radius. Only the pass offset matters here, which is why every row is
+measured at 8192 and nothing else. Second, **every row is a real `renderOneTile`**, because an isolated
+`ctx.filter` bench was tried first and lied twice: once by sampling near a canvas edge with no bleed, so
+it measured truncation and reported disagreement everywhere above 8 px; and once by reporting 0% at
+524 px where the real renderer reports 51%, because the emission bloom blurs the destination canvas into
+*itself*, twice, under `lighter`, which a separate-source bench does not model.
+
+**Every slab on this page is inside the invariant region, and 141 px was measured there directly rather
+than interpolated.** `before.json` sets `subsurface 0.05`, which is `coatRadius = (2 + 3 × 0.05) × bs` =
+**141 px** at 65535 — the figure its masters record as `blur sigma 141px`, and the same quantity this
+table is indexed by (`sigma = coatRadius(W / COAT_REF)`). `warped.json` and `Hero_Psyker.json` set
+`subsurface 0` and `specular 0`, so they record `sigma 0`.
+
+**`sigma 0` does not mean nothing blurred**, and the distinction matters for exactly these two. With drawn
+glow on, `coatRadius` still takes the subsurface/specular branch, so a black-light master whose halo is
+`16 × bs` — **1,048 px** at 65535 — records a coat radius of zero. That halo is `shadowBlur`, a different
+code path from `ctx.filter`, and it is separately measured bit-identical across a pass offset (the first
+row above). So the hero pair is clean because the halo path was tested, not because nothing blurred.
+
+The two `hero-*` images come from masters with no metadata block, so neither their radius nor their bloom
+path can be read back.
 
 **Detecting it after the fact is harder than it looks, and one claim here was wrong because of that.** An
 earlier version of this section said `hero-uv.png` ships the artifact, with columns quoted to two decimals.
