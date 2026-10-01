@@ -1176,7 +1176,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.28.18';
+  const BUILD = '2026.09.30.1';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4764,6 +4764,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // because a probe that exercises a different path is worse than no probe. A patch is drawn at the
   // centre, where no edge can truncate it, and the alpha is read one deviation beyond its edge: the blur
   // put light there, or it did not.
+  /* CAN THIS ENGINE BLOOM AT ALL — asked once, in one place, for every path that needs the answer.
+     The tile plan asked it inline and kept the answer to itself, so the tiled path could write
+     `bloomless: true` while the two PNG paths rendered the same defect and said nothing. A WebKit
+     master at 20480 black light came out at light.mean 12.30 against 57-62 for every other engine:
+     bare vein outlines and hard-edged specks, the emitter geometry with the blur never applied. It was
+     the light figure that exposed it, and the light figure is the symptom — this is the statement.
+     A 512 canvas, because only SUPPORT is in question here; whether a particular size blooms is the
+     separate question the tile ladder walks. */
+  function canBloom() {
+    try {
+      const c = document.createElement('canvas'); c.width = c.height = 512;
+      const x = c.getContext('2d');
+      return !!x && bloomWorks(c, x, 512, 512, 24);
+    } catch (_) { return false; }
+  }
+  /* Bloomless for one width and the light as it stands, phrased so the field is present only when it
+     is true — an absent `bloomless` has always meant "the bloom was there", and a `false` would read
+     as a different claim to every master already written. */
+  function bloomlessAt(W) {
+    const bs = W / COAT_REF;
+    const sigma = coatReachAt(bs, lightSpectrum) > 0 ? bs * 3 : 0;
+    return sigma > 0 && !canBloom() ? true : undefined;
+  }
   function bloomWorks(c, x, w, h, sigma) {
     try {
       const S = Math.max(2, Math.min(Math.round(sigma), Math.floor(Math.min(w, h) / 8)));
@@ -5307,6 +5330,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const CHUNK_BYTES = 16 << 20;
     const chunkRows = Math.max(1, Math.floor(CHUNK_BYTES / rowLen));
     let y = 0, bytes = 0, tRender = 0, bandH = p.stripH, bands = 0, shrinks = 0;
+    /* THE LIGHT, OFF A READBACK THAT ALREADY HAPPENS. Every chunk below is read out of the band canvas
+       to be filtered into scanlines, so sampling it costs a pass over bytes already in hand — the same
+       trade the tiled path makes, and unlike the plain PNG path it needs no extra read of its own.
+       THE PHASE CARRIES between chunks and between bands, so these are the same samples a single scan
+       of the finished image would take. Without that the figure would be close to what a reader derives
+       from the file and never equal to it, which is the difference between a number that can be checked
+       and one that has to be trusted. Chunks go in row order and every row is covered once, so carrying
+       the offset is exactly a whole-image walk.
+       A retried band re-renders only the rows it did not write, so nothing here is counted twice. */
+    let litSum = 0, litUp = 0, litN = 0, litOff = 0;
     let failFirst = opts && opts.failFirst || 0;           // harness only: prove the degrade actually fires
     while (y < p.FH) {
       const t0 = Date.now();
@@ -5327,6 +5360,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           while (wrote < h) {
             const rows = Math.min(chunkRows, h - wrote);
             const px = cx.getImageData(0, p.bleed + wrote, p.FW, rows).data;   // crop the bleed
+            // Sampled here, on the chunk exactly as it will appear in the file.
+            { const L = px.length;
+              if (litOff >= L) litOff -= L;                 // this whole chunk falls between two samples
+              else {
+                let i = litOff;
+                for (; i + 2 < L; i += 400) {               // every 100th pixel of RGBA
+                  const l = (px[i] + px[i + 1] + px[i + 2]) / 3;
+                  litSum += l; if (l > 40) litUp++; litN++;
+                }
+                litOff = i - L;                             // where the next sample lands in the next chunk
+              } }
             // A fresh buffer per chunk, not a reused one: the writer may still hold a chunk it has
             // accepted, and overwriting it underneath would corrupt the stream silently.
             const out = new Uint8Array(rows * rowLen);
@@ -5360,7 +5404,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', ihdr)];
     // bands as RENDERED, not as planned, and the shrink count with it: a render that degraded says so in
     // its own provenance rather than looking like a slow one for no reason.
-    const metaStr = typeof meta === 'function' ? meta({ msRender: tRender, bands, shrinks, bytes }) : meta;
+    const light = litN ? { mean: +(litSum / litN).toFixed(2), lit40: +(100 * litUp / litN).toFixed(2), every: 100 } : undefined;
+      const metaStr = typeof meta === 'function' ? meta({ msRender: tRender, bands, shrinks, bytes, light }) : meta;
     if (metaStr) parts.push(pngTextChunk('stone-author', metaStr));
     parts.push(...idats, pngChunk('IEND', new Uint8Array(0)));
     return { blob: new Blob(parts, { type: 'image/png' }), plan: p, msRender: tRender, bytes, bands, shrinks };
@@ -5904,6 +5949,46 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (runtime) throw new Error(TR('exp.err.no-download'));
     download(fn, blob);
   }
+  /* THE LIGHT A PNG ACTUALLY CARRIES.
+     The TIFF path samples every 100th pixel of each tile as it reads that tile back to compress it, so
+     its figure is free. The PNG path never reads pixels back at all, so this is a NEW read — done in
+     horizontal strips, which bounds the cost by the strip rather than the picture: 8192x256 is 8 MB
+     where the whole image is 168.
+
+     IT MUST BE THE FINISHED CANVAS, NOT THE TILES, and that is the whole point of recording it.
+     Measured at 8192 across five engines, a PNG and a TIFF of the same slab at the same tile in the
+     same session agree to ±0.03 in daylight and differ by about 2 under black light — the bloom lands
+     differently once the tiles are assembled, and the gap tracks the glow lift (WebKit, the only engine
+     with a negative lift, agrees to 0.07). Sampling tiles would reproduce the TIFF's number and miss
+     exactly the thing this exists to record.
+
+     THE PHASE CARRIES ACROSS STRIPS. Restarting the stride at each strip boundary samples a different
+     set of pixels than a single pass over the whole image, so the figure would be statistically similar
+     and never equal to one derived from the file. Carrying the offset makes the two identical, which is
+     what lets a reader check this number against the master rather than take it on faith. */
+  function sampleLight(c, every) {
+    const step = (every || 100) * 4;                      // RGBA
+    let x = null;
+    try { x = c.getContext('2d'); } catch (_) { return undefined; }
+    if (!x) return undefined;
+    const ROWS = 256;
+    let litSum = 0, litUp = 0, litN = 0, off = 0;
+    for (let y = 0; y < c.height; y += ROWS) {
+      const rows = Math.min(ROWS, c.height - y);
+      let px = null;
+      try { px = x.getImageData(0, y, c.width, rows).data; } catch (_) { return undefined; }
+      const L = px.length;
+      if (off >= L) { off -= L; continue; }               // the whole strip falls between two samples
+      let i = off;
+      for (; i + 2 < L; i += step) {
+        const l = (px[i] + px[i + 1] + px[i + 2]) / 3;
+        litSum += l; if (l > 40) litUp++; litN++;
+      }
+      off = i - L;                                        // where the next sample lands in the next strip
+    }
+    return litN ? { mean: +(litSum / litN).toFixed(2), lit40: +(100 * litUp / litN).toFixed(2), every: every || 100 } : undefined;
+  }
+
   async function exportAll(W, only) {
     if (exporting) return; exporting = true; wakeOn(); sealing = sealDevice();
     // The MENUS go dead too, not just the button. Leaving them live means you can pick a different width
@@ -5927,15 +6012,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         });
         flushCanvas(c);
         const msRender = Date.now() - tR;
+        // Measured off the FINISHED image and outside msRender, so the render figure stays comparable
+        // with every master written before this existed.
+        const tL = Date.now();
+        const light = sampleLight(c);
+        const msLight = Date.now() - tL;
         expStat(TR('exp.encoding'), null); await breathe();   // one call; it cannot count itself
         const tE = Date.now();
         const [raw] = await encodePNGs([c]);
         const msEncode = Date.now() - tE, cw = c.width, ch = c.height;
         c.width = 1; c.height = 1;                           // hand it back before we hold the blob
         await sealing;                                        // the device block, ready before the metadata is built
-        const png = pngText(raw, 'stone-author', expMeta({
+        // pngMeta, not expMeta: it adds the glow lift, which cannot be named this far up the file.
+        const png = pngText(raw, 'stone-author', pngMeta({
           scope: 'render', w: cw, h: ch, tiles, bytes: raw.length,
-          ms: { render: msRender, encode: msEncode, total: Date.now() - expT0 },
+          light,
+          // The engine could not blur, so this master has no bloom and says so rather than pretending.
+          bloomless: bloomlessAt(W),
+          ms: { render: msRender, encode: msEncode, light: msLight, total: Date.now() - expT0 },
         }));
         expStat(TR('exp.saving'), 0.7); await breathe();
         const blob = new Blob([png], { type: 'image/png' });
@@ -6624,6 +6718,23 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     : glowKnob !== null ? glowKnob
     : !CAN_FILTER ? WEBKIT_LIFT
     : GLOW_AUTO ? Math.max(0, Math.min(1, IS_GECKO ? glowPx * 0.000692 + 0.054 : glowPx * 0.00065 - 0.07)) : GLOW_SET;
+  /* THE PNG PATHS' METADATA, BUILT WHERE THE GLOW IS LEGAL TO READ.
+     The lift is a const arrow declared just above, so anything textually earlier than it is a temporal
+     dead zone — check-bleed enforces that on the bare identifier, which means a PNG export up at line
+     5900 cannot even name the field, let alone call for its value. A FUNCTION DECLARATION is hoisted and
+     initialised before any code runs, so this has no dead zone of its own, and its body resolves the
+     lift at call time, which is always after init because every caller is an export.
+
+     WHY BOTH PNG PATHS COME THROUGH HERE: the light figure a PNG carries is useless without the lift
+     beside it. Measured at 8192 across five engines, a PNG and a TIFF of the same slab at the same tile
+     in one session agree to ±0.03 in daylight and differ by about 2 under black light, and the gap
+     tracks the lift — WebKit, the only engine running a negative one, agrees to 0.07. The same
+     expression as the tiled path, rounded the same way, so the two are comparable as written. */
+  function pngMeta(o) {
+    o.glowLift = BLOOM_DRAW && uvMode ? +glowLift().toFixed(3) : undefined;
+    return expMeta(o);
+  }
+
   const liftCv = document.createElement('canvas');
   const liftMap = new Map();                               // 8,050 specks a tile: parse each colour once, not once per element
   let liftCached = -1;
@@ -6898,13 +7009,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     //
     // So ask once, on a canvas small enough that only support is in question. No support means render and
     // SAY SO in the master rather than refuse; no bloom at one size means keep looking for one that blooms.
-    const canBlur = sigma > 0 ? (() => {
-      try {
-        const c = document.createElement('canvas'); c.width = c.height = 512;
-        const x = c.getContext('2d');
-        return !!x && bloomWorks(c, x, 512, 512, 24);
-      } catch (_) { return false; }
-    })() : true;
+    const canBlur = sigma > 0 ? canBloom() : true;      // one probe, shared with both PNG paths
     const probeSigma = canBlur ? sigma : 0;                  // nothing to learn from asking again per size
     const budget = memBudget();
     const proven = forcedTile() ? 0 : provenTile(W);
@@ -7228,9 +7333,19 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     try {
       expStat(TR('exp.preparing'), null); await breathe();
       await sealing;                                        // the device block, ready before the metadata is built
-      const r = await renderStreamedPNG(W, m => expMeta({
+      // pngMeta, not expMeta: it adds the glow lift, without which the light figure cannot be read.
+      const r = await renderStreamedPNG(W, m => pngMeta({
         scope: 'render', streamed: true, w: W, h: Math.round(W * H),
-        bands: m.bands, bytes: m.bytes, ms: { render: m.msRender, total: Date.now() - expT0 },
+        bands: m.bands, bytes: m.bytes,
+        // A BAND THAT HAD TO BE HALVED SAYS SO. It was counted for exactly this and then dropped on the
+        // floor, so a render that degraded under memory pressure has been indistinguishable from one
+        // that did not - and surviving that is the whole reason the degrade exists rather than a throw.
+        shrinks: m.shrinks || undefined,
+        light: m.light,
+        // Where the WebKit 20480 collapse was found: bare emitter geometry, no glow, and nothing in
+        // the file saying so. The light figure is the symptom; this is the claim.
+        bloomless: bloomlessAt(W),
+        ms: { render: m.msRender, total: Date.now() - expT0 },
       }), async (y, FH, pl) => {
         expStat(TR('exp.strip', { done: Math.ceil(y / pl.stripH), total: pl.strips, px: W }), 0.92 * y / FH);
         await breathe();

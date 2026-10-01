@@ -17,6 +17,7 @@ on:
       - 'tools/check-wake-lock.mjs'
       - 'tools/check-device-seal.mjs'
       - 'tools/check-bleed.mjs'
+      - 'tools/check-png-meta.mjs'
       - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
   pull_request:
@@ -29,6 +30,7 @@ on:
       - 'tools/check-wake-lock.mjs'
       - 'tools/check-device-seal.mjs'
       - 'tools/check-bleed.mjs'
+      - 'tools/check-png-meta.mjs'
       - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
   workflow_dispatch:
@@ -61,3 +63,5 @@ jobs:
         run: node tools/ablate-state-sig.mjs
       - name: Every blur a tile can meet has bleed behind it, and the bloom is probed
         run: node tools/check-bleed.mjs
+      - name: PNG metadata
+        run: node tools/check-png-meta.mjs
