@@ -45,7 +45,16 @@ if (!DIR || !META) {
   process.exit(2);
 }
 
-const MASTER = /^stone-.*[.](tif|tiff|png|zip)$/i;
+// THE EXPORT IS NAMED AFTER THE SLAB, so renaming a slab renames every master it produces -- and this
+// regex is the only thing deciding what gets harvested. Loading `HERO-MASTER-sealkey.json` on 2026-09-30
+// turned the output into `HERO-MASTER-65535-...tif`, which matched nothing: 21 masters, 52.5 GiPx and
+// 15.2 GB accumulated unseen for an hour, with no log line, because a name that does not match is
+// indistinguishable from a directory with nothing in it.
+//
+// Listed explicitly rather than widened. A looser rule over a Downloads folder would start harvesting --
+// and deleting -- files this project never wrote. Add a prefix here when a slab earns one.
+const PREFIX = ['stone', 'HERO-MASTER'];
+const MASTER = new RegExp('^(' + PREFIX.join('|') + ')-.*[.](tif|tiff|png|zip)$', 'i');
 const stamp = () => new Date().toISOString().slice(11, 19);
 const say = m => console.log(stamp() + '  ' + m);
 
