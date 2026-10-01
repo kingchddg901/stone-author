@@ -12,12 +12,12 @@ record of each.
 ## Build — Claude Code
 
 The build is **two continuous Claude Code sessions**, back to back — the second one opened 23 seconds after
-the first closed — running from 2026-09-20 20:03 UTC to 2026-10-01 07:28 UTC: ten days, eleven hours and
-twenty-five minutes of wall-clock span, 12,866 tool calls, all 295 commits in this repo. Both are archived: every message, every tool
+the first closed — running from 2026-09-20 20:03 UTC to 2026-10-01 07:34 UTC: ten days, eleven hours and
+thirty-one minutes of wall-clock span, 12,875 tool calls, all 296 commits in this repo. Both are archived: every message, every tool
 call *with its arguments*, and every tool result. That record is the provenance oracle — the one source that
 can answer "why is this the way it is?" down to the exact call that made it.
 
-The raw material is ~716 MB across the two, so it is **not committed here** — it lives as compressed archives
+The raw material is ~717 MB across the two, so it is **not committed here** — it lives as compressed archives
 kept privately and, if ever published, attached to a GitHub Release. These tables are the pointer to them.
 
 ### Session 1 — the studio
@@ -31,7 +31,7 @@ kept privately and, if ever published, attached to a GitHub Release. These table
 | Tool calls | 4,384 (arguments recorded verbatim) |
 | Tool results | 4,383 (full output; 145 errors) |
 | Sidecars | 51 files, 35.6 MB (large results offloaded from the transcript) |
-| Commits here | 41 of 258 — the marble studio itself, from the repo split on Sep 21 |
+| Commits here | 41 of 296 — the marble studio itself, from the repo split on Sep 21 |
 | Archive | `stone-author-session-698bc007-76d7-4c9f-8f93-ad00bf28ca5c.tar.xz` (113.8 MB, xz) |
 | SHA-256 | `8365ee337924e61da2f5efb22a38b04d5ae31619e855febb008fc3f6957f9c2a` |
 
@@ -40,25 +40,15 @@ kept privately and, if ever published, attached to a GitHub Release. These table
 | | |
 |---|---|
 | Session ID | `28da307f-5ea7-4449-815d-ae43b7b0ba89` |
-| Span | 2026-09-23 06:55:35Z → 2026-10-01 07:28:21Z (192h 33m) |
-| Captured | **figures read 2026-10-01 07:28Z, at the close of the work this file describes** |
-| Transcript | 468.7 MB, 75,047 lines |
-| Tool calls | 8,482 (arguments recorded verbatim) |
-| Tool results | 8,481 (full output; 297 errors) |
-| Sidecars | 78 files, 58.5 MB — 68 offloaded results plus 10 subagent transcripts (5 runs) |
-| Commits here | 254 of 295 — the coat tier, the layer system, the master export path, the render calibration, and the tebipixel run |
-
-**The archive row is the one thing on this page still outstanding.** The figures above were read at the
-close of the work, but a session cannot archive itself while it is running — the transcript this
-describes was still being written as the row was filled in. The existing archive is a **prefix**, cut on
-2026-09-27 at 01:42:24Z at 4,794 tool calls and 233.3 MB, and it describes itself rather than the rows
-above. It will be re-cut and re-hashed when the session closes, exactly as session 1's was.
-
-| | |
-|---|---|
-| Archive (prefix) | `stone-author-session-28da307f-5ea7-4449-815d-ae43b7b0ba89.tar.xz` (95.5 MB, xz) |
-| Cut at | 2026-09-27 01:42:24Z — 4,794 tool calls, 233.3 MB, 38,557 lines |
-| SHA-256 | `aaf6f59d69190da0b2cbe778c35d2d1af197c16dd437a879fefae46aa851f49a` |
+| Span | 2026-09-23 06:55:35Z → 2026-10-01 07:34:30Z (192h 39m) |
+| Captured | after the session closed — **complete** |
+| Transcript | 469.2 MB, 75,146 lines |
+| Tool calls | 8,491 (arguments recorded verbatim) |
+| Tool results | 8,491 (full output; 297 errors) |
+| Sidecars | 77 files, 61.4 MB — 67 offloaded results plus 10 subagent transcripts (5 runs) |
+| Commits here | 255 of 296 — the coat tier, the layer system, the master export path, the render calibration, and the tebipixel run |
+| Archive | `stone-author-session-28da307f-5ea7-4449-815d-ae43b7b0ba89.tar.xz` (143.0 MB, xz) |
+| SHA-256 | `ccf9071b7fd52e1edc8ec4f8f489149b8df1f5a1df2332ae891ea7969078b645` |
 
 The second session is the larger part of this repo's history: the coat tier (subsurface, specular, the one
 movable light, light temperature, black light and the condition-agnostic spectrum engine, the lens top-coat,
@@ -92,15 +82,19 @@ gates before a browser found it in ten seconds.
 arguments, tool results) and the sidecar files it references — results too large to inline were offloaded and
 left behind as a pointer, so without those blobs the record is incomplete. Each archive was checked before it
 was cut: every offloaded blob present is referenced by its transcript, and nothing referenced is absent (51
-of 51, and 66 of 66). Both are replayable call by call — which is how the build's every decision, dead end,
+of 51, and 77 of 77). Both are replayable call by call — which is how the build's every decision, dead end,
 and correction can be reconstructed.
 
 **On "captured".** A capture taken while a session is running is a prefix of that session, and the first
 archive published here was one: it was cut on 2026-09-23 at 02:16 UTC, five hours before session 1 actually
 ended, and so listed 4,042 tool calls rather than 4,384. Session 1 has since closed and been re-archived
 complete, which is why its hash on this page has changed; the earlier archive was verified to be a byte-exact
-prefix of the new one, so nothing was lost in the swap. Session 2's archive row says plainly that it is still a
-prefix, and it will be re-cut when that session closes.
+prefix of the new one, so nothing was lost in the swap. Session 2's archive has since been swapped the same
+way: its prefix was cut on 2026-09-27 at 01:42 UTC and held 4,794 of the session's 8,491 tool calls, and the
+session then ran on for another four days. Before the complete archive replaced it, that prefix was checked
+against the closed transcript and found byte-exact — 233,296,031 of 469,200,088 bytes, ending cleanly at line
+38,557 of 75,146. Both prefixes are kept beside the archives they preceded, renamed `.PARTIAL-…`, so either
+swap can be re-checked rather than taken on trust.
 
 ## The corpus
 
