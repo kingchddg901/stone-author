@@ -165,29 +165,59 @@
 
   <section class="sect" id="raw">
     <h2>The masters, unmarked</h2>
-    <p class="note"><span class="badge pure">pure render</span> &nbsp;The same two sights with <b>nothing added</b> —
-      no burn, no compositing, no retouch. These are the 2.68-gigapixel masters downsampled to 1600 px, and they are
-      what the slab actually produces. Each master carries its own record of the render that made it — build, engine,
-      hardware class, tile plan, timings, and a device identity sealed under the slab's own bytes — readable with
-      <code>node tools/tiff-meta.mjs &lt;file&gt;</code>, which is how every figure published about this renderer is
-      checked. Both were rendered on a 12-core desktop under Blink, 65,535 × 40,959 in 40 passes of 8192.</p>
+    <p class="note"><span class="badge pure">pure render</span> &nbsp;Two slabs under two lights, with <b>nothing
+      added</b> — no burn, no compositing, no retouch. All four were cut on one machine on one afternoon, on the same
+      build, and downsampled to 1600 px from masters of up to 2.68 gigapixels. Each carries its own record of the
+      render that made it — build, engine, hardware class, tile plan, per-tile timings, and a device identity sealed
+      under the slab's own bytes — readable with <code>node tools/tiff-meta.mjs &lt;file&gt;</code>, which is how
+      every figure published about this renderer is checked.</p>
+
+    <h3 style="margin:36px 0 2px;font-size:19px;font-weight:600">The pristine slab <span style="color:var(--dim);font-weight:400">— nothing has happened to it</span></h3>
+    <p class="note" style="margin-bottom:18px">The same geometry as hero 01, rendered as a master rather than at
+      1600 px. Under the other spectrum it has <b>nothing to declare</b>: no emission colours are defined for it, so
+      what is left is the stone's own relief under a light that none of it answers.</p>
     <div class="pair">
       <figure>
-        <img src="img/raw-daylight.png" alt="The unburned marble master in daylight: gold and white veins over near-black granite, with soft fog banks and no scorch mark." loading="lazy" width="1600" height="1000">
+        <img src="img/raw-before-daylight.png" alt="The pristine marble master in daylight: a married gold-and-white fracture network over near-black granite, dense with speck and fog detail." loading="lazy" width="1600" height="1000">
         <figcaption class="cap">
-          <span class="idx">raw · daylight</span>
-          <h2>Daylight <span class="light">— 2.6 min, desktop</span></h2>
-          <p>65,535 × 40,959 in 40 passes of 8192, on a 12-core desktop under Blink. 730 MB of tiled BigTIFF.</p>
+          <span class="idx">before · daylight</span>
+          <h2>Daylight <span class="light">— 3.1 min, 1.18 GB</span></h2>
+          <p>65,535 × 40,959 in 160 passes of 4096 — the small passes are what a real blur costs, at
+            <code>sigma 141px</code>.</p>
         </figcaption>
       </figure>
       <figure>
-        <img src="img/raw-uv.png" alt="The unburned marble master under the psyker spectrum: cyan veins and neon speck scatter on black, with a patch of ordinary daylight stone showing through at the central junction and no scorch mark." loading="lazy" width="1600" height="1000">
+        <img src="img/raw-before-psyker.png" alt="The pristine marble master under the psyker spectrum: the whole speck field and vein network visible as faint grey-violet relief, with no colour anywhere." loading="lazy" width="1600" height="1000">
         <figcaption class="cap">
-          <span class="idx">raw · psyker</span>
+          <span class="idx">before · psyker</span>
+          <h2>The other spectrum <span class="light">— 2.9 min, 460 MB</span></h2>
+          <p>Structure without colour: every speck and vein in pale relief, and not one emitter. A psyker looking at
+            ordinary stone sees ordinary stone.</p>
+        </figcaption>
+      </figure>
+    </div>
+
+    <h3 style="margin:48px 0 2px;font-size:19px;font-weight:600">The warped slab <span style="color:var(--dim);font-weight:400">— the one the warp got into</span></h3>
+    <p class="note" style="margin-bottom:18px">The same two lights on the slab the heroes come from. Here the other
+      spectrum has everything to say, and the protected window at the junction is <b>rendered, not composited</b> —
+      ordinary daylight stone standing in the middle of the screaming, because the mask is a real mark in the slab.
+      Put the burn on top of this one and you have the picture at the head of the page.</p>
+    <div class="pair">
+      <figure>
+        <img src="img/raw-hero-daylight.png" alt="The warped marble master in daylight: gold veins over dark granite with grey fog banks, and no scorch mark." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap">
+          <span class="idx">warped · daylight</span>
+          <h2>Daylight <span class="light">— 40.1 s, 285 MB</span></h2>
+          <p>32,768 × 20,480 — a quarter of the pixels of the others, and the only one here not cut at 65,535.</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/raw-hero-psyker.png" alt="The warped marble master under the psyker spectrum: veins blazing cyan, granite scattering in neon, with a patch of ordinary daylight stone held at the central junction." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap">
+          <span class="idx">warped · psyker</span>
           <h2>The other spectrum <span class="light">— 1.6 min, 780 MB</span></h2>
-          <p>The same geometry under the other light, and the window is <b>rendered, not composited</b>: ordinary
-            daylight stone standing in the middle of the screaming, because the mask is a real mark in the slab.
-            Put the burn back on top of this and you have the picture at the head of the page.</p>
+          <p>65,535 × 40,959 in 40 passes of 8192, blur-free — which is why it renders in half the time of the
+            pristine slab at the same size.</p>
         </figcaption>
       </figure>
     </div>

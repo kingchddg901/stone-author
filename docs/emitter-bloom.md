@@ -20,7 +20,7 @@
 
 ## The original scope, kept for the reasoning
 
-The bloom is currently **image-space**: render the tile, blur the whole thing twice, add it back. That one
+The bloom was **image-space** when this was written, and still is under `?bloom=blur`: render the tile, blur the whole thing twice, add it back. That one
 decision is upstream of most of what went wrong in September 2026 — the bleed, the tile-edge truncation,
 the canvas-size ceiling that silently dropped the blur on two tablets, and WebKit having no bloom at all.
 

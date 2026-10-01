@@ -10,7 +10,7 @@ supplied by hand in the evidence set.
 
 ## The set
 
-Latest run per device and light, all on build `2026.09.27.25` or later.
+Latest run per device and light, all on build `2026.09.27.25` or later — which means **this table predates the per-engine halo calibration** of 2026-09-30 and the builds after it. The masters behind it are drawn-halo renders, so the shape of the figures holds, but the timings and light figures will move when the set is re-cut; treat them as the state of that week rather than of the current build.
 
 | device | engine | light | mean | lit>40 | time | render tile | passes | median tile | throughput |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

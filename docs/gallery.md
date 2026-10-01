@@ -55,23 +55,29 @@ list, because they are not 1600 × 1000 renders at all. They are **65,535 × 40,
 gigapixels — downsampled to 1600 px** with `vips thumbnail`. The page opens on the burned pair, which
 states the fiction, and closes on the same pair with nothing added.
 
-| image | from | light | what it is |
-|---|---|---|---|
-| `hero-daylight.png` | `HERO-65535-daylight-burn.png` | daylight | the burn composited after the render |
-| `hero-uv.png` | `HERO-65535-uv-burn.png` | −1 | the same, under the psyker spectrum |
-| `raw-daylight.png` | `desktop-daylight-65535.tif` | daylight | pure render — 12-core desktop, Blink, 2.6 min, 730 MB |
-| `raw-uv.png` | `stone-65535-uv-win-chrome-1001-024652.tif` | −1 | pure render — 12-core desktop, Blink, 1.6 min, 780 MB, device identity sealed |
+| image | from | slab | light | what it is |
+|---|---|---|---|---|
+| `hero-daylight.png` | `HERO-65535-daylight-burn.png` | warped | daylight | the burn composited after the render |
+| `hero-uv.png` | `HERO-65535-uv-burn.png` | warped | −1 | the same, under the psyker spectrum |
+| `raw-before-daylight.png` | `stone-65535-day-win-chrome-1001-030401.tif` | before (35 marks) | daylight | pure render — 3.1 min, 1.18 GB, 160 passes of 4096 (`blur sigma 141px`) |
+| `raw-before-psyker.png` | `stone-65535-uv-win-chrome-1001-030725.tif` | before (35 marks) | −1 | pure render — 2.9 min, 460 MB. No `OVR_uv`, so nothing emits: structure without colour |
+| `raw-hero-daylight.png` | `stone-32768-day-win-chrome-1001-025803.tif` | warped (666 marks) | daylight | pure render — 40.1 s, 285 MB. **32,768 × 20,480**, the only one not cut at 65535 |
+| `raw-hero-psyker.png` | `stone-65535-uv-win-chrome-1001-025637.tif` | warped (666 marks) | −1 | pure render — 1.6 min, 780 MB, 40 passes of 8192, blur-free |
+
+All four `raw-*` masters were cut on 2026-10-01 on one 12-core desktop under Blink, on the same build, so
+the 2×2 varies only the two things it means to vary: the slab and the light. The pair they replaced
+(`raw-daylight.png`, `raw-uv.png`) came off two different masters from different weeks.
 
 The split is visible in the files themselves: the two `hero-*` images carry **no** stone-author metadata
 block, because compositing produced them, while the two `raw-*` masters carry theirs and read back under
 `node tools/tiff-meta.mjs <file>`. The page badges every image `pure render` or `composited` on that
 basis, so a reader can tell at a glance which pictures the renderer is answerable for.
 
-**`raw-uv.png` was replaced on 2026-10-01, and the reason matters.** It first shipped from an S23
-black-light master that turned out to be a *different picture* — an older state that does not render the
-reality window at all — so the raw pair did not match the burned pair above it. The desktop master now in
-its place renders the window as a real mask mark, which is what makes "put the burn back on top of this"
-true rather than approximately true.
+**The raw set was cut twice on 2026-10-01, and the reason matters.** It first shipped as a pair, and its
+black-light half came off an S23 master that turned out to be a *different picture* — an older state that
+does not render the reality window at all — so the raw pair did not match the burned pair above it. The
+2×2 that replaced it renders the window as a real mask mark, which is what makes "put the burn on top of
+this one" true rather than approximately true.
 
 **A known defect still ships in `hero-uv.png`.** The master behind it carries a tone step at a vertical
 render-pass boundary: at x = 16384 the columns run …49.46, 49.41 │ 50.58, 50.55… — **+1.17 on a base of 50,
