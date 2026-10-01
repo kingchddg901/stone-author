@@ -9,7 +9,7 @@
 // Checks 1-3 read the app's source. Check 4 runs the real reader — tools/lib/device-seal.mjs, the same
 // module tiff-meta uses — against a seal made for a known identity, so it is not testing a copy of itself.
 import { readFileSync } from 'fs';
-import { openSeal, makeSeal, DEV_INFO, KID_BYTES } from './lib/device-seal.mjs';
+import { openSeal, makeSeal, keyFor, DEV_INFO, KID_BYTES } from './lib/device-seal.mjs';
 
 const app = readFileSync('app/stone-author.html', 'utf8');
 const fail = [];
@@ -72,8 +72,16 @@ else if (+appV[1] !== makeSeal({ ua: 'x' }, slab).v)
   fail.push('the app seals as v' + appV[1] + ' but the reader writes v' + makeSeal({ ua: 'x' }, slab).v + ': one of them is rotating without the other, and every new master would read as the wrong slab');
 // AND THE NAME MUST BE OUT OF THE KEY. That is what v2 IS. If the hash goes back to hashing the whole
 // of serialize(), renaming a slab silently orphans every master sealed under the old name.
-if (!app.includes('const { name: _unsealedName, ...sealable } = serialize();'))
-  fail.push('the slab name is back inside the seal key, so renaming a slab would silently make every master sealed under the old name unopenable');
+// AND THE SESSION STATE MUST BE OUT OF IT TOO. That is what v3 IS. serialize() carries the authoring
+// state and the session state together; the session half moves without a pixel changing, and
+// deserialize() FORCES the tool to `move` on load, so a slab that is merely opened already hashes
+// differently from the file on disk. If any of these seven returns to the key, a master rendered from a
+// published slab stops being openable with it - which is what happened to the 2026-10-01 set.
+const destr = app.match(/const [{]([^}]*)[}] = serialize[(][)];/);
+if (!destr) fail.push('the seal no longer destructures serialize(), so what is in the key cannot be read from the source');
+else for (const k of ['name', 'tool', 'view', 'guidesOn', 'NEXT', 'nextId', 'activeLayer'])
+  if (!destr[1].includes(k + ':'))
+    fail.push(k + ' is back inside the seal key: it cannot change the exported picture, so a master would be sealed under state the saved slab does not reproduce');
 
 const twin = Buffer.from(slab.toString('utf8') + ' ', 'utf8');            // the free rekey: one space
 const id = { ua: 'Mozilla/5.0 (Linux; Android 10; K) Chrome/154', model: 'SM-T510', platformVersion: '13' };
@@ -96,6 +104,29 @@ if (!forced || forced.id) fail.push('without the key-id, the wrong key still dec
 if (openSeal(null, slab) !== null || openSeal({ v: 1, sealed: false }, slab) !== null) fail.push('an unsealed block should read as null');
 // sealed but no slab to hand it: a reason, not a crash.
 if (!(openSeal(dev, null) || {}).why) fail.push('sealed with no slab should explain itself');
+
+// v3 BEHAVIOUR, against a slab shaped like a real one. Session fields must be inert; anything that
+// reaches the picture must not be. Both directions, because a key that ignores everything is as broken
+// as one that ignores nothing.
+const real = o => JSON.stringify(Object.assign({
+  v: 1, name: 'n', fam: 'granite', tool: 'moon', view: 'stone', layTiles: false, guidesOn: false,
+  G: { subsurface: 0.05 }, T: {}, NEXT: { gauge: 1 }, nextId: 644,
+  layers: [{ key: 'base', on: true }], soloLay: null, activeLayer: { major: 'major#6' },
+  OVR: {}, OVR_uv: {}, perItem: {}, hidden: [], folders: [], marks: [1, 2, 3],
+}, o));
+const kid3 = s => keyFor(Buffer.from(s, 'utf8'), 3).kid;
+const baseKid = kid3(real({}));
+for (const [k, v] of [['tool', 'move'], ['view', 'tile'], ['guidesOn', true], ['nextId', 999],
+                      ['NEXT', { gauge: 2 }], ['activeLayer', { major: 'major#1' }], ['name', 'other']])
+  if (kid3(real({ [k]: v })) !== baseKid)
+    fail.push('changing ' + k + ' moved the v3 key, and it cannot change a pixel - a master would not open with its own slab');
+for (const [k, v] of [['fam', 'carrara'], ['layTiles', true], ['soloLay', 'web'],
+                      ['G', { subsurface: 1 }], ['marks', [1, 2, 4]], ['layers', [{ key: 'base', on: false }]]])
+  if (kid3(real({ [k]: v })) === baseKid)
+    fail.push('changing ' + k + ' did NOT move the v3 key, but it changes the picture - two different slabs would share a key');
+// the rotation trick has to survive: one space anywhere still rekeys.
+if (kid3(real({}) + ' ') === baseKid)
+  fail.push('an extra space did not move the v3 key - the digest has stopped being over the bytes, and a published twin would open its private original');
 
 if (fail.length) { console.error('device seal:\n  ' + fail.join('\n  ')); process.exit(1); }
 console.log(`device seal: OK — ${entries.length} export path(s) seal, identity out of the clear, ` +

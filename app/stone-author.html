@@ -1176,7 +1176,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.09.30.1';
+  const BUILD = '2026.10.01.1';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5517,7 +5517,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // FORWARD ONLY. A v1 master stays sealed under the bytes it was written with, name included, and
       // the reader branches on dev.v. Rotating rather than patching, because a key cannot be changed
       // retroactively for a file already on disk.
-      const { name: _unsealedName, ...sealable } = serialize();
+      // v3 — ONLY WHAT CAN REACH THE PICTURE. serialize() carries the authoring state and the SESSION
+      // state together, and the session half moves without a pixel changing. Worse, deserialize() forces
+      // the tool to `move` on load, on purpose, so a slab is never armed over a picture the user just
+      // said they wanted unchanged — which means a master rendered from a loaded slab was sealed under a
+      // serialisation THE SAVED SLAB CANNOT PRODUCE, and the published slab did not open its own master.
+      // Measured on the 2026-10-01 set, where "tool":"moon" against "tool":"move" was the whole
+      // difference. These seven cannot change the exported picture: the offline render reads neither
+      // `view` nor `guidesOn`, and the other five only decide where the NEXT mark would go.
+      const { name: _unsealedName, tool: _sTool, view: _sView, guidesOn: _sGuides,
+              NEXT: _sNext, nextId: _sNextId, activeLayer: _sActive, ...sealable } = serialize();
       const slab = new Uint8Array(await sub.digest('SHA-256', te.encode(JSON.stringify(sealable))));
       // kid is the first four bytes of the SLAB digest. The key is a SECOND digest, over a domain string,
       // so publishing kid hands out no part of the key it is a label for.
@@ -5528,7 +5537,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const key = await sub.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt']);
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const ct = new Uint8Array(await sub.encrypt({ name: 'AES-GCM', iv }, key, te.encode(JSON.stringify(id))));
-      devSeal = { v: 2, sealed: true, kid, iv: b64(iv), ct: b64(ct) };
+      devSeal = { v: 3, sealed: true, kid, iv: b64(iv), ct: b64(ct) };
     } catch (_) { /* the withheld block set above stands: nothing identifying is written */ }
   }
   const expMeta = o => JSON.stringify(Object.assign({

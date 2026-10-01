@@ -46,12 +46,90 @@ function stripName(text) {
   return String.fromCharCode(123) + QUOTE + 'v' + QUOTE + ':1,' + text.slice(i + 2);
 }
 
+// v3 — ONLY WHAT CAN REACH THE PICTURE IS IN THE KEY.
+//
+// v2 removed the name. It should have removed more. `serialize()` emits the authoring state and the
+// SESSION state in one object, and the session half moves without a pixel changing: which tool is
+// armed, which view is on screen, whether guides are drawn, which layer the next mark would land in,
+// the id that mark would get, and the pending settings it would be drawn with.
+//
+// That is not a theoretical nuisance. `deserialize()` deliberately forces the tool to `move` on load,
+// so that opening a slab does not leave a drawing tool armed over a picture the user just said they
+// wanted unchanged - a good decision for the hand, and fatal for the key. It means a master rendered
+// from a loaded slab is sealed under a serialisation THE SAVED SLAB CANNOT PRODUCE: the file says
+// `"tool":"moon"`, the app says `"tool":"move"`, and the published slab no longer opens its own master.
+// Measured on the 2026-10-01 set, where exactly that one field was the whole difference.
+//
+// These seven are removed TEXTUALLY, leaving every other byte alone, for the same reason v2 did: the
+// digest is over the file's bytes, so a published twin that differs by one space still fails to open a
+// master sealed under the private original. Parsing and re-stringifying would normalise that away and
+// hand the rotation trick back.
+const V3_DROP = ['name', 'tool', 'view', 'guidesOn', 'NEXT', 'nextId', 'activeLayer'];
+
+// Remove the named members from a top-level JSON object, textually. Depth- and string-aware, so a
+// brace or a quote inside a nested value or a string cannot end the scan early. Returns null if the
+// text is not an object this build would have written, which makes the caller report "wrong slab" -
+// the honest answer - rather than hashing something it does not understand.
+function dropMembers(text, names) {
+  const QUOTE = String.fromCharCode(34), BSLASH = String.fromCharCode(92);
+  if (text.charCodeAt(0) !== 123) return null;                       // not '{'
+  const cuts = [];
+  let i = 1, depth = 0, inStr = false;
+  let keyStart = -1, memberStart = 1;
+  while (i < text.length) {
+    const ch = text[i];
+    if (inStr) {
+      if (ch === BSLASH) { i += 2; continue; }
+      if (ch === QUOTE) inStr = false;
+      i++; continue;
+    }
+    if (ch === QUOTE) {
+      if (depth === 0 && keyStart < 0) keyStart = i;
+      inStr = true; i++; continue;
+    }
+    if (ch === '{' || ch === '[') { depth++; i++; continue; }
+    if (ch === '}' || ch === ']') {
+      if (depth === 0) break;                                        // the object's own closing brace
+      depth--; i++; continue;
+    }
+    if (ch === ',' && depth === 0) {
+      const name = keyName(text, keyStart);
+      if (name !== null && names.includes(name)) cuts.push([memberStart, i + 1]);  // take the comma too
+      keyStart = -1; memberStart = i + 1; i++; continue;
+    }
+    i++;
+  }
+  // the last member, which has no trailing comma
+  const name = keyName(text, keyStart);
+  if (name !== null && names.includes(name)) cuts.push([memberStart - 1, i]);      // take the leading comma
+  if (!cuts.length) return text;
+  let out = '', at = 0;
+  for (const [a, b] of cuts) { out += text.slice(at, a); at = b; }
+  return out + text.slice(at);
+}
+
+function keyName(text, keyStart) {
+  if (keyStart < 0) return null;
+  const QUOTE = String.fromCharCode(34), BSLASH = String.fromCharCode(92);
+  let j = keyStart + 1, name = '';
+  while (j < text.length) {
+    if (text[j] === BSLASH) { name += text[j + 1]; j += 2; continue; }
+    if (text[j] === QUOTE) break;
+    name += text[j]; j++;
+  }
+  return text[j + 1] === ':' ? name : null;
+}
+
 // v1 hashes the file BYTES, name included. v2 hashes them with the name member removed, because a name
-// is a label the user edits freely and it should never have moved the key. Both are kept: a master
-// already on disk can never be re-sealed, so the reader branches on dev.v.
+// is a label the user edits freely and it should never have moved the key. v3 removes the session half
+// as well. All three are kept: a master already on disk can never be re-sealed, so the reader branches
+// on dev.v and rotation runs forward only.
 export function keyFor(slabBytes, v = 1) {
   let bytes = slabBytes;
-  if (v >= 2) {
+  if (v >= 3) {
+    const stripped = dropMembers(Buffer.from(slabBytes).toString('utf8'), V3_DROP);
+    bytes = stripped === null ? slabBytes : Buffer.from(stripped, 'utf8');
+  } else if (v === 2) {
     const stripped = stripName(Buffer.from(slabBytes).toString('utf8'));
     // A file this build would not have written cannot be reduced to the v2 input. Hash it as it came:
     // the kid will not match and the caller reports "wrong slab", which is the honest answer.
@@ -84,7 +162,7 @@ export function openSeal(dev, slabBytes) {
 
 // The write side exists only so the gate can seal a known identity and prove the reader opens it. The app
 // writes these blocks with WebCrypto; this produces the same layout (12-byte IV, tag appended).
-export function makeSeal(id, slabBytes, v = 2) {
+export function makeSeal(id, slabBytes, v = 3) {
   const { kid, key } = keyFor(slabBytes, v);
   const iv = randomBytes(12);
   const c = createCipheriv('aes-256-gcm', key, iv);

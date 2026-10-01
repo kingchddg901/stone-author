@@ -97,6 +97,41 @@ nothing in circulation for the key to unlock — the lock guards files that only
 What is published is the evidence extracted from them, and the slab is there so a reader can render the
 same picture rather than take the figures on trust.
 
+### v3 — only what can reach the picture is in the key
+
+`serialize()` carries the authoring state and the **session** state in one object, and v2 removed only
+the name. v3 removes the rest of the session half, because none of it can change a pixel:
+
+| out of the key (v3) | why it cannot matter |
+| --- | --- |
+| `name` | a label, removed in v2 |
+| `tool` | which tool is armed |
+| `view` | the offline render reads it nowhere |
+| `guidesOn` | likewise |
+| `activeLayer` | where the *next* mark would land |
+| `nextId` | the id that mark would get |
+| `NEXT` | the settings it would be drawn with |
+
+Everything that reaches the exported picture stays in: `fam`, `layTiles`, `G`, `T`, `layers`, `soloLay`,
+`OVR`, `OVR_uv`, `perItem`, `hidden`, `folders`, `marks`. `soloLay` and `layTiles` look like UI and are
+not — soloing a layer or laying tiles changes what is rendered.
+
+**Why this had to change rather than be documented around.** `deserialize()` deliberately forces the tool
+to `move` on load, so that opening a slab never leaves a drawing tool armed over a picture the user has
+just said they want unchanged. That is right for the hand and fatal for the key: it means a master
+rendered from a loaded slab was *always* sealed under a serialisation the saved slab could not produce.
+Not a trap you could avoid by being careful — a guarantee. The 2026-10-01 masters are the proof: sealed
+under `df62304e` where their own slab hashes to `19d7bd46`, and the entire difference is `"tool":"moon"`
+against `"tool":"move"`.
+
+The seven are removed **textually**, leaving every other byte alone, so the rotation trick above survives:
+a published twin differing by one space still fails to open a master sealed under the private original.
+Parsing and re-serialising would have been simpler and would have normalised that away.
+
+Rotation runs forward only, as always. v1 and v2 readers stay, a master keeps the scheme it was written
+with, and the masters already sealed under session state remain openable only by reproducing that state —
+which is cheap when the drift is one enumerable field and impossible otherwise.
+
 ### The other direction is harder, and it has already caught one set
 
 Publishing a twin and sealing under the original works, because you control the original's bytes. Sealing
