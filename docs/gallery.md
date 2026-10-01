@@ -96,10 +96,30 @@ Widening the bleed makes it *worse*, which rules out truncation; a 1 px change o
 pixels. Geometry, the bleed crop and the tile writer are all exonerated — and separately, in a master that
 has the artifact, tile joins that are not pass joins measure 0.039 against a control of 0.029, i.e. nothing.
 
-**All four `raw-*` masters record `drawn glow` in their own metadata**, so they are on the origin-invariant
-path by construction. That is a stronger statement than any measurement of the finished picture, for the
-reason below. The two `hero-*` images come from masters with no metadata block, so their path is not
-recorded and cannot be read back.
+**The line is the blur RADIUS, not which bloom ran.** Measured at the offset that actually occurs —
+adjacent passes are one pass apart, 8192 px — an ordinary coat blur is bit-identical across that offset
+and the emission bloom is not:
+
+| what blurs | radius | pixels differing at an 8192 offset |
+| --- | --- | --- |
+| nothing | — | 0%, bit-identical |
+| specular 0.6 | 131 px | 0% |
+| subsurface 0.1 | 151 px | 0% |
+| subsurface 0.5 | 229 px | 0% |
+| subsurface 1.0 | 328 px | 13.4% |
+| image-space emission bloom | 196 + 524 px | **51.0%** |
+
+The break sits between 229 and 328 px. Do not read that as a general threshold: against *arbitrary*
+offsets a blur disagrees with itself at nearly every radius above about 8 px, and which offsets agree
+changes with the radius. Only the pass offset matters here, which is why every row above is measured at
+8192 and nothing else.
+
+**Every slab on this page is far inside that.** `before.json` sets `subsurface 0.05`, which is
+`coatRadius = (2 + 3 × 0.05) × bs` = **141 px** at 65535 — the figure its masters record as
+`blur sigma 141px`, and the same quantity the table above is indexed by. `warped.json` and
+`Hero_Psyker.json` set `subsurface 0` and `specular 0`, so they blur nothing in the coat at all. All four
+`raw-*` masters additionally record `drawn glow`. The two `hero-*` images come from masters with no
+metadata block, so neither their radius nor their bloom path can be read back.
 
 **Detecting it after the fact is harder than it looks, and one claim here was wrong because of that.** An
 earlier version of this section said `hero-uv.png` ships the artifact, with columns quoted to two decimals.
