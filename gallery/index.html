@@ -102,9 +102,12 @@
 
     <p class="note">Stone Author draws stone as <b>vector geometry</b>, not pixels: veins, specks, fog and warp are a
       few thousand simple shapes driven by a small recipe. The recipe — a <code>.json</code> slab — is the master,
-      and the render is a deterministic function of it: the same slab produces the same image, byte for byte, at any
-      resolution. The four steps below came off two slabs, rendered at 1600 × 1000; the post-steps that three of
-      them add are recorded in <a href="reference.json">reference.json</a>, parameter by parameter.</p>
+      and the render is a deterministic function of it: within one browser build the same slab renders
+      <b>byte-identical every time</b> — the gallery harness gates exactly that, twice from a fresh load — and the same
+      geometry can be drawn at any size. Across browser builds the picture is the same and the bytes are not, because
+      sub-pixel anti-aliasing moves; that comparison is recorded rather than gated. The four steps below came off two
+      slabs, rendered at 1600 × 1000; the post-steps that three of them add are recorded in
+      <a href="reference.json">reference.json</a>, parameter by parameter.</p>
 
     <figure>
       <img src="img/before.png" alt="Pristine black-and-gold marble: a married gold-and-white fracture vein network over dark granite." loading="lazy" width="1600" height="1000">
@@ -194,9 +197,12 @@
     <p class="cc0">Dedicated to the public domain under CC0 1.0 — <a href="https://creativecommons.org/publicdomain/zero/1.0/">No Rights Reserved</a>.</p>
     <p>Authored by Chris King in <a href="https://github.com/kingchddg901/stone-author">Stone Author</a>, built with Claude Code.
       Open the studio: <a href="https://claude.ai/artifact/QNnjrqE2Zv4KY7mChVyaaP">claude.ai/artifact</a>.</p>
-    <p>Each slab above re-loads into Stone Author (Load → the <code>.json</code>) and re-renders at any size. What it
-      will <i>not</i> reproduce are the composited steps — the burn, the emission palette and the mask — which the
-      harness applies after the render and <a href="reference.json">reference.json</a> records in full.</p>
+    <p>Each slab above re-loads into Stone Author (Load → the <code>.json</code>) and re-renders at any size. What
+      <code>before.json</code> and <code>warped.json</code> will <i>not</i> reproduce are the steps the harness adds on
+      top of them — the burn, the emission palette and the mask — which
+      <a href="reference.json">reference.json</a> records in full. The masters at the foot of this page come from a
+      different slab, <code>Hero_Psyker.json</code>, which carries the palette and the window as real marks: there, the
+      burn is the only thing painted on.</p>
   </footer>
 </div>
 </body>

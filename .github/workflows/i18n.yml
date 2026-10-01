@@ -18,6 +18,8 @@ on:
       - 'tools/check-device-seal.mjs'
       - 'tools/check-bleed.mjs'
       - 'tools/check-png-meta.mjs'
+      - 'tools/check-fn-refs.mjs'
+      - 'docs/functions.md'
       - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
   pull_request:
@@ -31,6 +33,8 @@ on:
       - 'tools/check-device-seal.mjs'
       - 'tools/check-bleed.mjs'
       - 'tools/check-png-meta.mjs'
+      - 'tools/check-fn-refs.mjs'
+      - 'docs/functions.md'
       - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
   workflow_dispatch:
@@ -65,3 +69,5 @@ jobs:
         run: node tools/check-bleed.mjs
       - name: PNG metadata
         run: node tools/check-png-meta.mjs
+      - name: Every line pin in the function reference lands on its function
+        run: node tools/check-fn-refs.mjs
