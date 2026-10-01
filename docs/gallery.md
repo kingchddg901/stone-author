@@ -79,38 +79,47 @@ does not render the reality window at all — so the raw pair did not match the 
 2×2 that replaced it renders the window as a real mask mark, which is what makes "put the burn on top of
 this one" true rather than approximately true.
 
-**Nothing on this page carries the pass-join artifact.** An earlier version of this section said
-`hero-uv.png` did, with figures attached. Those figures were real but they came from a *different file* —
-an S23 master — and were attributed to this one on the strength of a 1:1 crop that looked the same. The
-master behind `hero-uv.png` measures **0.8×** on the test below, i.e. its pass joins are quieter than its
-ordinary columns. The claim is withdrawn.
+**The pass-join artifact, and why the images here are not subject to it.** A master renders as a grid of
+passes, and until 2026-09-27 the emission bloom was *image-space*: each pass canvas was blurred by
+`ctx.filter = blur()`. That blur is **not origin-invariant**, so two passes covering the same stone bloom
+slightly differently and the join is where the two meet. Established by direct experiment rather than by
+staring at pictures — rendering the same output columns from two different pass origins and diffing them:
 
-**The artifact is real, and it is in one master.** `S23-uv-run1-65535.tif` discontinues at its vertical
-pass joins **18× more than at control columns in the same picture** (median |step| 0.395 against 0.022,
-n=280 against 400). It is a *pass* effect, not a tile one: in the same file, tile joins that are not pass
-joins measure 0.039 against a control of 0.029 — indistinguishable. Everything else tested is clean:
-`desktop-daylight-65535.tif` 1.2×, `HERO-65535-uv.png` 0.8×, and all four of the 2026-10-01 masters on
-this page between 1.0× and 1.4×. So it belongs to that render — that device or that older build — and not
-to black light as such.
+| path | bleed | pixels differing |
+| --- | --- | --- |
+| image-space bloom (`?bloom=blur`) | 787 | 50.2%, mean \|diff\| 0.20 |
+| image-space bloom | 1600 (covers the full 1573 reach) | **58.7% — worse** |
+| drawn glow (the default since 2026-09-27) | 787 | **0%, bit-identical** |
+| drawn glow | 4 | 0.8% |
 
-**How to measure it, and four ways not to.** The step's **sign varies from join to join**, so every test
-built on consistency cancels it to nothing. These all failed against a master that has it:
+Widening the bleed makes it *worse*, which rules out truncation; a 1 px change of origin moves 8.5% of
+pixels. Geometry, the bleed crop and the tile writer are all exonerated — and separately, in a master that
+has the artifact, tile joins that are not pass joins measure 0.039 against a control of 0.029, i.e. nothing.
+
+**All four `raw-*` masters record `drawn glow` in their own metadata**, so they are on the origin-invariant
+path by construction. That is a stronger statement than any measurement of the finished picture, for the
+reason below. The two `hero-*` images come from masters with no metadata block, so their path is not
+recorded and cannot be read back.
+
+**Detecting it after the fact is harder than it looks, and one claim here was wrong because of that.** An
+earlier version of this section said `hero-uv.png` ships the artifact, with columns quoted to two decimals.
+Those figures came from a *different file* — an S23 master — and were attributed to this one because a 1:1
+crop looked the same. Withdrawn. Five probes failed before a sixth worked, and the sixth only resolves the
+strong case:
 
 | probe | why it fails |
 | --- | --- |
 | adjacent-column difference, globally | cannot tell a persistent step from a one-column spike |
-| short baseline (16 cols) against a content control | a real step is tiny next to a vein crossing, so it ranks unremarkable |
+| short baseline (16 cols) vs a content control | a real step is tiny beside a vein crossing; a local ramp of −0.086/col moves the estimator by 1.4 on its own |
 | per-block sign consistency | a vertical vein is also consistent down a long run of rows |
-| jump against local roughness | fires on a clean master and misses a known one |
-| any signed mean over joins | the varying sign cancels; injecting a *constant* step to prove power is testing the wrong shape |
+| jump against local roughness | fires on a clean master, misses a known one |
+| signed mean over joins | the step's **sign varies per join**, so it cancels; proving power by injecting a *constant* step tests the wrong shape |
+| median \|single-column jump\| at joins vs in-file controls | works — but with only 7–15 join columns per band it has power only for a strong case |
 
-What works is **magnitude, within one file**: per join column, take the adjacent-column difference in each
-of 40 bands down the full height, take the absolute value, and compare that distribution against the same
-statistic at control columns of the same picture. Absolute magnitudes mean nothing across pictures — a
-busy picture jumps more everywhere — which is why the control must come from the same file. Two further
-traps: a 2000-row strip from y=8000 straddles the horizontal pass join at y=8192, and a local brightness
-ramp of −0.086 per column moves a 16-column baseline estimator by 1.4, which is larger than the step
-being hunted.
+Permutation-tested against 4,000 random same-size column subsets, the S23 master is significant at
+p ≤ 0.1% in three bands of four. Every other master tested, including both `HERO-65535-uv.png` and the four
+here, is **not distinguishable from chance** — which is a statement about the test's power, not a clean bill
+of health. Read the master's recorded bloom path instead; that is what it is for.
 
 The page is dedicated to the public domain under **CC0 1.0** — as is the whole repo, studio included;
 see [`architecture.md`](architecture.md#licensing).
