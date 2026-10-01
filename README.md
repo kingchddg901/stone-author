@@ -80,7 +80,9 @@ shown four ways (pristine → subtly wrong → screaming → and the inversion: 
 window of the screaming held at the burn). Four heroes (`img/*.png`) from two slabs
 (`slabs/before.json`, `slabs/warped.json`) — three of them that second slab under settings the harness
 applies at render time, not stored in it; `reference.json` is the render recipe + reference hashes.
-CC0. See [`docs/gallery.md`](docs/gallery.md).
+The page also opens and closes on four 1600-px downsamples of the **65,535 × 40,959 masters** — the
+burned pair that states the fiction, then the same pair raw — badged so a composited picture and a pure
+render are never mistaken for each other. CC0. See [`docs/gallery.md`](docs/gallery.md).
 
 ### `harness/` — the determinism harness
 A Playwright harness that renders each gallery hero from its slab under headless Chromium and gates on

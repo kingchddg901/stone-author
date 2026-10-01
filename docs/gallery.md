@@ -45,8 +45,46 @@ the preset does not carry it.
 
 Daylight and psyker are one geometry under two lights: at rest it reads near-true; under the other
 spectrum the distortion it was always carrying is exposed. Committed PNGs live in `gallery/img/` at
-**1600 × 1000** (the slab keeps its 8×5 ratio); the page notes the same slabs re-render up to ~168 MP.
-Each slab re-loads into Stone Author (Load → the `.json`) and re-renders at any size.
+**1600 × 1000** (the slab keeps its 8×5 ratio). Each slab re-loads into Stone Author (Load → the
+`.json`) and re-renders at any size.
+
+### The four master downsamples — in `img/`, but not harness output
+
+`gallery/img/` also carries four images the harness does **not** render and `reference.json` does **not**
+list, because they are not 1600 × 1000 renders at all. They are **65,535 × 40,959 masters — 2.68
+gigapixels — downsampled to 1600 px** with `vips thumbnail`. The page opens on the burned pair, which
+states the fiction, and closes on the same pair with nothing added.
+
+| image | from | light | what it is |
+|---|---|---|---|
+| `hero-daylight.png` | `HERO-65535-daylight-burn.png` | daylight | the burn composited after the render |
+| `hero-uv.png` | `HERO-65535-uv-burn.png` | −1 | the same, under the psyker spectrum |
+| `raw-daylight.png` | `desktop-daylight-65535.tif` | daylight | pure render — 12-core desktop, Blink, 2.6 min, 730 MB |
+| `raw-uv.png` | `stone-65535-uv-win-chrome-1001-024652.tif` | −1 | pure render — 12-core desktop, Blink, 1.6 min, 780 MB, device identity sealed |
+
+The split is visible in the files themselves: the two `hero-*` images carry **no** stone-author metadata
+block, because compositing produced them, while the two `raw-*` masters carry theirs and read back under
+`node tools/tiff-meta.mjs <file>`. The page badges every image `pure render` or `composited` on that
+basis, so a reader can tell at a glance which pictures the renderer is answerable for.
+
+**`raw-uv.png` was replaced on 2026-10-01, and the reason matters.** It first shipped from an S23
+black-light master that turned out to be a *different picture* — an older state that does not render the
+reality window at all — so the raw pair did not match the burned pair above it. The desktop master now in
+its place renders the window as a real mask mark, which is what makes "put the burn back on top of this"
+true rather than approximately true.
+
+**A known defect still ships in `hero-uv.png`.** The master behind it carries a tone step at a vertical
+render-pass boundary: at x = 16384 the columns run …49.46, 49.41 │ 50.58, 50.55… — **+1.17 on a base of 50,
+2.4%, and it persists** rather than spiking. x = 24576 is the same sign and size; x = 32768 is negligible.
+The step is visible at 1:1, with speck geometry crossing the edge unbroken while the ground tone changes,
+so it is exposure and not geometry. Shipped knowingly.
+
+Measure this carefully if you revisit it: an **adjacent-column** difference cannot tell a persistent step
+from a one-column spike, and the 2026-10-01 desktop master has a column-pair oscillation (±3–4 of 255,
+every other column, picture-wide) that makes every boundary look catastrophic to that statistic — it is
+what made a first pass at this report wrong. Use a short baseline either side (16 columns), against the
+same statistic at non-boundary control points, and stay inside one pass row: a 2000-row strip from y=8000
+straddles the horizontal pass boundary at y=8192.
 
 The page is dedicated to the public domain under **CC0 1.0** — as is the whole repo, studio included;
 see [`architecture.md`](architecture.md#licensing).
