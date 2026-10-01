@@ -76,8 +76,10 @@ Each app is one file with everything inline. No build step; no server needed to 
 
 ### `gallery/` — the public showcase
 A static page (`index.html`, no build) — **"African St Laurent, Warped"**: one authored marble idea
-shown three ways (pristine → subtly wrong → screaming). Three heroes (`img/*.png`) from two slabs
-(`slabs/before.json`, `slabs/warped.json`); `reference.json` is the render recipe + reference hashes.
+shown four ways (pristine → subtly wrong → screaming → and the inversion: orderly daylight with one
+window of the screaming held at the burn). Four heroes (`img/*.png`) from two slabs
+(`slabs/before.json`, `slabs/warped.json`) — three of them that second slab under settings the harness
+applies at render time, not stored in it; `reference.json` is the render recipe + reference hashes.
 CC0. See [`docs/gallery.md`](docs/gallery.md).
 
 ### `harness/` — the determinism harness
@@ -136,6 +138,12 @@ Reference photographs used to rip stone are other people's product photography a
 enter this repo**. Only code, synthetic output, and stone from the author's own material may
 be committed. The harvested corpus stays local.
 
+**How it was built** is a separate record. [`PROVENANCE.md`](PROVENANCE.md) accounts for every commit
+here: two back-to-back Claude Code sessions, 12,875 tool calls, archived complete — every message, every
+call with its arguments, every result — with each archive listed by SHA-256 so a copy can be checked
+against it. It also names the ChatGPT thread used as a sounding board on the architecture, which was an
+idea-check rather than a second builder: the calls and the code were made in the build.
+
 ## Status
 
 Extracted from `ha-dashboard-builder` (2026). The authoring app has, so far: save-the-source +
@@ -163,8 +171,9 @@ rather than the render. Measured on one slab — `Hero_Psyker`, 666 marks, **655
 gigapixels** — across every device to hand. Each master was audited tile by tile and carries a signature
 over its own render inputs, so they are verifiably the same picture and not merely the same size. Each also
 records the machine that made it — hardware class in the clear, the identifying part sealed under the
-slab's own bytes, so whoever holds the slab can read it and whoever holds only the picture cannot
-([`docs/device-seal.md`](docs/device-seal.md)):
+slab's own bytes, so whoever holds the slab can read it and whoever holds only the picture cannot. The
+reader ships with it and needs nothing installed — `node tools/tiff-meta.mjs --slab <your-slab.json>
+<your-master.tif>` opens masters you made yourself ([`docs/device-seal.md`](docs/device-seal.md)):
 
 | device | engine | daylight | black light |
 | --- | --- | --- | --- |
@@ -176,10 +185,13 @@ slab's own bytes, so whoever holds the slab can read it and whoever holds only t
 | Galaxy Tab A7 Lite, 3 GB | Chrome | 29.4 min | — |
 | Galaxy Tab A (2019), 2 GB | Chrome | 104.1 min | 46.8 min |
 
-These times were measured on 2026-09-26, before the bleed was sized to the blur's reach and before
-reality windows were composited per tile, so the planner now chooses smaller render passes than it did
-for these runs and the figures will move when the set is re-rendered. The black-light masters behind
-them were also missing their island. Times, not light: each master was audited for dead tiles.
+These times were measured on 2026-09-26 and the renderer has moved three times since: the bleed was
+sized to the blur's reach, reality windows became per-tile, and the image-space bloom was replaced by a
+halo drawn per element — which took the bleed from 1,577 px per side to 4. The planner therefore chooses
+different render passes than it did for these runs, and the figures will move when the set is
+re-rendered: [`docs/devices.md`](docs/devices.md) is current to build `2026.09.27.25` and this app is
+`2026.09.30.1`. The black-light masters behind them were also missing their island. Times, not light:
+each master was audited for dead tiles.
 
 **A phone beats the workstation**, and a **2019 budget tablet — 2 GB of RAM, four in-order Cortex-A53
 cores — produces a verified 2.68-gigapixel master**, because it never holds more than one render tile.
@@ -208,14 +220,23 @@ them that the light is not stored in the slab and resets when you load one.
 
 **What it runs on.** Five machines have each produced a 65,535 x 40,959 master in both lights — a 2019
 budget tablet with 2 GB through to a desktop — and four Blink devices agree to 0.41% on the same
-picture. The slowest is 19x the fastest and both land within 0.5% of one reference. Models, timings,
+picture. The slowest is 19x the fastest and both land within 0.5% of one reference. One configuration
+does **not** come along: Gecko on Android lands 4.75% under the reference at the largest correction
+available to it, and is published as what it is rather than quietly dropped. Models, timings,
 throughput and what each device taught are in [`docs/devices.md`](docs/devices.md).
+
+The set behind those figures is not a demonstration: **768 masters, 1,107,051,880,835 pixels — a
+tebipixel, 2^40 — crossed on 2026-10-01**, rendered across those five machines over six days for 54
+hours of actual compute. The masters are not kept. Each is harvested to a ~21 KB sidecar carrying its own
+identity, geometry, tile plan and timings. The figures above re-derive from those sidecars, which is the
+only reason they can be stated at all — the pictures they describe no longer exist.
 
 **Check it yourself.** The app, one slab and a reader are all here, so every figure published about the
 renderer can be reproduced rather than taken on trust — load
 [`gallery/slabs/HERO-MASTER-sealkey.json`](gallery/slabs/HERO-MASTER-sealkey.json), **set `Light spectrum`
 to −1** (the light is not stored in the slab, and daylight is the default), render at 65535 and read the
-result with `tools/tiff-meta.mjs`. Three engines agree to within 0.3%. Steps, expected figures and the
+result with `tools/tiff-meta.mjs`. Three engines agree to within 0.3% under that light; in daylight they
+are not meant to agree and do not — Blink 45.03, Gecko 46.25, WebKit 71.40. Steps, expected figures and the
 ways an attempt can fail for the wrong reason are in [`docs/reproduce.md`](docs/reproduce.md).
 
 **Licence.** [CC0 1.0 Universal](LICENSE) — public domain. To the extent possible under law, Chris King
