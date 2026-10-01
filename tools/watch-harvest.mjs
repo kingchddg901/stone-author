@@ -107,12 +107,30 @@ function sweep() {
     const name = basename(p);
     const size = (() => { try { return statSync(p).size; } catch (_) { return 0; } })();
 
-    if (m.marks > 0 && !m.lines && !m.cracks && !m.specks) {
+    // TWO WAYS TO PRODUCE NOTHING, and the geometry counts only see one of them.
+    //
+    //   no geometry  -- the render ran before the geometry was built. marks exist, nothing else does.
+    //   black frame  -- the geometry existed and was never PAINTED. Every count is perfect.
+    //
+    // The second was invisible here until 2026-09-30, when seven 16384 masters were harvested and
+    // deleted carrying 666 marks, 70 lines, 232 cracks, 8050 specks and an image with no pixel above
+    // zero anywhere. 16384 is the widest size that still demands one full-size assembly canvas
+    // (16384 x 10240 RGBA = 640 MiB, with three windows each asking for one); it allocated, reported
+    // success and painted nothing. Only `light.mean` sees it, and nothing was reading `light.mean`.
+    //
+    // A render from a build with no light figure cannot be judged and is left alone rather than guessed
+    // at. A deliberately black slab would be set aside too, which costs a file in a directory and is the
+    // cheap side of this trade.
+    const noGeometry = m.marks > 0 && !m.lines && !m.cracks && !m.specks;
+    const blackFrame = !!(m.light && m.light.mean === 0);
+    if (noGeometry || blackFrame) {
       try {
         mkdirSync(ASIDE, { recursive: true });
         renameSync(p, join(ASIDE, name));
         aside++;
-        say('EMPTY STONE   ' + name + '  -> ' + ASIDE + '   (marks ' + m.marks + ', no geometry; kept)');
+        say((blackFrame ? 'BLACK FRAME   ' : 'EMPTY STONE   ') + name + '  -> ' + ASIDE + '   ' +
+            (blackFrame ? '(light.mean 0 at ' + m.w + 'px — allocated and painted nothing; kept)'
+                        : '(marks ' + m.marks + ', no geometry; kept)'));
       } catch (e) { refused++; say('could not move ' + name + ': ' + e.message); }
       continue;
     }
