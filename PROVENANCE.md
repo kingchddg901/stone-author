@@ -12,12 +12,12 @@ record of each.
 ## Build — Claude Code
 
 The build is **two continuous Claude Code sessions**, back to back — the second one opened 23 seconds after
-the first closed — running from 2026-09-20 20:03 UTC to 2026-09-28 09:11 UTC: seven days, thirteen hours
-and eight minutes of wall-clock span, 10,712 tool calls, all 267 commits in this repo. Both are archived: every message, every tool
+the first closed — running from 2026-09-20 20:03 UTC to 2026-10-01 07:28 UTC: ten days, eleven hours and
+twenty-five minutes of wall-clock span, 12,866 tool calls, all 295 commits in this repo. Both are archived: every message, every tool
 call *with its arguments*, and every tool result. That record is the provenance oracle — the one source that
 can answer "why is this the way it is?" down to the exact call that made it.
 
-The raw material is ~658 MB across the two, so it is **not committed here** — it lives as compressed archives
+The raw material is ~716 MB across the two, so it is **not committed here** — it lives as compressed archives
 kept privately and, if ever published, attached to a GitHub Release. These tables are the pointer to them.
 
 ### Session 1 — the studio
@@ -39,21 +39,24 @@ kept privately and, if ever published, attached to a GitHub Release. These table
 
 | | |
 |---|---|
-| Session ID | `28da307f-5ea7-4449-815d-ae43b7b0ba89` (still open) |
-| Span so far | 2026-09-23 06:55:35Z → 2026-09-28 09:11:10Z (122h 16m) |
-| Transcript | 327.8 MB, 54,217 lines |
-| Tool calls | 6,328 (arguments recorded verbatim) |
-| Tool results | 6,327 (full output; 197 errors) |
+| Session ID | `28da307f-5ea7-4449-815d-ae43b7b0ba89` |
+| Span | 2026-09-23 06:55:35Z → 2026-10-01 07:28:21Z (192h 33m) |
+| Captured | **figures read 2026-10-01 07:28Z, at the close of the work this file describes** |
+| Transcript | 468.7 MB, 75,047 lines |
+| Tool calls | 8,482 (arguments recorded verbatim) |
+| Tool results | 8,481 (full output; 297 errors) |
 | Sidecars | 78 files, 58.5 MB — 68 offloaded results plus 10 subagent transcripts (5 runs) |
-| Commits here | 226 of 267 — the coat tier, the layer system, the master export path, and the render calibration |
+| Commits here | 254 of 295 — the coat tier, the layer system, the master export path, the render calibration, and the tebipixel run |
 
-The figures above are the session **as it stands**, read from the live transcript on 2026-09-28 at 09:11Z. The archive
-below is a different thing: a **prefix**, cut while the session was running, and it describes itself rather
-than the rows above. It will be re-cut when the session closes.
+**The archive row is the one thing on this page still outstanding.** The figures above were read at the
+close of the work, but a session cannot archive itself while it is running — the transcript this
+describes was still being written as the row was filled in. The existing archive is a **prefix**, cut on
+2026-09-27 at 01:42:24Z at 4,794 tool calls and 233.3 MB, and it describes itself rather than the rows
+above. It will be re-cut and re-hashed when the session closes, exactly as session 1's was.
 
 | | |
 |---|---|
-| Archive | `stone-author-session-28da307f-5ea7-4449-815d-ae43b7b0ba89.tar.xz` (95.5 MB, xz) |
+| Archive (prefix) | `stone-author-session-28da307f-5ea7-4449-815d-ae43b7b0ba89.tar.xz` (95.5 MB, xz) |
 | Cut at | 2026-09-27 01:42:24Z — 4,794 tool calls, 233.3 MB, 38,557 lines |
 | SHA-256 | `aaf6f59d69190da0b2cbe778c35d2d1af197c16dd437a879fefae46aa851f49a` |
 
@@ -96,8 +99,59 @@ and correction can be reconstructed.
 archive published here was one: it was cut on 2026-09-23 at 02:16 UTC, five hours before session 1 actually
 ended, and so listed 4,042 tool calls rather than 4,384. Session 1 has since closed and been re-archived
 complete, which is why its hash on this page has changed; the earlier archive was verified to be a byte-exact
-prefix of the new one, so nothing was lost in the swap. Session 2's row says plainly that it is a live
-capture, and it will be re-cut when that session closes.
+prefix of the new one, so nothing was lost in the swap. Session 2's archive row says plainly that it is still a
+prefix, and it will be re-cut when that session closes.
+
+## The corpus
+
+What the record above produced: **768 renders totalling 1,107,051,880,835 pixels — a tebipixel, 2^40,
+crossed at 100.686%, overshooting it by 7,540,253,059** on 2026-10-01 at 07:23:23.938Z. That is ten days and eleven hours after the first
+session opened, and six days after the first render existed.
+
+The crossing is attributable to a single master rather than a batch, because every render records its own
+finish time to the millisecond:
+
+| | |
+|---|---|
+| Render | `stone-65535-day-win-chrome-1001-002324` |
+| Finished | 2026-10-01T07:23:23.938Z — number 766 of 768 |
+| Took | 160 s at a 4096 tile, 65,535 × 40,959 |
+| Before / after | 1023.5227 GiPx (99.9534%) → 1026.0226 GiPx (100.1975%) |
+
+Its two siblings finished 1.5 and 1.7 seconds later, in the same wall-clock second; the milliseconds are
+what make it one render and not three.
+
+**It cost 54 h 07 m of actual rendering — 2.25 days — at a 37.2% duty cycle over 6.06 calendar days.**
+Compute time is measured on 768 of 768 renders, not extrapolated. The remaining 62.8% is a person being
+away from the desk, which is the whole reason the figure is kept separately from the calendar.
+
+| engine | renders | compute | GiPx | Mpx/s |
+|---|---|---|---|---|
+| win-chrome | 398 | 17 h 60 m | 797.2 | 13.21 |
+| android-chrome | 139 | 19 h 33 m | 86.3 | 1.32 |
+| ios-safari | 80 | 1 h 10 m | 49.8 | 12.83 |
+| win-firefox | 63 | 6 h 06 m | 27.6 | 1.35 |
+| android-firefox | 50 | 3 h 36 m | 27.0 | 2.24 |
+| *(no engine recorded)* | 38 | 5 h 43 m | 43.1 | 2.25 |
+
+Five machines, three engine families, five engine/platform combinations — and **every width from 1,024 to
+65,535 was rendered on all five, with no gaps**. The desktop carries 80.0% of the pixels but only 60.0%
+of the renders; the handhelds are 35.0% of the renders for 15.8% of the pixels. That asymmetry is the
+point rather than an inefficiency: every defect this build found was found on a handheld. A farm that was
+all desktop would have more pixels and no findings.
+
+**The masters are not kept.** Each is harvested to a ~21 KB sidecar carrying its full identity, geometry,
+tile plan, per-tile timings and light figure, and then deleted. 952 sidecars occupy 20.6 MB. Every figure
+in this section re-derives from them, which is the only reason any of it can be stated at all — the
+pictures it describes no longer exist.
+
+**What is excluded, and why.** Seven renders at 16,384 recorded a light figure of exactly zero: the
+assembly canvas allocated, reported success and painted nothing, while every other field — identity,
+geometry counts, tile plan, a plausible 51-63 s duration — looked correct. They are kept as sidecars and
+excluded from the count, because the count is of pictures. A further 38 renders predate the metadata
+carrying an `engine` field and cannot be attributed to a machine; they are counted in the total and
+excluded from the per-engine table above, where they appear as their own row rather than being
+distributed by guess.
 
 ## Design — ChatGPT
 
