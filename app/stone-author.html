@@ -447,9 +447,10 @@
       <div class="sl"><label for="wood-dev2ZSpan"><span data-i18n="sl.wood-dev2ZSpan">Reach</span> <output id="wood-dev2ZSpanV"></output></label><input id="wood-dev2ZSpan" type="range" min="0.05" max="1.5" step="0.01"></div>
       <div class="sl"><label for="wood-dev2Start"><span data-i18n="sl.wood-dev2Start">Branch from ring</span> <output id="wood-dev2StartV"></output></label><input id="wood-dev2Start" type="range" min="0" max="400" step="1"></div>
       <div class="sl"><label for="wood-dev2Ramp"><span data-i18n="sl.wood-dev2Ramp">Branch over</span> <output id="wood-dev2RampV"></output></label><input id="wood-dev2Ramp" type="range" min="1" max="150" step="1"></div>
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-knot-note">Everything above draws wood around the branch. Knot draws the branch itself, where the plane went through it rather than past it: its rings are concentric about the branch and so run crosswise to the trunk's. It is a cone widening outward, because the branch gained a ring every year the trunk grew around it, which is why a knot is small on an inner board and large near the bark. Pitch is how tight its own rings are.</span></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-knot-note">Everything above draws wood around the branch. Knot draws the branch itself, where the plane went through it rather than past it: its rings are concentric about the branch and so run crosswise to the trunk's. It is a cone widening outward, because the branch gained a ring every year the trunk grew around it, which is why a knot is small on an inner board and large near the bark. Pitch is how tight its own rings are. Died at ring is the difference between the two kinds of knot: a living branch reaches the bark and its wood joins the trunk's, so the knot is sound and on every board; a dead one stops there and is grown over, trapping bark at its edge, so it is black, it falls out of a board, and it is only in the wood laid down before it was buried.</span></div>
       <div class="sl"><label for="wood-dev2Knot"><span data-i18n="sl.wood-dev2Knot">Knot</span> <output id="wood-dev2KnotV"></output></label><input id="wood-dev2Knot" type="range" min="0" max="0.5" step="0.005"></div>
       <div class="sl"><label for="wood-dev2KnotPitch"><span data-i18n="sl.wood-dev2KnotPitch">Knot pitch</span> <output id="wood-dev2KnotPitchV"></output></label><input id="wood-dev2KnotPitch" type="range" min="10" max="400" step="5"></div>
+      <div class="sl"><label for="wood-dev2Die"><span data-i18n="sl.wood-dev2Die">Died at ring</span> <output id="wood-dev2DieV"></output></label><input id="wood-dev2Die" type="range" min="0" max="400" step="1"></div>
     </div>
     </div></details>
     <details class="sec" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
@@ -903,6 +904,7 @@ window.SA_I18N = (() => {
   "sl.wood-dev2Ramp": "Branch over",
   "sl.wood-dev2Knot": "Knot",
   "sl.wood-dev2KnotPitch": "Knot pitch",
+  "sl.wood-dev2Die": "Died at ring",
   "sl.spotR": "Beam size",
   "sl.spread": "Spread",
   "sl.strength": "Strength",
@@ -1003,7 +1005,7 @@ window.SA_I18N = (() => {
   "ui.scatter": "scatter ",
   "ui.wood-cut-note": "Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.",
   "ui.wood-drift-note": "Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.",
-  "ui.wood-knot-note": "Everything above draws wood around the branch. Knot draws the branch itself, where the plane went through it rather than past it: its rings are concentric about the branch and so run crosswise to the trunk's. It is a cone widening outward, because the branch gained a ring every year the trunk grew around it, which is why a knot is small on an inner board and large near the bark. Pitch is how tight its own rings are.",
+  "ui.wood-knot-note": "Everything above draws wood around the branch. Knot draws the branch itself, where the plane went through it rather than past it: its rings are concentric about the branch and so run crosswise to the trunk's. It is a cone widening outward, because the branch gained a ring every year the trunk grew around it, which is why a knot is small on an inner board and large near the bark. Pitch is how tight its own rings are. Died at ring is the difference between the two kinds of knot: a living branch reaches the bark and its wood joins the trunk's, so the knot is sound and on every board; a dead one stops there and is grown over, trapping bark at its edge, so it is black, it falls out of a board, and it is only in the wood laid down before it was buried.",
   "ui.wood-dev2-note": "The second feature is a branch rather than a second lean, and the only difference is that it has a place along the trunk. At indicates where, Reach how far it carries either side. Walk the board past it and the grain sweeps around the branch and then straightens again, because outside the window the feature is not there at all.",
   "ui.wood-dev-note": "Rings are circles until this is turned up. Eccentricity is how far they bulge off round, and it ACCUMULATES: a bulge grown in year 60 is still in the surface at year 220, because every later ring was laid on top of it. From and Over say which years it came on. Direction aims it, Breadth sets how much of the trunk it covers. This is the thing a branch, a lean or a buried wound all need.",
   "ui.wood-heart-note": "Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.",
@@ -1259,7 +1261,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.11';
+  const BUILD = '2026.10.10.12';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3811,8 +3813,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     dev2Amp: 0, dev2Angle: 210, dev2Spread: 6,    // feature 2 - a BRANCH: the same, plus a z window, because a
     dev2Start: 90, dev2Ramp: 25,                  // branch is at one HEIGHT and a lean is not
     dev2Z: 1.2, dev2ZSpan: 0.35,
-    dev2Knot: 0, dev2KnotPitch: 90               // the knot FACE: how fast the branch cone widens, and the
+    dev2Knot: 0, dev2KnotPitch: 90,              // the knot FACE: how fast the branch cone widens, and the
                                                   // pitch of its own rings. 0 draws no face at all.
+    dev2Die: 0                                    // the ring the branch DIED at. 0 = still alive, so the knot
+                                                  // runs to the bark; otherwise it stops and is grown over.
   };
   const WOOD0 = JSON.parse(JSON.stringify(WOOD));   // pristine, so a load is a pure function of the slab
   function woodField() {                      // ring profile + pith wander, sampled into lookups
@@ -3830,7 +3834,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const DEV = [
       { a: WOOD.devAmp, g: WOOD.devAngle, s: WOOD.devSpread, st: WOOD.devStart, rp: WOOD.devRamp, z: 0, zs: 0 },
       { a: WOOD.dev2Amp, g: WOOD.dev2Angle, s: WOOD.dev2Spread, st: WOOD.dev2Start, rp: WOOD.dev2Ramp,
-        z: WOOD.dev2Z, zs: WOOD.dev2ZSpan, kn: WOOD.dev2Knot, kp: WOOD.dev2KnotPitch },
+        z: WOOD.dev2Z, zs: WOOD.dev2ZSpan, kn: WOOD.dev2Knot, kp: WOOD.dev2KnotPitch, die: WOOD.dev2Die },
     ].filter(d => d.a > 0);
     const [rnd, gss] = sub(WOOD.seed, 1);
     const n = WOOD.rings, edge = new Float64Array(n);
@@ -3920,8 +3924,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // r0: the radius the trunk had when this feature started. Nothing inside it belongs to the
       // branch, because that wood was already there - the same causality the rings obey.
       const si = Math.max(0, Math.min(n - 1, Math.round(d.st)));
+      // The death year becomes a RADIUS through the same ring series the wood uses, so "it died in
+      // year 90" and "the knot stops here" are the same statement rather than two numbers to keep in
+      // step. Alive is Infinity: the branch simply never stops, and every test below passes.
+      const dead = d.die > 0, di = Math.max(0, Math.min(n - 1, Math.round(d.die)));
       return { amp: d.a, ux: Math.cos(dir), uy: Math.sin(dir), al, zw, wl: wl[q],
-               kn: d.kn > 0 ? d.kn : 0, kp: d.kp, zc: d.z, r0: edge[si] };
+               kn: d.kn > 0 ? d.kn : 0, kp: d.kp, zc: d.z, r0: edge[si],
+               dead, rDie: dead ? edge[di] : Infinity };
     });
     // The axis is a curve, not a line: a lean plus a slow wander. This is what stops straight grain
     // rendering as ruled parallel lines, and it is where cathedral arches come from on a tangent plane.
@@ -4035,8 +4044,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // run crosswise to the trunk's - which is the whole reason a knot looks like a knot.
           if (KN) {
             const tt = ddx * KN.ux + ddy * KN.uy;                  // along the branch, from the pith
-            if (tt > KN.r0) {
-              const rb = KN.kn * (tt - KN.r0);                     // a cone, not a cylinder
+            // A dead branch ENDS at the radius it died at: wood laid down after it was buried is
+            // clear. That is the whole difference between a knot you find on every board and one
+            // that is only in the heart of the log.
+            if (tt > KN.r0 && tt <= KN.rDie) {
+              const te = tt < KN.rDie ? tt : KN.rDie;              // it stopped gaining rings when it died
+              const rb = KN.kn * (te - KN.r0);                     // a cone, not a cylinder
               const ss = -ddx * KN.uy + ddy * KN.ux, dzz = cu * WOOD.len - KN.zc;
               const q2 = ss * ss + dzz * dzz;
               if (q2 < rb * rb) {
@@ -4044,7 +4057,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                 const lt = u2 > 0.72 ? (u2 - 0.72) / 0.28 : 0;
                 let kv = 1 - 0.55 * lt * lt;                       // its own latewood, at its own pitch
                 const rim = dd / (rb || 1e-9);
-                if (rim > 0.86) kv *= 0.45;                        // the dark rim where the trunk closed around it
+                // INTERGROWN joins live cambium and barely shows a boundary. ENCASED trapped BARK,
+                // which is the black edge, and the reason that knot falls out of a board.
+                if (KN.dead) { kv *= 0.72; if (rim > 0.74) kv *= 0.18; }
+                else if (rim > 0.88) kv *= 0.55;
                 cr = KR * kv; cg = KG * kv; cb = KB * kv;
               }
             }
@@ -5019,7 +5035,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   dev2Spread: v => (+v).toFixed(1), dev2Z: v => (+v).toFixed(2),
                   dev2ZSpan: v => (+v).toFixed(2), dev2Start: v => `${Math.round(v)}`,
                   dev2Ramp: v => `${Math.round(v)}`, dev2Knot: v => (+v).toFixed(3),
-                  dev2KnotPitch: v => `${Math.round(v)}` };
+                  dev2KnotPitch: v => `${Math.round(v)}`,
+                  dev2Die: v => +v === 0 ? 'alive' : `${Math.round(v)}` };
   function showWood(k) {                                 // one slider's readout, from WOOD rather than from the input
     const out = document.getElementById('wood-' + k + 'V');
     if (out) out.textContent = WDFMT[k] ? WDFMT[k](WOOD[k]) : (+WOOD[k]).toFixed(3);

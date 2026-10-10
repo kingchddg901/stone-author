@@ -1752,6 +1752,13 @@
   ],
   "where": "slider: how tight the branch's own growth rings are inside the knot face"
  },
+ "sl.wood-dev2Die": {
+  "terms": [
+   "knot",
+   "sapwood"
+  ],
+  "where": "slider: the ring at which the branch died. 0 means it is still alive, so the knot runs to the bark; any other value stops it there and the trunk grows over it"
+ },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
