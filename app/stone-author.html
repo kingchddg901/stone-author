@@ -14,6 +14,10 @@
   body { background: var(--ground); color: var(--text);
          font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
   [hidden] { display: none !important; }
+  /* A control the current material does not have is not dimmed, it is gone. The attribute is on
+     the element and the material is on the body, so the tool logic keeps owning its own panels'
+     hidden state and this simply overrides while it applies. */
+  body[data-mat="wood"] [data-mat-only="stone"] { display: none !important; }
   .wrap { max-width: 1640px; margin-inline: auto; padding-inline: 16px; padding-block: 14px 36px;
           display: grid; gap: 12px; }
   h1 { font-size: 18px; font-weight: 500; margin: 0; text-wrap: balance; }
@@ -183,7 +187,7 @@
       <button id="m-stone" type="button" data-mat="stone" aria-pressed="true" data-i18n="mat.stone">Stone</button>
       <button id="m-wood" type="button" data-mat="wood" aria-pressed="false" data-i18n="mat.wood">Wood</button>
     </div>
-    <div class="grp" role="group" aria-label="Family" data-i18n-attr="aria-label=a11y.family"><span class="lbl" data-i18n="lbl.family">Family</span>
+    <div class="grp" role="group" aria-label="Family" data-mat-only="stone" data-i18n-attr="aria-label=a11y.family"><span class="lbl" data-i18n="lbl.family">Family</span>
       <button id="f-carrara" type="button" data-fam="carrara" data-i18n="fam.carrara">Carrara</button>
       <button id="f-calacatta" type="button" data-fam="calacatta" data-i18n="fam.calacatta">Calacatta</button>
       <button id="f-marquina" type="button" data-fam="marquina" data-i18n="fam.marquina">Nero Marquina</button>
@@ -200,43 +204,43 @@
   <div class="row">
     <div class="grp" role="group" aria-label="View" data-i18n-attr="aria-label=a11y.view"><span class="lbl" data-i18n="lbl.view">View</span>
       <button id="v-stone" type="button" data-view="stone" data-i18n="view.stone">Stone</button>
-      <button id="v-identity" type="button" data-view="identity" data-i18n="view.identity">Identity</button>
-      <button id="v-angle" type="button" data-view="angle" data-i18n="view.angle">Angle</button>
-      <button id="uv-toggle" type="button" aria-pressed="false" title="Black light — only the UV palette glows" data-i18n="btn.uv-toggle" data-i18n-attr="title=a11y.black-light-only-the-uv">Black light</button>
+      <button id="v-identity" type="button" data-mat-only="stone" data-view="identity" data-i18n="view.identity">Identity</button>
+      <button id="v-angle" type="button" data-mat-only="stone" data-view="angle" data-i18n="view.angle">Angle</button>
+      <button id="uv-toggle" type="button" data-mat-only="stone" aria-pressed="false" title="Black light — only the UV palette glows" data-i18n="btn.uv-toggle" data-i18n-attr="title=a11y.black-light-only-the-uv">Black light</button>
       <button id="guides" type="button" aria-pressed="true" data-i18n="btn.guides">Guides</button></div>
     <div class="grp" role="group" aria-label="Zoom" data-i18n-attr="aria-label=a11y.zoom"><span class="lbl" data-i18n="lbl.zoom">Zoom</span>
       <button id="zout" type="button" aria-label="Zoom out" data-i18n-attr="aria-label=a11y.zoom-out">&minus;</button>
       <button id="zin" type="button" aria-label="Zoom in" data-i18n-attr="aria-label=a11y.zoom-in">+</button>
       <button id="zfit" type="button" data-i18n="btn.zfit">Fit</button></div>
-    <div class="grp" role="group" aria-label="Edit" data-i18n-attr="aria-label=a11y.edit"><span class="lbl" data-i18n="lbl.edit">Edit</span>
+    <div class="grp" role="group" aria-label="Edit" data-mat-only="stone" data-i18n-attr="aria-label=a11y.edit"><span class="lbl" data-i18n="lbl.edit">Edit</span>
       <button id="undo" type="button" data-i18n="btn.undo">Undo</button>
       <button id="reroll" type="button" data-i18n="btn.reroll">Reroll last</button>
       <button id="clear" type="button" data-i18n="btn.clear">Clear</button></div>
     <span class="stat" id="stat">&mdash;</span>
   </div>
   <div class="grp" role="group" aria-label="Tool" data-i18n-attr="aria-label=a11y.tool"><span class="lbl" data-i18n="lbl.tool">Tool</span>
-    <button id="t-vein" type="button" data-tool="vein" data-i18n="tool.vein">Vein</button>
-    <button id="t-branch" type="button" data-tool="branch" data-i18n="tool.branch">Branch</button>
-    <button id="t-web" type="button" data-tool="web" data-i18n="tool.web">Web</button>
-    <button id="t-styl" type="button" data-tool="styl" data-i18n="tool.styl">Stylolite</button>
-    <button id="t-pour" type="button" data-tool="pour" data-i18n="tool.pour">Pour</button>
-    <button id="t-gravity" type="button" data-tool="gravity" data-i18n="tool.gravity">Gravity</button>
-    <button id="t-magnet" type="button" data-tool="magnet" data-i18n="tool.magnet">Magnet</button>
-    <button id="t-chip" type="button" data-tool="chip" data-i18n="tool.chip">Chip</button>
-    <button id="t-tune" type="button" data-tool="tune" data-i18n="tool.tune">Tune</button>
-    <button id="t-cloud" type="button" data-tool="cloud" data-i18n="tool.cloud">Cloud</button>
-    <button id="t-moon" type="button" data-tool="moon" data-i18n="tool.moon">Moon</button>
-    <button id="t-mask" type="button" data-tool="mask" data-i18n="tool.mask">Mask</button>
+    <button id="t-vein" type="button" data-mat-only="stone" data-tool="vein" data-i18n="tool.vein">Vein</button>
+    <button id="t-branch" type="button" data-mat-only="stone" data-tool="branch" data-i18n="tool.branch">Branch</button>
+    <button id="t-web" type="button" data-mat-only="stone" data-tool="web" data-i18n="tool.web">Web</button>
+    <button id="t-styl" type="button" data-mat-only="stone" data-tool="styl" data-i18n="tool.styl">Stylolite</button>
+    <button id="t-pour" type="button" data-mat-only="stone" data-tool="pour" data-i18n="tool.pour">Pour</button>
+    <button id="t-gravity" type="button" data-mat-only="stone" data-tool="gravity" data-i18n="tool.gravity">Gravity</button>
+    <button id="t-magnet" type="button" data-mat-only="stone" data-tool="magnet" data-i18n="tool.magnet">Magnet</button>
+    <button id="t-chip" type="button" data-mat-only="stone" data-tool="chip" data-i18n="tool.chip">Chip</button>
+    <button id="t-tune" type="button" data-mat-only="stone" data-tool="tune" data-i18n="tool.tune">Tune</button>
+    <button id="t-cloud" type="button" data-mat-only="stone" data-tool="cloud" data-i18n="tool.cloud">Cloud</button>
+    <button id="t-moon" type="button" data-mat-only="stone" data-tool="moon" data-i18n="tool.moon">Moon</button>
+    <button id="t-mask" type="button" data-mat-only="stone" data-tool="mask" data-i18n="tool.mask">Mask</button>
     <button id="t-light" type="button" data-tool="light" data-i18n="tool.light">Light</button>
     <button id="t-move" type="button" data-tool="move" data-i18n="tool.move">Move</button>
   </div>
-  <div class="grp" role="group" aria-label="Pen" data-i18n-attr="aria-label=a11y.pen"><span class="lbl" data-i18n="lbl.pen">Pen</span>
+  <div class="grp" role="group" aria-label="Pen" data-mat-only="stone" data-i18n-attr="aria-label=a11y.pen"><span class="lbl" data-i18n="lbl.pen">Pen</span>
     <button id="pen-pressure" type="button" aria-pressed="false" data-i18n="btn.pen-pressure">Pressure</button>
     <button id="pen-tilt" type="button" aria-pressed="false" data-i18n="btn.pen-tilt">Tilt</button>
     <span class="stat" id="penlive" data-i18n="btn.penlive">hold the pen over the slab to read it</span>
   </div>
   <p class="hint" id="hint" aria-live="polite"></p>
-  <div class="sliders" id="s-vein">
+  <div class="sliders" data-mat-only="stone" id="s-vein">
     <div class="sl"><label for="gauge"><span data-i18n="sl.gauge">Gauge</span> <output id="gaugeV"></output></label><input id="gauge" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="rough"><span data-i18n="sl.rough">Roughness</span> <output id="roughV"></output></label><input id="rough" type="range" min="0" max="2.5" step="0.05"></div>
     <div class="sl"><label for="breaks"><span data-i18n="sl.breaks">Breaks</span> <output id="breaksV"></output></label><input id="breaks" type="range" min="0" max="3" step="0.05"></div>
@@ -252,37 +256,37 @@
       <button type="button" data-var="halo" data-i18n="vein.variant.halo">Halo</button></div></div>
     <div class="sl"><label for="varAmt"><span data-i18n="sl.varAmt">Variant amount</span> <output id="varAmtV"></output></label><input id="varAmt" type="range" min="0.3" max="2" step="0.05"></div>
   </div>
-  <div class="sliders" id="s-branch" hidden>
+  <div class="sliders" data-mat-only="stone" id="s-branch" hidden>
     <div class="sl"><label for="blen"><span data-i18n="sl.blen">Minor length</span> <output id="blenV"></output></label><input id="blen" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="gauge2"><span data-i18n="sl.gauge2">Gauge</span> <output id="gauge2V"></output></label><input id="gauge2" type="range" min="0.3" max="3" step="0.05"></div>
   </div>
-  <div class="sliders" id="s-web" hidden>
+  <div class="sliders" data-mat-only="stone" id="s-web" hidden>
     <div class="sl"><label for="spread"><span data-i18n="sl.spread">Spread</span> <output id="spreadV"></output></label><input id="spread" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="density"><span data-i18n="sl.density">Density</span> <output id="densityV"></output></label><input id="density" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="stretch"><span data-i18n="sl.stretch">Stretch</span> <output id="stretchV"></output></label><input id="stretch" type="range" min="0.4" max="2.5" step="0.05"></div>
   </div>
-  <div class="sliders" id="s-styl" hidden>
+  <div class="sliders" data-mat-only="stone" id="s-styl" hidden>
     <div class="sl"><label for="stylAmp"><span data-i18n="sl.stylAmp">Tooth height</span> <output id="stylAmpV"></output></label><input id="stylAmp" type="range" min="0.2" max="3" step="0.05"></div>
     <div class="sl"><label for="stylTooth"><span data-i18n="sl.stylTooth">Teeth</span> <output id="stylToothV"></output></label><input id="stylTooth" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="stylWidth"><span data-i18n="sl.stylWidth">Seam width</span> <output id="stylWidthV"></output></label><input id="stylWidth" type="range" min="0.4" max="3" step="0.05"></div>
   </div>
-  <div class="sliders" id="s-pour" hidden>
+  <div class="sliders" data-mat-only="stone" id="s-pour" hidden>
     <div class="sl"><label for="prate"><span data-i18n="sl.prate">Pour</span> <output id="prateV"></output></label><input id="prate" type="range" min="200" max="4000" step="50"></div>
     <div class="sl"><label for="pwidth"><span data-i18n="sl.pwidth">Width</span> <output id="pwidthV"></output></label><input id="pwidth" type="range" min="0.3" max="4" step="0.1"></div>
     <div class="sl"><label for="pfling"><span data-i18n="sl.pfling">Fling</span> <output id="pflingV"></output></label><input id="pfling" type="range" min="0" max="3" step="0.1"></div>
   </div>
-  <div class="sliders" id="s-gravity" hidden>
+  <div class="sliders" data-mat-only="stone" id="s-gravity" hidden>
     <div class="sl"><span class="lbl" data-i18n="lbl.gravity">Gravity</span><div class="grp" role="group" aria-label="Gravity sign" data-i18n-attr="aria-label=a11y.gravity-sign">
       <button id="g-pull" type="button" data-sign="1" aria-pressed="true" data-i18n="grav.pull">Pull</button>
       <button id="g-push" type="button" data-sign="-1" aria-pressed="false" data-i18n="grav.push">Push</button></div></div>
     <div class="sl"><label for="strength"><span data-i18n="sl.strength">Strength</span> <output id="strengthV"></output></label><input id="strength" type="range" min="0.05" max="0.9" step="0.01"></div>
     <div class="sl"><label for="reach"><span data-i18n="sl.reach">Reach</span> <output id="reachV"></output></label><input id="reach" type="range" min="0.3" max="3" step="0.05"></div>
   </div>
-  <div class="sliders" id="s-moon" hidden>
+  <div class="sliders" data-mat-only="stone" id="s-moon" hidden>
     <div class="sl"><label for="moonReach"><span data-i18n="sl.moonReach">Ball size</span> <output id="moonReachV"></output></label><input id="moonReach" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="moonStrength"><span data-i18n="sl.moonStrength">Pull</span> <output id="moonStrengthV"></output></label><input id="moonStrength" type="range" min="0.2" max="3" step="0.05"></div>
   </div>
-  <div class="sliders" id="s-mask" hidden>
+  <div class="sliders" data-mat-only="stone" id="s-mask" hidden>
     <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.island">Island</span><div class="grp" role="group" aria-label="Island sense" data-i18n-attr="aria-label=a11y.island-sense">
       <button id="mi-protect" type="button" data-minv="0" aria-pressed="true" data-i18n="mask.sense.protect">Protects</button>
       <button id="mi-chaos" type="button" data-minv="1" aria-pressed="false" data-i18n="mask.sense.chaos">Window into chaos</button></div></div>
@@ -293,10 +297,10 @@
     <div class="sl"><label for="maskSpec"><span data-i18n="sl.maskSpec">Window spectrum</span> <output id="maskSpecV"></output></label><input id="maskSpec" type="range" min="-1" max="1" step="0.02"></div>
     <div class="sl" style="grid-column:1/-1"><span style="margin:0" data-i18n-html="help.protects"><b>Protects</b> freezes the warp inside the disc &mdash; an island of normalcy. <b>Window into chaos</b> inverts that: place one and the slab holds still everywhere <i>except</i> inside these discs. <b>Show through</b> renders the disc at its own light, so the window can look out on a different reality (0 = daylight).</span></div>
   </div>
-  <div class="sliders" id="s-chip" hidden>
+  <div class="sliders" data-mat-only="stone" id="s-chip" hidden>
     <div class="sl"><label for="chipsize"><span data-i18n="sl.chipsize">Chip size</span> <output id="chipsizeV"></output></label><input id="chipsize" type="range" min="0.2" max="2.5" step="0.05"></div>
   </div>
-  <div class="sliders" id="s-magnet" hidden>
+  <div class="sliders" data-mat-only="stone" id="s-magnet" hidden>
     <div class="sl"><span class="lbl" data-i18n="lbl.magnet">Magnet</span><div class="grp" role="group" aria-label="Magnet mode" data-i18n-attr="aria-label=a11y.magnet-mode">
       <button id="m-align" type="button" data-mag="1" aria-pressed="true" data-i18n="mag.align">Align</button>
       <button id="m-scatter" type="button" data-mag="-1" aria-pressed="false" data-i18n="mag.scatter">Scatter</button>
@@ -308,7 +312,7 @@
   </div><!-- /stage -->
 
   <div class="rail">
-  <details class="sec" open><summary data-i18n="sec.layers">Layers</summary><div class="body">
+  <details class="sec" open data-mat-only="stone"><summary data-i18n="sec.layers">Layers</summary><div class="body">
     <div class="layers" id="layers"></div>
   </div></details>
   <details class="sec"><summary data-i18n="sec.colour">Colour</summary><div class="body">
@@ -374,7 +378,7 @@
       <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.lens-type">Lens type</span><div class="grp" role="group" aria-label="Lens type" data-i18n-attr="aria-label=a11y.lens-type"><button data-lens="fresnel" type="button" data-i18n="lens.fresnel">Fresnel</button><button data-lens="reeded" type="button" data-i18n="lens.reeded">Reeded</button><button data-lens="water" type="button" data-i18n="lens.water">Water</button></div></div>
     </div>
     </div></details>
-    <details class="sec"><summary data-i18n="sec.clouds-and-warp">Clouds & warp</summary><div class="body">
+    <details class="sec" data-mat-only="stone"><summary data-i18n="sec.clouds-and-warp">Clouds & warp</summary><div class="body">
     <div class="sliders" id="g-clouds">
       <div class="sl"><label for="cloudStrength"><span data-i18n="sl.cloudStrength">Clouds</span> <output id="cloudStrengthV"></output></label><input id="cloudStrength" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="cloudScale"><span data-i18n="sl.cloudScale">Cloud scale</span> <output id="cloudScaleV"></output></label><input id="cloudScale" type="range" min="0.4" max="3" step="0.05"></div>
@@ -385,7 +389,7 @@
       <div class="sl"><span class="lbl" data-i18n="lbl.warp-holds">Warp holds</span><div class="grp"><button id="warp-holdmajor" type="button" aria-pressed="false" data-i18n="btn.warp-holdmajor">Major veins stable</button></div></div>
     </div>
     </div></details>
-    <details class="sec"><summary data-i18n="sec.banding">Banding</summary><div class="body">
+    <details class="sec" data-mat-only="stone"><summary data-i18n="sec.banding">Banding</summary><div class="body">
     <div class="sliders" id="g-bands">
       <div class="sl"><label for="bandStrength"><span data-i18n="sl.bandStrength">Banding</span> <output id="bandStrengthV"></output></label><input id="bandStrength" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="bandFreq"><span data-i18n="sl.bandFreq">Bands</span> <output id="bandFreqV"></output></label><input id="bandFreq" type="range" min="2" max="20" step="1"></div>
@@ -393,14 +397,14 @@
       <div class="sl"><label for="bandWave"><span data-i18n="sl.bandWave">Waviness</span> <output id="bandWaveV"></output></label><input id="bandWave" type="range" min="0" max="1" step="0.02"></div>
     </div>
     </div></details>
-    <details class="sec"><summary data-i18n="sec.breccia">Breccia</summary><div class="body">
+    <details class="sec" data-mat-only="stone"><summary data-i18n="sec.breccia">Breccia</summary><div class="body">
     <div class="sliders" id="g-breccia">
       <div class="sl"><label for="brecStrength"><span data-i18n="sl.brecStrength">Breccia</span> <output id="brecStrengthV"></output></label><input id="brecStrength" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="brecClasts"><span data-i18n="sl.brecClasts">Clasts</span> <output id="brecClastsV"></output></label><input id="brecClasts" type="range" min="6" max="90" step="1"></div>
       <div class="sl"><label for="brecSeam"><span data-i18n="sl.brecSeam">Matrix</span> <output id="brecSeamV"></output></label><input id="brecSeam" type="range" min="0.3" max="2.5" step="0.05"></div>
     </div>
     </div></details>
-    <details class="sec"><summary data-i18n="sec.drusy">Drusy</summary><div class="body">
+    <details class="sec" data-mat-only="stone"><summary data-i18n="sec.drusy">Drusy</summary><div class="body">
     <div class="sliders" id="g-drusy">
       <div class="sl"><label for="drusyDensity"><span data-i18n="sl.drusyDensity">Drusy</span> <output id="drusyDensityV"></output></label><input id="drusyDensity" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><label for="drusySize"><span data-i18n="sl.drusySize">Crystal size</span> <output id="drusySizeV"></output></label><input id="drusySize" type="range" min="0.4" max="2.5" step="0.05"></div>
@@ -409,7 +413,7 @@
       <div class="sl"><label for="drusySubs"><span data-i18n="sl.drusySubs">Drusy variants</span> <output id="drusySubsV"></output></label><input id="drusySubs" type="range" min="1" max="4" step="1"></div>
     </div>
     </div></details>
-    <details class="sec"><summary data-i18n="sec.fog-and-resin">Fog & resin</summary><div class="body">
+    <details class="sec" data-mat-only="stone"><summary data-i18n="sec.fog-and-resin">Fog & resin</summary><div class="body">
     <div class="sliders" id="g-fog">
       <div id="fog-panel" class="tk" style="grid-column:1/-1"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.to-sculpt-the-haze-select">To sculpt the haze: select the Fog layer, then use Gravity (push clears a window, pull pools) or Magnet.</span></div>
@@ -453,7 +457,7 @@
       <div class="sl"><label for="wood-dev2Die"><span data-i18n="sl.wood-dev2Die">Died at ring</span> <output id="wood-dev2DieV"></output></label><input id="wood-dev2Die" type="range" min="0" max="400" step="1"></div>
     </div>
     </div></details>
-    <details class="sec" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
+    <details class="sec" data-mat-only="stone" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
     <div class="sliders">
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.specks-size-reseed-act-on">Specks / size / reseed act on the ACTIVE granite layer. Add more with "+ Granite layer" — each its own field + colour.</span></div>
       <div id="granite-panel" class="tk" style="grid-column:1/-1"></div>
@@ -463,7 +467,7 @@
     </div>
     </div></details>
   </div><!-- /#ground -->
-  <details class="sec" id="calib"><summary data-i18n="sec.calibrate">Calibrate the pen</summary><div class="body">
+  <details class="sec" data-mat-only="stone" id="calib"><summary data-i18n="sec.calibrate">Calibrate the pen</summary><div class="body">
     <p class="note" data-i18n-html="note.calibrate">Twenty short strokes teach the studio <i>your</i> hand: the pressure you actually use, how you normally hold the pen, and what counts as fast for you. Nothing is drawn on the slab while you calibrate, and nothing leaves this device.</p>
     <div class="grp">
       <button id="cal-start" type="button" data-i18n="btn.cal-start">Start</button>
@@ -507,7 +511,7 @@
       <div class="grp"><button value="cancel" data-i18n="btn.cancel">Cancel</button><button value="go" id="bigdlg-go" class="warn" data-i18n="btn.start-giant">Start giant render</button></div>
     </form></dialog>
   </div></details>
-  <details class="sec"><summary data-i18n="sec.how-the-tools-read">How the tools read</summary><div class="body">
+  <details class="sec" data-mat-only="stone"><summary data-i18n="sec.how-the-tools-read">How the tools read</summary><div class="body">
   <p class="note" id="fwd" data-i18n="btn.fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
   <p data-i18n-html="note.each-line-keeps-what-it"><b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw
     it, so changing them shapes the next line only. This generates the base structure; the colours here are
@@ -569,6 +573,7 @@ window.SA_I18N = (() => {
   "a11y.zoom": "Zoom",
   "a11y.zoom-in": "Zoom in",
   "a11y.zoom-out": "Zoom out",
+  "app.sub-wood": "You author the log. Where the saw stands decides what the board looks like.",
   "app.sub": "You draw where the lines go. The family decides what they are.",
   "app.title": "Stone author",
   "big.confirm": "Start {w} × {h} render?\n\n{gpx} gigapixels. This may run for several minutes and produce a file approaching or exceeding 1 GB. Other software may need tens of gigabytes to open it.",
@@ -1261,7 +1266,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.12';
+  const BUILD = '2026.10.10.13';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5050,7 +5055,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     document.getElementById('g-granite').hidden = !F.groundSpecks;
     // Chrome, not the render path: this asks which material through the sanctioned accessor, never the
     // discriminator, so it stays on the right side of tools/check-material-fork.mjs.
-    document.getElementById('g-wood').hidden = currentMaterial() !== 'wood';
+    const mat = currentMaterial();
+    document.getElementById('g-wood').hidden = mat !== 'wood';
+    document.body.dataset.mat = mat;                    // the CSS rule above hides what this material lacks
+    // "You draw where the lines go" is a stone sentence. In wood you do not draw: you author a log and
+    // then mill it, and saying otherwise is the first thing the interface would be lying about.
+    const sub = document.querySelector('.sub');
+    if (sub) sub.textContent = TR(mat === 'wood' ? 'app.sub-wood' : 'app.sub');
   }
 
   // ---- THE SOURCE: marks + family + settings. Everything bakes from this; save it, restore it.

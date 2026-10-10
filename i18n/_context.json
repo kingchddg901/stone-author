@@ -123,6 +123,12 @@
  "a11y.zoom-out": {
   "where": "accessibility label (aria-label), not visible on screen"
  },
+ "app.sub-wood": {
+  "terms": [
+   "wood"
+  ],
+  "where": "the subtitle under the title, shown only while the material is wood; the stone one says you draw the lines, which is not true of wood"
+ },
  "app.sub": {
   "terms": [
    "family"
