@@ -1647,6 +1647,10 @@
  "hint.cut-kept": {"placeholders": {"n": "how many cuts are now kept, e.g. 3"}, "terms": ["wood"], "where": "status shown after keeping a cut"},
  "hint.cuts-cleared": {"terms": ["wood"], "where": "status after discarding every kept cut"},
  "hint.cuts-full": {"terms": ["wood"], "where": "status when trying to keep a ninth cut"},
+ "sl.wood-plankLen": {"terms": ["wood"], "where": "slider: nominal plank length in inches, capped at the board's own length"},
+ "sl.wood-plankVary": {"terms": ["wood"], "where": "slider: how much plank lengths differ from the nominal, 0 = all identical"},
+ "sl.wood-plankStagger": {"terms": ["wood"], "where": "slider: how far each row's end joints shift from the row below, 0 = joints stack into columns"},
+ "tile.pat.plank": {"terms": ["wood"], "where": "button: the plank-run floor layout, rows of varying-length boards with staggered end joints"},
  "sl.wood-stage": {"terms": ["wood"], "where": "slider: how many different boards of the one log the floor is cut from. 1 repeats a single board; higher walks down the cant"},
  "sl.wood-rings": {
   "terms": [

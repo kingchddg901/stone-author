@@ -333,6 +333,7 @@
     <button id="p-square" type="button" data-pat="square" aria-pressed="true" data-i18n="tile.pat.square">Square</button>
     <button id="p-rect" type="button" data-pat="rect" aria-pressed="false" data-i18n="tile.pat.rect">Rectangle</button>
     <button id="p-subway" type="button" data-pat="subway" aria-pressed="false" data-i18n="tile.pat.subway">Subway</button>
+    <button id="p-plank" type="button" data-mat-only="wood" data-pat="plank" aria-pressed="false" data-i18n="tile.pat.plank">Plank run</button>
     <button id="p-hex" type="button" data-pat="hex" aria-pressed="false" data-i18n="tile.pat.hex">Hexagon</button>
     <button id="p-cairo" type="button" data-pat="cairo" aria-pressed="false" data-i18n="tile.pat.cairo">Cairo</button>
     <button id="p-diagonal" type="button" data-pat="diagonal" aria-pressed="false" data-i18n="tile.pat.diagonal">Diagonal</button>
@@ -362,6 +363,9 @@
   </div>
   <div class="sliders" data-mat-only="wood">
     <div class="sl"><label for="wood-stage"><span data-i18n="sl.wood-stage">Boards</span> <output id="wood-stageV"></output></label><input id="wood-stage" type="range" min="1" max="8" step="1"></div>
+    <div class="sl"><label for="wood-plankLen"><span data-i18n="sl.wood-plankLen">Plank length</span> <output id="wood-plankLenV"></output></label><input id="wood-plankLen" type="range" min="6" max="96" step="1"></div>
+    <div class="sl"><label for="wood-plankVary"><span data-i18n="sl.wood-plankVary">Length variation</span> <output id="wood-plankVaryV"></output></label><input id="wood-plankVary" type="range" min="0" max="1" step="0.01"></div>
+    <div class="sl"><label for="wood-plankStagger"><span data-i18n="sl.wood-plankStagger">Joint stagger</span> <output id="wood-plankStaggerV"></output></label><input id="wood-plankStagger" type="range" min="0" max="1" step="0.01"></div>
   </div>
   <div class="grp" data-mat-only="wood" role="group" aria-label="Kept cuts" data-i18n-attr="aria-label=a11y.wood-set"><span class="lbl" data-i18n="lbl.kept-cuts">Kept cuts</span>
     <button id="wood-set-add" type="button" data-i18n="tool.keep-cut">Keep this cut</button>
@@ -370,7 +374,7 @@
   </div>
   <p data-i18n-html="note.lay-tiles"><b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor.
     Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint.
-    In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely.
+    In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Plank run is the one layout that is not a repeating pattern: rows of boards of differing lengths with their end joints staggered. The plank is the board you cut — its width and its longest length come from the Plank controls above, not from Size — so Plank length is a nominal that Length variation scatters around, and Joint stagger is how far each row's joints shift from the row below. At zero they stack into columns, which is exactly what a floor is laid to avoid.
     Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.</p>
   </div></details>
   <div id="ground" class="rail">
@@ -857,7 +861,7 @@ window.SA_I18N = (() => {
   "note.each-line-keeps-what-it": "<b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw it, so changing them shapes the next line only. This generates the base structure; the colours here are only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor vein grown while zoomed in comes out shorter, at the scale you are working.",
   "note.granite": "<b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space. A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only specks already down are moved, so what you draw first is older rock.",
   "note.identity": "<b>Identity</b> shows what an animation would read: each line in its own colour, brightening along its length in the direction you drew it; web cracks brighten toward the line that spread them. Nothing had to be traced &mdash; the line was known when it was made.",
-  "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint. In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
+  "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint. In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Plank run is the one layout that is not a repeating pattern: rows of boards of differing lengths with their end joints staggered. The plank is the board you cut — its width and its longest length come from the Plank controls above, not from Size — so Plank length is a nominal that Length variation scatters around, and Joint stagger is how far each row's joints shift from the row below. At zero they stack into columns, which is exactly what a floor is laid to avoid. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
   "note.magnet": "<b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab. The Angle view colours every speck by the way it points, so alignment shows as a single colour.",
   "opt.fmt-png": "PNG",
   "opt.fmt-tiff": "TIFF",
@@ -951,6 +955,10 @@ window.SA_I18N = (() => {
   "sl.wood-cutAngle": "Cut angle",
   "sl.wood-treeDia": "Tree size",
   "sl.wood-stage": "Boards",
+  "sl.wood-plankLen": "Plank length",
+  "sl.wood-plankVary": "Length variation",
+  "sl.wood-plankStagger": "Joint stagger",
+  "tile.pat.plank": "Plank run",
   "lbl.kept-cuts": "Kept cuts",
   "a11y.wood-set": "Kept cuts",
   "tool.keep-cut": "Keep this cut",
@@ -1379,7 +1387,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.34';
+  const BUILD = '2026.10.10.36';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2849,6 +2857,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // tile size u. n*ax + m*ay over the integers, times the cell's polygons, tiles the whole plane.
   const PATTERNS = {
     square: u => ({ polys: [[[0, 0], [u, 0], [u, u], [0, u]]], ax: [u, 0], ay: [0, u] }),
+    // A STUB, because the plank floor is not periodic and tileInstances generates it directly. This
+    // only has to answer the two questions drawTiles asks of every pattern: is it overlapping, and
+    // what does the joints pass outline. See plankInstances for the real layout.
+    plank:  u => ({ polys: [[[0, 0], [u, 0], [u, u / 2], [0, u / 2]]], ax: [u, 0], ay: [0, u / 2] }),
     rect:   u => ({ polys: [[[0, 0], [u, 0], [u, u / 2], [0, u / 2]]], ax: [u, 0], ay: [0, u / 2] }),
     subway: u => ({ polys: [[[0, 0], [u, 0], [u, u / 2], [0, u / 2]]], ax: [u, 0], ay: [u / 2, u / 2] }),
     hex: u => { const r = u / 2, w = Math.sqrt(3) * r;   // pointy-top, u = point-to-point height
@@ -2928,7 +2940,49 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // Every visible tile: its polygon in FRAME coords (spread apart for grout) and the shift that
   // samples its own piece of slab (spread less, by kerf) - so veins drift across the joints.
+  // A PLANK RUN. Rows the width of the board you cut, filled left to right with boards of varying
+  // length, each row started at its own offset so the butt joints never stack into a column.
+  function plankInstances() {
+    const wIn = Math.max(0.5, WOOD.wid * 12);                 // the plank IS the board: width and longest length
+    const maxL = Math.max(wIn * 1.5, WOOD.len * 12);          // come from the cut, never from T.sizeIn
+    const nom = Math.min(Math.max(WOOD.plankLen, wIn * 1.5), maxL);
+    const vary = Math.max(0, Math.min(1, WOOD.plankVary));
+    const stag = Math.max(0, Math.min(1, WOOD.plankStagger));
+    const slabS = (wIn + T.kerfIn) / wIn;                     // kerf: the grain steps a little across a joint
+    const g = inFr(T.groutIn) / 2;
+    const cx = 0.5, cy = H / 2, out = [];
+    const halfW = IN * 0.75, halfH = IN * H * 0.75;           // inches from centre, generous; off-frame is culled
+    const rows = Math.ceil(halfH / wIn) + 1;
+    for (let m = -rows; m <= rows; m++) {
+      const y0 = m * wIn, y1 = y0 + wIn;
+      if (y1 < -halfH || y0 > halfH) continue;
+      const [r] = sub(mix(m, 7717, 0, 31337), 1);             // the row's own lengths, stable across redraws
+      // Where this row starts. The stagger term walks the joints along row by row; at 0 every row
+      // starts together, which is the stacked-joint look a real floor is laid to avoid - worth being
+      // able to see, so it is not designed out.
+      let x = -halfW - nom * (1 + (((m * stag) % 1) + 1) % 1);
+      let pi = 0;
+      while (x < halfW) {
+        const L = Math.max(wIn * 0.8, nom * (1 + vary * (r() * 2 - 1) * 0.8));
+        const x1 = x + L;
+        if (x1 > -halfW) {
+          const ctr = [(x + x1) / 2, (y0 + y1) / 2];
+          const base = [[x, y0], [x1, y0], [x1, y1], [x, y1]];
+          // grout by INSET, not by spreading centres: planks are not on a single pitch, so a spread
+          // would make the end gaps grow with distance from the middle.
+          let poly = insetPoly(base.map(q => [cx + inFr(q[0]), cy + inFr(q[1])]), g);
+          let on = false;
+          for (const q of poly) if (q[0] > -0.05 && q[0] < 1.05 && q[1] > -0.05 && q[1] < H + 0.05) { on = true; break; }
+          if (on) out.push({ poly, shift: [inFr(ctr[0]) * (1 - slabS), inFr(ctr[1]) * (1 - slabS)],
+                             key: 'plank:' + m + ':' + pi, n: pi, m, pi, ctr });
+        }
+        x = x1; pi++;
+      }
+    }
+    return out;
+  }
   function tileInstances() {
+    if (T.pattern === 'plank') return plankInstances();       // not a lattice; it generates itself
     const u = T.sizeIn, pat = PATTERNS[T.pattern](u);
     const noSpread = !!pat.overlap;                                   // scales overlap - never pushed apart
     const floorS = noSpread ? 1 : (u + T.groutIn) / u, slabS = noSpread ? 1 : (u + T.kerfIn) / u;
@@ -2989,6 +3043,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // A KEPT SET PAINTS ITS ENTRIES; otherwise the bands walk the cant. Entries are whole logs, so
     // each one rebuilds the field - unavoidable, and the reason the set is capped. The cant does not,
     // because its offset lives outside WOOD.
+    // WHERE BOARD k ACTUALLY COMES FROM. Stepping by wid from y0 marches straight off the log: six
+    // 0.44 ft boards need 2.6 ft of cant and an oak of radius 0.85 ft has 1.7 ft at the pith plane,
+    // so the far bands came out as bare background and the floor got solid black rows. Wrapping the
+    // position into the width the log HAS at this plane keeps every band real wood, and leaves band
+    // 0 exactly where y0 put it. A kept cut is never wrapped - that position is the user's choice.
+    const cantBand = (k) => {
+      const F = woodField();
+      const ymax = Math.sqrt(Math.max(0, F.R * F.R - WOOD.plane * WOOD.plane));
+      const lo = -ymax, rng = Math.max(1e-6, (ymax - WOOD.wid) - lo);
+      const want = WOOD.y0 + k * WOOD.wid;
+      return lo + (((want - lo) % rng) + rng) % rng - WOOD.y0;
+    };
     const SET = woodSet(), keep = SET.length ? JSON.stringify(WOOD) : null;
     const keepOvr = SET.length ? { woodEarly: OVR.woodEarly, woodLate: OVR.woodLate, woodHeart: OVR.woodHeart } : null;
     for (let k = 0; k < st; k++) {
@@ -2997,7 +3063,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         for (const key in e) if (key !== 'set' && key !== 'ovr') WOOD[key] = e[key];
         if (e.ovr) { Object.assign(OVR, e.ovr); recolour(); }   // its own palette, or an ebony paints pale
         woodBandY = 0;
-      } else woodBandY = st > 1 ? k * WOOD.wid : 0;
+      } else woodBandY = st > 1 ? cantBand(k) : 0;
       c.setTransform(cw, 0, 0, cw, 0, k * cw * H);
       paintContent(false, false);
     }
@@ -3979,6 +4045,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const WOOD = {
     seed: 770513, trunk: 1,                       // trunk is the SCALE, not the radius - the radius is what
                                                   // the rings add up to, so more years means a bigger log
+    plankLen: 36, plankVary: 0.35,                // THE PLANK RUN: nominal board length in inches, how much
+    plankStagger: 0.5,                            // lengths differ, and how far each row's joints shift from
+                                                  // the row below. Width and max length come from the BOARD.
     set: [],                                      // KEPT CUTS. Non-empty and the floor is laid from these,
                                                   // one band each, each free to be a different TREE.
     stage: 1,                                     // THE STAGED SET: how many different boards the floor is
@@ -5683,7 +5752,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   fibreSpiral: v => `${(+v).toFixed(1)}\u00b0`, interlock: v => `${(+v).toFixed(1)}\u00b0`,
                   interlockRings: v => `${Math.round(v)}`, curl: v => `${(+v).toFixed(1)}\u00b0`,
                   curlRate: v => (+v).toFixed(1), eyes: v => (+v).toFixed(2),
-                  stage: v => `${Math.round(v)}`,
+                  stage: v => `${Math.round(v)}`, plankLen: v => `${Math.round(v)}\u2033`,
+                  plankVary: v => (+v).toFixed(2), plankStagger: v => (+v).toFixed(2),
                   eyeSpacing: v => `${(+v).toFixed(2)}\u2033`, eyeSize: v => `${(+v).toFixed(2)}\u2033`,
                   eyeDepth: v => (+v).toFixed(2),
                   waveK: v => `${Math.round(v)}`, waveZ: v => (+v).toFixed(2),
