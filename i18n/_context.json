@@ -1245,6 +1245,12 @@
  "sec.tiles-and-floor": {
   "where": "title of a collapsible section in the right-hand rail"
  },
+ "sec.wood": {
+  "terms": [
+   "wood"
+  ],
+  "where": "heading of the wood settings panel"
+ },
  "sl.backlight": {
   "terms": [
    "light"
@@ -1547,6 +1553,59 @@
  },
  "sl.warpDepth": {
   "where": "under the \"clouds-and-warp\" section"
+ },
+ "sl.wood-plane": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how far the saw plane stands from the log's axis. Low is quartersawn, high is plainsawn - this one control is the whole range of cuts"
+ },
+ "sl.wood-y0": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: where along the saw plane the board is taken from"
+ },
+ "sl.wood-rings": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how many growth rings the log has"
+ },
+ "sl.wood-late": {
+  "terms": [
+   "latewood",
+   "wood"
+  ],
+  "where": "slider: how dark the latewood band is - the contrast of the grain"
+ },
+ "sl.wood-lean": {
+  "terms": [
+   "pith",
+   "wood"
+  ],
+  "where": "slider: how far the pith leans along the saw plane"
+ },
+ "sl.wood-leanFine": {
+  "terms": [
+   "pith",
+   "wood"
+  ],
+  "where": "slider: a faster ripple on top of the pith's lean"
+ },
+ "sl.wood-wander": {
+  "terms": [
+   "pith",
+   "wood"
+  ],
+  "where": "slider: how far the pith wanders across the board"
+ },
+ "sl.wood-wanderFine": {
+  "terms": [
+   "pith",
+   "wood"
+  ],
+  "where": "slider: a faster ripple on top of the pith's wander"
  },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
@@ -1933,6 +1992,21 @@
    "warp"
   ],
   "where": "button or label in the Selected bar (acts on the layers you have selected), under Layers"
+ },
+ "ui.wood-cut-note": {
+  "terms": [
+   "quartersawn",
+   "cathedral",
+   "wood"
+  ],
+  "where": "explanatory note above the Cut and Board position sliders"
+ },
+ "ui.wood-pith-note": {
+  "terms": [
+   "pith",
+   "wood"
+  ],
+  "where": "explanatory note above the four pith-motion sliders"
  },
  "unit.in": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"

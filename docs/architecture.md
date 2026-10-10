@@ -141,6 +141,15 @@ Two consequences worth stating rather than discovering:
 The material is **serialised** (`material`, alongside `fam`), so it is part of the picture and part of
 the device seal. A slab saved before the fork has no `material` key and loads as stone.
 
+Wood's own settings live in **`WOOD`, deliberately not in `G`** — eight sliders for the cut, the ring
+profile and the pith's motion. `renderSig` hashes `G` *wholesale*, so a single new key there moves the
+signature of every master ever rendered: measured, the default state goes `bc019919` → `da405c25`, and
+no fix afterwards recovers a master that was written under the old number. `material` and `wood`
+therefore enter the signature **only when the material is wood**, which is the same unchanged-when-off
+shape the crossfade light tuple uses. Stone slabs hash exactly as they did before wood existed, proven
+in both directions by `tools/ablate-state-sig.mjs`: a wood number must move the hash on a wood slab and
+must not move it on a stone one.
+
 ### Character vs colour
 
 A **family** is character only — the *shape* language (rough, swing, breaks, branches; the granite

@@ -51,11 +51,16 @@ export function stateSig(slab, lightSpectrum, uvMode, spotOn) {
   const o = {};
   for (const f of FIELDS) o[f] = slab[f];
   o.light = [lightSpectrum, uvMode, spotOn];
-  // LAST, and only for wood. The app adds it the same way and in the same place: a stone slab hashes
+  // LAST, and only for wood. The app adds them the same way and in the same place: a stone slab hashes
   // byte-identically to before materials existed, which is what keeps every master on disk readable.
   // A slab saved before materials has no material key at all, and that hashes as stone - correctly, it
   // IS stone. Moving this line, or dropping the condition, re-dates every signature in the gallery.
-  if (slab.material === 'wood') o.material = slab.material;
+  //
+  // The wood SETTINGS ride the same condition, and that is the whole reason they are not in G: G is
+  // hashed wholesale above, so a single wood key added there would have moved every master that exists
+  // (measured: bc019919 -> da405c25 on the default state). An absent `wood` stringifies away, so a wood
+  // slab saved before the settings existed still hashes as the bare material did.
+  if (slab.material === 'wood') { o.material = slab.material; o.wood = slab.wood; }
   return crc32(new TextEncoder().encode(JSON.stringify(o))).toString(16);
 }
 

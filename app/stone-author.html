@@ -415,6 +415,20 @@
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.to-sculpt-the-haze-select">To sculpt the haze: select the Fog layer, then use Gravity (push clears a window, pull pools) or Magnet.</span></div>
     </div>
     </div></details>
+    <details class="sec" id="g-wood" hidden open><summary data-i18n="sec.wood">Wood</summary><div class="body">
+    <div class="sliders">
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-cut-note">Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.</span></div>
+      <div class="sl"><label for="wood-plane"><span data-i18n="sl.wood-plane">Cut</span> <output id="wood-planeV"></output></label><input id="wood-plane" type="range" min="0.02" max="0.9" step="0.01"></div>
+      <div class="sl"><label for="wood-y0"><span data-i18n="sl.wood-y0">Board position</span> <output id="wood-y0V"></output></label><input id="wood-y0" type="range" min="-0.4" max="0.6" step="0.01"></div>
+      <div class="sl"><label for="wood-rings"><span data-i18n="sl.wood-rings">Rings</span> <output id="wood-ringsV"></output></label><input id="wood-rings" type="range" min="40" max="400" step="5"></div>
+      <div class="sl"><label for="wood-late"><span data-i18n="sl.wood-late">Latewood</span> <output id="wood-lateV"></output></label><input id="wood-late" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-pith-note">The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.</span></div>
+      <div class="sl"><label for="wood-lean"><span data-i18n="sl.wood-lean">Pith lean</span> <output id="wood-leanV"></output></label><input id="wood-lean" type="range" min="0" max="0.08" step="0.002"></div>
+      <div class="sl"><label for="wood-leanFine"><span data-i18n="sl.wood-leanFine">Lean ripple</span> <output id="wood-leanFineV"></output></label><input id="wood-leanFine" type="range" min="0" max="0.04" step="0.001"></div>
+      <div class="sl"><label for="wood-wander"><span data-i18n="sl.wood-wander">Pith wander</span> <output id="wood-wanderV"></output></label><input id="wood-wander" type="range" min="0" max="0.06" step="0.002"></div>
+      <div class="sl"><label for="wood-wanderFine"><span data-i18n="sl.wood-wanderFine">Wander ripple</span> <output id="wood-wanderFineV"></output></label><input id="wood-wanderFine" type="range" min="0" max="0.03" step="0.001"></div>
+    </div>
+    </div></details>
     <details class="sec" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
     <div class="sliders">
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.specks-size-reseed-act-on">Specks / size / reseed act on the ACTIVE granite layer. Add more with "+ Granite layer" — each its own field + colour.</span></div>
@@ -759,6 +773,7 @@ window.SA_I18N = (() => {
   "sec.breccia": "Breccia",
   "sec.calibrate": "Calibrate the pen",
   "sec.clouds-and-warp": "Clouds & warp",
+  "sec.wood": "Wood",
   "sec.coat-and-light": "Coat & light",
   "sec.colour": "Colour",
   "sec.drusy": "Drusy",
@@ -835,6 +850,14 @@ window.SA_I18N = (() => {
   "sl.speckGroups": "Speck colours",
   "sl.speckSubs": "Speck variants",
   "sl.specular": "Specular / polish",
+  "sl.wood-plane": "Cut",
+  "sl.wood-y0": "Board position",
+  "sl.wood-rings": "Rings",
+  "sl.wood-late": "Latewood",
+  "sl.wood-lean": "Pith lean",
+  "sl.wood-leanFine": "Lean ripple",
+  "sl.wood-wander": "Pith wander",
+  "sl.wood-wanderFine": "Wander ripple",
   "sl.spotR": "Beam size",
   "sl.spread": "Spread",
   "sl.strength": "Strength",
@@ -933,6 +956,8 @@ window.SA_I18N = (() => {
   "ui.no-colour": "no colour",
   "ui.pass": "pass ",
   "ui.scatter": "scatter ",
+  "ui.wood-cut-note": "Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.",
+  "ui.wood-pith-note": "The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.",
   "ui.selected": "Selected ▸",
   "ui.show": "show",
   "ui.specks-size-reseed-act-on": "Specks / size / reseed act on the ACTIVE granite layer. Add more with \"+ Granite layer\" — each its own field + colour.",
@@ -1184,7 +1209,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.3';
+  const BUILD = '2026.10.10.4';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3707,14 +3732,28 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // 3. No per-pixel transcendentals. The pith wander and the ring profile are both sampled into
   //    lookups once, because a master tile is tens of megapixels and four sin() calls per pixel is
   //    minutes of nothing.
+  // WOOD is the wood path's settings object, the way G is the slab's and T is the floor's - and it is
+  // deliberately NOT part of G. renderSig hashes G wholesale, so one new G key moves the signature of
+  // every master ever rendered: measured, bc019919 -> da405c25 on the default state. WOOD is signed only
+  // when the material is wood, so a stone slab's signature is untouched by wood existing at all.
   const WOOD = {
-    seed: 770513, rings: 220, trunk: 1,      // trunk radius, in board widths
-    plane: 0.27,                             // how far the cut plane stands from the axis
-    y0: 0.2, wid: 0.44,                      // the strip taken off that plane: r/p runs 1.0 -> 1.4, i.e. RIFT
-    len: 2.4                                 // how far along the trunk the slab reaches
+    seed: 770513, trunk: 1, len: 2.4, wid: 0.44,  // the log and the board: fixed shape, not art direction
+    rings: 220, late: 0.52,                       // the ring profile: how many, and how dark the latewood band
+    plane: 0.27, y0: 0.2,                         // WHERE THE CUT STANDS. plane is the whole quarter-to-cathedral
+                                                  // axis, because cos(theta) = plane / r; y0 slides the board
+                                                  // along the cut, which is why one board drifts in character.
+    lean: 0.01, leanFine: 0.006,                  // pith motion along the plane's normal -> the stripes breathe wider and tighter
+    wander: 0.008, wanderFine: 0.004              // pith motion across the board -> the stripes bend up and down
   };
+  const WOOD0 = JSON.parse(JSON.stringify(WOOD));   // pristine, so a load is a pure function of the slab
   function woodField() {                      // ring profile + pith wander, sampled into lookups
-    if (woodField.c) return woodField.c;      // memo on the function, so the serialised copy carries it
+    // Memo on the FUNCTION, so the copy serialised into the worker carries it, and keyed on the whole
+    // settings object rather than on a list of the fields that happen to matter today. A hand-kept list
+    // is a slider that silently does nothing the first time someone forgets to add one; stringifying is
+    // a few microseconds against a megapixel loop.
+    const sig = JSON.stringify(WOOD);
+    if (woodField.c && woodField.k === sig) return woodField.c;
+    woodField.k = sig;
     const [rnd, gss] = sub(WOOD.seed, 1);
     const n = WOOD.rings, edge = new Float64Array(n);
     let acc = 0;
@@ -3735,15 +3774,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // latewood is a NARROW DARK BAND at the ring's outer edge, abrupt on one side. A sine here is the
       // loudest tell of fake wood; rings all the same width is the second loudest.
       const late = Math.pow(Math.max(0, Math.min(1, (u - 0.72) / 0.28)), 0.65);
-      lut[i] = (1 - 0.52 * late) * (1 + 0.05 * Math.sin(k * 2.399));   // + a per-ring value drift
+      lut[i] = (1 - WOOD.late * late) * (1 + 0.05 * Math.sin(k * 2.399));   // + a per-ring value drift
     }
     // The axis is a curve, not a line: a lean plus a slow wander. This is what stops straight grain
     // rendering as ruled parallel lines, and it is where cathedral arches come from on a tangent plane.
     const Z = 1024, pax = new Float32Array(Z), pay = new Float32Array(Z);
     for (let i = 0; i < Z; i++) {
       const z = WOOD.len * i / (Z - 1);
-      pax[i] = 0.03 * Math.sin(z * 2.7) + 0.015 * Math.sin(z * 8.3 + 1.1);
-      pay[i] = 0.024 * Math.sin(z * 2.2 + 2) + 0.011 * Math.sin(z * 6.9);
+      pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
+      pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
     return (woodField.c = { lut, K, pax, pay, Z });
   }
@@ -4767,10 +4806,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       row.classList.toggle('sel-on', selected.has('lay:' + L.key));
     }
   }
+  const WDFMT = { rings: v => `${Math.round(v)}`, plane: v => (+v).toFixed(2), y0: v => (+v).toFixed(2),
+                  late: v => (+v).toFixed(2) };
+  function showWood(k) {                                 // one slider's readout, from WOOD rather than from the input
+    const out = document.getElementById('wood-' + k + 'V');
+    if (out) out.textContent = WDFMT[k] ? WDFMT[k](WOOD[k]) : (+WOOD[k]).toFixed(3);
+  }
+  function syncWood() {                                  // after a load, the rail has to agree with the slab
+    for (const k of Object.keys(WOOD)) { const el = document.getElementById('wood-' + k); if (el) { el.value = WOOD[k]; showWood(k); } }
+  }
   function showGround() {
     const F = FAM[fam];
     document.getElementById('ground').hidden = false;    // clouds apply to every family, so the ground panel always shows
     document.getElementById('g-granite').hidden = !F.groundSpecks;
+    // Chrome, not the render path: this asks which material through the sanctioned accessor, never the
+    // discriminator, so it stays on the right side of tools/check-material-fork.mjs.
+    document.getElementById('g-wood').hidden = currentMaterial() !== 'wood';
   }
 
   // ---- THE SOURCE: marks + family + settings. Everything bakes from this; save it, restore it.
@@ -4817,7 +4868,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const expName = (W, ext) => `${fileStem()}-${W}-${lightTag()}-${engineTag()}-${stampTag()}.${ext}`;
 
   function serialize() {
-    return { v: 1, name: slabName, fam, material: currentMaterial(), tool, view, layTiles, guidesOn,
+    return { v: 1, name: slabName, fam, material: currentMaterial(), wood: JSON.parse(JSON.stringify(WOOD)), tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
              layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed, haze: L.haze, transmit: L.transmit, scatter: L.scatter })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden], folders: folders.map(F => ({ name: F.name, v: F.v, c: F.c, members: [...F.members] })),
@@ -4851,6 +4902,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     const reset = (dst, def, src) => { for (const k in dst) delete dst[k]; Object.assign(dst, JSON.parse(JSON.stringify(def))); if (src) Object.assign(dst, JSON.parse(JSON.stringify(src))); };
     reset(G, G0, o.G); reset(T, T0, o.T); reset(NEXT, NEXT0, o.NEXT);   // HARD reset to defaults, THEN apply the slab — a load never inherits the previous slab's non-saved keys
+    reset(WOOD, WOOD0, o.wood);                                       // same rule for the wood settings; woodField re-keys itself off them
     cloudSig = bandSig = brecSig = ''; last = null;                     // invalidate the render caches so nothing survives a load
     clearUserLayers();                                                                                   // drop the previous slab's user layers, reset the active layer to the bucket defaults
     layAt('micro').density = 1; layAt('micro').size = 1; layAt('micro').seed = 7070;                     // reset the default granite field
@@ -5405,7 +5457,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
     for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
-    showGround(); syncLayerUI(); syncGranite(); syncFog(); hint();
+    showGround(); syncWood(); syncLayerUI(); syncGranite(); syncFog(); hint();
   }
   // Revoking a blob URL while the browser is still writing the file CANCELS the download, and the old
   // one-second timer was set when an export was a few megabytes. At 800 MB the write is nowhere near
@@ -5607,9 +5659,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           ? ['cross', crossA, crossB, crossT, uvMode, spotOn]
           : [lightSpectrum, uvMode, spotOn],            // unchanged shape when off, so old masters still match
         // The material reaches the pixels, so leaving it out would let a wood master and a stone master
-        // of one slab claim the same inputs. Added the way `light` is: a shape that is UNCHANGED WHEN
-        // OFF. Stone is off, so every signature already on disk is byte-identical; wood starts its own.
-        ...(s.material === 'wood' ? { material: s.material } : {}),
+        // of one slab claim the same inputs - and so do the wood settings. Added the way `light` is: a
+        // shape that is UNCHANGED WHEN OFF. Stone is off, so every signature already on disk is
+        // byte-identical; wood starts its own. This is also why the wood settings are not in G: G is
+        // hashed wholesale, so one key added there would have moved every master that exists.
+        ...(s.material === 'wood' ? { material: s.material, wood: s.wood } : {}),
       }))).toString(16);
     } catch (_) { return null; }
   };
@@ -6285,7 +6339,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
-  for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => { setMaterial(b.dataset.mat); press('[data-mat]', b); redraw(true); });
+  for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => { setMaterial(b.dataset.mat); press('[data-mat]', b); showGround(); redraw(true); });
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     tool = b.dataset.tool; press('[data-tool]', b); hint();
     const show = tool === 'move' ? 'vein' : tool;
@@ -6312,6 +6366,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const show = () => { document.getElementById(id + 'V').textContent = GFMT[id] ? GFMT[id](G[id]) : `${(+G[id]).toFixed(2)}\u00d7`; };
     el.value = G[id]; show();
     el.addEventListener('input', () => { G[id] = +el.value; show(); redraw(true); });   // the slab: at once
+  }
+  // The wood settings bind the same way G's do, against their own object and an id prefix. Every key
+  // with a matching input gets a slider; a key without one (seed, trunk, len, wid) is simply not art
+  // direction, and adding its control later is adding the markup and nothing else.
+  for (const k of Object.keys(WOOD)) {
+    const el = document.getElementById('wood-' + k); if (!el) continue;
+    el.value = WOOD[k]; showWood(k);
+    el.addEventListener('input', () => { WOOD[k] = +el.value; showWood(k); redraw(true); });
   }
   for (const id of ['speckGroups', 'speckSubs', 'drusyGroups', 'drusySubs'])   // add/remove the group + sub-variant colour tokens
     document.getElementById(id).addEventListener('input', () => { registerSpeckGroups(); recolour(); mountEditor(); });

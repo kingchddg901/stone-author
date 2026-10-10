@@ -16,6 +16,7 @@ import { stateSig } from './state-sig.mjs';
 
 const NEWLINE = String.fromCharCode(10);
 
+let woodCases = 0;
 const PATH = 'test-slabs/default-state.json';
 const base = JSON.parse(readFileSync(PATH, 'utf8'));
 const clone = () => JSON.parse(JSON.stringify(base));
@@ -67,6 +68,8 @@ const mustNot = [
     'organising the layer list is housekeeping.'],
   ['guidesOn', s => { s.guidesOn = !s.guidesOn; },
     'guides are an editing aid. If this moved the hash they would be in the render, which would be a\n    defect in the RENDERER, not here.'],
+  ['a wood setting on a STONE slab', s => { s.wood = { plane: 0.5, lean: 0.04 }; },
+    'the wood settings are signed only when the material is wood. If this moves, they are being hashed\n    unconditionally - which is exactly the mistake that keeping them out of G was meant to avoid, and it\n    would re-date every stone master in the gallery.'],
   ['material recorded as stone on a slab that predates materials', s => { s.material = 'stone'; },
     'THE BACKWARD-COMPATIBILITY CLAIM, as an assertion. Every slab saved before the material fork has\n    no material key, and opening one and saving it back writes material: "stone". That is the same\n    picture, so it must carry the same signature - otherwise adding wood silently re-dated every\n    master in the gallery, which is the one thing renderSig exists to prevent.'],
 ];
@@ -113,7 +116,29 @@ for (const [label, args] of LIGHTS) {
   else { seen.set(h, label); console.log("  distinct  " + label + "   " + h); }
 }
 
+// THE WOOD SETTINGS, isolated. Same trap the light section exists for: every case above perturbs the
+// slab, so dropping `wood` from the hash entirely would leave all of them green - including the two
+// that mention wood, because those change the MATERIAL as well and the material alone moves the hash.
+// Only a pair differing in nothing but a wood number can prove the settings are read at all.
+console.log(NEWLINE + 'THE WOOD SETTINGS (two slabs differing in one wood number and nothing else)');
+const withWood = (mat, plane) => {
+  const s = clone();
+  if (mat) s.material = mat;
+  s.wood = { seed: 770513, trunk: 1, len: 2.4, wid: 0.44, rings: 220, late: 0.52, plane, y0: 0.2,
+             lean: 0.01, leanFine: 0.006, wander: 0.008, wanderFine: 0.004 };
+  return s;
+};
+for (const [label, mat, want] of [['on a wood slab, Cut 0.27 vs 0.50', 'wood', 'differ'],
+                                  ['on a stone slab, Cut 0.27 vs 0.50', null, 'match']]) {
+  const a = sig(withWood(mat, 0.27)), b = sig(withWood(mat, 0.5));
+  const ok = want === 'differ' ? a !== b : a === b;
+  if (!ok) bad++;
+  console.log('  ' + (ok ? (want === 'differ' ? 'differ ' : 'match  ') : 'WRONG  ') + label
+    + (ok ? '' : '   ' + a + ' vs ' + b));
+}
+woodCases = 2;
+
 console.log('\n' + (bad === 0
-  ? 'moves on all ' + mustMove.length + ' picture changes, holds on all ' + mustNot.length + ' bookkeeping ones, tells ' + LIGHTS.length + ' lights apart'
-  : bad + ' of ' + (mustMove.length + mustNot.length + LIGHTS.length) + ' wrong'));
+  ? 'moves on all ' + mustMove.length + ' picture changes, holds on all ' + mustNot.length + ' bookkeeping ones, tells ' + LIGHTS.length + ' lights apart, and reads the wood settings only under wood'
+  : bad + ' of ' + (mustMove.length + mustNot.length + LIGHTS.length + woodCases) + ' wrong'));
 process.exit(bad === 0 ? 0 : 1);
