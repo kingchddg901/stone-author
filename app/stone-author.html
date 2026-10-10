@@ -439,6 +439,14 @@
       <div class="sl"><label for="wood-devSpread"><span data-i18n="sl.wood-devSpread">Breadth</span> <output id="wood-devSpreadV"></output></label><input id="wood-devSpread" type="range" min="0.3" max="12" step="0.1"></div>
       <div class="sl"><label for="wood-devStart"><span data-i18n="sl.wood-devStart">From ring</span> <output id="wood-devStartV"></output></label><input id="wood-devStart" type="range" min="0" max="400" step="1"></div>
       <div class="sl"><label for="wood-devRamp"><span data-i18n="sl.wood-devRamp">Over</span> <output id="wood-devRampV"></output></label><input id="wood-devRamp" type="range" min="1" max="150" step="1"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-dev2-note">The second feature is a branch rather than a second lean, and the only difference is that it has a place along the trunk. At indicates where, Reach how far it carries either side. Walk the board past it and the grain sweeps around the branch and then straightens again, because outside the window the feature is not there at all.</span></div>
+      <div class="sl"><label for="wood-dev2Amp"><span data-i18n="sl.wood-dev2Amp">Branch swell</span> <output id="wood-dev2AmpV"></output></label><input id="wood-dev2Amp" type="range" min="0" max="0.8" step="0.01"></div>
+      <div class="sl"><label for="wood-dev2Angle"><span data-i18n="sl.wood-dev2Angle">Branch side</span> <output id="wood-dev2AngleV"></output></label><input id="wood-dev2Angle" type="range" min="0" max="359" step="1"></div>
+      <div class="sl"><label for="wood-dev2Spread"><span data-i18n="sl.wood-dev2Spread">Branch breadth</span> <output id="wood-dev2SpreadV"></output></label><input id="wood-dev2Spread" type="range" min="0.3" max="24" step="0.1"></div>
+      <div class="sl"><label for="wood-dev2Z"><span data-i18n="sl.wood-dev2Z">At</span> <output id="wood-dev2ZV"></output></label><input id="wood-dev2Z" type="range" min="0" max="3" step="0.02"></div>
+      <div class="sl"><label for="wood-dev2ZSpan"><span data-i18n="sl.wood-dev2ZSpan">Reach</span> <output id="wood-dev2ZSpanV"></output></label><input id="wood-dev2ZSpan" type="range" min="0.05" max="1.5" step="0.01"></div>
+      <div class="sl"><label for="wood-dev2Start"><span data-i18n="sl.wood-dev2Start">Branch from ring</span> <output id="wood-dev2StartV"></output></label><input id="wood-dev2Start" type="range" min="0" max="400" step="1"></div>
+      <div class="sl"><label for="wood-dev2Ramp"><span data-i18n="sl.wood-dev2Ramp">Branch over</span> <output id="wood-dev2RampV"></output></label><input id="wood-dev2Ramp" type="range" min="1" max="150" step="1"></div>
     </div>
     </div></details>
     <details class="sec" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
@@ -882,6 +890,13 @@ window.SA_I18N = (() => {
   "sl.wood-devSpread": "Breadth",
   "sl.wood-devStart": "From ring",
   "sl.wood-devRamp": "Over",
+  "sl.wood-dev2Amp": "Branch swell",
+  "sl.wood-dev2Angle": "Branch side",
+  "sl.wood-dev2Spread": "Branch breadth",
+  "sl.wood-dev2Z": "At",
+  "sl.wood-dev2ZSpan": "Reach",
+  "sl.wood-dev2Start": "Branch from ring",
+  "sl.wood-dev2Ramp": "Branch over",
   "sl.spotR": "Beam size",
   "sl.spread": "Spread",
   "sl.strength": "Strength",
@@ -982,6 +997,7 @@ window.SA_I18N = (() => {
   "ui.scatter": "scatter ",
   "ui.wood-cut-note": "Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.",
   "ui.wood-drift-note": "Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.",
+  "ui.wood-dev2-note": "The second feature is a branch rather than a second lean, and the only difference is that it has a place along the trunk. At indicates where, Reach how far it carries either side. Walk the board past it and the grain sweeps around the branch and then straightens again, because outside the window the feature is not there at all.",
   "ui.wood-dev-note": "Rings are circles until this is turned up. Eccentricity is how far they bulge off round, and it ACCUMULATES: a bulge grown in year 60 is still in the surface at year 220, because every later ring was laid on top of it. From and Over say which years it came on. Direction aims it, Breadth sets how much of the trunk it covers. This is the thing a branch, a lean or a buried wound all need.",
   "ui.wood-heart-note": "Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.",
   "ui.wood-pith-note": "The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.",
@@ -1236,7 +1252,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.9';
+  const BUILD = '2026.10.10.10';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3781,8 +3797,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     drift: 0.4, driftRings: 90,                   // colour: how FAR it wanders from pith to bark, and how FAST
     sapRings: 22, sapFade: 8,                     // the SECOND timeline: outer rings still sapwood, and the
                                                   // width of the conversion front, both counted in rings
-    devAmp: 0, devAngle: 40, devSpread: 2,        // THE ACCUMULATED SURFACE: how far the rings bulge off round,
-    devStart: 60, devRamp: 40                     // which way, how broad, and the years it came on over
+    devAmp: 0, devAngle: 40, devSpread: 2,        // THE ACCUMULATED SURFACE, feature 1 - a LEAN: how far the
+    devStart: 60, devRamp: 40,                    // rings bulge, which way, how broad, over which years. It
+                                                  // runs the whole log, which is what makes it a lean.
+    dev2Amp: 0, dev2Angle: 210, dev2Spread: 6,    // feature 2 - a BRANCH: the same, plus a z window, because a
+    dev2Start: 90, dev2Ramp: 25,                  // branch is at one HEIGHT and a lean is not
+    dev2Z: 1.2, dev2ZSpan: 0.35
   };
   const WOOD0 = JSON.parse(JSON.stringify(WOOD));   // pristine, so a load is a pure function of the slab
   function woodField() {                      // ring profile + pith wander, sampled into lookups
@@ -3793,19 +3813,31 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const sig = JSON.stringify(WOOD);
     if (woodField.c && woodField.k === sig) return woodField.c;
     woodField.k = sig;
+    // THE FEATURE LIST. Flat keys in, a list out: the field code below never learns how many there are,
+    // so a third feature is five more keys and a row of sliders rather than another case to write.
+    // `zs <= 0` means the feature runs the whole log, and that is the only structural difference
+    // between a lean and a branch.
+    const DEV = [
+      { a: WOOD.devAmp, g: WOOD.devAngle, s: WOOD.devSpread, st: WOOD.devStart, rp: WOOD.devRamp, z: 0, zs: 0 },
+      { a: WOOD.dev2Amp, g: WOOD.dev2Angle, s: WOOD.dev2Spread, st: WOOD.dev2Start, rp: WOOD.dev2Ramp,
+        z: WOOD.dev2Z, zs: WOOD.dev2ZSpan },
+    ].filter(d => d.a > 0);
     const [rnd, gss] = sub(WOOD.seed, 1);
-    const n = WOOD.rings, edge = new Float64Array(n), wring = new Float64Array(n);
-    let acc = 0, devAcc = 0;
+    const n = WOOD.rings, edge = new Float64Array(n);
+    const wring = DEV.map(() => new Float64Array(n)), devAcc = DEV.map(() => 0);
+    let acc = 0;
     for (let i = 0; i < n; i++) {
       const trend = 14 * Math.exp(-i / 90) + 2.2;      // juvenile surge, then the slow years
       let w = trend * (1 + 0.3 * gss());
       if (rnd() < 0.05) w *= 0.42;                     // a pinched year: drought, or a taller neighbour
       acc += Math.max(w, 0.6); edge[i] = acc;
-      // THE ACCUMULATION. This year's eccentric growth, added to every previous year's. Monotone and
-      // non-negative, so the surface only ever moves outward and the layers cannot fold through each
-      // other - the one constraint the foam model has to respect.
-      devAcc += Math.max(w, 0.6) * Math.max(0, Math.min(1, (i - WOOD.devStart) / Math.max(WOOD.devRamp, 0.001)));
-      wring[i] = devAcc;
+      // THE ACCUMULATION, once per feature. This year's eccentric growth added to every previous year's,
+      // monotone and non-negative, so the surface only moves outward and the layers cannot fold through
+      // each other. Separate envelopes, because separate START YEARS are the whole reason for a list.
+      for (let q = 0; q < DEV.length; q++) {
+        devAcc[q] += Math.max(w, 0.6) * Math.max(0, Math.min(1, (i - DEV[q].st) / Math.max(DEV[q].rp, 0.001)));
+        wring[q][i] = devAcc[q];
+      }
     }
     // CAUSALITY. Do NOT normalise to a fixed trunk: that makes a change in year 260 rescale year 1, and
     // it was measured doing exactly that - every band on screen moved when the ring count changed. The
@@ -3813,7 +3845,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     let unitAcc = 0;
     for (let i = 0; i < 220; i++) unitAcc += 14 * Math.exp(-i / 90) + 2.2;   // the mean trend at the default count
     const unit = WOOD.trunk / unitAcc, R = acc * unit;                        // R: what this log actually came to
-    for (let i = 0; i < n; i++) { edge[i] *= unit; wring[i] *= unit; }
+    for (let i = 0; i < n; i++) { edge[i] *= unit; for (let q = 0; q < DEV.length; q++) wring[q][i] *= unit; }
     // COLOUR, PER RING, AS A CORRELATED WALK - the thing a per-ring random value cannot do. Ring N and
     // N+1 are nearly the same; N+200 can be a different wood. Two channels, value and warmth, because
     // those are the two that move in a real log.
@@ -3835,8 +3867,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // count can produce; beyond R the loop just repeats the outermost ring, which the painter clamps to
     // anyway.
     const LMAX = 2 * WOOD.trunk, K = 16384;
-    const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K), th = new Float32Array(K),
-          wl = new Float32Array(K);
+    const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K), th = new Float32Array(K);
+    const wl = DEV.map(() => new Float32Array(K));
     let k = 0;
     for (let i = 0; i < K; i++) {
       const rad = LMAX * i / (K - 1);
@@ -3854,26 +3886,38 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // the wood formed, which is exactly what makes it the second timeline.
       const ageR = (n - 1) - k;
       th[i] = Math.max(0, Math.min(1, (ageR - WOOD.sapRings) / Math.max(WOOD.sapFade, 0.001)));
-      wl[i] = wring[k];
+      for (let q = 0; q < DEV.length; q++) wl[q][i] = wring[q][k];
     }
-    // THE ANGULAR SHAPE of the deviation, indexed by cos(theta - theta0) rather than by theta, so the
-    // painter needs a dot product and not an atan2. One lobe today; the table is the seam, and a branch
-    // is another entry in it rather than another kind of code.
-    const NA = 1024, al = new Float32Array(NA), lobe = Math.max(WOOD.devSpread, 0.1);
-    for (let i = 0; i < NA; i++) {
-      const ca = -1 + 2 * i / (NA - 1);
-      al[i] = ca <= 0 ? 0 : Math.pow(ca, lobe);           // non-negative: growth never goes backwards
-    }
-    const dir = WOOD.devAngle * Math.PI / 180, dux = Math.cos(dir), duy = Math.sin(dir);
+    const Z = 1024;
+    // EACH FEATURE'S SHAPE, baked once. The angular lobe is indexed by cos(theta - theta0) rather than
+    // by theta, so the painter needs a dot product and not an atan2; pow and cos are paid here, across
+    // 1024 entries, instead of per pixel. The z window is what separates a branch from a lean: outside
+    // it the feature is simply not there, so walking the board walks past the branch.
+    const NA = 1024;
+    const FE = DEV.map((d, q) => {
+      const al = new Float32Array(NA), lobe = Math.max(d.s, 0.1);
+      for (let i = 0; i < NA; i++) {
+        const ca = -1 + 2 * i / (NA - 1);
+        al[i] = ca <= 0 ? 0 : Math.pow(ca, lobe);         // non-negative: growth never goes backwards
+      }
+      const zw = new Float32Array(Z);
+      for (let i = 0; i < Z; i++) {
+        if (!(d.zs > 0)) { zw[i] = 1; continue; }         // no window: this one runs the whole log
+        const u = (WOOD.len * i / (Z - 1) - d.z) / d.zs;
+        zw[i] = u * u >= 1 ? 0 : (1 - u * u) * (1 - u * u);   // smooth at both ends, exactly zero outside
+      }
+      const dir = d.g * Math.PI / 180;
+      return { amp: d.a, ux: Math.cos(dir), uy: Math.sin(dir), al, zw, wl: wl[q] };
+    });
     // The axis is a curve, not a line: a lean plus a slow wander. This is what stops straight grain
     // rendering as ruled parallel lines, and it is where cathedral arches come from on a tangent plane.
-    const Z = 1024, pax = new Float32Array(Z), pay = new Float32Array(Z);
+    const pax = new Float32Array(Z), pay = new Float32Array(Z);
     for (let i = 0; i < Z; i++) {
       const z = WOOD.len * i / (Z - 1);
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    return (woodField.c = { lut, tv, tw, th, wl, al, NA, dux, duy, K, R, LMAX, pax, pay, Z });
+    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z });
   }
   function woodHash(a, b) {                   // keyed to quantised SLAB position, so tiles agree
     let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
@@ -3913,7 +3957,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // the default when nobody has picked one, so this works with OVR untouched.
     const [BR, BG, BB] = hexRGB(COL.woodEarly || '#c49660'), [DR, DG, DB] = hexRGB(COL.woodLate || '#603e22');
     const [HR, HG, HB] = hexRGB(COL.woodHeart || '#5a3418');
-    const amp = WOOD.devAmp;                                 // 0 skips the inversion entirely
+    const FE = F.FE, NF = FE.length, NA = F.NA;              // no active feature skips the inversion entirely
+    const sq = new Float64Array(NF || 1);                    // each feature's strength at the current pixel
     const band = Math.max(1, Math.min(bh, Math.ceil(2097152 / bw)));   // ~2 Mpx of ImageData at a time
     const img = g2d.createImageData(bw, band), px = img.data;
     for (let by = y0; by < y1; by += band) {
@@ -3936,14 +3981,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           if (rad > F.R) rad = F.R;                                // the bark: a board cannot leave the log it came from
           // INVERTING THE ACCUMULATED SURFACE. The rings are no longer circles, so "which ring is this
           // point in?" is no longer a lookup on the radius. It is still only a subtraction: take the
-          // concentric answer, correct the radius by the deviation accumulated at that ring, and read
-          // again. The deviation moves by well under a ring width per ring, so one refinement lands it.
+          // concentric answer, correct the radius by the deviation accumulated there, and read again.
+          // The deviation moves by well under a ring width per ring, so one refinement lands it.
+          //
+          // A feature's strength here is its amplitude times its angular lobe times its z window. The
+          // last is how a branch is present at one place along the board and gone at the next. The sum
+          // runs over the list, so this loop never learns how many features there are.
           let li;
-          if (amp) {
-            const ca = (ddx * F.dux + ddy * F.duy) / (rad || 1e-9);
-            const av = amp * F.al[((ca + 1) * 0.5 * (F.NA - 1)) | 0];
-            let rr = rad - av * F.wl[(rad * KS) | 0];
-            rr = rad - av * F.wl[(rr > 0 ? rr * KS : 0) | 0];
+          if (NF) {
+            const inv = 1 / (rad || 1e-9);
+            for (let q = 0; q < NF; q++) {
+              const f = FE[q], ca = (ddx * f.ux + ddy * f.uy) * inv;
+              sq[q] = f.amp * f.al[((ca + 1) * 0.5 * (NA - 1)) | 0] * f.zw[zi];
+            }
+            let gi = (rad * KS) | 0, dv = 0;
+            for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
+            let rr = rad - dv;
+            gi = (rr > 0 ? rr * KS : 0) | 0; dv = 0;
+            for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
+            rr = rad - dv;
             li = (rr > 0 ? rr * KS : 0) | 0;
           } else li = (rad * KS) | 0;
           let w = F.lut[li]
@@ -4923,7 +4979,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   driftRings: v => `${Math.round(v)}`, sapRings: v => `${Math.round(v)}`,
                   sapFade: v => `${Math.round(v)}`, devAmp: v => (+v).toFixed(2),
                   devAngle: v => `${Math.round(v)}\u00b0`, devSpread: v => (+v).toFixed(1),
-                  devStart: v => `${Math.round(v)}`, devRamp: v => `${Math.round(v)}` };
+                  devStart: v => `${Math.round(v)}`, devRamp: v => `${Math.round(v)}`,
+                  dev2Amp: v => (+v).toFixed(2), dev2Angle: v => `${Math.round(v)}\u00b0`,
+                  dev2Spread: v => (+v).toFixed(1), dev2Z: v => (+v).toFixed(2),
+                  dev2ZSpan: v => (+v).toFixed(2), dev2Start: v => `${Math.round(v)}`,
+                  dev2Ramp: v => `${Math.round(v)}` };
   function showWood(k) {                                 // one slider's readout, from WOOD rather than from the input
     const out = document.getElementById('wood-' + k + 'V');
     if (out) out.textContent = WDFMT[k] ? WDFMT[k](WOOD[k]) : (+WOOD[k]).toFixed(3);

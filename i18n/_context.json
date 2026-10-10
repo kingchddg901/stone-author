@@ -1684,6 +1684,55 @@
   ],
   "where": "slider: how many rings the bulge takes to come fully on"
  },
+ "sl.wood-dev2Amp": {
+  "terms": [
+   "knot",
+   "wood"
+  ],
+  "where": "slider: how far the trunk swells where a branch leaves it"
+ },
+ "sl.wood-dev2Angle": {
+  "terms": [
+   "knot",
+   "wood"
+  ],
+  "where": "slider: which way round the trunk the branch points, in degrees"
+ },
+ "sl.wood-dev2Spread": {
+  "terms": [
+   "knot",
+   "wood"
+  ],
+  "where": "slider: how much of the trunk's circumference the branch disturbs"
+ },
+ "sl.wood-dev2Z": {
+  "terms": [
+   "knot",
+   "wood"
+  ],
+  "where": "slider: where ALONG the trunk the branch sits - the control that makes it a branch and not a lean"
+ },
+ "sl.wood-dev2ZSpan": {
+  "terms": [
+   "knot",
+   "wood"
+  ],
+  "where": "slider: how far along the trunk the branch's influence reaches either side"
+ },
+ "sl.wood-dev2Start": {
+  "terms": [
+   "knot",
+   "wood"
+  ],
+  "where": "slider: the ring at which the branch begins. Wood inside it is untouched"
+ },
+ "sl.wood-dev2Ramp": {
+  "terms": [
+   "knot",
+   "wood"
+  ],
+  "where": "slider: how many rings the branch takes to come fully on"
+ },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
@@ -2107,6 +2156,13 @@
    "wood"
   ],
   "where": "explanatory note above the five eccentricity sliders"
+ },
+ "ui.wood-dev2-note": {
+  "terms": [
+   "knot",
+   "wood"
+  ],
+  "where": "explanatory note above the seven branch sliders"
  },
  "unit.in": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
