@@ -1217,7 +1217,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.5';
+  const BUILD = '2026.10.10.7';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3750,7 +3750,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // every master ever rendered: measured, bc019919 -> da405c25 on the default state. WOOD is signed only
   // when the material is wood, so a stone slab's signature is untouched by wood existing at all.
   const WOOD = {
-    seed: 770513, trunk: 1, len: 2.4, wid: 0.44,  // the log and the board: fixed shape, not art direction
+    seed: 770513, trunk: 1, len: 2.4, wid: 0.44,  // trunk is the SCALE, not the radius - the radius is what
+                                                  // the rings add up to, so more years means a bigger log
     rings: 220, late: 0.52,                       // the ring profile: how many, and how dark the latewood band
     plane: 0.27, y0: 0.2,                         // WHERE THE CUT STANDS. plane is the whole quarter-to-cathedral
                                                   // axis, because cos(theta) = plane / r; y0 slides the board
@@ -3777,7 +3778,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (rnd() < 0.05) w *= 0.42;                     // a pinched year: drought, or a taller neighbour
       acc += Math.max(w, 0.6); edge[i] = acc;
     }
-    for (let i = 0; i < n; i++) edge[i] *= WOOD.trunk / acc;
+    // CAUSALITY. Do NOT normalise to a fixed trunk: that makes a change in year 260 rescale year 1, and
+    // it was measured doing exactly that - every band on screen moved when the ring count changed. The
+    // SCALE is fixed and the RADIUS is derived, so growth at year X only ever reaches outward.
+    let unitAcc = 0;
+    for (let i = 0; i < 220; i++) unitAcc += 14 * Math.exp(-i / 90) + 2.2;   // the mean trend at the default count
+    const unit = WOOD.trunk / unitAcc, R = acc * unit;                        // R: what this log actually came to
+    for (let i = 0; i < n; i++) edge[i] *= unit;
     // COLOUR, PER RING, AS A CORRELATED WALK - the thing a per-ring random value cannot do. Ring N and
     // N+1 are nearly the same; N+200 can be a different wood. Two channels, value and warmth, because
     // those are the two that move in a real log.
@@ -3794,10 +3801,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       av = av * rev + dgs() * norm; aw = aw * rev + dgs() * norm;
       cv[i] = av + dgs() * 0.2; cw[i] = aw + dgs() * 0.2;
     }
-    const K = 4096, lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K);
+    // FIXED DOMAIN, not [0, R]: a grid tied to the trunk radius slides under the rings whenever the log
+    // grows, which is causality lost at the last pixel. LMAX is generous enough for any log the ring
+    // count can produce; beyond R the loop just repeats the outermost ring, which the painter clamps to
+    // anyway.
+    const LMAX = 2 * WOOD.trunk, K = 16384;
+    const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K);
     let k = 0;
     for (let i = 0; i < K; i++) {
-      const rad = WOOD.trunk * i / (K - 1);
+      const rad = LMAX * i / (K - 1);
       while (k < n - 1 && edge[k] < rad) k++;
       const lo = k > 0 ? edge[k - 1] : 0, hi = edge[k];
       const u = hi > lo ? (rad - lo) / (hi - lo) : 0;
@@ -3815,7 +3827,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    return (woodField.c = { lut, tv, tw, K, pax, pay, Z });
+    return (woodField.c = { lut, tv, tw, K, R, LMAX, pax, pay, Z });
   }
   function woodHash(a, b) {                   // keyed to quantised SLAB position, so tiles agree
     let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
@@ -3850,7 +3862,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     x1 = Math.min(cw, Math.floor(x1 - 0.5) + 1); y1 = Math.min(ch, Math.floor(y1 - 0.5) + 1);
     const bw = x1 - x0, bh = y1 - y0;
     if (bw <= 0 || bh <= 0) return;
-    const F = woodField(), KS = (F.K - 1) / WOOD.trunk, ZS = (F.Z - 1) / WOOD.len;
+    const F = woodField(), KS = (F.K - 1) / F.LMAX, ZS = (F.Z - 1) / WOOD.len;
     // Resolved out of COL at draw time, like every other colour in the app. The token resolver fills
     // the default when nobody has picked one, so this works with OVR untouched.
     const [BR, BG, BB] = hexRGB(COL.woodEarly || '#c49660'), [DR, DG, DB] = hexRGB(COL.woodLate || '#603e22');
@@ -3873,7 +3885,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           if (zi > F.Z - 1) zi = F.Z - 1;
           const ddx = WOOD.plane - F.pax[zi], ddy = (WOOD.y0 + (cvv / H) * WOOD.wid) - F.pay[zi];
           let rad = Math.sqrt(ddx * ddx + ddy * ddy);
-          if (rad > WOOD.trunk) rad = WOOD.trunk;                  // the sapwood edge: a board never leaves the log
+          if (rad > F.R) rad = F.R;                                // the bark: a board cannot leave the log it came from
           const li = (rad * KS) | 0;
           let w = F.lut[li]
             + (woodHash(cvv * 2600, 7) - 0.5) * 0.06               // lengthwise fibre streak
