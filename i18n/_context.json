@@ -1783,6 +1783,42 @@
   ],
   "where": "slider: the ring at which the branch died. 0 means it is still alive, so the knot runs to the bark; any other value stops it there and the trunk grows over it"
  },
+ "sl.wood-waveAmp": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the shared wave family that makes a tree a species"
+ },
+ "sl.wood-waveK": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the shared wave family that makes a tree a species"
+ },
+ "sl.wood-waveZ": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the shared wave family that makes a tree a species"
+ },
+ "sl.wood-anchorAt": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the shared wave family that makes a tree a species"
+ },
+ "sl.wood-anchorOver": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the shared wave family that makes a tree a species"
+ },
+ "sl.wood-anchorTo": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the shared wave family that makes a tree a species"
+ },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
@@ -2220,6 +2256,13 @@
    "wood"
   ],
   "where": "explanatory note above the two knot sliders"
+ },
+ "ui.wood-wave-note": {
+  "terms": [
+   "wood",
+   "knot"
+  ],
+  "where": "explanatory note above the wave-family and anchor sliders"
  },
  "unit.in": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"

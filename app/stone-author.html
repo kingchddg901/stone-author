@@ -447,6 +447,13 @@
       <div class="sl"><label for="wood-sapRings"><span data-i18n="sl.wood-sapRings">Sapwood</span> <output id="wood-sapRingsV"></output></label><input id="wood-sapRings" type="range" min="0" max="400" step="1"></div>
       <div class="sl"><label for="wood-sapFade"><span data-i18n="sl.wood-sapFade">Conversion</span> <output id="wood-sapFadeV"></output></label><input id="wood-sapFade" type="range" min="1" max="400" step="1"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-dev-note">Rings are circles until this is turned up. Eccentricity is how far they bulge off round, and it ACCUMULATES: a bulge grown in year 60 is still in the surface at year 220, because every later ring was laid on top of it. From and Over say which years it came on. Direction aims it, Breadth sets how much of the trunk it covers. This is the thing a branch, a lean or a buried wound all need.</span></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-wave-note">The wave family is what makes a tree a species rather than a setting. Three waves round the trunk and along it, shared by every axis the tree has — branches included, which is why a knot looks like it came from this tree. Out of round is how far they push, Lobes how many swellings go round the trunk, Travel how fast they move along it. An interference year is a kink in the family rather than a second mechanism: Anchor is when, Over how long, and To what the amplitude becomes. It ramps, because a step reads as an edit and a ramp reads as growth, and nothing before the anchor moves.</span></div>
+      <div class="sl"><label for="wood-waveAmp"><span data-i18n="sl.wood-waveAmp">Out of round</span> <output id="wood-waveAmpV"></output></label><input id="wood-waveAmp" type="range" min="0" max="0.4" step="0.005"></div>
+      <div class="sl"><label for="wood-waveK"><span data-i18n="sl.wood-waveK">Lobes</span> <output id="wood-waveKV"></output></label><input id="wood-waveK" type="range" min="1" max="9" step="1"></div>
+      <div class="sl"><label for="wood-waveZ"><span data-i18n="sl.wood-waveZ">Travel</span> <output id="wood-waveZV"></output></label><input id="wood-waveZ" type="range" min="0" max="6" step="0.05"></div>
+      <div class="sl"><label for="wood-anchorAt"><span data-i18n="sl.wood-anchorAt">Anchor year</span> <output id="wood-anchorAtV"></output></label><input id="wood-anchorAt" type="range" min="0" max="400" step="1"></div>
+      <div class="sl"><label for="wood-anchorOver"><span data-i18n="sl.wood-anchorOver">Anchor over</span> <output id="wood-anchorOverV"></output></label><input id="wood-anchorOver" type="range" min="1" max="400" step="1"></div>
+      <div class="sl"><label for="wood-anchorTo"><span data-i18n="sl.wood-anchorTo">Anchor to</span> <output id="wood-anchorToV"></output></label><input id="wood-anchorTo" type="range" min="0" max="4" step="0.05"></div>
       <div class="sl"><label for="wood-devAmp"><span data-i18n="sl.wood-devAmp">Eccentricity</span> <output id="wood-devAmpV"></output></label><input id="wood-devAmp" type="range" min="0" max="1.5" step="0.01"></div>
       <div class="sl"><label for="wood-devAngle"><span data-i18n="sl.wood-devAngle">Direction</span> <output id="wood-devAngleV"></output></label><input id="wood-devAngle" type="range" min="0" max="359" step="1"></div>
       <div class="sl"><label for="wood-devSpread"><span data-i18n="sl.wood-devSpread">Breadth</span> <output id="wood-devSpreadV"></output></label><input id="wood-devSpread" type="range" min="0.05" max="40" step="0.05"></div>
@@ -907,6 +914,12 @@ window.SA_I18N = (() => {
   "sl.wood-driftRings": "Drift scale",
   "sl.wood-sapRings": "Sapwood",
   "sl.wood-sapFade": "Conversion",
+  "sl.wood-waveAmp": "Out of round",
+  "sl.wood-waveK": "Lobes",
+  "sl.wood-waveZ": "Travel",
+  "sl.wood-anchorAt": "Anchor year",
+  "sl.wood-anchorOver": "Anchor over",
+  "sl.wood-anchorTo": "Anchor to",
   "sl.wood-devAmp": "Eccentricity",
   "sl.wood-devAngle": "Direction",
   "sl.wood-devSpread": "Breadth",
@@ -1024,6 +1037,7 @@ window.SA_I18N = (() => {
   "ui.wood-drift-note": "Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.",
   "ui.wood-knot-note": "Everything above draws wood around the branch. Knot draws the branch itself, where the plane went through it rather than past it: its rings are concentric about the branch and so run crosswise to the trunk's. It is a cone widening outward, because the branch gained a ring every year the trunk grew around it, which is why a knot is small on an inner board and large near the bark. Pitch is how tight its own rings are. Died at ring is the difference between the two kinds of knot: a living branch reaches the bark and its wood joins the trunk's, so the knot is sound and on every board; a dead one stops there and is grown over, trapping bark at its edge, so it is black, it falls out of a board, and it is only in the wood laid down before it was buried.",
   "ui.wood-dev2-note": "The second feature is a branch rather than a second lean, and the only difference is that it has a place along the trunk. At indicates where, Reach how far it carries either side. Walk the board past it and the grain sweeps around the branch and then straightens again, because outside the window the feature is not there at all.",
+  "ui.wood-wave-note": "The wave family is what makes a tree a species rather than a setting. Three waves round the trunk and along it, shared by every axis the tree has — branches included, which is why a knot looks like it came from this tree. Out of round is how far they push, Lobes how many swellings go round the trunk, Travel how fast they move along it. An interference year is a kink in the family rather than a second mechanism: Anchor is when, Over how long, and To what the amplitude becomes. It ramps, because a step reads as an edit and a ramp reads as growth, and nothing before the anchor moves.",
   "ui.wood-dev-note": "Rings are circles until this is turned up. Eccentricity is how far they bulge off round, and it ACCUMULATES: a bulge grown in year 60 is still in the surface at year 220, because every later ring was laid on top of it. From and Over say which years it came on. Direction aims it, Breadth sets how much of the trunk it covers. This is the thing a branch, a lean or a buried wound all need.",
   "ui.wood-heart-note": "Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.",
   "ui.wood-pith-note": "The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.",
@@ -1280,7 +1294,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.17';
+  const BUILD = '2026.10.10.18';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3833,6 +3847,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     drift: 0.4, driftRings: 90,                   // colour: how FAR it wanders from pith to bark, and how FAST
     sapRings: 22, sapFade: 8,                     // the SECOND timeline: outer rings still sapwood, and the
                                                   // width of the conversion front, both counted in rings
+    waveAmp: 0, waveK: 3, waveZ: 1.2,             // THE WAVE FAMILY: how far out of round, how many lobes round
+    anchorAt: 90, anchorOver: 20, anchorTo: 1,     // the trunk, how fast it travels along it - plus ONE anchor
+                                                  // year scaling the family from then on. Shared by the whole
+                                                  // tree, branches included: it is what a species IS.
     devAmp: 0, devAngle: 40, devSpread: 2,        // THE ACCUMULATED SURFACE, feature 1 - a LEAN: how far the
     devStart: 60, devRamp: 40,                    // rings bulge, which way, how broad, over which years. It
                                                   // runs the whole log, which is what makes it a lean.
@@ -3874,6 +3892,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const [rnd, gss] = sub(WOOD.seed, 1);
     const edge = new Float64Array(n);
     const wring = DEV.map(() => new Float64Array(n)), devAcc = DEV.map(() => 0);
+    const wring2 = new Float64Array(n);                 // the wave family's amplitude, year by year
     let acc = 0;
     for (let i = 0; i < n; i++) {
       const trend = 14 * Math.exp(-i / 90) + 2.2;      // juvenile surge, then the slow years
@@ -3887,6 +3906,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         devAcc[q] += Math.max(w, 0.6) * Math.max(0, Math.min(1, (i - DEV[q].st) / Math.max(DEV[q].rp, 0.001)));
         wring[q][i] = devAcc[q];
       }
+      // THE ANCHOR, as an envelope on the wave family. A ramp, not a step: a step in amplitude reads
+      // as an edit and a ramp reads as growth. Everything before the anchor is untouched, so an
+      // anchor at 80 cannot move year 79 - causality by construction, not by the stream being
+      // sequential. One anchor today; the list is the obvious next entry.
+      wring2[i] = WOOD.waveAmp *
+        (1 + (WOOD.anchorTo - 1) * Math.max(0, Math.min(1, (i - WOOD.anchorAt) / Math.max(WOOD.anchorOver, 0.001))));
     }
     // CAUSALITY. Do NOT normalise to a fixed trunk: that makes a change in year 260 rescale year 1, and
     // it was measured doing exactly that - every band on screen moved when the ring count changed. The
@@ -3917,7 +3942,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // anyway.
     const LMAX = 2 * WOOD.trunk, K = 16384;
     const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K), th = new Float32Array(K);
-    const wl = DEV.map(() => new Float32Array(K));
+    const wl = DEV.map(() => new Float32Array(K)), wv = new Float32Array(K);
     let k = 0;
     for (let i = 0; i < K; i++) {
       const rad = LMAX * i / (K - 1);
@@ -3936,8 +3961,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const ageR = (n - 1) - k;
       th[i] = Math.max(0, Math.min(1, (ageR - WOOD.sapRings) / Math.max(WOOD.sapFade, 0.001)));
       for (let q = 0; q < DEV.length; q++) wl[q][i] = wring[q][k];
+      wv[i] = wring2[k];
     }
     const Z = 1024;
+    // THE WAVE FAMILY. Three waves in theta and z, shared by every axis of this tree. The z half of
+    // each wave is a function of height alone, so it bakes into the Z grid; the theta half is left to
+    // the painter, which gets it from a Chebyshev recurrence on cos and sin of theta rather than from
+    // an atan2. sin(k*theta + q*z + phi) = sin(k*theta)*cos(q*z+phi) + cos(k*theta)*sin(q*z+phi), and
+    // that separation is the whole reason this costs multiplies instead of transcendentals.
+    const [wrnd] = sub(WOOD.seed, 3), NW = 3, WK = Math.max(1, Math.round(WOOD.waveK));
+    const WV = [];
+    for (let i = 0; i < NW; i++) {
+      const q = WOOD.waveZ * (0.45 + 0.8 * i), ph = wrnd() * 6.2832, a = 1 / (i + 1);
+      const zc = new Float32Array(Z), zs = new Float32Array(Z);
+      for (let j = 0; j < Z; j++) {
+        const z = WOOD.len * j / (Z - 1);
+        zc[j] = Math.cos(q * z + ph) * a; zs[j] = Math.sin(q * z + ph) * a;
+      }
+      WV.push({ zc, zs });
+    }
     // EACH FEATURE'S SHAPE, baked once. The angular lobe is indexed by cos(theta - theta0) rather than
     // by theta, so the painter needs a dot product and not an atan2; pow and cos are paid here, across
     // 1024 entries, instead of per pixel. The z window is what separates a branch from a lean: outside
@@ -3975,7 +4017,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z });
+    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW });
   }
   function woodHash(a, b) {                   // keyed to quantised SLAB position, so tiles agree
     let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
@@ -3993,6 +4035,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const [HR, HG, HB] = hexRGB(COL.woodHeart || '#5a3418');
     const [KR, KG, KB] = hexRGB(COL.woodKnot || '#4a2f18');
     const FE = F.FE, NF = FE.length, NA = F.NA;              // no active feature skips the inversion entirely
+    const WV = F.WV, WVA = F.wv, WK = F.WK, NW = F.NW;       // the tree's wave family and its anchored envelope
+    const WAVY = WOOD.waveAmp > 0;                           // zero skips the recurrence, not just the result
     const sq = new Float64Array(NF || 1);                    // each feature's strength at the current pixel
     const KN = FE.find(f => f.kn > 0) || null;               // the one feature with a knot face, if any
     // (ddx, ddy) is the offset from the PITH at this height; zi indexes the pith tables; zp is the
@@ -4013,16 +4057,31 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // how a branch is present at one place and gone at the next. The sum runs over the list, so
       // this never learns how many features there are.
       let li;
-      if (NF) {
+      if (NF || WAVY) {
         const inv = 1 / (rad || 1e-9);
+        // THE WAVE FAMILY, with cos and sin of theta taken straight from the offset - no atan2. The
+        // harmonics come from the Chebyshev recurrence, which is where the "integer wavenumber"
+        // constraint earns its keep: k, 2k and 3k are three more multiplies each, not three sines.
+        let wsum = 0;
+        if (WAVY) {
+          const ct = ddx * inv, st = ddy * inv;
+          let ck = 1, sk = 0;
+          for (let h = 0; h < WK; h++) { const x = ck * ct - sk * st; sk = sk * ct + ck * st; ck = x; }
+          let hc = ck, hs = sk;                              // the base harmonic, k
+          for (let i = 0; i < NW; i++) {
+            const W = WV[i];
+            wsum += hs * W.zc[zi] + hc * W.zs[zi];           // sin(k.theta + q.z + phi), expanded
+            const x = hc * ck - hs * sk; hs = hs * ck + hc * sk; hc = x;   // step to the next harmonic
+          }
+        }
         for (let q = 0; q < NF; q++) {
           const f = FE[q], ca = (ddx * f.ux + ddy * f.uy) * inv;
           sq[q] = f.amp * f.al[((ca + 1) * 0.5 * (NA - 1)) | 0] * f.zw[zi];
         }
-        let gi = (rad * KS) | 0, dv = 0;
+        let gi = (rad * KS) | 0, dv = wsum * WVA[gi];
         for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
         let rr = rad - dv;
-        gi = (rr > 0 ? rr * KS : 0) | 0; dv = 0;
+        gi = (rr > 0 ? rr * KS : 0) | 0; dv = wsum * WVA[gi];
         for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
         rr = rad - dv;
         li = (rr > 0 ? rr * KS : 0) | 0;
@@ -4051,8 +4110,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           const rb = KN.kn * (te - KN.r0);                     // a cone, not a cylinder
           const ss = -ddx * KN.uy + ddy * KN.ux, dzz = zp - KN.zc;
           const q2 = ss * ss + dzz * dzz;
-          if (q2 < rb * rb) {
-            const dd = Math.sqrt(q2), u2 = (dd * KN.kp) % 1;
+              if (q2 < rb * rb) {
+            // THE BRANCH SHARES THE TREE'S WAVE FAMILY. Its own rings are pushed by the same
+            // waves, read at its own angle about its own axis, so a knot looks like it came from
+            // THIS tree rather than out of a knot library. The species is the family; every axis
+            // draws on it.
+            let dd = Math.sqrt(q2);
+            if (WAVY) {
+                  const iq = 1 / (dd || 1e-9), bc = ss * iq, bs = dzz * iq;
+                  let ck = 1, sk = 0;
+                  for (let h = 0; h < WK; h++) { const x = ck * bc - sk * bs; sk = sk * bc + ck * bs; ck = x; }
+                  dd += (sk * WV[0].zc[zi] + ck * WV[0].zs[zi]) * WVA[(rad * KS) | 0] * 0.5;
+                  if (dd < 0) dd = 0;
+            }
+            const u2 = (dd * KN.kp) % 1;
             const lt = u2 > 0.72 ? (u2 - 0.72) / 0.28 : 0;
             let kv = 1 - 0.55 * lt * lt;                       // its own latewood, at its own pitch
             const rim = dd / (rb || 1e-9);
@@ -5185,7 +5256,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   const WDFMT = { rings: v => `${Math.round(v)}`, plane: v => (+v).toFixed(2), y0: v => (+v).toFixed(2),
                   late: v => (+v).toFixed(2), drift: v => (+v).toFixed(2), wid: v => (+v).toFixed(2),
-                  len: v => (+v).toFixed(2),
+                  len: v => (+v).toFixed(2), waveAmp: v => (+v).toFixed(3),
+                  waveK: v => `${Math.round(v)}`, waveZ: v => (+v).toFixed(2),
+                  anchorAt: v => `${Math.round(v)}`, anchorOver: v => `${Math.round(v)}`,
+                  anchorTo: v => `${(+v).toFixed(2)}\u00d7`,
                   cutAngle: v => `${Math.round(v)}\u00b0`,
                   driftRings: v => `${Math.round(v)}`, sapRings: v => `${Math.round(v)}`,
                   sapFade: v => `${Math.round(v)}`, devAmp: v => (+v).toFixed(2),
