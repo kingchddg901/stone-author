@@ -1176,7 +1176,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.01.1';
+  const BUILD = '2026.10.10.1';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2752,7 +2752,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     c.fillStyle = STONE_BG; c.fillRect(0, 0, SW, SH);
     if (layVis('base')) { c.globalAlpha = layOp('base'); c.fillStyle = COL.ground; c.fillRect(0, 0, SW, SH); c.globalAlpha = 1; }  // slab's own ground, so tiles are stone not grout
     const prev = g2d; g2d = c; c.setTransform(SW, 0, 0, SW, 0, 0); c.lineCap = 'round'; c.lineJoin = 'round';
-    paintStoneContent(false, false);
+    paintContent(false, false);
     g2d = prev; stoneReady = true;
   }
   const chipMap = () => { const mp = new Map(); for (const mk of marks) if (mk.kind === 'chip') (mp.get(mk.tileKey) || mp.set(mk.tileKey, []).get(mk.tileKey)).push(mk); return mp; };
@@ -2984,7 +2984,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ex.setTransform(1, 0, 0, 1, 0, 0); ex.globalAlpha = 1; ex.filter = 'none'; ex.globalCompositeOperation = 'source-over';
     ex.fillStyle = '#000'; ex.fillRect(0, 0, gw, gh);
     ex.setTransform(gw, 0, 0, gw, 0, 0); ex.lineCap = 'round'; ex.lineJoin = 'round';   // slab 0..1 → gw px (gh = gw·H)
-    const sg = g2d, su = uvMode; g2d = ex; uvMode = true; paintStoneContent(false, false); uvMode = su; g2d = sg;   // paints emitters as emit()||UV_DARK on black
+    const sg = g2d, su = uvMode; g2d = ex; uvMode = true; paintContent(false, false); uvMode = su; g2d = sg;   // paints emitters as emit()||UV_DARK on black
     const ed = ex.getImageData(0, 0, gw, gh), da = ed.data;                              // clip the near-black UV_DARK floor so ONLY real emission is added
     for (let i = 0; i < da.length; i += 4) if (da[i] + da[i + 1] + da[i + 2] < 60) { da[i] = da[i + 1] = da[i + 2] = 0; }
     ex.putImageData(ed, 0, 0);
@@ -3145,7 +3145,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     else if (uvMode) { ox.fillStyle = UV_GROUND; ox.fillRect(0, 0, oc.width, oc.height); }
     else { ox.fillStyle = STONE_BG; ox.fillRect(0, 0, oc.width, oc.height); if (layVis('base')) { ox.globalAlpha = layOp('base'); ox.fillStyle = COL.ground; ox.fillRect(0, 0, oc.width, oc.height); ox.globalAlpha = 1; } }
     ox.setTransform(W, 0, 0, W, 0, 0); ox.lineCap = 'round'; ox.lineJoin = 'round'; g2d = ox;
-    if (backlit) paintBacklit(oc, bs); else paintStoneContent(false, false);
+    if (backlit) paintBacklit(oc, bs); else paintContent(false, false);
     applyCoat(oc, ox, bs, { ident: false, uvMode, backlit });
     applyWindows(oc, W);
     g2d = prevG; return oc;
@@ -3166,7 +3166,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (uvMode) { cx.fillStyle = UV_GROUND; cx.fillRect(0, 0, w, h); }
     else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, w, h); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, w, h); cx.globalAlpha = 1; } }
     cx.setTransform(tf[0], tf[1], tf[2], tf[3], tf[4], tf[5]); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
-    paintStoneContent(false, false);
+    paintContent(false, false);
     applyCoat(c, cx, coatScale, { ident: false, uvMode, backlit: false, tiled: !!tile }, tile);
     g2d = svG; lightSpectrum = svS; uvMode = svU;
     return c;
@@ -3253,7 +3253,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           if (tc.width !== ew || tc.height !== eh) { tc.width = ew; tc.height = eh; }
           baseFill(tcx);
           tcx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); tcx.lineCap = 'round'; tcx.lineJoin = 'round'; g2d = tcx;   // slab 0..1 → final px, offset so this tile's expanded region fills tc
-          paintStoneContent(false, false);
+          paintContent(false, false);
           applyCoat(tc, tcx, bs, { ident: false, uvMode, backlit: false, tiled: true }, { ox: ex0, oy: ey0, fw: finalW, fh: finalH });
           g2d = prevG;
           fx.setTransform(1, 0, 0, 1, 0, 0); fx.drawImage(tc, bleed, bleed, tileW, tileH, tx0, ty0, tileW, tileH);   // crop the bleed
@@ -3323,7 +3323,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, finalW, eh); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, finalW, eh); cx.globalAlpha = 1; } }
     const tile = { ox: 0, oy: ey0, fw: finalW, fh: finalH };
     cx.setTransform(finalW, 0, 0, finalW, 0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
-    paintStoneContent(false, false);
+    paintContent(false, false);
     applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true }, tile);
     g2d = prevG;
     for (const win of wins)
@@ -3347,7 +3347,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, ew, eh); cx.globalAlpha = 1; }
     }
     cx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
-    paintStoneContent(false, false);
+    paintContent(false, false);
     const vp = { ox: ex0, oy: ey0, fw: finalW, fh: finalH };
     applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true }, vp);
     // REALITY WINDOWS ARE NOT A WHOLE-PICTURE STEP HERE, because this path never assembles a picture.
@@ -3390,7 +3390,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // hexRGB/rgbHex/mixHexAt travel with them: emit blends between spectrum stops and cannot be serialised
     // without them. (This core has no live caller — renderTiledParallel measured a no-op — but a serialised
     // copy that references a function it does not carry is a trap for whoever revives it.)
-    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, hexRGB, rgbHex, mixHexAt, emitAt, idxAt, strainColour, adjOf, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent };
+    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, hexRGB, rgbHex, mixHexAt, emitAt, idxAt, strainColour, adjOf, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent, paintWoodContent, paintContent, setMaterial };
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
     s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;
@@ -3402,7 +3402,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
     s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_DARK;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=COL.ground;tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
-    s += `paintStoneContent(false,false);\n`;
+    s += `paintContent(false,false);\n`;
     s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:false,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
     s += `var inner=new OffscreenCanvas(d.tileW,d.tileH);inner.getContext('2d').drawImage(tc,d.bleed,d.bleed,d.tileW,d.tileH,0,0,d.tileW,d.tileH);\n`;
     s += `var bmp=inner.transferToImageBitmap();self.postMessage({i:d.i,tx0:d.tx0,ty0:d.ty0,bmp:bmp},[bmp]);};`;
@@ -3480,7 +3480,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // export's 524, and the drawn glow's deficit is sigma-dependent - so the preview never showed the look
     // a render would produce. It keeps the image-space bloom, which is what it has always shown.
     glowPx = 0;
-    if (backlit) paintBacklit(); else paintStoneContent(ident, angleView);
+    if (backlit) paintBacklit(); else paintContent(ident, angleView);
     applyCoat(cv, ctx, cv.width / COAT_REF, { ident, uvMode, backlit });   // coat tier: emission bloom · subsurface · specular · lens (shared with renderFull); same reference as the export, so the preview matches
     if (!ident && !layTiles) applyWindowsScreen();                      // reality windows: daylight (or another light) through the islands
     ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);   // restore the view for guides/live
@@ -3657,6 +3657,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!ident && !uv) for (const L of mine) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(only), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }   // shoulder
     for (const L of mine) { const bk = L.major ? 'major' : 'minor'; const _fx = (uv && !BLOOM_DRAW) ? null : fxOn(only, vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : strainColour(L, vcol(L), only, bk, t)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(only))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }   // main (per-item adjustments)
   }
+  // ---- MATERIAL FORK BEGIN ----------------------------------------------------------------------
+  // The ONE place that knows which material is being rendered, discriminator included. A material
+  // supplies a field and a way to query a 2D face out of it: stone's query is the identity, because the
+  // marks ARE the face; wood's is a plane through a 3D growth-ring field. Everything downstream of this
+  // function - the coat and light tier, warp, masks, layers, tokens, tiling, the tiled render and the
+  // master export - is material-agnostic and must never learn which path it is on.
+  //
+  // MATERIAL is declared HERE rather than beside BUILD so that no read of it exists outside these
+  // markers; callers switch material through setMaterial and never touch the token.
+  // tools/check-material-fork.mjs fails the build otherwise. It is a tripwire against the accidental
+  // leak, not a proof - it matches the token, so a helper that leaked the value could still defeat it.
+  let MATERIAL = 'stone';                       // 'stone' | 'wood' | ...
+  function setMaterial(m) { MATERIAL = (m === 'wood') ? 'wood' : 'stone'; }
+  function paintContent(ident, angleView) {
+    if (MATERIAL === 'wood') return paintWoodContent(ident, angleView);
+    return paintStoneContent(ident, angleView);
+  }
+  // ---- MATERIAL FORK END ------------------------------------------------------------------------
+
+  // Wood path: not wired yet. Falls through to stone rather than painting an empty slab, so the
+  // dispatcher can land and be proven a no-op before the ring field arrives.
+  function paintWoodContent(ident, angleView) { return paintStoneContent(ident, angleView); }
+
   function paintStoneContent(ident, angleView) {
     const uv = uvMode && !ident;                                // black-light: only the UV palette paints; the stone body is dark
     // pinned GROUND — base setter + modulators, always at the bottom (they SET the ground, they aren't content):
@@ -5801,7 +5824,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const L of layers) L.on = (L.bucket === bucketKey);
     cx.setTransform(1, 0, 0, 1, 0, 0);
     if (bucketKey === 'base') { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, c.width, c.height); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, c.width, c.height); cx.globalAlpha = 1; } }
-    cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; paintStoneContent(false, false); g2d = prev;
+    cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; paintContent(false, false); g2d = prev;
     layers.forEach((L, i) => L.on = saved[i]); soloLay = sv; return c;
   }
   function expIdT(W) {                                    // vein-id map (rgb-encoded index) + along-vein t map (grey) + legend
