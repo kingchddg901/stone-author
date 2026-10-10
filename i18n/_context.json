@@ -1639,6 +1639,7 @@
   ],
   "where": "slider: which way round the trunk the saw plane faces, in degrees. 0 to 179, because 180 is the same plane cut from the other side"
  },
+ "sl.wood-treeDia": {"terms": ["wood"], "where": "slider: the log's diameter in feet. A readout you can drag — it shows the size the rings actually came to, and dragging solves once for the ring-width scale rather than pinning the size"},
  "sl.wood-rings": {
   "terms": [
    "wood"
@@ -1941,7 +1942,7 @@
   "terms": [
    "wood"
   ],
-  "where": "slider: how wide each dimple is, as a fraction of the spacing"
+  "where": "slider: how wide each eye is, in inches"
  },
  "sl.wood-eyeDepth": {
   "terms": [

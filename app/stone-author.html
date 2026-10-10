@@ -445,6 +445,7 @@
       <div class="sl"><label for="wood-wid"><span data-i18n="sl.wood-wid">Plank width</span> <output id="wood-widV"></output></label><input id="wood-wid" type="range" min="0.05" max="4" step="0.01"></div>
       <div class="sl"><label for="wood-len"><span data-i18n="sl.wood-len">Plank length</span> <output id="wood-lenV"></output></label><input id="wood-len" type="range" min="0.2" max="8" step="0.05"></div>
       <div class="sl"><label for="wood-cutAngle"><span data-i18n="sl.wood-cutAngle">Cut angle</span> <output id="wood-cutAngleV"></output></label><input id="wood-cutAngle" type="range" min="0" max="179" step="1"></div>
+      <div class="sl"><label for="wood-treeDia"><span data-i18n="sl.wood-treeDia">Tree size</span> <output id="wood-treeDiaV"></output></label><input id="wood-treeDia" type="range" min="0.2" max="20" step="0.02"></div>
       <div class="sl"><label for="wood-rings"><span data-i18n="sl.wood-rings">Rings</span> <output id="wood-ringsV"></output></label><input id="wood-rings" type="range" min="5" max="400" step="5"></div>
       <div class="sl"><label for="wood-late"><span data-i18n="sl.wood-late">Latewood contrast</span> <output id="wood-lateV"></output></label><input id="wood-late" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-growth-note">These are the numbers a species actually differs by. Juvenile is how wide the first rings are, Settles how fast that fades, and Mature the width it lands on. Scatter is year-to-year variation; Bad years is how often a pinched run comes and how deep. Latewood is what fraction of each ring is the dark band and Edge how abruptly it starts — a fir has a narrow, violently sharp band and a maple a soft, almost invisible one.</span></div>
@@ -940,6 +941,7 @@ window.SA_I18N = (() => {
   "sl.wood-wid": "Plank width",
   "sl.wood-len": "Plank length",
   "sl.wood-cutAngle": "Cut angle",
+  "sl.wood-treeDia": "Tree size",
   "sl.wood-rings": "Rings",
   "sl.wood-late": "Latewood contrast",
   "sl.wood-juv": "Juvenile",
@@ -1361,7 +1363,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.29';
+  const BUILD = '2026.10.10.30';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4112,7 +4114,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // grows, which is causality lost at the last pixel. LMAX is generous enough for any log the ring
     // count can produce; beyond R the loop just repeats the outermost ring, which the painter clamps to
     // anyway.
-    const LMAX = 2 * WOOD.trunk, K = 16384;
+    // THE PITCH IS THE INVARIANT, NOT THE DOMAIN. 2*trunk over 16384 was pinned so the grid could not
+    // move when the ring count did; but a log can outgrow it - at the slider stops by 5.5x - and past
+    // the end the loop repeats its last entry, so the outer wood comes out as flat colour.
+    // Holding the PITCH and growing K covers any log while leaving every existing sample exactly where
+    // it was: the new grid is a strict superset of the old, so this is bit-exact for anything that fit.
+    const PITCH = (2 * WOOD.trunk) / 16383;
+    const K = Math.min(131072, Math.max(16384, Math.ceil(Math.max(2 * WOOD.trunk, R * 1.02) / PITCH) + 1));
+    const LMAX = PITCH * (K - 1);
     const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K), th = new Float32Array(K),
           urel = new Float32Array(K),                        // where in its ring each radius sits
           rwl = new Float32Array(K);                         // and how wide that ring is, so a depth can be
@@ -5621,6 +5630,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   function syncWood() {                                  // after a load, the rail has to agree with the slab
     for (const k of Object.keys(WOOD)) { const el = document.getElementById('wood-' + k); if (el) { el.value = WOOD[k]; showWood(k); } }
+    syncTreeDia();
+  }
+  // THE TREE SIZE IS A READOUT YOU CAN GRAB, not a setting that is stored. What is stored is the
+  // ring-width scale; the diameter is what the rings came to. So this shows the ACTUAL diameter and
+  // re-reads it after every change - pick a slower species or drop the ring count and the number
+  // moves, which is the honest answer rather than a figure the model quietly failed to honour.
+  //
+  // The thumb saturates past 20 ft; the TEXT never does, so an absurd growth curve reads its true
+  // size even when the slider has run out of travel.
+  function syncTreeDia() {
+    const el = document.getElementById('wood-treeDia'); if (!el) return;
+    const d = woodField().R * 2;
+    el.value = d;
+    const out = document.getElementById('wood-treeDiaV');
+    if (out) out.textContent = d.toFixed(2) + '\u2032';
   }
   function showGround() {
     const F = FAM[fam];
@@ -7192,12 +7216,28 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     el.addEventListener('input', () => { G[id] = +el.value; show(); redraw(true); });   // the slab: at once
   }
   // The wood settings bind the same way G's do, against their own object and an id prefix. Every key
-  // with a matching input gets a slider; a key without one (seed, trunk, len, wid) is simply not art
-  // direction, and adding its control later is adding the markup and nothing else.
+  // with a matching input gets a slider; a key without one is reached another way or not at all.
+  // `seed` is not art direction. `trunk` deliberately has NO slider of its own: it is the ring-width
+  // scale, and a scale is not a thing anyone wants to drag - what they want is the size it produces,
+  // which is what Tree size gives them by solving for it.
   for (const k of Object.keys(WOOD)) {
     const el = document.getElementById('wood-' + k); if (!el) continue;
     el.value = WOOD[k]; showWood(k);
-    el.addEventListener('input', () => { WOOD[k] = +el.value; showWood(k); redraw(true); });
+    // syncTreeDia because rings, juv, decay and floor all move the log's size: the readout has to
+    // follow them or it states a diameter the log no longer has.
+    el.addEventListener('input', () => { WOOD[k] = +el.value; showWood(k); redraw(true); syncTreeDia(); });
+  }
+  // THE ONE-SHOT SOLVE. R is linear in trunk, so trunk * target / R lands exactly on target - no
+  // iteration, and no need for the growth sum at the call site. It runs on the drag and then stops;
+  // nothing re-applies it afterwards, which is what keeps growth at year X reaching outward only.
+  {
+    const el = document.getElementById('wood-treeDia');
+    if (el) el.addEventListener('input', () => {
+      const R = woodField().R, target = +el.value / 2;
+      if (R > 0 && target > 0) WOOD.trunk = Math.max(1e-4, WOOD.trunk * target / R);
+      redraw(true); syncTreeDia();
+    });
+    syncTreeDia();
   }
   for (const id of ['speckGroups', 'speckSubs', 'drusyGroups', 'drusySubs'])   // add/remove the group + sub-variant colour tokens
     document.getElementById(id).addEventListener('input', () => { registerSpeckGroups(); recolour(); mountEditor(); });
