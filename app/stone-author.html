@@ -1361,7 +1361,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.22';
+  const BUILD = '2026.10.10.23';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4102,7 +4102,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // count can produce; beyond R the loop just repeats the outermost ring, which the painter clamps to
     // anyway.
     const LMAX = 2 * WOOD.trunk, K = 16384;
-    const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K), th = new Float32Array(K);
+    const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K), th = new Float32Array(K),
+          urel = new Float32Array(K);                        // where in its ring each radius sits
     const wl = DEV.map(() => new Float32Array(K)), wv = new Float32Array(K), fsp = new Float32Array(K);
     let k = 0;
     for (let i = 0; i < K; i++) {
@@ -4112,6 +4113,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const u = hi > lo ? (rad - lo) / (hi - lo) : 0;
       // latewood is a NARROW DARK BAND at the ring's outer edge, abrupt on one side. A sine here is the
       // loudest tell of fake wood; rings all the same width is the second loudest.
+      urel[i] = u;
       const lf = Math.max(WOOD.lateFrac, 0.001);
       const late = Math.pow(Math.max(0, Math.min(1, (u - (1 - lf)) / lf)), Math.max(WOOD.lateSharp, 0.05));
       lut[i] = (1 - WOOD.late * late) * (1 + 0.05 * Math.sin(k * 2.399));   // + a per-ring value drift
@@ -4189,7 +4191,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz });
+    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel });
   }
   // A rational atan2, good to under half a degree and costing about ten multiplies. The eye grid needs
   // the ANGLE, and the painter only ever has its cosine and sine; this is the one place in the wood
@@ -4241,7 +4243,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const FE = F.FE, NF = FE.length, NA = F.NA;              // no active feature skips the inversion entirely
     const WV = F.WV, WVA = F.wv, WK = F.WK, NW = F.NW;       // the tree's wave family and its anchored envelope
     const WAVY = WOOD.waveAmp > 0;                           // zero skips the recurrence, not just the result
-    const FSP = F.fsp, FCZ = F.fcz, GLOSS = WOOD.gloss;
+    const FSP = F.fsp, FCZ = F.fcz, UREL = F.urel, GLOSS = WOOD.gloss;
     const EYES = WOOD.eyes, ECELL = Math.max(WOOD.eyeSpacing, 0.004);
     const ERAD2 = Math.pow(ECELL * Math.max(WOOD.eyeSize, 0.02), 2);
     // The face normal, which the two views set for themselves. Figure is an angle BETWEEN the fibre
@@ -4278,7 +4280,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // The eye depends on WHERE on the cambium this point is, not on which ring, so it is found
         // once per pixel and reused by both passes of the inversion below.
         let eyeG = 0;
-        if (EYES) eyeG = eyeHold = woodEye(woodAtan2(ddy, ddx), zp, ECELL, ERAD2);
+        if (EYES) {
+          eyeG = woodEye(woodAtan2(ddy, ddx), zp, ECELL, ERAD2);
+          // ORIENTATION. The needle runs along the radius, so what decides whether this face shows an
+          // EYE or a faint fleck is how square it is to that needle: r_hat . N. One on a tangential
+          // face, where you cut straight across the cone and get a circle; zero on a radial one, where
+          // the needle lies in the face and you cut along its length. This is the whole
+          // quarter-versus-flat behaviour and it costs one dot product.
+          const iv3 = 1 / (rad || 1e-9);
+          const sq2 = (ddx * iv3) * pn[0] + (ddy * iv3) * pn[1];
+          eyeG *= sq2 < 0 ? -sq2 : sq2;
+          eyeHold = eyeG;
+        }
         let wsum = 0;
         if (WAVY) {
           const ct = ddx * inv, st = ddy * inv;
@@ -4297,7 +4310,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         }
         // The dimple moves the surface INWARD, the one direction the foam model otherwise forbids.
         // Bounded to a fraction of a ring so the layers still cannot cross.
-        const eyeD = eyeG * EYES * WOOD.eyeDepth * 0.004;
+        // A real eye is a STACK OF SHALLOW CONES, one per year, not a smooth tube: the cambium
+        // re-dimples at each boundary and the next year's growth partly fills it in. Weighting the
+        // dip by where the point sits in its ring is what gives an eye its fine concentric
+        // structure rather than a soft well.
+        const ur = UREL[(rad * KS) | 0];
+        const eyeD = eyeG * EYES * WOOD.eyeDepth * 0.004 * (0.35 + 0.65 * ur * ur);
         let gi = (rad * KS) | 0, dv = wsum * WVA[gi] - eyeD;
         for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
         let rr = rad - dv;
