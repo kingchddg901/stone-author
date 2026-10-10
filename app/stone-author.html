@@ -463,9 +463,9 @@
       <div class="sl"><label for="wood-interlockRings"><span data-i18n="sl.wood-interlockRings">Interlock period</span> <output id="wood-interlockRingsV"></output></label><input id="wood-interlockRings" type="range" min="2" max="120" step="1"></div>
       <div class="sl"><label for="wood-curl"><span data-i18n="sl.wood-curl">Curl</span> <output id="wood-curlV"></output></label><input id="wood-curl" type="range" min="0" max="30" step="0.5"></div>
       <div class="sl"><label for="wood-curlRate"><span data-i18n="sl.wood-curlRate">Curl rate</span> <output id="wood-curlRateV"></output></label><input id="wood-curlRate" type="range" min="0" max="120" step="0.5"></div>
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-eye-note">A bird's eye is not a mark on the surface. It is a small dimple in the cambium that the tree keeps re-making in the same spot year on year, so it runs outward as a needle pointing at the pith. Cut across those needles on a flatsawn face and you see the eyes; cut along them and you see almost nothing, which is why bird's eye hides on quartersawn. Eyes is how strongly they show, Spacing how far apart they sit and Size how wide each one is — both in INCHES, a real bird's eye being about a fifth of an inch across; Spacing is measured at the bark, where boards get cut from. Depth is how far the rings dip into it, counted in RING WIDTHS — at 2.4 two or three ring boundaries curve into each eye, which is what draws those little contour circles. The dimple is a cone rather than a soft well, so those circles come out evenly spaced.</span></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-eye-note">A bird's eye is not a mark on the surface. It is a small dimple in the cambium that the tree keeps re-making in the same spot year on year, so it runs outward as a needle pointing at the pith. Cut across those needles on a flatsawn face and you see the eyes; cut along them and you see almost nothing, which is why bird's eye hides on quartersawn. Eyes is how strongly they show, Spacing how far apart they sit and Size how wide each one is — both in INCHES, a real bird's eye being about a fifth of an inch across; Spacing is measured one foot out from the pith, so eyes crowd together towards the centre and spread apart towards the bark — a bigger tree carries more of them, not wider-spaced ones. Depth is how far the rings dip into it, counted in RING WIDTHS — at 2.4 two or three ring boundaries curve into each eye, which is what draws those little contour circles. The dimple is a cone rather than a soft well, so those circles come out evenly spaced.</span></div>
       <div class="sl"><label for="wood-eyes"><span data-i18n="sl.wood-eyes">Eyes</span> <output id="wood-eyesV"></output></label><input id="wood-eyes" type="range" min="0" max="2" step="0.02"></div>
-      <div class="sl"><label for="wood-eyeSpacing"><span data-i18n="sl.wood-eyeSpacing">Eye spacing</span> <output id="wood-eyeSpacingV"></output></label><input id="wood-eyeSpacing" type="range" min="0.15" max="4" step="0.05"></div>
+      <div class="sl"><label for="wood-eyeSpacing"><span data-i18n="sl.wood-eyeSpacing">Eye spacing</span> <output id="wood-eyeSpacingV"></output></label><input id="wood-eyeSpacing" type="range" min="0.3" max="8" step="0.05"></div>
       <div class="sl"><label for="wood-eyeSize"><span data-i18n="sl.wood-eyeSize">Eye size</span> <output id="wood-eyeSizeV"></output></label><input id="wood-eyeSize" type="range" min="0.04" max="0.8" step="0.01"></div>
       <div class="sl"><label for="wood-eyeDepth"><span data-i18n="sl.wood-eyeDepth">Eye depth</span> <output id="wood-eyeDepthV"></output></label><input id="wood-eyeDepth" type="range" min="0" max="6" step="0.05"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-pith-note">The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.</span></div>
@@ -1103,7 +1103,7 @@ window.SA_I18N = (() => {
   "ui.wood-dev2-note": "The second feature is a branch rather than a second lean, and the only difference is that it has a place along the trunk. At indicates where, Reach how far it carries either side. Walk the board past it and the grain sweeps around the branch and then straightens again, because outside the window the feature is not there at all.",
   "ui.wood-wave-note": "The wave family is what makes a tree a species rather than a setting. Three waves round the trunk and along it, shared by every axis the tree has — branches included, which is why a knot looks like it came from this tree. Out of round is how far they push, Lobes how many swellings go round the trunk, Travel how fast they move along it. An interference year is a kink in the family rather than a second mechanism: Anchor is when, Over how long, and To what the amplitude becomes. It ramps, because a step reads as an edit and a ramp reads as growth, and nothing before the anchor moves.",
   "ui.wood-dev-note": "Rings are circles until this is turned up. Eccentricity is how far they bulge off round, and it ACCUMULATES: a bulge grown in year 60 is still in the surface at year 220, because every later ring was laid on top of it. From and Over say which years it came on. Direction aims it, Breadth sets how much of the trunk it covers. This is the thing a branch, a lean or a buried wound all need.",
-  "ui.wood-eye-note": "A bird's eye is not a mark on the surface. It is a small dimple in the cambium that the tree keeps re-making in the same spot year on year, so it runs outward as a needle pointing at the pith. Cut across those needles on a flatsawn face and you see the eyes; cut along them and you see almost nothing, which is why bird's eye hides on quartersawn. Eyes is how strongly they show, Spacing how far apart they sit and Size how wide each one is — both in INCHES, a real bird's eye being about a fifth of an inch across; Spacing is measured at the bark, where boards get cut from. Depth is how far the rings dip into it, counted in RING WIDTHS — at 2.4 two or three ring boundaries curve into each eye, which is what draws those little contour circles. The dimple is a cone rather than a soft well, so those circles come out evenly spaced.",
+  "ui.wood-eye-note": "A bird's eye is not a mark on the surface. It is a small dimple in the cambium that the tree keeps re-making in the same spot year on year, so it runs outward as a needle pointing at the pith. Cut across those needles on a flatsawn face and you see the eyes; cut along them and you see almost nothing, which is why bird's eye hides on quartersawn. Eyes is how strongly they show, Spacing how far apart they sit and Size how wide each one is — both in INCHES, a real bird's eye being about a fifth of an inch across; Spacing is measured one foot out from the pith, so eyes crowd together towards the centre and spread apart towards the bark — a bigger tree carries more of them, not wider-spaced ones. Depth is how far the rings dip into it, counted in RING WIDTHS — at 2.4 two or three ring boundaries curve into each eye, which is what draws those little contour circles. The dimple is a cone rather than a soft well, so those circles come out evenly spaced.",
   "ui.wood-fibre-note": "Ribbon, curl and quilt are not ring effects — they are fibre direction, and they are optical rather than geometric. Wood reflects far more light along the fibre than across it, so where fibres dive into the cut face it reads dark and where they lie along it, light. Figure is how strongly that shows at all. Spiral is a steady helical wind about the trunk; Interlock is the same angle alternating its sign every few years, which is what mahogany is; Curl is a transverse undulation, which is fiddleback. Turn the light angle and the ribbon reverses — that is the tell that it is modelled rather than painted, and end grain shows none of it because every fibre meets that surface square on.",
   "ui.wood-growth-note": "These are the numbers a species actually differs by. Juvenile is how wide the first rings are, Settles how fast that fades, and Mature the width it lands on. Scatter is year-to-year variation; Bad years is how often a pinched run comes and how deep. Latewood is what fraction of each ring is the dark band and Edge how abruptly it starts — a fir has a narrow, violently sharp band and a maple a soft, almost invisible one.",
   "ui.wood-heart-note": "Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.",
@@ -1361,7 +1361,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.28';
+  const BUILD = '2026.10.10.29';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3919,7 +3919,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     juv: 14, decay: 90, floor: 2.2,               // THE GROWTH CURVE: juvenile surge, how fast it fades, and
     vary: 0.3, dRate: 0.05, dDepth: 0.42,         // the mature width - plus year-to-year scatter and how
                                                   // often a bad run comes, and how bad. Species data, all of it.
-    eyes: 0, eyeSpacing: 0.9, eyeSize: 0.22,      // BIRD'S EYE: point dimples in the cambium, held in the same
+    eyes: 0, eyeSpacing: 1.8, eyeSize: 0.22,      // BIRD'S EYE: point dimples in the cambium, held in the same
     eyeDepth: 1.2,                                // spot year on year so they run outward as needles.
                                                   // Depth is in RING WIDTHS: how many boundaries curve in.
     gloss: 0, fibreSpiral: 0, interlock: 7,       // THE FIBRE FIELD. gloss is how strongly fibre direction
@@ -3970,25 +3970,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                lateFrac: 0.34, lateSharp: 0.30, late: 0.78, sapRings: 30, sapFade: 6,
                drift: 0.30, driftRings: 60, waveAmp: 0.02, waveK: 3,
                gloss: 0.18, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
-               eyes: 0, eyeSpacing: 0.9, eyeSize: 0.22, eyeDepth: 1.2,
+               eyes: 0, eyeSpacing: 1.8, eyeSize: 0.22, eyeDepth: 1.2,
                early: '#dcb286', late_: '#7c4a22', heart: '#9a6334' },
     redwood: { juv: 22, decay: 110, floor: 2.6, vary: 0.34, dRate: 0.05, dDepth: 0.45,
                lateFrac: 0.22, lateSharp: 0.55, late: 0.56, sapRings: 18, sapFade: 10,
                drift: 0.55, driftRings: 120, waveAmp: 0.03, waveK: 2,
                gloss: 0.15, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
-               eyes: 0, eyeSpacing: 0.9, eyeSize: 0.22, eyeDepth: 1.2,
+               eyes: 0, eyeSpacing: 1.8, eyeSize: 0.22, eyeDepth: 1.2,
                early: '#d79a6a', late_: '#8a3f22', heart: '#7b3519' },
     oak:     { juv: 13, decay: 80, floor: 1.9, vary: 0.30, dRate: 0.07, dDepth: 0.40,
                lateFrac: 0.62, lateSharp: 0.18, late: 0.60, sapRings: 14, sapFade: 5,
                drift: 0.35, driftRings: 80, waveAmp: 0.035, waveK: 4,
                gloss: 0.22, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
-               eyes: 0, eyeSpacing: 0.9, eyeSize: 0.22, eyeDepth: 1.2,
+               eyes: 0, eyeSpacing: 1.8, eyeSize: 0.22, eyeDepth: 1.2,
                early: '#d9bd8e', late_: '#8a6a38', heart: '#9b7a44' },
     maple:   { juv: 9, decay: 70, floor: 1.7, vary: 0.22, dRate: 0.04, dDepth: 0.55,
                lateFrac: 0.16, lateSharp: 1.60, late: 0.18, sapRings: 90, sapFade: 30,
                drift: 0.18, driftRings: 110, waveAmp: 0.015, waveK: 2,
                gloss: 0.20, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
-               eyes: 0, eyeSpacing: 0.9, eyeSize: 0.22, eyeDepth: 1.2,
+               eyes: 0, eyeSpacing: 1.8, eyeSize: 0.22, eyeDepth: 1.2,
                early: '#eadcc0', late_: '#cdb48c', heart: '#d6c2a0' },
     // THE FIBRE FIELD'S OWN SPECIES. Mahogany was impossible an hour ago: what makes it mahogany is
     // interlocked grain, not its rings, and a preset without a fibre field would have been a brown
@@ -3998,31 +3998,31 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                lateFrac: 0.18, lateSharp: 1.10, late: 0.26, sapRings: 16, sapFade: 8,
                drift: 0.40, driftRings: 95, waveAmp: 0.02, waveK: 2,
                gloss: 0.85, fibreSpiral: 0, interlock: 11, interlockRings: 9, curl: 0, curlRate: 14,
-               eyes: 0, eyeSpacing: 0.9, eyeSize: 0.22, eyeDepth: 1.2,
+               eyes: 0, eyeSpacing: 1.8, eyeSize: 0.22, eyeDepth: 1.2,
                early: '#b4714a', late_: '#6b2f18', heart: '#7a3a1c' },
     ebony:   { juv: 6, decay: 120, floor: 0.9, vary: 0.18, dRate: 0.02, dDepth: 0.7,
                lateFrac: 0.06, lateSharp: 2.40, late: 0.06, sapRings: 150, sapFade: 40,
                drift: 0.12, driftRings: 140, waveAmp: 0.05, waveK: 3,
                gloss: 0.25, fibreSpiral: 0, interlock: 3, interlockRings: 20, curl: 0, curlRate: 14,
-               eyes: 0, eyeSpacing: 0.9, eyeSize: 0.22, eyeDepth: 1.2,
+               eyes: 0, eyeSpacing: 1.8, eyeSize: 0.22, eyeDepth: 1.2,
                early: '#2a211b', late_: '#16100c', heart: '#120c09' },
     curly:   { juv: 9, decay: 70, floor: 1.7, vary: 0.22, dRate: 0.04, dDepth: 0.55,
                lateFrac: 0.16, lateSharp: 1.60, late: 0.18, sapRings: 90, sapFade: 30,
                drift: 0.18, driftRings: 110, waveAmp: 0.015, waveK: 2,
                gloss: 1.10, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 13, curlRate: 46,
-               eyes: 0, eyeSpacing: 0.9, eyeSize: 0.22, eyeDepth: 1.2,
+               eyes: 0, eyeSpacing: 1.8, eyeSize: 0.22, eyeDepth: 1.2,
                early: '#eadcc0', late_: '#cdb48c', heart: '#d6c2a0' },
     birdseye:{ juv: 9, decay: 70, floor: 1.7, vary: 0.22, dRate: 0.04, dDepth: 0.55,
                lateFrac: 0.16, lateSharp: 1.60, late: 0.18, sapRings: 90, sapFade: 30,
                drift: 0.18, driftRings: 110, waveAmp: 0.015, waveK: 2,
                gloss: 0.95, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
-               eyes: 1.1, eyeSpacing: 0.6, eyeSize: 0.2, eyeDepth: 2.4,
+               eyes: 1.1, eyeSpacing: 1.2, eyeSize: 0.2, eyeDepth: 2.4,
                early: '#ecdcbe', late_: '#c9ad84', heart: '#d8c4a2' },
     walnut:  { juv: 12, decay: 75, floor: 2.0, vary: 0.28, dRate: 0.06, dDepth: 0.44,
                lateFrac: 0.40, lateSharp: 0.45, late: 0.42, sapRings: 10, sapFade: 4,
                drift: 0.70, driftRings: 70, waveAmp: 0.03, waveK: 3,
                gloss: 0.35, fibreSpiral: 0, interlock: 2, interlockRings: 16, curl: 0, curlRate: 14,
-               eyes: 0, eyeSpacing: 0.9, eyeSize: 0.22, eyeDepth: 1.2,
+               eyes: 0, eyeSpacing: 1.8, eyeSize: 0.22, eyeDepth: 1.2,
                early: '#b08a5e', late_: '#4a2f1c', heart: '#3d2415' },
   };
   function applySpecies(k) {
@@ -4271,10 +4271,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const WAVY = WOOD.waveAmp > 0;                           // zero skips the recurrence, not just the result
     const FSP = F.fsp, FCZ = F.fcz, UREL = F.urel, RWL = F.rwl, GLOSS = WOOD.gloss;
     const EYES = WOOD.eyes;
-    // Spacing is a DISTANCE AT THE BARK, so it is set where boards are actually cut from. The grid
-    // itself stays angular - a fixed count round the trunk - which is the one place this still
-    // differs from a real tree, where new eyes appear between the old as the cambium stretches.
-    const ECELL = Math.max(WOOD.eyeSpacing * WOOD_IN / Math.max(F.R, 1e-6), 0.002);
+    // Spacing is a DISTANCE AT ONE FOOT OF RADIUS, and the reference has to be a CONSTANT.
+    //
+    // It was F.R, the bark radius - which is the sum of every ring, so adding rings at the bark
+    // changed the angular cell and moved eyes DEEP INSIDE the log. A board that never comes near the
+    // live edge cannot be allowed to know how big the tree is, and that one broke it: 125,557 pixels
+    // moved between a 180-ring and a 400-ring log on a board sitting at radius 0.2. With eyes off the
+    // same comparison is 0, which is how the eye grid was identified as the only cause.
+    //
+    // Anchored to the declared unit instead, eyes sit a fixed physical distance apart at one foot out
+    // and the COUNT grows with the tree - which is also the right answer if trunk ever becomes a
+    // control, because a bigger tree carries more eyes, not wider-spaced ones.
+    const ECELL = Math.max(WOOD.eyeSpacing * WOOD_IN / WOOD_FT, 0.002);
     const ERADFT = Math.max(WOOD.eyeSize, 0.02) * WOOD_IN * 0.5;        // a diameter in inches -> a radius in feet
     // The face normal, which the two views set for themselves. Figure is an angle BETWEEN the fibre
     // and the surface, so the surface has to be part of the question.
