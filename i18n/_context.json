@@ -1654,6 +1654,36 @@
   ],
   "where": "slider: how many rings the conversion from sapwood to heartwood takes - how abrupt the boundary looks"
  },
+ "sl.wood-devAmp": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how far the growth rings bulge away from being circles"
+ },
+ "sl.wood-devAngle": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: which way round the trunk the bulge points, in degrees"
+ },
+ "sl.wood-devSpread": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how much of the trunk's circumference the bulge covers - narrow is a lump, wide is a lean"
+ },
+ "sl.wood-devStart": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: the ring at which the bulge begins to form. Everything inside it stays round"
+ },
+ "sl.wood-devRamp": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how many rings the bulge takes to come fully on"
+ },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
@@ -2070,6 +2100,13 @@
    "wood"
   ],
   "where": "explanatory note above the two heartwood sliders"
+ },
+ "ui.wood-dev-note": {
+  "terms": [
+   "pith",
+   "wood"
+  ],
+  "where": "explanatory note above the five eccentricity sliders"
  },
  "unit.in": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
