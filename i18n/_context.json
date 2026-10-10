@@ -1925,6 +1925,30 @@
   ],
   "where": "slider: how tightly that undulation repeats along the trunk"
  },
+ "sl.wood-eyes": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how strongly the bird's-eye dimples show. 0 draws none"
+ },
+ "sl.wood-eyeSpacing": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how far apart the dimples sit on the cambium"
+ },
+ "sl.wood-eyeSize": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how wide each dimple is, as a fraction of the spacing"
+ },
+ "sl.wood-eyeDepth": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how far the growth rings dip into a dimple - the dip is what makes the little concentric circles"
+ },
  "sp.fir": {
   "terms": [
    "wood"
@@ -1973,6 +1997,12 @@
    "wood"
   ],
   "where": "species preset button: a tropical wood with no reliable annual rings, which is the case the model otherwise assumes away"
+ },
+ "sp.birdseye": {
+  "terms": [
+   "wood"
+  ],
+  "where": "species preset button: a maple whose cambium carries dimples, so the board shows small eyes"
  },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
@@ -2439,6 +2469,12 @@
    "knot"
   ],
   "where": "explanatory note above the six fibre-field sliders"
+ },
+ "ui.wood-eye-note": {
+  "terms": [
+   "wood"
+  ],
+  "where": "explanatory note above the four bird's-eye sliders"
  },
  "unit.in": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"

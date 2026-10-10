@@ -435,6 +435,7 @@
       <button type="button" data-species="walnut" data-i18n="sp.walnut">Black walnut</button>
       <button type="button" data-species="mahogany" data-i18n="sp.mahogany">Mahogany</button>
       <button type="button" data-species="curly" data-i18n="sp.curly">Curly maple</button>
+      <button type="button" data-species="birdseye" data-i18n="sp.birdseye">Bird's eye</button>
       <button type="button" data-species="ebony" data-i18n="sp.ebony">Ebony</button>
     </div>
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-species-note">A species is a row of numbers, not a mode. Pressing one writes every control below and the three wood colours, and you carry on dragging from there. These are eyeballed starting points informed by wood anatomy, not measurements — the place measured ring widths would land is exactly here.</span></div>
@@ -462,6 +463,11 @@
       <div class="sl"><label for="wood-interlockRings"><span data-i18n="sl.wood-interlockRings">Interlock period</span> <output id="wood-interlockRingsV"></output></label><input id="wood-interlockRings" type="range" min="2" max="120" step="1"></div>
       <div class="sl"><label for="wood-curl"><span data-i18n="sl.wood-curl">Curl</span> <output id="wood-curlV"></output></label><input id="wood-curl" type="range" min="0" max="30" step="0.5"></div>
       <div class="sl"><label for="wood-curlRate"><span data-i18n="sl.wood-curlRate">Curl rate</span> <output id="wood-curlRateV"></output></label><input id="wood-curlRate" type="range" min="0" max="120" step="0.5"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-eye-note">A bird's eye is not a mark on the surface. It is a small dimple in the cambium that the tree keeps re-making in the same spot year on year, so it runs outward as a needle pointing at the pith. Cut across those needles on a flatsawn face and you see the eyes; cut along them and you see almost nothing, which is why bird's eye hides on quartersawn. Eyes is how strongly they show, Spacing how far apart they sit, Size how wide each one is and Depth how far the rings dip into it — the dip is what bunches the ring boundaries into those little circles.</span></div>
+      <div class="sl"><label for="wood-eyes"><span data-i18n="sl.wood-eyes">Eyes</span> <output id="wood-eyesV"></output></label><input id="wood-eyes" type="range" min="0" max="2" step="0.02"></div>
+      <div class="sl"><label for="wood-eyeSpacing"><span data-i18n="sl.wood-eyeSpacing">Eye spacing</span> <output id="wood-eyeSpacingV"></output></label><input id="wood-eyeSpacing" type="range" min="0.008" max="0.3" step="0.002"></div>
+      <div class="sl"><label for="wood-eyeSize"><span data-i18n="sl.wood-eyeSize">Eye size</span> <output id="wood-eyeSizeV"></output></label><input id="wood-eyeSize" type="range" min="0.05" max="0.95" step="0.01"></div>
+      <div class="sl"><label for="wood-eyeDepth"><span data-i18n="sl.wood-eyeDepth">Eye depth</span> <output id="wood-eyeDepthV"></output></label><input id="wood-eyeDepth" type="range" min="0" max="3" step="0.05"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-pith-note">The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.</span></div>
       <div class="sl"><label for="wood-lean"><span data-i18n="sl.wood-lean">Pith lean</span> <output id="wood-leanV"></output></label><input id="wood-lean" type="range" min="-0.25" max="0.25" step="0.002"></div>
       <div class="sl"><label for="wood-leanFine"><span data-i18n="sl.wood-leanFine">Lean ripple</span> <output id="wood-leanFineV"></output></label><input id="wood-leanFine" type="range" min="-0.15" max="0.15" step="0.001"></div>
@@ -950,6 +956,10 @@ window.SA_I18N = (() => {
   "sl.wood-interlockRings": "Interlock period",
   "sl.wood-curl": "Curl",
   "sl.wood-curlRate": "Curl rate",
+  "sl.wood-eyes": "Eyes",
+  "sl.wood-eyeSpacing": "Eye spacing",
+  "sl.wood-eyeSize": "Eye size",
+  "sl.wood-eyeDepth": "Eye depth",
   "sl.wood-lean": "Pith lean",
   "sl.wood-leanFine": "Lean ripple",
   "sl.wood-wander": "Pith wander",
@@ -986,6 +996,7 @@ window.SA_I18N = (() => {
   "sp.walnut": "Black walnut",
   "sp.mahogany": "Mahogany",
   "sp.curly": "Curly maple",
+  "sp.birdseye": "Bird's eye",
   "sp.ebony": "Ebony",
   "sl.spotR": "Beam size",
   "sl.spread": "Spread",
@@ -1092,6 +1103,7 @@ window.SA_I18N = (() => {
   "ui.wood-dev2-note": "The second feature is a branch rather than a second lean, and the only difference is that it has a place along the trunk. At indicates where, Reach how far it carries either side. Walk the board past it and the grain sweeps around the branch and then straightens again, because outside the window the feature is not there at all.",
   "ui.wood-wave-note": "The wave family is what makes a tree a species rather than a setting. Three waves round the trunk and along it, shared by every axis the tree has — branches included, which is why a knot looks like it came from this tree. Out of round is how far they push, Lobes how many swellings go round the trunk, Travel how fast they move along it. An interference year is a kink in the family rather than a second mechanism: Anchor is when, Over how long, and To what the amplitude becomes. It ramps, because a step reads as an edit and a ramp reads as growth, and nothing before the anchor moves.",
   "ui.wood-dev-note": "Rings are circles until this is turned up. Eccentricity is how far they bulge off round, and it ACCUMULATES: a bulge grown in year 60 is still in the surface at year 220, because every later ring was laid on top of it. From and Over say which years it came on. Direction aims it, Breadth sets how much of the trunk it covers. This is the thing a branch, a lean or a buried wound all need.",
+  "ui.wood-eye-note": "A bird's eye is not a mark on the surface. It is a small dimple in the cambium that the tree keeps re-making in the same spot year on year, so it runs outward as a needle pointing at the pith. Cut across those needles on a flatsawn face and you see the eyes; cut along them and you see almost nothing, which is why bird's eye hides on quartersawn. Eyes is how strongly they show, Spacing how far apart they sit, Size how wide each one is and Depth how far the rings dip into it — the dip is what bunches the ring boundaries into those little circles.",
   "ui.wood-fibre-note": "Ribbon, curl and quilt are not ring effects — they are fibre direction, and they are optical rather than geometric. Wood reflects far more light along the fibre than across it, so where fibres dive into the cut face it reads dark and where they lie along it, light. Figure is how strongly that shows at all. Spiral is a steady helical wind about the trunk; Interlock is the same angle alternating its sign every few years, which is what mahogany is; Curl is a transverse undulation, which is fiddleback. Turn the light angle and the ribbon reverses — that is the tell that it is modelled rather than painted, and end grain shows none of it because every fibre meets that surface square on.",
   "ui.wood-growth-note": "These are the numbers a species actually differs by. Juvenile is how wide the first rings are, Settles how fast that fades, and Mature the width it lands on. Scatter is year-to-year variation; Bad years is how often a pinched run comes and how deep. Latewood is what fraction of each ring is the dark band and Edge how abruptly it starts — a fir has a narrow, violently sharp band and a maple a soft, almost invisible one.",
   "ui.wood-heart-note": "Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.",
@@ -1349,7 +1361,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.20';
+  const BUILD = '2026.10.10.22';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3897,6 +3909,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     juv: 14, decay: 90, floor: 2.2,               // THE GROWTH CURVE: juvenile surge, how fast it fades, and
     vary: 0.3, dRate: 0.05, dDepth: 0.42,         // the mature width - plus year-to-year scatter and how
                                                   // often a bad run comes, and how bad. Species data, all of it.
+    eyes: 0, eyeSpacing: 0.055, eyeSize: 0.45,    // BIRD'S EYE: point dimples in the cambium, held in the same
+    eyeDepth: 0.5,                                // spot year on year so they run outward as needles
     gloss: 0, fibreSpiral: 0, interlock: 7,       // THE FIBRE FIELD. gloss is how strongly fibre direction
     interlockRings: 12, curl: 0, curlRate: 14,    // shows at all; spiral is a steady helical wind, interlock
                                                   // the same angle ALTERNATING every few years (mahogany),
@@ -3945,21 +3959,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                lateFrac: 0.34, lateSharp: 0.30, late: 0.78, sapRings: 30, sapFade: 6,
                drift: 0.30, driftRings: 60, waveAmp: 0.02, waveK: 3,
                gloss: 0.18, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
+               eyes: 0, eyeSpacing: 0.055, eyeSize: 0.45, eyeDepth: 0.5,
                early: '#dcb286', late_: '#7c4a22', heart: '#9a6334' },
     redwood: { juv: 22, decay: 110, floor: 2.6, vary: 0.34, dRate: 0.05, dDepth: 0.45,
                lateFrac: 0.22, lateSharp: 0.55, late: 0.56, sapRings: 18, sapFade: 10,
                drift: 0.55, driftRings: 120, waveAmp: 0.03, waveK: 2,
                gloss: 0.15, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
+               eyes: 0, eyeSpacing: 0.055, eyeSize: 0.45, eyeDepth: 0.5,
                early: '#d79a6a', late_: '#8a3f22', heart: '#7b3519' },
     oak:     { juv: 13, decay: 80, floor: 1.9, vary: 0.30, dRate: 0.07, dDepth: 0.40,
                lateFrac: 0.62, lateSharp: 0.18, late: 0.60, sapRings: 14, sapFade: 5,
                drift: 0.35, driftRings: 80, waveAmp: 0.035, waveK: 4,
                gloss: 0.22, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
+               eyes: 0, eyeSpacing: 0.055, eyeSize: 0.45, eyeDepth: 0.5,
                early: '#d9bd8e', late_: '#8a6a38', heart: '#9b7a44' },
     maple:   { juv: 9, decay: 70, floor: 1.7, vary: 0.22, dRate: 0.04, dDepth: 0.55,
                lateFrac: 0.16, lateSharp: 1.60, late: 0.18, sapRings: 90, sapFade: 30,
                drift: 0.18, driftRings: 110, waveAmp: 0.015, waveK: 2,
                gloss: 0.20, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
+               eyes: 0, eyeSpacing: 0.055, eyeSize: 0.45, eyeDepth: 0.5,
                early: '#eadcc0', late_: '#cdb48c', heart: '#d6c2a0' },
     // THE FIBRE FIELD'S OWN SPECIES. Mahogany was impossible an hour ago: what makes it mahogany is
     // interlocked grain, not its rings, and a preset without a fibre field would have been a brown
@@ -3969,21 +3987,31 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                lateFrac: 0.18, lateSharp: 1.10, late: 0.26, sapRings: 16, sapFade: 8,
                drift: 0.40, driftRings: 95, waveAmp: 0.02, waveK: 2,
                gloss: 0.85, fibreSpiral: 0, interlock: 11, interlockRings: 9, curl: 0, curlRate: 14,
+               eyes: 0, eyeSpacing: 0.055, eyeSize: 0.45, eyeDepth: 0.5,
                early: '#b4714a', late_: '#6b2f18', heart: '#7a3a1c' },
     ebony:   { juv: 6, decay: 120, floor: 0.9, vary: 0.18, dRate: 0.02, dDepth: 0.7,
                lateFrac: 0.06, lateSharp: 2.40, late: 0.06, sapRings: 150, sapFade: 40,
                drift: 0.12, driftRings: 140, waveAmp: 0.05, waveK: 3,
                gloss: 0.25, fibreSpiral: 0, interlock: 3, interlockRings: 20, curl: 0, curlRate: 14,
+               eyes: 0, eyeSpacing: 0.055, eyeSize: 0.45, eyeDepth: 0.5,
                early: '#2a211b', late_: '#16100c', heart: '#120c09' },
     curly:   { juv: 9, decay: 70, floor: 1.7, vary: 0.22, dRate: 0.04, dDepth: 0.55,
                lateFrac: 0.16, lateSharp: 1.60, late: 0.18, sapRings: 90, sapFade: 30,
                drift: 0.18, driftRings: 110, waveAmp: 0.015, waveK: 2,
                gloss: 1.10, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 13, curlRate: 46,
+               eyes: 0, eyeSpacing: 0.055, eyeSize: 0.45, eyeDepth: 0.5,
                early: '#eadcc0', late_: '#cdb48c', heart: '#d6c2a0' },
+    birdseye:{ juv: 9, decay: 70, floor: 1.7, vary: 0.22, dRate: 0.04, dDepth: 0.55,
+               lateFrac: 0.16, lateSharp: 1.60, late: 0.18, sapRings: 90, sapFade: 30,
+               drift: 0.18, driftRings: 110, waveAmp: 0.015, waveK: 2,
+               gloss: 0.95, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
+               eyes: 1.1, eyeSpacing: 0.05, eyeSize: 0.42, eyeDepth: 1.2,
+               early: '#ecdcbe', late_: '#c9ad84', heart: '#d8c4a2' },
     walnut:  { juv: 12, decay: 75, floor: 2.0, vary: 0.28, dRate: 0.06, dDepth: 0.44,
                lateFrac: 0.40, lateSharp: 0.45, late: 0.42, sapRings: 10, sapFade: 4,
                drift: 0.70, driftRings: 70, waveAmp: 0.03, waveK: 3,
                gloss: 0.35, fibreSpiral: 0, interlock: 2, interlockRings: 16, curl: 0, curlRate: 14,
+               eyes: 0, eyeSpacing: 0.055, eyeSize: 0.45, eyeDepth: 0.5,
                early: '#b08a5e', late_: '#4a2f1c', heart: '#3d2415' },
   };
   function applySpecies(k) {
@@ -4163,6 +4191,38 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz });
   }
+  // A rational atan2, good to under half a degree and costing about ten multiplies. The eye grid needs
+  // the ANGLE, and the painter only ever has its cosine and sine; this is the one place in the wood
+  // path that wants a transcendental, so it approximates one instead of calling it.
+  function woodAtan2(y, x) {
+    const ax = x < 0 ? -x : x, ay = y < 0 ? -y : y;
+    const mn = ax < ay ? ax : ay, mx = ax < ay ? ay : ax;
+    const a = mn / (mx + 1e-12);
+    let r = a * (0.7853981634 - (a - 1) * (0.2447 + 0.0663 * a));
+    if (ay > ax) r = 1.5707963268 - r;
+    if (x < 0) r = 3.1415926536 - r;
+    return y < 0 ? -r : r;
+  }
+  // How deep into an eye this point sits, 0 outside. A jittered grid over (theta, z): the containing
+  // cell plus its eight neighbours, because an eye near a boundary reaches across it.
+  function woodEye(th, zp, cell, rad2) {
+    const gx = Math.floor(th / cell), gy = Math.floor(zp / cell);
+    let best = 0;
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const cx2 = gx + i, cy2 = gy + j;
+      // Jitter near the full half-cell, or the grid shows: at 0.7 the eyes sat in visible diagonal
+      // rows, which is the one thing real bird's eye never does. 0.92 is as far as it can go while
+      // the nine cells checked still cover every eye that could reach this point.
+      const jx = (cx2 + 0.5 + (woodHash(cx2, cy2) - 0.5) * 0.92) * cell;
+      const jy = (cy2 + 0.5 + (woodHash(cy2, cx2 + 7919) - 0.5) * 0.92) * cell;
+      // and each eye its own size, because a field of identical dots reads as a pattern, not as wood
+      const sz = 0.45 + 1.1 * woodHash(cx2 + 104729, cy2 + 31337);
+      const r2 = rad2 * sz * sz;
+      const dx = th - jx, dy = zp - jy, d2 = dx * dx + dy * dy;
+      if (d2 < r2) { const u = 1 - d2 / r2; if (u > best) best = u; }
+    }
+    return best * best;                                  // smooth at the rim, peaked at the centre
+  }
   function woodHash(a, b) {                   // keyed to quantised SLAB position, so tiles agree
     let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
     h = Math.imul(h ^ (h >>> 13), 1274126177) | 0;
@@ -4182,6 +4242,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const WV = F.WV, WVA = F.wv, WK = F.WK, NW = F.NW;       // the tree's wave family and its anchored envelope
     const WAVY = WOOD.waveAmp > 0;                           // zero skips the recurrence, not just the result
     const FSP = F.fsp, FCZ = F.fcz, GLOSS = WOOD.gloss;
+    const EYES = WOOD.eyes, ECELL = Math.max(WOOD.eyeSpacing, 0.004);
+    const ERAD2 = Math.pow(ECELL * Math.max(WOOD.eyeSize, 0.02), 2);
     // The face normal, which the two views set for themselves. Figure is an angle BETWEEN the fibre
     // and the surface, so the surface has to be part of the question.
     const pn = [1, 0, 0];
@@ -4207,12 +4269,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // A feature's strength is its amplitude times its angular lobe times its z window. The last is
       // how a branch is present at one place and gone at the next. The sum runs over the list, so
       // this never learns how many features there are.
-      let li;
-      if (NF || WAVY) {
+      let li, eyeHold = 0;
+      if (NF || WAVY || EYES) {
         const inv = 1 / (rad || 1e-9);
         // THE WAVE FAMILY, with cos and sin of theta taken straight from the offset - no atan2. The
         // harmonics come from the Chebyshev recurrence, which is where the "integer wavenumber"
         // constraint earns its keep: k, 2k and 3k are three more multiplies each, not three sines.
+        // The eye depends on WHERE on the cambium this point is, not on which ring, so it is found
+        // once per pixel and reused by both passes of the inversion below.
+        let eyeG = 0;
+        if (EYES) eyeG = eyeHold = woodEye(woodAtan2(ddy, ddx), zp, ECELL, ERAD2);
         let wsum = 0;
         if (WAVY) {
           const ct = ddx * inv, st = ddy * inv;
@@ -4229,10 +4295,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           const f = FE[q], ca = (ddx * f.ux + ddy * f.uy) * inv;
           sq[q] = f.amp * f.al[((ca + 1) * 0.5 * (NA - 1)) | 0] * f.zw[zi];
         }
-        let gi = (rad * KS) | 0, dv = wsum * WVA[gi];
+        // The dimple moves the surface INWARD, the one direction the foam model otherwise forbids.
+        // Bounded to a fraction of a ring so the layers still cannot cross.
+        const eyeD = eyeG * EYES * WOOD.eyeDepth * 0.004;
+        let gi = (rad * KS) | 0, dv = wsum * WVA[gi] - eyeD;
         for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
         let rr = rad - dv;
-        gi = (rr > 0 ? rr * KS : 0) | 0; dv = wsum * WVA[gi];
+        gi = (rr > 0 ? rr * KS : 0) | 0; dv = wsum * WVA[gi] - eyeD;
         for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
         rr = rad - dv;
         li = (rr > 0 ? rr * KS : 0) | 0;
@@ -4259,7 +4328,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         const iv2 = 1 / (rad || 1e-9), rx = ddx * iv2, ry = ddy * iv2;
         const dNr = rx * pn[0] + ry * pn[1];                   // radial . normal
         const dNt = -ry * pn[0] + rx * pn[1];                  // tangential . normal
-        const m = 1 + GLOSS * LIT * (FSP[li] * dNt + FCZ[zi] * dNr);
+        // The fibre tilts into the dimple, so an eye darkens through the SAME dive term the ribbon
+        // uses rather than through a second optical model bolted on beside it.
+        const m = 1 + GLOSS * LIT * (FSP[li] * dNt + FCZ[zi] * dNr) - GLOSS * eyeHold * EYES * 0.55;
         cr *= m; cg *= m; cb *= m;
       }
       // THE KNOT FACE. Everything above drew wood around the branch; this is the branch itself, where
@@ -5429,7 +5500,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   lateSharp: v => (+v).toFixed(2), gloss: v => (+v).toFixed(2),
                   fibreSpiral: v => `${(+v).toFixed(1)}\u00b0`, interlock: v => `${(+v).toFixed(1)}\u00b0`,
                   interlockRings: v => `${Math.round(v)}`, curl: v => `${(+v).toFixed(1)}\u00b0`,
-                  curlRate: v => (+v).toFixed(1),
+                  curlRate: v => (+v).toFixed(1), eyes: v => (+v).toFixed(2),
+                  eyeSpacing: v => (+v).toFixed(3), eyeSize: v => (+v).toFixed(2),
+                  eyeDepth: v => (+v).toFixed(2),
                   waveK: v => `${Math.round(v)}`, waveZ: v => (+v).toFixed(2),
                   anchorAt: v => `${Math.round(v)}`, anchorOver: v => `${Math.round(v)}`,
                   anchorTo: v => `${(+v).toFixed(2)}\u00d7`,
