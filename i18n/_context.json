@@ -966,6 +966,13 @@
   ],
   "where": "colour token: the dead, chemically altered wood at the centre of a log"
  },
+ "lay.wood-knot": {
+  "terms": [
+   "knot",
+   "wood"
+  ],
+  "where": "colour token: the face of the branch itself where a cut passes through it"
+ },
  "lbl.edit": {
   "where": "in the \"Edit\" group/panel"
  },
@@ -1733,6 +1740,18 @@
   ],
   "where": "slider: how many rings the branch takes to come fully on"
  },
+ "sl.wood-dev2Knot": {
+  "terms": [
+   "knot"
+  ],
+  "where": "slider: how fast the branch cone widens, which sets how big the knot face is. 0 draws no face"
+ },
+ "sl.wood-dev2KnotPitch": {
+  "terms": [
+   "knot"
+  ],
+  "where": "slider: how tight the branch's own growth rings are inside the knot face"
+ },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
@@ -2163,6 +2182,13 @@
    "wood"
   ],
   "where": "explanatory note above the seven branch sliders"
+ },
+ "ui.wood-knot-note": {
+  "terms": [
+   "knot",
+   "wood"
+  ],
+  "where": "explanatory note above the two knot sliders"
  },
  "unit.in": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
