@@ -1889,6 +1889,42 @@
   ],
   "where": "slider: how abruptly the latewood begins - sharp in a fir, soft in a maple"
  },
+ "sl.wood-gloss": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how strongly fibre direction shows as light and dark at all. 0 draws no figure"
+ },
+ "sl.wood-fibreSpiral": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: a steady helical wind of the fibres about the trunk, in degrees"
+ },
+ "sl.wood-interlock": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how far the spiral angle swings when it alternates - interlocked grain, which is what gives ribbon figure"
+ },
+ "sl.wood-interlockRings": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how many years the spiral takes to reverse and come back"
+ },
+ "sl.wood-curl": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how far the fibres undulate across the trunk - fiddleback and quilt"
+ },
+ "sl.wood-curlRate": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how tightly that undulation repeats along the trunk"
+ },
  "sp.fir": {
   "terms": [
    "wood"
@@ -1918,6 +1954,25 @@
    "wood"
   ],
   "where": "species preset button: writes every wood control at once"
+ },
+ "sp.mahogany": {
+  "terms": [
+   "wood",
+   "knot"
+  ],
+  "where": "species preset button: only possible once there is a fibre field, because interlocked grain is what mahogany IS"
+ },
+ "sp.curly": {
+  "terms": [
+   "wood"
+  ],
+  "where": "species preset button: a maple whose fibre undulates transversely - fiddleback figure"
+ },
+ "sp.ebony": {
+  "terms": [
+   "wood"
+  ],
+  "where": "species preset button: a tropical wood with no reliable annual rings, which is the case the model otherwise assumes away"
  },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
@@ -2377,6 +2432,13 @@
    "wood"
   ],
   "where": "note above the eight growth-curve sliders"
+ },
+ "ui.wood-fibre-note": {
+  "terms": [
+   "wood",
+   "knot"
+  ],
+  "where": "explanatory note above the six fibre-field sliders"
  },
  "unit.in": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"

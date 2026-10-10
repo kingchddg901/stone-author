@@ -433,6 +433,9 @@
       <button type="button" data-species="oak" data-i18n="sp.oak">White oak</button>
       <button type="button" data-species="maple" data-i18n="sp.maple">Hard maple</button>
       <button type="button" data-species="walnut" data-i18n="sp.walnut">Black walnut</button>
+      <button type="button" data-species="mahogany" data-i18n="sp.mahogany">Mahogany</button>
+      <button type="button" data-species="curly" data-i18n="sp.curly">Curly maple</button>
+      <button type="button" data-species="ebony" data-i18n="sp.ebony">Ebony</button>
     </div>
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-species-note">A species is a row of numbers, not a mode. Pressing one writes every control below and the three wood colours, and you carry on dragging from there. These are eyeballed starting points informed by wood anatomy, not measurements — the place measured ring widths would land is exactly here.</span></div>
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-cut-note">On the Log view you can simply drag the cut: a stroke across the section is the plank, and it sets all four of these at once. Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.</span></div>
@@ -452,6 +455,13 @@
       <div class="sl"><label for="wood-dDepth"><span data-i18n="sl.wood-dDepth">How bad</span> <output id="wood-dDepthV"></output></label><input id="wood-dDepth" type="range" min="0.05" max="1" step="0.01"></div>
       <div class="sl"><label for="wood-lateFrac"><span data-i18n="sl.wood-lateFrac">Latewood</span> <output id="wood-lateFracV"></output></label><input id="wood-lateFrac" type="range" min="0.02" max="0.9" step="0.01"></div>
       <div class="sl"><label for="wood-lateSharp"><span data-i18n="sl.wood-lateSharp">Latewood edge</span> <output id="wood-lateSharpV"></output></label><input id="wood-lateSharp" type="range" min="0.05" max="4" step="0.05"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-fibre-note">Ribbon, curl and quilt are not ring effects — they are fibre direction, and they are optical rather than geometric. Wood reflects far more light along the fibre than across it, so where fibres dive into the cut face it reads dark and where they lie along it, light. Figure is how strongly that shows at all. Spiral is a steady helical wind about the trunk; Interlock is the same angle alternating its sign every few years, which is what mahogany is; Curl is a transverse undulation, which is fiddleback. Turn the light angle and the ribbon reverses — that is the tell that it is modelled rather than painted, and end grain shows none of it because every fibre meets that surface square on.</span></div>
+      <div class="sl"><label for="wood-gloss"><span data-i18n="sl.wood-gloss">Figure</span> <output id="wood-glossV"></output></label><input id="wood-gloss" type="range" min="0" max="1.5" step="0.01"></div>
+      <div class="sl"><label for="wood-fibreSpiral"><span data-i18n="sl.wood-fibreSpiral">Spiral</span> <output id="wood-fibreSpiralV"></output></label><input id="wood-fibreSpiral" type="range" min="-20" max="20" step="0.5"></div>
+      <div class="sl"><label for="wood-interlock"><span data-i18n="sl.wood-interlock">Interlock</span> <output id="wood-interlockV"></output></label><input id="wood-interlock" type="range" min="0" max="30" step="0.5"></div>
+      <div class="sl"><label for="wood-interlockRings"><span data-i18n="sl.wood-interlockRings">Interlock period</span> <output id="wood-interlockRingsV"></output></label><input id="wood-interlockRings" type="range" min="2" max="120" step="1"></div>
+      <div class="sl"><label for="wood-curl"><span data-i18n="sl.wood-curl">Curl</span> <output id="wood-curlV"></output></label><input id="wood-curl" type="range" min="0" max="30" step="0.5"></div>
+      <div class="sl"><label for="wood-curlRate"><span data-i18n="sl.wood-curlRate">Curl rate</span> <output id="wood-curlRateV"></output></label><input id="wood-curlRate" type="range" min="0" max="120" step="0.5"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-pith-note">The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.</span></div>
       <div class="sl"><label for="wood-lean"><span data-i18n="sl.wood-lean">Pith lean</span> <output id="wood-leanV"></output></label><input id="wood-lean" type="range" min="-0.25" max="0.25" step="0.002"></div>
       <div class="sl"><label for="wood-leanFine"><span data-i18n="sl.wood-leanFine">Lean ripple</span> <output id="wood-leanFineV"></output></label><input id="wood-leanFine" type="range" min="-0.15" max="0.15" step="0.001"></div>
@@ -934,6 +944,12 @@ window.SA_I18N = (() => {
   "sl.wood-dDepth": "How bad",
   "sl.wood-lateFrac": "Latewood",
   "sl.wood-lateSharp": "Latewood edge",
+  "sl.wood-gloss": "Figure",
+  "sl.wood-fibreSpiral": "Spiral",
+  "sl.wood-interlock": "Interlock",
+  "sl.wood-interlockRings": "Interlock period",
+  "sl.wood-curl": "Curl",
+  "sl.wood-curlRate": "Curl rate",
   "sl.wood-lean": "Pith lean",
   "sl.wood-leanFine": "Lean ripple",
   "sl.wood-wander": "Pith wander",
@@ -968,6 +984,9 @@ window.SA_I18N = (() => {
   "sp.oak": "White oak",
   "sp.maple": "Hard maple",
   "sp.walnut": "Black walnut",
+  "sp.mahogany": "Mahogany",
+  "sp.curly": "Curly maple",
+  "sp.ebony": "Ebony",
   "sl.spotR": "Beam size",
   "sl.spread": "Spread",
   "sl.strength": "Strength",
@@ -1073,6 +1092,7 @@ window.SA_I18N = (() => {
   "ui.wood-dev2-note": "The second feature is a branch rather than a second lean, and the only difference is that it has a place along the trunk. At indicates where, Reach how far it carries either side. Walk the board past it and the grain sweeps around the branch and then straightens again, because outside the window the feature is not there at all.",
   "ui.wood-wave-note": "The wave family is what makes a tree a species rather than a setting. Three waves round the trunk and along it, shared by every axis the tree has — branches included, which is why a knot looks like it came from this tree. Out of round is how far they push, Lobes how many swellings go round the trunk, Travel how fast they move along it. An interference year is a kink in the family rather than a second mechanism: Anchor is when, Over how long, and To what the amplitude becomes. It ramps, because a step reads as an edit and a ramp reads as growth, and nothing before the anchor moves.",
   "ui.wood-dev-note": "Rings are circles until this is turned up. Eccentricity is how far they bulge off round, and it ACCUMULATES: a bulge grown in year 60 is still in the surface at year 220, because every later ring was laid on top of it. From and Over say which years it came on. Direction aims it, Breadth sets how much of the trunk it covers. This is the thing a branch, a lean or a buried wound all need.",
+  "ui.wood-fibre-note": "Ribbon, curl and quilt are not ring effects — they are fibre direction, and they are optical rather than geometric. Wood reflects far more light along the fibre than across it, so where fibres dive into the cut face it reads dark and where they lie along it, light. Figure is how strongly that shows at all. Spiral is a steady helical wind about the trunk; Interlock is the same angle alternating its sign every few years, which is what mahogany is; Curl is a transverse undulation, which is fiddleback. Turn the light angle and the ribbon reverses — that is the tell that it is modelled rather than painted, and end grain shows none of it because every fibre meets that surface square on.",
   "ui.wood-growth-note": "These are the numbers a species actually differs by. Juvenile is how wide the first rings are, Settles how fast that fades, and Mature the width it lands on. Scatter is year-to-year variation; Bad years is how often a pinched run comes and how deep. Latewood is what fraction of each ring is the dark band and Edge how abruptly it starts — a fir has a narrow, violently sharp band and a maple a soft, almost invisible one.",
   "ui.wood-heart-note": "Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.",
   "ui.wood-pith-note": "The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.",
@@ -1329,7 +1349,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.19';
+  const BUILD = '2026.10.10.20';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3877,6 +3897,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     juv: 14, decay: 90, floor: 2.2,               // THE GROWTH CURVE: juvenile surge, how fast it fades, and
     vary: 0.3, dRate: 0.05, dDepth: 0.42,         // the mature width - plus year-to-year scatter and how
                                                   // often a bad run comes, and how bad. Species data, all of it.
+    gloss: 0, fibreSpiral: 0, interlock: 7,       // THE FIBRE FIELD. gloss is how strongly fibre direction
+    interlockRings: 12, curl: 0, curlRate: 14,    // shows at all; spiral is a steady helical wind, interlock
+                                                  // the same angle ALTERNATING every few years (mahogany),
+                                                  // curl a transverse undulation (fiddleback, quilt).
     lateFrac: 0.28, lateSharp: 0.65,              // what fraction of a ring is latewood, and how abrupt the
                                                   // transition is: the difference between a fir and a maple
     plane: 0.27, y0: 0.2, cutAngle: 0,            // WHERE THE CUT STANDS. plane is the whole quarter-to-cathedral
@@ -3920,22 +3944,46 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     fir:     { juv: 11, decay: 65, floor: 1.5, vary: 0.26, dRate: 0.06, dDepth: 0.38,
                lateFrac: 0.34, lateSharp: 0.30, late: 0.78, sapRings: 30, sapFade: 6,
                drift: 0.30, driftRings: 60, waveAmp: 0.02, waveK: 3,
+               gloss: 0.18, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
                early: '#dcb286', late_: '#7c4a22', heart: '#9a6334' },
     redwood: { juv: 22, decay: 110, floor: 2.6, vary: 0.34, dRate: 0.05, dDepth: 0.45,
                lateFrac: 0.22, lateSharp: 0.55, late: 0.56, sapRings: 18, sapFade: 10,
                drift: 0.55, driftRings: 120, waveAmp: 0.03, waveK: 2,
+               gloss: 0.15, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
                early: '#d79a6a', late_: '#8a3f22', heart: '#7b3519' },
     oak:     { juv: 13, decay: 80, floor: 1.9, vary: 0.30, dRate: 0.07, dDepth: 0.40,
                lateFrac: 0.62, lateSharp: 0.18, late: 0.60, sapRings: 14, sapFade: 5,
                drift: 0.35, driftRings: 80, waveAmp: 0.035, waveK: 4,
+               gloss: 0.22, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
                early: '#d9bd8e', late_: '#8a6a38', heart: '#9b7a44' },
     maple:   { juv: 9, decay: 70, floor: 1.7, vary: 0.22, dRate: 0.04, dDepth: 0.55,
                lateFrac: 0.16, lateSharp: 1.60, late: 0.18, sapRings: 90, sapFade: 30,
                drift: 0.18, driftRings: 110, waveAmp: 0.015, waveK: 2,
+               gloss: 0.20, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 0, curlRate: 14,
+               early: '#eadcc0', late_: '#cdb48c', heart: '#d6c2a0' },
+    // THE FIBRE FIELD'S OWN SPECIES. Mahogany was impossible an hour ago: what makes it mahogany is
+    // interlocked grain, not its rings, and a preset without a fibre field would have been a brown
+    // maple. Ebony is the opposite test - a tropical wood with no reliable annual rings at all, so it
+    // asks whether the model degrades or just looks broken when the thing it assumes is absent.
+    mahogany:{ juv: 14, decay: 95, floor: 2.4, vary: 0.24, dRate: 0.03, dDepth: 0.55,
+               lateFrac: 0.18, lateSharp: 1.10, late: 0.26, sapRings: 16, sapFade: 8,
+               drift: 0.40, driftRings: 95, waveAmp: 0.02, waveK: 2,
+               gloss: 0.85, fibreSpiral: 0, interlock: 11, interlockRings: 9, curl: 0, curlRate: 14,
+               early: '#b4714a', late_: '#6b2f18', heart: '#7a3a1c' },
+    ebony:   { juv: 6, decay: 120, floor: 0.9, vary: 0.18, dRate: 0.02, dDepth: 0.7,
+               lateFrac: 0.06, lateSharp: 2.40, late: 0.06, sapRings: 150, sapFade: 40,
+               drift: 0.12, driftRings: 140, waveAmp: 0.05, waveK: 3,
+               gloss: 0.25, fibreSpiral: 0, interlock: 3, interlockRings: 20, curl: 0, curlRate: 14,
+               early: '#2a211b', late_: '#16100c', heart: '#120c09' },
+    curly:   { juv: 9, decay: 70, floor: 1.7, vary: 0.22, dRate: 0.04, dDepth: 0.55,
+               lateFrac: 0.16, lateSharp: 1.60, late: 0.18, sapRings: 90, sapFade: 30,
+               drift: 0.18, driftRings: 110, waveAmp: 0.015, waveK: 2,
+               gloss: 1.10, fibreSpiral: 0, interlock: 0, interlockRings: 12, curl: 13, curlRate: 46,
                early: '#eadcc0', late_: '#cdb48c', heart: '#d6c2a0' },
     walnut:  { juv: 12, decay: 75, floor: 2.0, vary: 0.28, dRate: 0.06, dDepth: 0.44,
                lateFrac: 0.40, lateSharp: 0.45, late: 0.42, sapRings: 10, sapFade: 4,
                drift: 0.70, driftRings: 70, waveAmp: 0.03, waveK: 3,
+               gloss: 0.35, fibreSpiral: 0, interlock: 2, interlockRings: 16, curl: 0, curlRate: 14,
                early: '#b08a5e', late_: '#4a2f1c', heart: '#3d2415' },
   };
   function applySpecies(k) {
@@ -4027,7 +4075,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // anyway.
     const LMAX = 2 * WOOD.trunk, K = 16384;
     const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K), th = new Float32Array(K);
-    const wl = DEV.map(() => new Float32Array(K)), wv = new Float32Array(K);
+    const wl = DEV.map(() => new Float32Array(K)), wv = new Float32Array(K), fsp = new Float32Array(K);
     let k = 0;
     for (let i = 0; i < K; i++) {
       const rad = LMAX * i / (K - 1);
@@ -4048,6 +4096,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       th[i] = Math.max(0, Math.min(1, (ageR - WOOD.sapRings) / Math.max(WOOD.sapFade, 0.001)));
       for (let q = 0; q < DEV.length; q++) wl[q][i] = wring[q][k];
       wv[i] = wring2[k];
+      // The spiral angle, ring by ring. Interlocked grain is this alternating its SIGN - stored as a
+      // tangent because the dive term wants the tangent, and small angles make it nearly the angle.
+      fsp[i] = Math.tan((WOOD.fibreSpiral + WOOD.interlock *
+        Math.sin(6.2832 * k / Math.max(WOOD.interlockRings, 1))) * Math.PI / 180);
     }
     const Z = 1024;
     // THE WAVE FAMILY. Three waves in theta and z, shared by every axis of this tree. The z half of
@@ -4097,13 +4149,19 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     });
     // The axis is a curve, not a line: a lean plus a slow wander. This is what stops straight grain
     // rendering as ruled parallel lines, and it is where cathedral arches come from on a tangent plane.
+    // Curl is a transverse undulation along the trunk, so it belongs to the height grid - the same
+    // place the pith wander and the wave family's z halves live.
+    const fcz = new Float32Array(Z);
+    for (let i = 0; i < Z; i++) {
+      fcz[i] = Math.tan(WOOD.curl * Math.PI / 180 * Math.sin(WOOD.len * i / (Z - 1) * WOOD.curlRate));
+    }
     const pax = new Float32Array(Z), pay = new Float32Array(Z);
     for (let i = 0; i < Z; i++) {
       const z = WOOD.len * i / (Z - 1);
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW });
+    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz });
   }
   function woodHash(a, b) {                   // keyed to quantised SLAB position, so tiles agree
     let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
@@ -4123,6 +4181,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const FE = F.FE, NF = FE.length, NA = F.NA;              // no active feature skips the inversion entirely
     const WV = F.WV, WVA = F.wv, WK = F.WK, NW = F.NW;       // the tree's wave family and its anchored envelope
     const WAVY = WOOD.waveAmp > 0;                           // zero skips the recurrence, not just the result
+    const FSP = F.fsp, FCZ = F.fcz, GLOSS = WOOD.gloss;
+    // The face normal, which the two views set for themselves. Figure is an angle BETWEEN the fibre
+    // and the surface, so the surface has to be part of the question.
+    const pn = [1, 0, 0];
+    // Which way the light rakes across the board. Turn it and the ribbon reverses, because the dark
+    // bands are the fibres diving away from it - that reversal is the whole tell of real figure.
+    const LIT = Math.cos(G.lightAngle * Math.PI / 180);
     const sq = new Float64Array(NF || 1);                    // each feature's strength at the current pixel
     const KN = FE.find(f => f.kn > 0) || null;               // the one feature with a knot face, if any
     // (ddx, ddy) is the offset from the PITH at this height; zi indexes the pith tables; zp is the
@@ -4184,6 +4249,19 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         const s = 0.55 + 0.45 * w;
         cr += (HR * s - cr) * h; cg += (HG * s - cg) * h; cb += (HB * s - cb) * h;
       }
+      // THE FIBRE FIELD, as light rather than as shape. f = zhat + tan(spiral)*thetahat + tan(curl)*rhat,
+      // and what shows is how far it dives into the cut face: f . N. The tangential and radial unit
+      // vectors are ddx/r and ddy/r rotated, so this is two dot products and no transcendental.
+      //
+      // pn[2] is 1 on end grain, where every fibre meets the surface perpendicular and the dive is
+      // uniform: a constant multiply is a brightness change, not figure, so there is nothing to draw.
+      if (GLOSS && !pn[2]) {
+        const iv2 = 1 / (rad || 1e-9), rx = ddx * iv2, ry = ddy * iv2;
+        const dNr = rx * pn[0] + ry * pn[1];                   // radial . normal
+        const dNt = -ry * pn[0] + rx * pn[1];                  // tangential . normal
+        const m = 1 + GLOSS * LIT * (FSP[li] * dNt + FCZ[zi] * dNr);
+        cr *= m; cg *= m; cb *= m;
+      }
       // THE KNOT FACE. Everything above drew wood around the branch; this is the branch itself, where
       // the plane went through it. Its rings are concentric about the BRANCH axis, so they run
       // crosswise to the trunk's - which is the whole reason a knot looks like a knot.
@@ -4226,7 +4304,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       out[2] = cb < 0 ? 0 : cb > 255 ? 255 : cb;
       return true;
     };
-    return { F, KS, ZS, shade };
+    return { F, KS, ZS, shade, pn };
   }
   // The slab rectangle in DEVICE pixels, rounded INWARD to pixel centres. putImageData replaces alpha
   // as well as colour, so a box one pixel wider than the slab would punch a transparent hairline
@@ -4256,13 +4334,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (ident || uvMode) return;
     if (view === 'log') return paintWoodLog();               // the other query on the same field
     const B = woodRect(); if (!B) return;
-    const { F, KS, ZS, shade } = woodSampler();
+    const { F, KS, ZS, shade, pn } = woodSampler();
     const out = [0, 0, 0];
     const [UR, UG, UB] = hexRGB(STONE_BG);                   // beyond the bark there is no board
     // A plane is a NORMAL and an offset; the normal used to be nailed to +x. Rotating it about the
     // trunk axis is two cosines, hoisted, and two multiplies per pixel.
     const phi = WOOD.cutAngle * Math.PI / 180, cux = Math.cos(phi), cuy = Math.sin(phi);
     const pcx = WOOD.plane * cux, pcy = WOOD.plane * cuy;
+    pn[0] = cux; pn[1] = cuy; pn[2] = 0;                     // the board's face: fibres can rake across it
     const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));   // ~2 Mpx of ImageData at a time
     const img = g2d.createImageData(B.bw, band), px = img.data;
     for (let by = B.y0; by < B.y1; by += band) {
@@ -4306,6 +4385,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function paintWoodLog() {
     const B = woodRect(); if (!B) return;
     const S = woodSampler(), F = S.F, G = logGeom(F);
+    S.pn[0] = 0; S.pn[1] = 0; S.pn[2] = 1;                   // end grain: every fibre perpendicular, no figure
     const [UR, UG, UB] = hexRGB(STONE_BG);                   // the surround, so the section reads as an object
     const out = [0, 0, 0];
     const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));
@@ -5346,7 +5426,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   juv: v => (+v).toFixed(1), decay: v => `${Math.round(v)}`, floor: v => (+v).toFixed(1),
                   vary: v => (+v).toFixed(2), dRate: v => `${Math.round(v * 100)}%`,
                   dDepth: v => (+v).toFixed(2), lateFrac: v => `${Math.round(v * 100)}%`,
-                  lateSharp: v => (+v).toFixed(2),
+                  lateSharp: v => (+v).toFixed(2), gloss: v => (+v).toFixed(2),
+                  fibreSpiral: v => `${(+v).toFixed(1)}\u00b0`, interlock: v => `${(+v).toFixed(1)}\u00b0`,
+                  interlockRings: v => `${Math.round(v)}`, curl: v => `${(+v).toFixed(1)}\u00b0`,
+                  curlRate: v => (+v).toFixed(1),
                   waveK: v => `${Math.round(v)}`, waveZ: v => (+v).toFixed(2),
                   anchorAt: v => `${Math.round(v)}`, anchorOver: v => `${Math.round(v)}`,
                   anchorTo: v => `${(+v).toFixed(2)}\u00d7`,
