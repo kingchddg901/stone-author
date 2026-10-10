@@ -71,6 +71,12 @@
   ],
   "where": "accessibility label (aria-label), not visible on screen"
  },
+ "a11y.material": {
+  "terms": [
+   "material"
+  ],
+  "where": "accessible name for the material group (stone or wood), not visible on screen"
+ },
  "a11y.pen": {
   "where": "accessibility label (aria-label), not visible on screen"
  },
@@ -981,6 +987,12 @@
   ],
   "where": "in the \"magnet\" group/panel"
  },
+ "lbl.material": {
+  "terms": [
+   "material"
+  ],
+  "where": "group label above the Stone / Wood buttons"
+ },
  "lbl.pen": {
   "where": "in the \"Pen\" group/panel"
  },
@@ -1067,6 +1079,18 @@
  },
  "mask.win.on": {
   "where": "in the \"Reality window\" group/panel"
+ },
+ "mat.stone": {
+  "terms": [
+   "stone"
+  ],
+  "where": "a material choice button; the stone path, the app's original material"
+ },
+ "mat.wood": {
+  "terms": [
+   "wood"
+  ],
+  "where": "a material choice button; the wood path - sawn timber, not a tree"
  },
  "note.calibrate": {
   "where": "explanatory paragraph inside the Calibrate the pen section"

@@ -46,6 +46,7 @@ const mustMove = [
   }],
   ['a layer switched off', s => { s.layers[5].on = false; }],
   ['the family changed', s => { s.fam = 'granite'; }],
+  ['the material changed to wood', s => { s.material = 'wood'; }],
 ];
 
 // MUST NOT MOVE. Each of these is a claim the app makes out loud.
@@ -66,6 +67,8 @@ const mustNot = [
     'organising the layer list is housekeeping.'],
   ['guidesOn', s => { s.guidesOn = !s.guidesOn; },
     'guides are an editing aid. If this moved the hash they would be in the render, which would be a\n    defect in the RENDERER, not here.'],
+  ['material recorded as stone on a slab that predates materials', s => { s.material = 'stone'; },
+    'THE BACKWARD-COMPATIBILITY CLAIM, as an assertion. Every slab saved before the material fork has\n    no material key, and opening one and saving it back writes material: "stone". That is the same\n    picture, so it must carry the same signature - otherwise adding wood silently re-dated every\n    master in the gallery, which is the one thing renderSig exists to prevent.'],
 ];
 
 console.log(PATH + '   baseline ' + BASE + '   (black light / daylight)');

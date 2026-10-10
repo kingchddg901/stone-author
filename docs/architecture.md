@@ -114,6 +114,33 @@ a dead render back up).
 
 ## How the studio is built
 
+### Materials — one fork, one seam
+
+Stone is path 1; **wood** is path 2. A material supplies a field and a way to query a 2D face out of
+it: stone's query is the identity, because the marks *are* the face; wood's is a plane through a 3D
+growth-ring field around a wandering pith, so the cut is not a property of the board but of **where on
+the plane you stand** — `cos(theta) = p / r`, tangent at `r = p` (plainsawn cathedrals), rift at
+`r ≈ 1.41p`, straightening toward quartersawn as `r` grows. One log yields every cut, and a wide board
+drifts in character across its own width. Nothing stores a board.
+
+The fork lives at **exactly one function**, `paintContent`, between the authored content and everything
+downstream of the face. The coat and light tier, warp, masks, the layer and token spine, tiling, the
+tiled render, the master export, the device seal and i18n are all material-agnostic and must never learn
+which path they are on — tiling especially, since herringbone, basketweave and Versailles are *parquet*
+patterns that came from wood in the first place. `tools/check-material-fork.mjs` fails the build if the
+`MATERIAL` discriminator is read anywhere outside the marked seam.
+
+Two consequences worth stating rather than discovering:
+
+- **Wood replaces the content, not just the ground.** `paintContent` is the whole content pass, so in
+  wood the veins, cracks, specks and drusy do not paint. The marks are still in the slab and come back
+  when you switch to Stone; they are simply not what a board is made of.
+- **Wood paints nothing in the ident pass or under black light.** It has no items to colour by id and
+  no fluorescent minerals. A flat brown in either would be a lie that looks like data.
+
+The material is **serialised** (`material`, alongside `fam`), so it is part of the picture and part of
+the device seal. A slab saved before the fork has no `material` key and loads as stone.
+
 ### Character vs colour
 
 A **family** is character only — the *shape* language (rough, swing, breaks, branches; the granite

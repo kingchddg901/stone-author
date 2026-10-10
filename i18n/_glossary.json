@@ -34,6 +34,24 @@
      "notThe": "a security or access token, a transit token, or a token gesture",
      "ruling": "keep",
      "hint": "design-system vocabulary, kept as \"token\" in IT/FR/DE; the sense is a named setting the user can change and reset"
+    },
+    "material": {
+     "means": "which substance the app is authoring - stone on one path, wood on another; everything downstream of the material fork is deliberately blind to it",
+     "notThe": "cloth or fabric, a building supply, or material in the sense of relevant",
+     "ruling": "translate",
+     "hint": "the sense is substance or medium, as in what a thing is made of"
+    },
+    "stone": {
+     "means": "the stone material path, and the main slab view that shows it",
+     "notThe": "a pebble, a gemstone, or the imperial unit of weight",
+     "ruling": "translate",
+     "hint": "the ordinary word for the substance; the Italian pack already renders the view as Pietra, so match it"
+    },
+    "wood": {
+     "means": "the wood material path: sawn timber, a board milled out of an authored log",
+     "notThe": "a forest or woodland, and not firewood",
+     "ruling": "translate",
+     "hint": "the substance, not the place - legno not bosco (IT), Holz not Wald (DE); French bois covers both, so check the surrounding label reads as timber"
     }
   },
 

@@ -44,11 +44,18 @@ function crc32(u8) {                                     // the app's own, byte 
 // The FIELD ORDER is load-bearing: JSON.stringify writes keys in insertion order, so a reordering here
 // silently produces a different hash for identical state. Kept in the app's order deliberately.
 const FIELDS = ['fam', 'G', 'T', 'layTiles', 'layers', 'soloLay', 'OVR', 'OVR_uv', 'perItem', 'hidden', 'marks'];
+// material is deliberately NOT in FIELDS: it is conditional, and a slab that predates it is not a
+// partial slab. Listing it here would report every existing slab as missing a field.
 
 export function stateSig(slab, lightSpectrum, uvMode, spotOn) {
   const o = {};
   for (const f of FIELDS) o[f] = slab[f];
   o.light = [lightSpectrum, uvMode, spotOn];
+  // LAST, and only for wood. The app adds it the same way and in the same place: a stone slab hashes
+  // byte-identically to before materials existed, which is what keeps every master on disk readable.
+  // A slab saved before materials has no material key at all, and that hashes as stone - correctly, it
+  // IS stone. Moving this line, or dropping the condition, re-dates every signature in the gallery.
+  if (slab.material === 'wood') o.material = slab.material;
   return crc32(new TextEncoder().encode(JSON.stringify(o))).toString(16);
 }
 

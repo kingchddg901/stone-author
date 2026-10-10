@@ -179,6 +179,10 @@
       <h1 data-i18n="app.title">Stone author</h1><span class="build" id="build"></span>
       <p class="sub" data-i18n="app.sub">You draw where the lines go. The family decides what they are.</p>
     </div>
+    <div class="grp" role="group" aria-label="Material" data-i18n-attr="aria-label=a11y.material"><span class="lbl" data-i18n="lbl.material">Material</span>
+      <button id="m-stone" type="button" data-mat="stone" aria-pressed="true" data-i18n="mat.stone">Stone</button>
+      <button id="m-wood" type="button" data-mat="wood" aria-pressed="false" data-i18n="mat.wood">Wood</button>
+    </div>
     <div class="grp" role="group" aria-label="Family" data-i18n-attr="aria-label=a11y.family"><span class="lbl" data-i18n="lbl.family">Family</span>
       <button id="f-carrara" type="button" data-fam="carrara" data-i18n="fam.carrara">Carrara</button>
       <button id="f-calacatta" type="button" data-fam="calacatta" data-i18n="fam.calacatta">Calacatta</button>
@@ -513,6 +517,7 @@ window.SA_I18N = (() => {
   "a11y.island-sense": "Island sense",
   "a11y.lens-type": "Lens type",
   "a11y.magnet-mode": "Magnet mode",
+  "a11y.material": "Material",
   "a11y.pen": "Pen",
   "a11y.reality-window": "Reality window",
   "a11y.slab-name": "Slab name",
@@ -716,6 +721,7 @@ window.SA_I18N = (() => {
   "lbl.lens-type": "Lens type",
   "lbl.crossfade": "Crossfade",
   "lbl.magnet": "Magnet",
+  "lbl.material": "Material",
   "lbl.pen": "Pen",
   "lbl.scatter": "Scatter",
   "lbl.show-through": "Show through",
@@ -737,6 +743,8 @@ window.SA_I18N = (() => {
   "mask.sense.protect": "Protects",
   "mask.win.off": "Off",
   "mask.win.on": "On",
+  "mat.stone": "Stone",
+  "mat.wood": "Wood",
   "note.calibrate": "Twenty short strokes teach the studio <i>your</i> hand: the pressure you actually use, how you normally hold the pen, and what counts as fast for you. Nothing is drawn on the slab while you calibrate, and nothing leaves this device.",
   "note.each-line-keeps-what-it": "<b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw it, so changing them shapes the next line only. This generates the base structure; the colours here are only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor vein grown while zoomed in comes out shorter, at the scale you are working.",
   "note.granite": "<b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space. A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only specks already down are moved, so what you draw first is older rock.",
@@ -1176,7 +1184,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.1';
+  const BUILD = '2026.10.10.3';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3390,8 +3398,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // hexRGB/rgbHex/mixHexAt travel with them: emit blends between spectrum stops and cannot be serialised
     // without them. (This core has no live caller — renderTiledParallel measured a no-op — but a serialised
     // copy that references a function it does not carry is a trap for whoever revives it.)
-    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, hexRGB, rgbHex, mixHexAt, emitAt, idxAt, strainColour, adjOf, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent, paintWoodContent, paintContent, setMaterial };
+    const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, hexRGB, rgbHex, mixHexAt, emitAt, idxAt, strainColour, adjOf, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent, mix, mulberry32, gaussOf, sub,
+      woodField, woodHash, paintWoodContent, paintContent, setMaterial };
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
+    s += `var WOOD=${JSON.stringify(WOOD)};\n`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
     s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;
     s += `var ensureClouds=()=>__cl,ensureBands=()=>__bd,ensureBreccia=()=>__br;\n`;
@@ -3670,15 +3680,144 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // leak, not a proof - it matches the token, so a helper that leaked the value could still defeat it.
   let MATERIAL = 'stone';                       // 'stone' | 'wood' | ...
   function setMaterial(m) { MATERIAL = (m === 'wood') ? 'wood' : 'stone'; }
+  function currentMaterial() { return MATERIAL; }   // saving a slab reads through here, never the token
   function paintContent(ident, angleView) {
     if (MATERIAL === 'wood') return paintWoodContent(ident, angleView);
     return paintStoneContent(ident, angleView);
   }
   // ---- MATERIAL FORK END ------------------------------------------------------------------------
 
-  // Wood path: not wired yet. Falls through to stone rather than painting an empty slab, so the
-  // dispatcher can land and be proven a no-op before the ring field arrives.
-  function paintWoodContent(ident, angleView) { return paintStoneContent(ident, angleView); }
+  // ---- WOOD: author the tree, mill the board ----------------------------------------------------
+  // Path 2. The tree is a 3D growth-ring field around a wandering pith; a board is a plane handed to
+  // that field, and the face is the field's level set on the plane. Nothing stores a board. Where the
+  // plane stands decides the cut, because the angle between ring and face is cos(theta) = p / r: at
+  // r = p the plane is tangent to the ring and you get plainsawn cathedrals, at r = 1.41p you get
+  // RIFT, and as r grows the stripes straighten into quartersawn. One log yields every cut, and a wide
+  // board drifts in character across its own width - which is the whole reason to author the field
+  // rather than the board. Rift first, because rift is the cut with no flake to fake.
+  //
+  // THREE CONSTRAINTS THAT SHAPE EVERY LINE BELOW.
+  // 1. Every value is a function of SLAB COORDINATES, never of pixel index. A tile renders its own
+  //    sub-rectangle on its own canvas under its own transform, so anything keyed to pixels - the
+  //    fibre noise especially - would step at the tile seams. That is why the loop inverts the
+  //    transform rather than walking the canvas.
+  // 2. The field is seeded through sub() like every other field here, so a render stays a pure
+  //    function of the slab. The gallery harness gates byte-identical renders from a fresh load; a
+  //    single Math.random would fail it on the first run.
+  // 3. No per-pixel transcendentals. The pith wander and the ring profile are both sampled into
+  //    lookups once, because a master tile is tens of megapixels and four sin() calls per pixel is
+  //    minutes of nothing.
+  const WOOD = {
+    seed: 770513, rings: 220, trunk: 1,      // trunk radius, in board widths
+    plane: 0.27,                             // how far the cut plane stands from the axis
+    y0: 0.2, wid: 0.44,                      // the strip taken off that plane: r/p runs 1.0 -> 1.4, i.e. RIFT
+    len: 2.4                                 // how far along the trunk the slab reaches
+  };
+  function woodField() {                      // ring profile + pith wander, sampled into lookups
+    if (woodField.c) return woodField.c;      // memo on the function, so the serialised copy carries it
+    const [rnd, gss] = sub(WOOD.seed, 1);
+    const n = WOOD.rings, edge = new Float64Array(n);
+    let acc = 0;
+    for (let i = 0; i < n; i++) {
+      const trend = 14 * Math.exp(-i / 90) + 2.2;      // juvenile surge, then the slow years
+      let w = trend * (1 + 0.3 * gss());
+      if (rnd() < 0.05) w *= 0.42;                     // a pinched year: drought, or a taller neighbour
+      acc += Math.max(w, 0.6); edge[i] = acc;
+    }
+    for (let i = 0; i < n; i++) edge[i] *= WOOD.trunk / acc;
+    const K = 4096, lut = new Float32Array(K);
+    let k = 0;
+    for (let i = 0; i < K; i++) {
+      const rad = WOOD.trunk * i / (K - 1);
+      while (k < n - 1 && edge[k] < rad) k++;
+      const lo = k > 0 ? edge[k - 1] : 0, hi = edge[k];
+      const u = hi > lo ? (rad - lo) / (hi - lo) : 0;
+      // latewood is a NARROW DARK BAND at the ring's outer edge, abrupt on one side. A sine here is the
+      // loudest tell of fake wood; rings all the same width is the second loudest.
+      const late = Math.pow(Math.max(0, Math.min(1, (u - 0.72) / 0.28)), 0.65);
+      lut[i] = (1 - 0.52 * late) * (1 + 0.05 * Math.sin(k * 2.399));   // + a per-ring value drift
+    }
+    // The axis is a curve, not a line: a lean plus a slow wander. This is what stops straight grain
+    // rendering as ruled parallel lines, and it is where cathedral arches come from on a tangent plane.
+    const Z = 1024, pax = new Float32Array(Z), pay = new Float32Array(Z);
+    for (let i = 0; i < Z; i++) {
+      const z = WOOD.len * i / (Z - 1);
+      pax[i] = 0.03 * Math.sin(z * 2.7) + 0.015 * Math.sin(z * 8.3 + 1.1);
+      pay[i] = 0.024 * Math.sin(z * 2.2 + 2) + 0.011 * Math.sin(z * 6.9);
+    }
+    return (woodField.c = { lut, K, pax, pay, Z });
+  }
+  function woodHash(a, b) {                   // keyed to quantised SLAB position, so tiles agree
+    let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) | 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  function paintWoodContent(ident, angleView) {
+    // Wood has no ITEMS and no fluorescent minerals, so it has nothing to say in either diagnostic:
+    // the ident pass colours items by id, and under black light only the UV palette paints. Painting a
+    // flat brown into those would be a lie that looks like data.
+    if (ident || uvMode) return;
+    const cv = g2d.canvas, cw = cv.width | 0, ch = cv.height | 0;
+    if (!cw || !ch) return;
+    const m = g2d.getTransform();
+    if (!(Math.abs(m.a * m.d - m.b * m.c) > 1e-12)) return;     // degenerate transform: nothing to fill
+    const iv = m.inverse();
+    // device-space bounds of the slab rect, so the surround is never touched and the live view only
+    // pays for the pixels the slab actually covers
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [u, v] of [[0, 0], [1, 0], [0, H], [1, H]]) {
+      const dx = m.a * u + m.c * v + m.e, dy = m.b * u + m.d * v + m.f;
+      if (dx < x0) x0 = dx;
+      if (dx > x1) x1 = dx;
+      if (dy < y0) y0 = dy;
+      if (dy > y1) y1 = dy;
+    }
+    // Round INWARD to pixel CENTRES, not outward to pixel edges. putImageData replaces alpha as well
+    // as colour, so a box one pixel wider than the slab would punch a transparent hairline through the
+    // lit ground the caller drew underneath - an erase, not a miss. Centres also make the clamp below
+    // dead code under every transform the app actually uses, which are all axis-aligned scales.
+    x0 = Math.max(0, Math.ceil(x0 - 0.5)); y0 = Math.max(0, Math.ceil(y0 - 0.5));
+    x1 = Math.min(cw, Math.floor(x1 - 0.5) + 1); y1 = Math.min(ch, Math.floor(y1 - 0.5) + 1);
+    const bw = x1 - x0, bh = y1 - y0;
+    if (bw <= 0 || bh <= 0) return;
+    const F = woodField(), KS = (F.K - 1) / WOOD.trunk, ZS = (F.Z - 1) / WOOD.len;
+    // PLACEHOLDER COLOUR, and the one thing in here that breaks the project's own rule. Stone routes
+    // every colour through the token resolver at draw time and wood must do the same before it ships.
+    // Two literals so the GEOMETRY can be judged first, since the geometry is what is new and hard.
+    const BR = 196, BG = 150, BB = 96, DR = 96, DG = 62, DB = 34;
+    const band = Math.max(1, Math.min(bh, Math.ceil(2097152 / bw)));   // ~2 Mpx of ImageData at a time
+    const img = g2d.createImageData(bw, band), px = img.data;
+    for (let by = y0; by < y1; by += band) {
+      const rows = Math.min(band, y1 - by);
+      let o = 0;
+      for (let y = 0; y < rows; y++) {
+        const dy = by + y + 0.5, dx0 = x0 + 0.5;
+        // incremental inverse transform: solve the row start, then one add per pixel. General for any
+        // affine, and it keeps the slab coordinate exact rather than rebuilt from a scale alone.
+        let su = iv.a * dx0 + iv.c * dy + iv.e, sv = iv.b * dx0 + iv.d * dy + iv.f;
+        for (let x = 0; x < bw; x++, o += 4, su += iv.a, sv += iv.b) {
+          // CLAMP, never skip: the field extends by at most a pixel at its own edge, which is what any
+          // sampler does. Skipping would mean leaving alpha at 0, and that erases. Only a rotated
+          // transform can reach here, and overpainting a corner is the safer of the two failures.
+          const cu = su < 0 ? 0 : su > 1 ? 1 : su, cvv = sv < 0 ? 0 : sv > H ? H : sv;
+          let zi = (cu * WOOD.len * ZS) | 0;
+          if (zi > F.Z - 1) zi = F.Z - 1;
+          const ddx = WOOD.plane - F.pax[zi], ddy = (WOOD.y0 + (cvv / H) * WOOD.wid) - F.pay[zi];
+          let rad = Math.sqrt(ddx * ddx + ddy * ddy);
+          if (rad > WOOD.trunk) rad = WOOD.trunk;                  // the sapwood edge: a board never leaves the log
+          let w = F.lut[(rad * KS) | 0]
+            + (woodHash(cvv * 2600, 7) - 0.5) * 0.06               // lengthwise fibre streak
+            + (woodHash(cu * 1700, cvv * 2600) - 0.5) * 0.035;     // fine grain. Without it wood reads as plastic.
+          if (w < 0) w = 0; else if (w > 1.25) w = 1.25;
+          px[o] = DR + (BR - DR) * w; px[o + 1] = DG + (BG - DG) * w; px[o + 2] = DB + (BB - DB) * w;
+          px[o + 3] = 255;
+        }
+      }
+      // putImageData works in device pixels and ignores the transform, which is what is wanted here:
+      // the face is already resolved in slab space, so it must not be resampled on the way down.
+      g2d.putImageData(img, x0, by, 0, 0, bw, rows);
+    }
+  }
 
   function paintStoneContent(ident, angleView) {
     const uv = uvMode && !ident;                                // black-light: only the UV palette paints; the stone body is dark
@@ -4678,7 +4817,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const expName = (W, ext) => `${fileStem()}-${W}-${lightTag()}-${engineTag()}-${stampTag()}.${ext}`;
 
   function serialize() {
-    return { v: 1, name: slabName, fam, tool, view, layTiles, guidesOn,
+    return { v: 1, name: slabName, fam, material: currentMaterial(), tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
              layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed, haze: L.haze, transmit: L.transmit, scatter: L.scatter })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden], folders: folders.map(F => ({ name: F.name, v: F.v, c: F.c, members: [...F.members] })),
@@ -4689,6 +4828,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     slabName = typeof o.name === 'string' ? o.name : '';   // absent on a slab saved before names existed
     { const el = document.getElementById('slabname'); if (el) el.value = slabName; }
     fam = FAM[o.fam] ? o.fam : 'carrara';                 // a retired family (e.g. wood) falls back to Carrara
+    setMaterial(o.material);                              // absent on every slab saved before materials: stone
     // LOADING ARMS MOVE, WHATEVER THE SLAB SAVED. A slab records the tool that was active when it was
     // written, and the gallery slab here records "moon" - so loading it leaves a drawing tool armed on a
     // picture the user has just declared they want unchanged. On a tablet one stray tap while scrolling
@@ -5254,7 +5394,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Push the whole of the state into the controls - after a load, every control must match.
   function syncUI() {
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
-    pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
+    pv('data-mat', currentMaterial()); pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
     pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : 'order'); pv('data-unit', T.units);
     pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType); pv('data-mwin', NEXT.maskWin); pv('data-minv', NEXT.maskInvert);
     const tog = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', !!on); };
@@ -5466,6 +5606,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         light: crossOn                                  // never serialised, and it changes everything
           ? ['cross', crossA, crossB, crossT, uvMode, spotOn]
           : [lightSpectrum, uvMode, spotOn],            // unchanged shape when off, so old masters still match
+        // The material reaches the pixels, so leaving it out would let a wood master and a stone master
+        // of one slab claim the same inputs. Added the way `light` is: a shape that is UNCHANGED WHEN
+        // OFF. Stone is off, so every signature already on disk is byte-identical; wood starts its own.
+        ...(s.material === 'wood' ? { material: s.material } : {}),
       }))).toString(16);
     } catch (_) { return null; }
   };
@@ -6141,6 +6285,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
+  for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => { setMaterial(b.dataset.mat); press('[data-mat]', b); redraw(true); });
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     tool = b.dataset.tool; press('[data-tool]', b); hint();
     const show = tool === 'move' ? 'vein' : tool;
