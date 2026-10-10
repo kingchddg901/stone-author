@@ -427,8 +427,8 @@
     </div></details>
     <details class="sec" id="g-wood" hidden open><summary data-i18n="sec.wood">Wood</summary><div class="body">
     <div class="sliders">
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-cut-note">Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.</span></div>
-      <div class="sl"><label for="wood-plane"><span data-i18n="sl.wood-plane">Cut</span> <output id="wood-planeV"></output></label><input id="wood-plane" type="range" min="0.02" max="0.9" step="0.01"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-cut-note">On the Log view you can simply drag the cut: a stroke across the section is the plank, and it sets all four of these at once. Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.</span></div>
+      <div class="sl"><label for="wood-plane"><span data-i18n="sl.wood-plane">Cut</span> <output id="wood-planeV"></output></label><input id="wood-plane" type="range" min="-1.3" max="1.3" step="0.01"></div>
       <div class="sl"><label for="wood-y0"><span data-i18n="sl.wood-y0">Board position</span> <output id="wood-y0V"></output></label><input id="wood-y0" type="range" min="-1.3" max="1.3" step="0.01"></div>
       <div class="sl"><label for="wood-wid"><span data-i18n="sl.wood-wid">Plank width</span> <output id="wood-widV"></output></label><input id="wood-wid" type="range" min="0.05" max="2.6" step="0.01"></div>
       <div class="sl"><label for="wood-cutAngle"><span data-i18n="sl.wood-cutAngle">Cut angle</span> <output id="wood-cutAngleV"></output></label><input id="wood-cutAngle" type="range" min="0" max="179" step="1"></div>
@@ -1018,7 +1018,7 @@ window.SA_I18N = (() => {
   "ui.no-colour": "no colour",
   "ui.pass": "pass ",
   "ui.scatter": "scatter ",
-  "ui.wood-cut-note": "Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.",
+  "ui.wood-cut-note": "On the Log view you can simply drag the cut: a stroke across the section is the plank, and it sets all four of these at once. Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.",
   "ui.wood-drift-note": "Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.",
   "ui.wood-knot-note": "Everything above draws wood around the branch. Knot draws the branch itself, where the plane went through it rather than past it: its rings are concentric about the branch and so run crosswise to the trunk's. It is a cone widening outward, because the branch gained a ring every year the trunk grew around it, which is why a knot is small on an inner board and large near the bark. Pitch is how tight its own rings are. Died at ring is the difference between the two kinds of knot: a living branch reaches the bark and its wood joins the trunk's, so the knot is sound and on every board; a dead one stops there and is grown over, trapping bark at its edge, so it is black, it falls out of a board, and it is only in the wood laid down before it was buried.",
   "ui.wood-dev2-note": "The second feature is a branch rather than a second lean, and the only difference is that it has a place along the trunk. At indicates where, Reach how far it carries either side. Walk the board past it and the grain sweeps around the branch and then straightens again, because outside the window the feature is not there at all.",
@@ -1044,6 +1044,7 @@ window.SA_I18N = (() => {
   "view.angle": "Angle",
   "view.identity": "Identity",
   "view.log": "Log",
+  "view.plank": "Plank",
   "view.stone": "Stone"
 } };
   // NAMES holds a language we have actually loaded; INDEX holds one we know EXISTS but have not fetched.
@@ -1277,7 +1278,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.15';
+  const BUILD = '2026.10.10.16';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4379,6 +4380,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     V.cx = Math.min(1 - hw, Math.max(hw, V.cx)); V.cy = Math.min(H - hh, Math.max(hh, V.cy));
   }
   const toFrame = (ex, ey) => [V.cx + (ex - Wc / 2) / (Wc * V.z), V.cy + (ey - Hc / 2) / (Wc * V.z)];
+  // A stroke across the section, solved back into the four numbers that describe a plank. The painter
+  // places a board point at P = plane*N + yy*T with N = (cos phi, sin phi) and T = (-sin phi, cos phi),
+  // so the stroke's direction IS T, its perpendicular offset is the plane, and its ends are the edges.
+  // phi folds into [0,180) because 180 is the same plane cut from the other side, which is exactly why
+  // the Cut offset has to be allowed to go negative.
+  function sawDrag(fa, fb) {
+    const F = woodField(), G = logGeom(F);
+    const ax = (fa[0] - G.cx) / G.sc, ay = (fa[1] - G.cy) / G.sc;      // slab -> log coordinates
+    const bx = (fb[0] - G.cx) / G.sc, by = (fb[1] - G.cy) / G.sc;
+    let tx = bx - ax, ty = by - ay, L = Math.hypot(tx, ty);
+    if (L < 1e-4) { tx = 0; ty = 1; L = 1; }                           // a tap keeps the current angle's sense
+    tx /= L; ty /= L;
+    let phi = Math.atan2(tx, -ty) * 180 / Math.PI;                     // T = (-sin phi, cos phi)
+    phi = ((phi % 360) + 360) % 360;
+    if (phi >= 180) phi -= 180;                                        // the same plane, from the other side
+    const r = phi * Math.PI / 180, nx = Math.cos(r), ny = Math.sin(r), ux = -ny, uy = nx;
+    const ya = ax * ux + ay * uy, yb = bx * ux + by * uy;
+    WOOD.cutAngle = Math.round(phi);
+    WOOD.plane = Math.max(-1.3, Math.min(1.3, ax * nx + ay * ny));
+    WOOD.y0 = Math.max(-1.3, Math.min(1.3, Math.min(ya, yb)));
+    WOOD.wid = Math.max(0.05, Math.min(2.6, Math.abs(yb - ya) || WOOD.wid));
+    syncWood(); redraw(true); saveLocal();
+  }
   function zoomAt(ex, ey, f) {
     const [fx, fy] = toFrame(ex, ey);
     V.z *= f; clampView();
@@ -4497,6 +4521,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     if (ptrs.size > 2) return;
     const [ex, ey] = local(e), f = toFrame(ex, ey);
+    // THE SAW. On the section a stroke IS the plank: its direction is the plane, its distance from
+    // the axis is the offset, and its two ends are the plank's edges. Takes precedence over the tool,
+    // because in wood the drawing tools are not on screen anyway.
+    if (view === 'log') { gesture = { type: 'saw', a: f }; sawDrag(f, f); return; }
     if (tool === 'move') { gesture = { type: 'pan', e0: [ex, ey], c0: [V.cx, V.cy] }; return; }
     if (tool === 'cloud') { gesture = { type: 'cloudpan', e0: [ex, ey], c0: [G.cloudX, G.cloudY] }; hint(); return; }
     if (tool === 'light') { setLight(f); gesture = { type: 'lightdrag' }; redraw(false); return; }
@@ -4514,6 +4542,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!ptrs.has(e.pointerId)) return;
     ptrs.set(e.pointerId, local(e));
     if (!gesture) return;
+    if (gesture.type === 'saw') { sawDrag(gesture.a, toFrame(...local(e))); return; }
     if (gesture.type === 'pinch' && ptrs.size >= 2) {
       const [a, b] = [...ptrs.values()], mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       V.z = gesture.z0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / gesture.d0; clampView();
@@ -5180,6 +5209,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // then mill it, and saying otherwise is the first thing the interface would be lying about.
     const sub = document.querySelector('.sub');
     if (sub) sub.textContent = TR(mat === 'wood' ? 'app.sub-wood' : 'app.sub');
+    // The slab view is the board. Calling it "Stone" while the material is wood was the last place
+    // the interface still assumed there was only ever one material.
+    const vs2 = document.getElementById('v-stone');
+    if (vs2) vs2.textContent = TR(mat === 'wood' ? 'view.plank' : 'view.stone');
   }
 
   // ---- THE SOURCE: marks + family + settings. Everything bakes from this; save it, restore it.

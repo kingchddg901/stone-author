@@ -2269,6 +2269,12 @@
   ],
   "where": "a VIEW button, wood only: the end grain of the whole log with the saw line drawn on it, so where a plank comes from is something you look at"
  },
+ "view.plank": {
+  "terms": [
+   "wood"
+  ],
+  "where": "the slab view button, relabelled while the material is wood - the same button reads Stone in stone. It shows the board, not the whole log"
+ },
  "view.stone": {
   "where": "in the \"View\" group/panel"
  }

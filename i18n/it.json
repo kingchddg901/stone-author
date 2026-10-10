@@ -479,7 +479,7 @@
  "ui.the-three-families-are-starting": "Le tre famiglie sono punti di partenza impostati a occhio, non ancora misurati sulle pietre raccolte.",
  "ui.to-sculpt-the-haze-select": "Per scolpire la foschia: seleziona il livello Nebbia, poi usa Gravità (respingi apre una finestra, attrai accumula) o Magnete.",
  "ui.warp": "distorsione",
- "ui.wood-cut-note": "Qui non viene memorizzata nessuna tavola. C'è un solo tronco, e Taglio indica dove si trova il piano della sega rispetto al suo asse: vicino a zero il taglio è radiale e la venatura è dritta, più largo diventa semi-radiale, più largo ancora diventa tangenziale e gli anelli si aprono in archi a cattedrale. Posizione della tavola scorre lungo quel piano, ed è per questo che una stessa tavola cambia carattere nella propria larghezza.",
+ "ui.wood-cut-note": "Nella vista Tronco puoi semplicemente trascinare il taglio: un tratto attraverso la sezione è la tavola, e imposta tutti e quattro questi valori insieme. Qui non viene memorizzata nessuna tavola. C'è un solo tronco, e Taglio indica dove si trova il piano della sega rispetto al suo asse: vicino a zero il taglio è radiale e la venatura è dritta, più largo diventa semi-radiale, più largo ancora diventa tangenziale e gli anelli si aprono in archi a cattedrale. Posizione della tavola scorre lungo quel piano, ed è per questo che una stessa tavola cambia carattere nella propria larghezza.",
  "ui.wood-pith-note": "Il midollo è una curva, non una retta, ed è questo che impedisce alla venatura dritta di apparire come righe tracciate col righello. Inclinazione lo sposta lungo il piano della sega, così le righe si allargano e si stringono; Deriva lo sposta attraverso la tavola, così le righe si piegano in alto e in basso. Ognuna ha un termine lento e un'ondulazione sopra di esso.",
  "unit.in": "pollici",
  "ui.wood-drift-note": "Il colore procede verso l'esterno a partire dal midollo invece di essere estratto a caso per ogni anello, così gli anelli vicini sono quasi identici e anelli distanti due secoli possono essere legni diversi. Deriva indica quanto si allontana, Scala della deriva quanti anelli servono per arrivarci. I due estremi sono token: apri l'editor dei colori per impostare il legno primaticcio e quello tardivo.",
@@ -497,5 +497,6 @@
  "view.angle": "Angolo",
  "view.identity": "Identità",
  "view.log": "Tronco",
+ "view.plank": "Tavola",
  "view.stone": "Pietra"
 }
