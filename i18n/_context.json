@@ -959,6 +959,13 @@
   ],
   "where": "colour token: the narrow dark band at each ring's outer edge"
  },
+ "lay.wood-heartwood": {
+  "terms": [
+   "heartwood",
+   "wood"
+  ],
+  "where": "colour token: the dead, chemically altered wood at the centre of a log"
+ },
  "lbl.edit": {
   "where": "in the \"Edit\" group/panel"
  },
@@ -1633,6 +1640,20 @@
   ],
   "where": "slider: how many rings the colour takes to wander that far - the correlation length, not a count of anything"
  },
+ "sl.wood-sapRings": {
+  "terms": [
+   "sapwood",
+   "wood"
+  ],
+  "where": "slider: how many rings inward from the bark are still sapwood - a count of rings, not a distance"
+ },
+ "sl.wood-sapFade": {
+  "terms": [
+   "heartwood",
+   "sapwood"
+  ],
+  "where": "slider: how many rings the conversion from sapwood to heartwood takes - how abrupt the boundary looks"
+ },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
@@ -2041,6 +2062,14 @@
    "wood"
   ],
   "where": "explanatory note above the two colour-drift sliders"
+ },
+ "ui.wood-heart-note": {
+  "terms": [
+   "heartwood",
+   "sapwood",
+   "wood"
+  ],
+  "where": "explanatory note above the two heartwood sliders"
  },
  "unit.in": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"

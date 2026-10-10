@@ -430,6 +430,9 @@
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-drift-note">Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.</span></div>
       <div class="sl"><label for="wood-drift"><span data-i18n="sl.wood-drift">Colour drift</span> <output id="wood-driftV"></output></label><input id="wood-drift" type="range" min="0" max="1.5" step="0.05"></div>
       <div class="sl"><label for="wood-driftRings"><span data-i18n="sl.wood-driftRings">Drift scale</span> <output id="wood-driftRingsV"></output></label><input id="wood-driftRings" type="range" min="3" max="200" step="1"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-heart-note">Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.</span></div>
+      <div class="sl"><label for="wood-sapRings"><span data-i18n="sl.wood-sapRings">Sapwood</span> <output id="wood-sapRingsV"></output></label><input id="wood-sapRings" type="range" min="0" max="400" step="1"></div>
+      <div class="sl"><label for="wood-sapFade"><span data-i18n="sl.wood-sapFade">Conversion</span> <output id="wood-sapFadeV"></output></label><input id="wood-sapFade" type="range" min="1" max="80" step="1"></div>
     </div>
     </div></details>
     <details class="sec" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
@@ -729,6 +732,7 @@ window.SA_I18N = (() => {
   "lay.vein": "Vein ",
   "lay.wood-earlywood": "Wood earlywood",
   "lay.wood-latewood": "Wood latewood",
+  "lay.wood-heartwood": "Wood heartwood",
   "lay.vein-halo": "Vein halo",
   "lay.web": "Web ",
   "lbl.edit": "Edit",
@@ -865,6 +869,8 @@ window.SA_I18N = (() => {
   "sl.wood-wanderFine": "Wander ripple",
   "sl.wood-drift": "Colour drift",
   "sl.wood-driftRings": "Drift scale",
+  "sl.wood-sapRings": "Sapwood",
+  "sl.wood-sapFade": "Conversion",
   "sl.spotR": "Beam size",
   "sl.spread": "Spread",
   "sl.strength": "Strength",
@@ -965,6 +971,7 @@ window.SA_I18N = (() => {
   "ui.scatter": "scatter ",
   "ui.wood-cut-note": "Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.",
   "ui.wood-drift-note": "Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.",
+  "ui.wood-heart-note": "Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.",
   "ui.wood-pith-note": "The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.",
   "ui.selected": "Selected ▸",
   "ui.show": "show",
@@ -1217,7 +1224,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.7';
+  const BUILD = '2026.10.10.8';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1269,6 +1276,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // from its default, so COL.woodEarly exists while OVR stays exactly as it was before wood.
     { key: 'woodEarly', labelKey: 'lay.wood-earlywood', label: TR('lay.wood-earlywood'), def: '#c49660' },
     { key: 'woodLate', labelKey: 'lay.wood-latewood', label: TR('lay.wood-latewood'), def: '#603e22' },
+    { key: 'woodHeart', labelKey: 'lay.wood-heartwood', label: TR('lay.wood-heartwood'), def: '#5a3418' },
   ];
   // COL = RESOLVED values the renderer paints from. OVR = the overrides the editor edits and we
   // persist. perItem = id -> layer bucket, for per-id (per-item) colour tokens that inherit their
@@ -3758,7 +3766,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                                                   // along the cut, which is why one board drifts in character.
     lean: 0.01, leanFine: 0.006,                  // pith motion along the plane's normal -> the stripes breathe wider and tighter
     wander: 0.008, wanderFine: 0.004,             // pith motion across the board -> the stripes bend up and down
-    drift: 0.4, driftRings: 90                    // colour: how FAR it wanders from pith to bark, and how FAST
+    drift: 0.4, driftRings: 90,                   // colour: how FAR it wanders from pith to bark, and how FAST
+    sapRings: 22, sapFade: 8                      // the SECOND timeline: outer rings still sapwood, and the
+                                                  // width of the conversion front, both counted in rings
   };
   const WOOD0 = JSON.parse(JSON.stringify(WOOD));   // pristine, so a load is a pure function of the slab
   function woodField() {                      // ring profile + pith wander, sampled into lookups
@@ -3806,7 +3816,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // count can produce; beyond R the loop just repeats the outermost ring, which the painter clamps to
     // anyway.
     const LMAX = 2 * WOOD.trunk, K = 16384;
-    const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K);
+    const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K), th = new Float32Array(K);
     let k = 0;
     for (let i = 0; i < K; i++) {
       const rad = LMAX * i / (K - 1);
@@ -3818,6 +3828,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const late = Math.pow(Math.max(0, Math.min(1, (u - 0.72) / 0.28)), 0.65);
       lut[i] = (1 - WOOD.late * late) * (1 + 0.05 * Math.sin(k * 2.399));   // + a per-ring value drift
       tv[i] = cv[k] * 0.12 * WOOD.drift; tw[i] = cw[k] * 0.12 * WOOD.drift;
+      // How long ago this ring formed, in RINGS, measured from the currently outermost one - wood age,
+      // not distance from the bark. Past sapRings it begins converting; sapFade is how abrupt the
+      // front is. This is the one thing here that is a function of the PRESENT rather than of the year
+      // the wood formed, which is exactly what makes it the second timeline.
+      const ageR = (n - 1) - k;
+      th[i] = Math.max(0, Math.min(1, (ageR - WOOD.sapRings) / Math.max(WOOD.sapFade, 0.001)));
     }
     // The axis is a curve, not a line: a lean plus a slow wander. This is what stops straight grain
     // rendering as ruled parallel lines, and it is where cathedral arches come from on a tangent plane.
@@ -3827,7 +3843,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    return (woodField.c = { lut, tv, tw, K, R, LMAX, pax, pay, Z });
+    return (woodField.c = { lut, tv, tw, th, K, R, LMAX, pax, pay, Z });
   }
   function woodHash(a, b) {                   // keyed to quantised SLAB position, so tiles agree
     let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
@@ -3866,6 +3882,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // Resolved out of COL at draw time, like every other colour in the app. The token resolver fills
     // the default when nobody has picked one, so this works with OVR untouched.
     const [BR, BG, BB] = hexRGB(COL.woodEarly || '#c49660'), [DR, DG, DB] = hexRGB(COL.woodLate || '#603e22');
+    const [HR, HG, HB] = hexRGB(COL.woodHeart || '#5a3418');
     const band = Math.max(1, Math.min(bh, Math.ceil(2097152 / bw)));   // ~2 Mpx of ImageData at a time
     const img = g2d.createImageData(bw, band), px = img.data;
     for (let by = y0; by < y1; by += band) {
@@ -3892,8 +3909,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
             + (woodHash(cu * 1700, cvv * 2600) - 0.5) * 0.035;     // fine grain. Without it wood reads as plastic.
           if (w < 0) w = 0; else if (w > 1.25) w = 1.25;
           const mv = 1 + F.tv[li], mw = F.tw[li] * 26;             // this ring's value scale and warmth shift
-          const cr = (DR + (BR - DR) * w) * mv + mw, cg = (DG + (BG - DG) * w) * mv,
-                cb = (DB + (BB - DB) * w) * mv - mw;
+          let cr = (DR + (BR - DR) * w) * mv + mw, cg = (DG + (BG - DG) * w) * mv,
+              cb = (DB + (BB - DB) * w) * mv - mw;
+          const h = F.th[li];                                      // ...then the material state, on top of it
+          if (h) {                                                 // the ring keeps its own light and dark through the conversion
+            const s = 0.55 + 0.45 * w;
+            cr += (HR * s - cr) * h; cg += (HG * s - cg) * h; cb += (HB * s - cb) * h;
+          }
           px[o] = cr < 0 ? 0 : cr > 255 ? 255 : cr;
           px[o + 1] = cg < 0 ? 0 : cg > 255 ? 255 : cg;
           px[o + 2] = cb < 0 ? 0 : cb > 255 ? 255 : cb;
@@ -4856,7 +4878,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   const WDFMT = { rings: v => `${Math.round(v)}`, plane: v => (+v).toFixed(2), y0: v => (+v).toFixed(2),
                   late: v => (+v).toFixed(2), drift: v => (+v).toFixed(2),
-                  driftRings: v => `${Math.round(v)}` };
+                  driftRings: v => `${Math.round(v)}`, sapRings: v => `${Math.round(v)}`,
+                  sapFade: v => `${Math.round(v)}` };
   function showWood(k) {                                 // one slider's readout, from WOOD rather than from the input
     const out = document.getElementById('wood-' + k + 'V');
     if (out) out.textContent = WDFMT[k] ? WDFMT[k](WOOD[k]) : (+WOOD[k]).toFixed(3);
