@@ -1361,7 +1361,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.27';
+  const BUILD = '2026.10.10.28';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4612,16 +4612,40 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Guides are for you, not the stone: a filled dot pulls, an open ring pushes, its size is the
   // reach; a gravity line carries a band each side as wide as its reach, solid to pull, dashed to push.
   function drawScaleBar() {
-    const ftPx = Wc * V.z / SLAB_FT, useIn = ftPx > 700, len = useIn ? ftPx / 12 : ftPx;
-    const label = useIn ? '1 in' : '1 ft', dark = view === 'stone' && !layTiles;
+    const slabPx = Wc * V.z;                               // pixels across one slab unit
+    // WHAT A FOOT IS WORTH, PER AXIS. Stone is slab feet. Wood is WOOD feet, and the plank view is
+    // anisotropic because a board of any proportion is drawn to fill the same 8 x 5 ft frame.
+    let hPx = slabPx / SLAB_FT, vPx = hPx;
+    if (currentMaterial() === 'wood') {
+      if (view === 'log') { hPx = vPx = slabPx * logGeom(woodField()).sc; }   // a circle stays a circle
+      else { hPx = slabPx / Math.max(WOOD.len, 1e-6); vPx = slabPx * H / Math.max(WOOD.wid, 1e-6); }
+    }
+    const dark = view === 'stone' && !layTiles;
     ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const x0 = 12, y0 = Hc - 14;
-    ctx.strokeStyle = dark ? '#000000' : '#ffffff'; ctx.lineWidth = 3; ctx.globalAlpha = 0.35;
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + len, y0); ctx.stroke();
-    ctx.strokeStyle = dark ? '#ffffff' : '#ffd36b'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.95;
-    ctx.beginPath(); ctx.moveTo(x0, y0 - 4); ctx.lineTo(x0, y0); ctx.lineTo(x0 + len, y0); ctx.lineTo(x0 + len, y0 - 4); ctx.stroke();
-    ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace'; ctx.fillStyle = ctx.strokeStyle;
-    ctx.fillText(label, x0 + len + 6, y0 + 3); ctx.restore(); ctx.globalAlpha = 1;
+    ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace';
+    // One rule, in pixels per foot and the longest bar that axis can carry. 700 across reproduces the
+    // old stone behaviour exactly; down is also held to half the canvas so a tall bar cannot run off.
+    const step = (pxFt, cap) => { const useIn = pxFt > cap; return { len: useIn ? pxFt / 12 : pxFt, label: useIn ? '1 in' : '1 ft' }; };
+    const bar = (x0, y0, dx, dy, len, label, lx, ly) => {
+      ctx.strokeStyle = dark ? '#000000' : '#ffffff'; ctx.lineWidth = 3; ctx.globalAlpha = 0.35;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + dx * len, y0 + dy * len); ctx.stroke();
+      ctx.strokeStyle = dark ? '#ffffff' : '#ffd36b'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.95;
+      // the end ticks stand square to the bar, so one helper draws either orientation
+      const tx = dy * 4, ty = dx * 4;
+      ctx.beginPath();
+      ctx.moveTo(x0 + tx, y0 - ty); ctx.lineTo(x0, y0);
+      ctx.lineTo(x0 + dx * len, y0 + dy * len); ctx.lineTo(x0 + dx * len + tx, y0 + dy * len - ty); ctx.stroke();
+      ctx.fillStyle = ctx.strokeStyle; ctx.fillText(label, lx, ly);
+    };
+    const h = step(hPx, 700);
+    bar(12, Hc - 14, 1, 0, h.len, h.label, 12 + h.len + 6, Hc - 11);
+    // THE SECOND BAR IS THE VIEW'S TELL. Only drawn when the two scales genuinely disagree, so stone
+    // and the log section keep their single rule without needing to know they are exempt.
+    if (Math.abs(vPx / hPx - 1) > 0.02) {
+      const v = step(vPx, Math.min(700, Hc * 0.5));
+      bar(12, Hc - 30, 0, -1, v.len, v.label, 20, Hc - 30 - v.len + 4);
+    }
+    ctx.restore(); ctx.globalAlpha = 1;
   }
   // The warp field made visible. When you drag the Cloud tool you're moving THIS — the source of the
   // distortion you watch happen on the veins. Samples the SAME fbm2 field warpGeo displaces geometry by
