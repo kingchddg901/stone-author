@@ -945,6 +945,20 @@
   ],
   "where": "label in the generated colour editor / layers panel"
  },
+ "lay.wood-earlywood": {
+  "terms": [
+   "earlywood",
+   "wood"
+  ],
+  "where": "colour token: the broad light body of each growth ring"
+ },
+ "lay.wood-latewood": {
+  "terms": [
+   "latewood",
+   "wood"
+  ],
+  "where": "colour token: the narrow dark band at each ring's outer edge"
+ },
  "lbl.edit": {
   "where": "in the \"Edit\" group/panel"
  },
@@ -1607,6 +1621,18 @@
   ],
   "where": "slider: a faster ripple on top of the pith's wander"
  },
+ "sl.wood-drift": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how far the colour wanders between the pith and the bark"
+ },
+ "sl.wood-driftRings": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how many rings the colour takes to wander that far - the correlation length, not a count of anything"
+ },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
@@ -2007,6 +2033,14 @@
    "wood"
   ],
   "where": "explanatory note above the four pith-motion sliders"
+ },
+ "ui.wood-drift-note": {
+  "terms": [
+   "earlywood",
+   "latewood",
+   "wood"
+  ],
+  "where": "explanatory note above the two colour-drift sliders"
  },
  "unit.in": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"

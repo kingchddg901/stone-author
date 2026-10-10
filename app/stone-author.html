@@ -421,12 +421,15 @@
       <div class="sl"><label for="wood-plane"><span data-i18n="sl.wood-plane">Cut</span> <output id="wood-planeV"></output></label><input id="wood-plane" type="range" min="0.02" max="0.9" step="0.01"></div>
       <div class="sl"><label for="wood-y0"><span data-i18n="sl.wood-y0">Board position</span> <output id="wood-y0V"></output></label><input id="wood-y0" type="range" min="-0.4" max="0.6" step="0.01"></div>
       <div class="sl"><label for="wood-rings"><span data-i18n="sl.wood-rings">Rings</span> <output id="wood-ringsV"></output></label><input id="wood-rings" type="range" min="40" max="400" step="5"></div>
-      <div class="sl"><label for="wood-late"><span data-i18n="sl.wood-late">Latewood</span> <output id="wood-lateV"></output></label><input id="wood-late" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><label for="wood-late"><span data-i18n="sl.wood-late">Latewood contrast</span> <output id="wood-lateV"></output></label><input id="wood-late" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-pith-note">The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.</span></div>
       <div class="sl"><label for="wood-lean"><span data-i18n="sl.wood-lean">Pith lean</span> <output id="wood-leanV"></output></label><input id="wood-lean" type="range" min="0" max="0.08" step="0.002"></div>
       <div class="sl"><label for="wood-leanFine"><span data-i18n="sl.wood-leanFine">Lean ripple</span> <output id="wood-leanFineV"></output></label><input id="wood-leanFine" type="range" min="0" max="0.04" step="0.001"></div>
       <div class="sl"><label for="wood-wander"><span data-i18n="sl.wood-wander">Pith wander</span> <output id="wood-wanderV"></output></label><input id="wood-wander" type="range" min="0" max="0.06" step="0.002"></div>
       <div class="sl"><label for="wood-wanderFine"><span data-i18n="sl.wood-wanderFine">Wander ripple</span> <output id="wood-wanderFineV"></output></label><input id="wood-wanderFine" type="range" min="0" max="0.03" step="0.001"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-drift-note">Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.</span></div>
+      <div class="sl"><label for="wood-drift"><span data-i18n="sl.wood-drift">Colour drift</span> <output id="wood-driftV"></output></label><input id="wood-drift" type="range" min="0" max="1.5" step="0.05"></div>
+      <div class="sl"><label for="wood-driftRings"><span data-i18n="sl.wood-driftRings">Drift scale</span> <output id="wood-driftRingsV"></output></label><input id="wood-driftRings" type="range" min="3" max="200" step="1"></div>
     </div>
     </div></details>
     <details class="sec" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
@@ -724,6 +727,8 @@ window.SA_I18N = (() => {
   "lay.stylolite-seam": "Stylolite seam",
   "lay.stylolites": "Stylolites",
   "lay.vein": "Vein ",
+  "lay.wood-earlywood": "Wood earlywood",
+  "lay.wood-latewood": "Wood latewood",
   "lay.vein-halo": "Vein halo",
   "lay.web": "Web ",
   "lbl.edit": "Edit",
@@ -853,11 +858,13 @@ window.SA_I18N = (() => {
   "sl.wood-plane": "Cut",
   "sl.wood-y0": "Board position",
   "sl.wood-rings": "Rings",
-  "sl.wood-late": "Latewood",
+  "sl.wood-late": "Latewood contrast",
   "sl.wood-lean": "Pith lean",
   "sl.wood-leanFine": "Lean ripple",
   "sl.wood-wander": "Pith wander",
   "sl.wood-wanderFine": "Wander ripple",
+  "sl.wood-drift": "Colour drift",
+  "sl.wood-driftRings": "Drift scale",
   "sl.spotR": "Beam size",
   "sl.spread": "Spread",
   "sl.strength": "Strength",
@@ -957,6 +964,7 @@ window.SA_I18N = (() => {
   "ui.pass": "pass ",
   "ui.scatter": "scatter ",
   "ui.wood-cut-note": "Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.",
+  "ui.wood-drift-note": "Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.",
   "ui.wood-pith-note": "The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.",
   "ui.selected": "Selected ▸",
   "ui.show": "show",
@@ -1209,7 +1217,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.4';
+  const BUILD = '2026.10.10.5';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1256,6 +1264,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { key: 'ground', labelKey: 'lay.base-ground', label: TR('lay.base-ground') }, { key: 'major', label: TR('lay.major-veins') }, { key: 'minor', label: TR('lay.minor-veins') },
     { key: 'web', labelKey: 'lay.fracture-web', label: TR('lay.fracture-web') }, { key: 'micro', label: TR('lay.micro-specks') }, { key: 'styl', label: TR('lay.stylolite-seam') },
     { key: 'drusy', labelKey: 'lay.drusy-sparkle', label: TR('lay.drusy-sparkle') }, { key: 'halo', label: TR('lay.vein-halo') },
+    // Wood's two. `def` rather than a seed: seedColours writes into OVR, OVR is hashed by renderSig,
+    // and two keys written there at boot would re-date every master on disk. An unset token resolves
+    // from its default, so COL.woodEarly exists while OVR stays exactly as it was before wood.
+    { key: 'woodEarly', labelKey: 'lay.wood-earlywood', label: TR('lay.wood-earlywood'), def: '#c49660' },
+    { key: 'woodLate', labelKey: 'lay.wood-latewood', label: TR('lay.wood-latewood'), def: '#603e22' },
   ];
   // COL = RESOLVED values the renderer paints from. OVR = the overrides the editor edits and we
   // persist. perItem = id -> layer bucket, for per-id (per-item) colour tokens that inherit their
@@ -3743,7 +3756,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                                                   // axis, because cos(theta) = plane / r; y0 slides the board
                                                   // along the cut, which is why one board drifts in character.
     lean: 0.01, leanFine: 0.006,                  // pith motion along the plane's normal -> the stripes breathe wider and tighter
-    wander: 0.008, wanderFine: 0.004              // pith motion across the board -> the stripes bend up and down
+    wander: 0.008, wanderFine: 0.004,             // pith motion across the board -> the stripes bend up and down
+    drift: 0.4, driftRings: 90                    // colour: how FAR it wanders from pith to bark, and how FAST
   };
   const WOOD0 = JSON.parse(JSON.stringify(WOOD));   // pristine, so a load is a pure function of the slab
   function woodField() {                      // ring profile + pith wander, sampled into lookups
@@ -3764,7 +3778,23 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       acc += Math.max(w, 0.6); edge[i] = acc;
     }
     for (let i = 0; i < n; i++) edge[i] *= WOOD.trunk / acc;
-    const K = 4096, lut = new Float32Array(K);
+    // COLOUR, PER RING, AS A CORRELATED WALK - the thing a per-ring random value cannot do. Ring N and
+    // N+1 are nearly the same; N+200 can be a different wood. Two channels, value and warmth, because
+    // those are the two that move in a real log.
+    //
+    // `rev` makes driftRings an actual correlation length in rings, and `norm` normalises the walk to
+    // unit stationary spread so that changing the length does not change the amplitude behind your
+    // back - otherwise the two controls fight and neither means anything on its own. The small
+    // uncorrelated term on top is what stops the result reading as a smooth gradient.
+    const [, dgs] = sub(WOOD.seed, 2);
+    const rev = Math.exp(-1 / Math.max(WOOD.driftRings, 1)), norm = Math.sqrt(1 - rev * rev);
+    const cv = new Float64Array(n), cw = new Float64Array(n);
+    let av = 0, aw = 0;
+    for (let i = 0; i < n; i++) {
+      av = av * rev + dgs() * norm; aw = aw * rev + dgs() * norm;
+      cv[i] = av + dgs() * 0.2; cw[i] = aw + dgs() * 0.2;
+    }
+    const K = 4096, lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K);
     let k = 0;
     for (let i = 0; i < K; i++) {
       const rad = WOOD.trunk * i / (K - 1);
@@ -3775,6 +3805,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // loudest tell of fake wood; rings all the same width is the second loudest.
       const late = Math.pow(Math.max(0, Math.min(1, (u - 0.72) / 0.28)), 0.65);
       lut[i] = (1 - WOOD.late * late) * (1 + 0.05 * Math.sin(k * 2.399));   // + a per-ring value drift
+      tv[i] = cv[k] * 0.12 * WOOD.drift; tw[i] = cw[k] * 0.12 * WOOD.drift;
     }
     // The axis is a curve, not a line: a lean plus a slow wander. This is what stops straight grain
     // rendering as ruled parallel lines, and it is where cathedral arches come from on a tangent plane.
@@ -3784,7 +3815,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    return (woodField.c = { lut, K, pax, pay, Z });
+    return (woodField.c = { lut, tv, tw, K, pax, pay, Z });
   }
   function woodHash(a, b) {                   // keyed to quantised SLAB position, so tiles agree
     let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
@@ -3820,10 +3851,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const bw = x1 - x0, bh = y1 - y0;
     if (bw <= 0 || bh <= 0) return;
     const F = woodField(), KS = (F.K - 1) / WOOD.trunk, ZS = (F.Z - 1) / WOOD.len;
-    // PLACEHOLDER COLOUR, and the one thing in here that breaks the project's own rule. Stone routes
-    // every colour through the token resolver at draw time and wood must do the same before it ships.
-    // Two literals so the GEOMETRY can be judged first, since the geometry is what is new and hard.
-    const BR = 196, BG = 150, BB = 96, DR = 96, DG = 62, DB = 34;
+    // Resolved out of COL at draw time, like every other colour in the app. The token resolver fills
+    // the default when nobody has picked one, so this works with OVR untouched.
+    const [BR, BG, BB] = hexRGB(COL.woodEarly || '#c49660'), [DR, DG, DB] = hexRGB(COL.woodLate || '#603e22');
     const band = Math.max(1, Math.min(bh, Math.ceil(2097152 / bw)));   // ~2 Mpx of ImageData at a time
     const img = g2d.createImageData(bw, band), px = img.data;
     for (let by = y0; by < y1; by += band) {
@@ -3844,11 +3874,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           const ddx = WOOD.plane - F.pax[zi], ddy = (WOOD.y0 + (cvv / H) * WOOD.wid) - F.pay[zi];
           let rad = Math.sqrt(ddx * ddx + ddy * ddy);
           if (rad > WOOD.trunk) rad = WOOD.trunk;                  // the sapwood edge: a board never leaves the log
-          let w = F.lut[(rad * KS) | 0]
+          const li = (rad * KS) | 0;
+          let w = F.lut[li]
             + (woodHash(cvv * 2600, 7) - 0.5) * 0.06               // lengthwise fibre streak
             + (woodHash(cu * 1700, cvv * 2600) - 0.5) * 0.035;     // fine grain. Without it wood reads as plastic.
           if (w < 0) w = 0; else if (w > 1.25) w = 1.25;
-          px[o] = DR + (BR - DR) * w; px[o + 1] = DG + (BG - DG) * w; px[o + 2] = DB + (BB - DB) * w;
+          const mv = 1 + F.tv[li], mw = F.tw[li] * 26;             // this ring's value scale and warmth shift
+          const cr = (DR + (BR - DR) * w) * mv + mw, cg = (DG + (BG - DG) * w) * mv,
+                cb = (DB + (BB - DB) * w) * mv - mw;
+          px[o] = cr < 0 ? 0 : cr > 255 ? 255 : cr;
+          px[o + 1] = cg < 0 ? 0 : cg > 255 ? 255 : cg;
+          px[o + 2] = cb < 0 ? 0 : cb > 255 ? 255 : cb;
           px[o + 3] = 255;
         }
       }
@@ -4308,7 +4344,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const t = document.getElementById('colour-toggle');
     if (!window.TTK) { if (t) { t.disabled = true; t.textContent = TR('ui.colour-editor-unavailable'); } return; }
     kit = TTK.createThemeKit({ prefix: '--stone-' });
-    kit.registerTokenGroup({ id: 'colour', label: TR('lay.colour-per-layer'), tokens: COLOUR_TOKENS.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: CARRARA_COL[tk.key] })) });
+    kit.registerTokenGroup({ id: 'colour', label: TR('lay.colour-per-layer'), tokens: COLOUR_TOKENS.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: CARRARA_COL[tk.key] ?? tk.def })) });
     kit.registerTokenGroup({ id: 'effects', label: TR('lay.effects-per-layer'), tokens: FX_LAYERS.flatMap(k => {
       const lbl = layName(COLOUR_TOKENS.find(t => t.key === k)) || k;
       return [
@@ -4807,7 +4843,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
   }
   const WDFMT = { rings: v => `${Math.round(v)}`, plane: v => (+v).toFixed(2), y0: v => (+v).toFixed(2),
-                  late: v => (+v).toFixed(2) };
+                  late: v => (+v).toFixed(2), drift: v => (+v).toFixed(2),
+                  driftRings: v => `${Math.round(v)}` };
   function showWood(k) {                                 // one slider's readout, from WOOD rather than from the input
     const out = document.getElementById('wood-' + k + 'V');
     if (out) out.textContent = WDFMT[k] ? WDFMT[k](WOOD[k]) : (+WOOD[k]).toFixed(3);
