@@ -457,6 +457,10 @@
       <div class="sl"><label for="wood-wid"><span data-i18n="sl.wood-wid">Plank width</span> <output id="wood-widV"></output></label><input id="wood-wid" type="range" min="0.05" max="4" step="0.01"></div>
       <div class="sl"><label for="wood-len"><span data-i18n="sl.wood-len">Plank length</span> <output id="wood-lenV"></output></label><input id="wood-len" type="range" min="0.2" max="8" step="0.05"></div>
       <div class="sl"><label for="wood-cutAngle"><span data-i18n="sl.wood-cutAngle">Cut angle</span> <output id="wood-cutAngleV"></output></label><input id="wood-cutAngle" type="range" min="0" max="179" step="1"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-taper-note">A tree grows upward as well as outward, so a ring laid down when the leader was at thirty feet does not exist at a hundred and fifty — the wood up there is only the rings added after the apex passed it. That is what makes a trunk narrow toward the top: not thinner rings, but FEWER of them. Taper is how hard the leader's climb tracks the year it was growing in. Height is put on a year at a time, and the increment comes from that same year's ring — so the drought that pinched a ring also stalled the leader, from one climate signal rather than two inventions. At zero the leader was always at full height and you get the perfect cylinder; near zero it climbs steadily; at one it climbs in proportion to the ring, fast while the tree is young and slowing after; higher still and a poor year stops it almost dead, so the butt gathers far more rings than the top. Height up trunk is where this board was cut, and because a board spans a range of heights it really does cross wood of different ages.</span></div>
+      <div class="sl"><label for="wood-trunkH"><span data-i18n="sl.wood-trunkH">Trunk height</span> <output id="wood-trunkHV"></output></label><input id="wood-trunkH" type="range" min="6" max="200" step="1"></div>
+      <div class="sl"><label for="wood-taper"><span data-i18n="sl.wood-taper">Taper</span> <output id="wood-taperV"></output></label><input id="wood-taper" type="range" min="0" max="2.5" step="0.05"></div>
+      <div class="sl"><label for="wood-zBase"><span data-i18n="sl.wood-zBase">Height up trunk</span> <output id="wood-zBaseV"></output></label><input id="wood-zBase" type="range" min="0" max="180" step="0.5"></div>
       <div class="sl"><label for="wood-treeDia"><span data-i18n="sl.wood-treeDia">Tree size</span> <output id="wood-treeDiaV"></output></label><input id="wood-treeDia" type="range" min="0.2" max="20" step="0.02"></div>
       <div class="sl"><label for="wood-rings"><span data-i18n="sl.wood-rings">Rings</span> <output id="wood-ringsV"></output></label><input id="wood-rings" type="range" min="5" max="400" step="5"></div>
       <div class="sl"><label for="wood-late"><span data-i18n="sl.wood-late">Latewood contrast</span> <output id="wood-lateV"></output></label><input id="wood-late" type="range" min="0" max="1" step="0.02"></div>
@@ -955,6 +959,9 @@ window.SA_I18N = (() => {
   "sl.wood-cutAngle": "Cut angle",
   "sl.wood-treeDia": "Tree size",
   "sl.wood-stage": "Boards",
+  "sl.wood-trunkH": "Trunk height",
+  "sl.wood-taper": "Taper",
+  "sl.wood-zBase": "Height up trunk",
   "sl.wood-plankLen": "Plank length",
   "sl.wood-plankVary": "Length variation",
   "sl.wood-plankStagger": "Joint stagger",
@@ -1131,6 +1138,7 @@ window.SA_I18N = (() => {
   "ui.wood-dev-note": "Rings are circles until this is turned up. Eccentricity is how far they bulge off round, and it ACCUMULATES: a bulge grown in year 60 is still in the surface at year 220, because every later ring was laid on top of it. From and Over say which years it came on. Direction aims it, Breadth sets how much of the trunk it covers. This is the thing a branch, a lean or a buried wound all need.",
   "ui.wood-eye-note": "A bird's eye is not a mark on the surface. It is a small dimple in the cambium that the tree keeps re-making in the same spot year on year, so it runs outward as a needle pointing at the pith. Cut across those needles on a flatsawn face and you see the eyes; cut along them and you see almost nothing, which is why bird's eye hides on quartersawn. Eyes is how strongly they show, Spacing how far apart they sit and Size how wide each one is — both in INCHES, a real bird's eye being about a fifth of an inch across; Spacing is measured one foot out from the pith, so eyes crowd together towards the centre and spread apart towards the bark — a bigger tree carries more of them, not wider-spaced ones. Depth is how far the rings dip into it, counted in RING WIDTHS — at 2.4 two or three ring boundaries curve into each eye, which is what draws those little contour circles. The dimple is a cone rather than a soft well, so those circles come out evenly spaced.",
   "ui.wood-fibre-note": "Ribbon, curl and quilt are not ring effects — they are fibre direction, and they are optical rather than geometric. Wood reflects far more light along the fibre than across it, so where fibres dive into the cut face it reads dark and where they lie along it, light. Figure is how strongly that shows at all. Spiral is a steady helical wind about the trunk; Interlock is the same angle alternating its sign every few years, which is what mahogany is; Curl is a transverse undulation, which is fiddleback. Turn the light angle and the ribbon reverses — that is the tell that it is modelled rather than painted, and end grain shows none of it because every fibre meets that surface square on.",
+  "ui.wood-taper-note": "A tree grows upward as well as outward, so a ring laid down when the leader was at thirty feet does not exist at a hundred and fifty — the wood up there is only the rings added after the apex passed it. That is what makes a trunk narrow toward the top: not thinner rings, but FEWER of them. Taper is how hard the leader's climb tracks the year it was growing in. Height is put on a year at a time, and the increment comes from that same year's ring — so the drought that pinched a ring also stalled the leader, from one climate signal rather than two inventions. At zero the leader was always at full height and you get the perfect cylinder; near zero it climbs steadily; at one it climbs in proportion to the ring, fast while the tree is young and slowing after; higher still and a poor year stops it almost dead, so the butt gathers far more rings than the top. Height up trunk is where this board was cut, and because a board spans a range of heights it really does cross wood of different ages.",
   "ui.wood-growth-note": "These are the numbers a species actually differs by. Juvenile is how wide the first rings are, Settles how fast that fades, and Mature the width it lands on. Scatter is year-to-year variation; Bad years is how often a pinched run comes and how deep. Latewood is what fraction of each ring is the dark band and Edge how abruptly it starts — a fir has a narrow, violently sharp band and a maple a soft, almost invisible one.",
   "ui.wood-heart-note": "Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.",
   "ui.wood-pith-note": "The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.",
@@ -1387,7 +1395,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.36';
+  const BUILD = '2026.10.10.38';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4045,6 +4053,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const WOOD = {
     seed: 770513, trunk: 1,                       // trunk is the SCALE, not the radius - the radius is what
                                                   // the rings add up to, so more years means a bigger log
+    trunkH: 60, zBase: 0, taper: 0,               // THE TAPER, as GROWTH: total trunk height, how far up this
+                                                  // board sits, and how fast the leader climbed. The rings
+                                                  // a height never saw are ABSENT there, not thinner.
     plankLen: 36, plankVary: 0.35,                // THE PLANK RUN: nominal board length in inches, how much
     plankStagger: 0.5,                            // lengths differ, and how far each row's joints shift from
                                                   // the row below. Width and max length come from the BOARD.
@@ -4347,13 +4358,44 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (let i = 0; i < Z; i++) {
       fcz[i] = Math.tan(WOOD.curl * Math.PI / 180 * Math.sin(WOOD.len * i / (Z - 1) * WOOD.curlRate));
     }
+    // HOW MUCH RADIUS IS MISSING AT THIS HEIGHT. The leader reached h in year a(h); every ring
+    // before that was laid on a stem that had not got here yet, so at this height they do not exist.
+    // edge[a-1] is the radius they account for, and adding it maps a local radius onto the stump's
+    // own ring series - which is what every lookup downstream is indexed by.
+    const zoff = new Float32Array(Z);
+    const Ht = Math.max(WOOD.trunkH, 0.5), tpow = Math.max(0, WOOD.taper);
+    if (tpow > 0) {
+      // THE LEADER CLIMBS A YEAR AT A TIME, ON THE SAME YEARS THE RINGS DID. A smooth power law was
+      // the wrong shape: height is an ANNUAL INCREMENT, and a bad year is short or nothing at all
+      // while a good one puts on extra. Driving the increment off that year's own ring width gets
+      // this for free and gets it CORRELATED - the drought that pinched the ring also stalled the
+      // leader, which is the single climate signal doing both jobs rather than two inventions.
+      //
+      // tpow is how hard the climb tracks the year: near 0 a near-steady climb, 1 proportional to
+      // the ring, higher and a poor year stops the leader almost dead.
+      const apex = new Float64Array(n);
+      let hacc = 0;
+      for (let k = 0; k < n; k++) {
+        const w = edge[k] - (k ? edge[k - 1] : 0);         // this year's ring: scatter and droughts included
+        hacc += Math.pow(w > 1e-9 ? w : 1e-9, tpow);
+        apex[k] = hacc;
+      }
+      const hs = Ht / (apex[n - 1] || 1);                  // normalised so the last ring stands at full height
+      // h rises with i, and apex rises with k, so one moving pointer answers every sample.
+      let a = 0;
+      for (let i = 0; i < Z; i++) {
+        const h = Math.min(Math.max(WOOD.zBase + WOOD.len * i / (Z - 1), 0), Ht);
+        while (a < n && apex[a] * hs < h) a++;             // the first ring whose year got this high
+        zoff[i] = a > 0 ? edge[Math.min(a, n) - 1] : 0;
+      }
+    }
     const pax = new Float32Array(Z), pay = new Float32Array(Z);
     for (let i = 0; i < Z; i++) {
       const z = WOOD.len * i / (Z - 1);
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl });
+    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl, zoff });
   }
   // A rational atan2, good to under half a degree and costing about ten multiplies. The eye grid needs
   // the ANGLE, and the painter only ever has its cosine and sine; this is the one place in the wood
@@ -4418,7 +4460,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const FE = F.FE, NF = FE.length, NA = F.NA;              // no active feature skips the inversion entirely
     const WV = F.WV, WVA = F.wv, WK = F.WK, NW = F.NW;       // the tree's wave family and its anchored envelope
     const WAVY = WOOD.waveAmp > 0;                           // zero skips the recurrence, not just the result
-    const FSP = F.fsp, FCZ = F.fcz, UREL = F.urel, RWL = F.rwl, GLOSS = WOOD.gloss;
+    const FSP = F.fsp, FCZ = F.fcz, UREL = F.urel, RWL = F.rwl, ZOFF = F.zoff, GLOSS = WOOD.gloss;
     const EYES = WOOD.eyes;
     // Spacing is a DISTANCE AT ONE FOOT OF RADIUS, and the reference has to be a CONSTANT.
     //
@@ -4448,8 +4490,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // is no wood there. The caller decides what to draw instead, and for the board that is the live
     // edge of a slab wider than the log it came from.
     const shade = (ddx, ddy, zi, zp, fu, fv, out) => {
-      const rad = Math.sqrt(ddx * ddx + ddy * ddy);
-      if (rad > F.R) return false;
+      // rad0 is where this point sits around the pith AT THIS HEIGHT. rad adds back the radius of
+      // the rings that never reached here, putting it on the stump's own series - which is what the
+      // whole field is indexed by. That single add is the taper: rings, latewood, colour, the
+      // heartwood front and the bark all answer for the right wood with no further change.
+      const rad0 = Math.sqrt(ddx * ddx + ddy * ddy);
+      const rad = rad0 + ZOFF[zi];
+      if (rad > F.R) return false;                 // the bark, closer in the higher you go
       // INVERTING THE ACCUMULATED SURFACE. The rings are no longer circles, so "which ring is this
       // point in?" is no longer a lookup on the radius. It is still only a subtraction: take the
       // concentric answer, correct the radius by the deviation accumulated there, and read again.
@@ -4468,13 +4515,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // once per pixel and reused by both passes of the inversion below.
         let eyeG = 0;
         if (EYES) {
-          eyeG = woodEye(woodAtan2(ddy, ddx), zp, ECELL, ERADFT, rad);
+          eyeG = woodEye(woodAtan2(ddy, ddx), zp, ECELL, ERADFT, rad0);   // a real arc, at the LOCAL radius
           // ORIENTATION. The needle runs along the radius, so what decides whether this face shows an
           // EYE or a faint fleck is how square it is to that needle: r_hat . N. One on a tangential
           // face, where you cut straight across the cone and get a circle; zero on a radial one, where
           // the needle lies in the face and you cut along its length. This is the whole
           // quarter-versus-flat behaviour and it costs one dot product.
-          const iv3 = 1 / (rad || 1e-9);
+          const iv3 = 1 / (rad0 || 1e-9);                                 // a unit vector: the local radius
           const sq2 = (ddx * iv3) * pn[0] + (ddy * iv3) * pn[1];
           eyeG *= sq2 < 0 ? -sq2 : sq2;
           eyeHold = eyeG;
@@ -4536,7 +4583,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // pn[2] is 1 on end grain, where every fibre meets the surface perpendicular and the dive is
       // uniform: a constant multiply is a brightness change, not figure, so there is nothing to draw.
       if (GLOSS && !pn[2]) {
-        const iv2 = 1 / (rad || 1e-9), rx = ddx * iv2, ry = ddy * iv2;
+        const iv2 = 1 / (rad0 || 1e-9), rx = ddx * iv2, ry = ddy * iv2;   // likewise, or figure drifts with height
         const dNr = rx * pn[0] + ry * pn[1];                   // radial . normal
         const dNt = -ry * pn[0] + rx * pn[1];                  // tangential . normal
         // The fibre tilts into the dimple, so an eye darkens through the SAME dive term the ribbon
@@ -5752,7 +5799,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   fibreSpiral: v => `${(+v).toFixed(1)}\u00b0`, interlock: v => `${(+v).toFixed(1)}\u00b0`,
                   interlockRings: v => `${Math.round(v)}`, curl: v => `${(+v).toFixed(1)}\u00b0`,
                   curlRate: v => (+v).toFixed(1), eyes: v => (+v).toFixed(2),
-                  stage: v => `${Math.round(v)}`, plankLen: v => `${Math.round(v)}\u2033`,
+                  stage: v => `${Math.round(v)}`,
+                  trunkH: v => `${Math.round(v)}\u2032`, zBase: v => `${(+v).toFixed(1)}\u2032`,
+                  taper: v => +v === 0 ? 'cylinder' : (+v).toFixed(2), plankLen: v => `${Math.round(v)}\u2033`,
                   plankVary: v => (+v).toFixed(2), plankStagger: v => (+v).toFixed(2),
                   eyeSpacing: v => `${(+v).toFixed(2)}\u2033`, eyeSize: v => `${(+v).toFixed(2)}\u2033`,
                   eyeDepth: v => (+v).toFixed(2),
