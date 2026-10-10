@@ -1606,6 +1606,12 @@
   ],
   "where": "slider: how wide the plank is, in the same units as the trunk radius. It may be set WIDER than the log, which is how a live-edge slab is cut"
  },
+ "sl.wood-len": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how far along the trunk the plank runs. With the width it sets the board's proportions, so it also decides whether a round knot renders round"
+ },
  "sl.wood-cutAngle": {
   "terms": [
    "wood"
