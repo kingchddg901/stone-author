@@ -2251,6 +2251,12 @@
   ],
   "where": "in the \"View\" group/panel"
  },
+ "view.log": {
+  "terms": [
+   "wood"
+  ],
+  "where": "a VIEW button, wood only: the end grain of the whole log with the saw line drawn on it, so where a plank comes from is something you look at"
+ },
  "view.stone": {
   "where": "in the \"View\" group/panel"
  }

@@ -17,7 +17,12 @@
   /* A control the current material does not have is not dimmed, it is gone. The attribute is on
      the element and the material is on the body, so the tool logic keeps owning its own panels'
      hidden state and this simply overrides while it applies. */
-  body[data-mat="wood"] [data-mat-only="stone"] { display: none !important; }
+  body[data-mat="wood"] [data-mat-only="stone"],
+  body[data-mat="stone"] [data-mat-only="wood"] { display: none !important; }
+  /* In wood the material panel goes to the TOP of the rail. Two `order` rules rather than moving
+     the markup, because in stone the ground panels have to come back in their own order. */
+  body[data-mat="wood"] #ground { order: -2; }
+  body[data-mat="wood"] #g-wood { order: -2; }
   .wrap { max-width: 1640px; margin-inline: auto; padding-inline: 16px; padding-block: 14px 36px;
           display: grid; gap: 12px; }
   h1 { font-size: 18px; font-weight: 500; margin: 0; text-wrap: balance; }
@@ -207,6 +212,7 @@
       <button id="v-identity" type="button" data-mat-only="stone" data-view="identity" data-i18n="view.identity">Identity</button>
       <button id="v-angle" type="button" data-mat-only="stone" data-view="angle" data-i18n="view.angle">Angle</button>
       <button id="uv-toggle" type="button" data-mat-only="stone" aria-pressed="false" title="Black light — only the UV palette glows" data-i18n="btn.uv-toggle" data-i18n-attr="title=a11y.black-light-only-the-uv">Black light</button>
+      <button id="v-log" type="button" data-mat-only="wood" data-view="log" data-i18n="view.log">Log</button>
       <button id="guides" type="button" aria-pressed="true" data-i18n="btn.guides">Guides</button></div>
     <div class="grp" role="group" aria-label="Zoom" data-i18n-attr="aria-label=a11y.zoom"><span class="lbl" data-i18n="lbl.zoom">Zoom</span>
       <button id="zout" type="button" aria-label="Zoom out" data-i18n-attr="aria-label=a11y.zoom-out">&minus;</button>
@@ -1033,6 +1039,7 @@ window.SA_I18N = (() => {
   "vein.variant.sinuous": "Sinuous",
   "view.angle": "Angle",
   "view.identity": "Identity",
+  "view.log": "Log",
   "view.stone": "Stone"
 } };
   // NAMES holds a language we have actually loaded; INDEX holds one we know EXISTS but have not fetched.
@@ -1266,7 +1273,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.13';
+  const BUILD = '2026.10.10.14';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3488,16 +3495,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // without them. (This core has no live caller — renderTiledParallel measured a no-op — but a serialised
     // copy that references a function it does not carry is a trap for whoever revives it.)
     const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, hexRGB, rgbHex, mixHexAt, emitAt, idxAt, strainColour, adjOf, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent, mix, mulberry32, gaussOf, sub,
-      woodField, woodHash, paintWoodContent, paintContent, setMaterial };
+      woodField, woodHash, woodSampler, woodRect, logGeom, drawLogGuides, paintWoodLog,
+      paintWoodContent, paintContent, setMaterial };
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
-    s += `var WOOD=${JSON.stringify(WOOD)};\n`;
+    s += `var WOOD=${JSON.stringify(WOOD)},LOG_FIT=${LOG_FIT};\n`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
-    s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;
+    s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,view,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;
     s += `var ensureClouds=()=>__cl,ensureBands=()=>__bd,ensureBreccia=()=>__br;\n`;
     s += `var document={createElement:()=>new OffscreenCanvas(1,1)};\n`;
     for (const n in fns) s += `var ${n}=${fns[n].toString()};\n`;
     s += `self.onmessage=function(e){var d=e.data;\n`;
-    s += `if(d.type==='init'){geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
+    s += `if(d.type==='init'){geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
     s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
     s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_DARK;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=COL.ground;tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
@@ -3520,7 +3528,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       modBitmap(layVis('bands') && G.bandStrength > 0, ensureBands),
       modBitmap(layVis('breccia') && G.brecStrength > 0, ensureBreccia),
     ]);
-    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, lightSpectrum, spotOn, hidden: [...hidden] };
+    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, spotOn, hidden: [...hidden] };
     const url = URL.createObjectURL(new Blob([renderCoreSrc()], { type: 'application/javascript' }));
     const pool = [];
     for (let i = 0; i < nWorkers; i++) {
@@ -3559,7 +3567,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function draw() {
     if (cal) return;   // calibration owns the canvas; without this the redraw loop paints the slab back
                        // over the instructions and the strokes, every frame, silently
-    const F = FAM[fam], ident = view !== 'stone', angleView = view === 'angle';
+    // Named, not negated. `view !== 'stone'` meant every future view was a diagnostic by default,
+    // and the log view is a view of the material rather than a readout of its ids.
+    const F = FAM[fam], ident = view === 'identity' || view === 'angle', angleView = view === 'angle';
     const backlit = !ident && !layTiles && G.backlight > 0;   // back light replaces the daylight body + its front-lit coat passes; it takes precedence over uv so emitters can compose at the current spectrum
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
     if (ident) { ctx.fillStyle = '#0c0d11'; ctx.fillRect(0, 0, cv.width, cv.height); }
@@ -3952,18 +3962,98 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     h = Math.imul(h ^ (h >>> 13), 1274126177) | 0;
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   }
-  function paintWoodContent(ident, angleView) {
-    // Wood has no ITEMS and no fluorescent minerals, so it has nothing to say in either diagnostic:
-    // the ident pass colours items by id, and under black light only the UV palette paints. Painting a
-    // flat brown into those would be a lie that looks like data.
-    if (ident || uvMode) return;
+  // ONE SAMPLER, TWO QUERIES. Everything that turns a point in the log into a colour lives here, and
+  // the two views below differ only in how a pixel becomes that point. Built once per paint: the
+  // closure costs one allocation and saves re-resolving tokens and feature tables per pixel.
+  function woodSampler() {
+    const F = woodField(), KS = (F.K - 1) / F.LMAX, ZS = (F.Z - 1) / WOOD.len;
+    // Resolved out of COL at draw time, like every other colour in the app. The token resolver fills
+    // the default when nobody has picked one, so this works with OVR untouched.
+    const [BR, BG, BB] = hexRGB(COL.woodEarly || '#c49660'), [DR, DG, DB] = hexRGB(COL.woodLate || '#603e22');
+    const [HR, HG, HB] = hexRGB(COL.woodHeart || '#5a3418');
+    const [KR, KG, KB] = hexRGB(COL.woodKnot || '#4a2f18');
+    const FE = F.FE, NF = FE.length, NA = F.NA;              // no active feature skips the inversion entirely
+    const sq = new Float64Array(NF || 1);                    // each feature's strength at the current pixel
+    const KN = FE.find(f => f.kn > 0) || null;               // the one feature with a knot face, if any
+    // (ddx, ddy) is the offset from the PITH at this height; zi indexes the pith tables; zp is the
+    // height itself; (fu, fv) are whatever the caller wants the surface texture keyed to.
+    const shade = (ddx, ddy, zi, zp, fu, fv, out) => {
+      let rad = Math.sqrt(ddx * ddx + ddy * ddy);
+      if (rad > F.R) rad = F.R;                              // the bark: nothing is sampled outside the log
+      // INVERTING THE ACCUMULATED SURFACE. The rings are no longer circles, so "which ring is this
+      // point in?" is no longer a lookup on the radius. It is still only a subtraction: take the
+      // concentric answer, correct the radius by the deviation accumulated there, and read again.
+      // The deviation moves by well under a ring width per ring, so one refinement lands it.
+      //
+      // A feature's strength is its amplitude times its angular lobe times its z window. The last is
+      // how a branch is present at one place and gone at the next. The sum runs over the list, so
+      // this never learns how many features there are.
+      let li;
+      if (NF) {
+        const inv = 1 / (rad || 1e-9);
+        for (let q = 0; q < NF; q++) {
+          const f = FE[q], ca = (ddx * f.ux + ddy * f.uy) * inv;
+          sq[q] = f.amp * f.al[((ca + 1) * 0.5 * (NA - 1)) | 0] * f.zw[zi];
+        }
+        let gi = (rad * KS) | 0, dv = 0;
+        for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
+        let rr = rad - dv;
+        gi = (rr > 0 ? rr * KS : 0) | 0; dv = 0;
+        for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
+        rr = rad - dv;
+        li = (rr > 0 ? rr * KS : 0) | 0;
+      } else li = (rad * KS) | 0;
+      let w = F.lut[li]
+        + (woodHash(fv * 2600, 7) - 0.5) * 0.06                // lengthwise fibre streak
+        + (woodHash(fu * 1700, fv * 2600) - 0.5) * 0.035;      // fine grain. Without it wood reads as plastic.
+      if (w < 0) w = 0; else if (w > 1.25) w = 1.25;
+      const mv = 1 + F.tv[li], mw = F.tw[li] * 26;             // this ring's value scale and warmth shift
+      let cr = (DR + (BR - DR) * w) * mv + mw, cg = (DG + (BG - DG) * w) * mv,
+          cb = (DB + (BB - DB) * w) * mv - mw;
+      const h = F.th[li];                                      // ...then the material state, on top of it
+      if (h) {                                                 // the ring keeps its own light and dark through the conversion
+        const s = 0.55 + 0.45 * w;
+        cr += (HR * s - cr) * h; cg += (HG * s - cg) * h; cb += (HB * s - cb) * h;
+      }
+      // THE KNOT FACE. Everything above drew wood around the branch; this is the branch itself, where
+      // the plane went through it. Its rings are concentric about the BRANCH axis, so they run
+      // crosswise to the trunk's - which is the whole reason a knot looks like a knot.
+      if (KN) {
+        const tt = ddx * KN.ux + ddy * KN.uy;                  // along the branch, from the pith
+        // A dead branch ENDS at the radius it died at: wood laid down after it was buried is clear.
+        // That is the difference between a knot on every board and one only in the heart of the log.
+        if (tt > KN.r0 && tt <= KN.rDie) {
+          const te = tt < KN.rDie ? tt : KN.rDie;              // it stopped gaining rings when it died
+          const rb = KN.kn * (te - KN.r0);                     // a cone, not a cylinder
+          const ss = -ddx * KN.uy + ddy * KN.ux, dzz = zp - KN.zc;
+          const q2 = ss * ss + dzz * dzz;
+          if (q2 < rb * rb) {
+            const dd = Math.sqrt(q2), u2 = (dd * KN.kp) % 1;
+            const lt = u2 > 0.72 ? (u2 - 0.72) / 0.28 : 0;
+            let kv = 1 - 0.55 * lt * lt;                       // its own latewood, at its own pitch
+            const rim = dd / (rb || 1e-9);
+            // INTERGROWN joins live cambium and barely shows a boundary. ENCASED trapped BARK, which
+            // is the black edge, and the reason that knot falls out of a board.
+            if (KN.dead) { kv *= 0.72; if (rim > 0.74) kv *= 0.18; }
+            else if (rim > 0.88) kv *= 0.55;
+            cr = KR * kv; cg = KG * kv; cb = KB * kv;
+          }
+        }
+      }
+      out[0] = cr < 0 ? 0 : cr > 255 ? 255 : cr;
+      out[1] = cg < 0 ? 0 : cg > 255 ? 255 : cg;
+      out[2] = cb < 0 ? 0 : cb > 255 ? 255 : cb;
+    };
+    return { F, KS, ZS, shade };
+  }
+  // The slab rectangle in DEVICE pixels, rounded INWARD to pixel centres. putImageData replaces alpha
+  // as well as colour, so a box one pixel wider than the slab would punch a transparent hairline
+  // through the lit ground the caller drew underneath - an erase, not a miss.
+  function woodRect() {
     const cv = g2d.canvas, cw = cv.width | 0, ch = cv.height | 0;
-    if (!cw || !ch) return;
+    if (!cw || !ch) return null;
     const m = g2d.getTransform();
-    if (!(Math.abs(m.a * m.d - m.b * m.c) > 1e-12)) return;     // degenerate transform: nothing to fill
-    const iv = m.inverse();
-    // device-space bounds of the slab rect, so the surround is never touched and the live view only
-    // pays for the pixels the slab actually covers
+    if (!(Math.abs(m.a * m.d - m.b * m.c) > 1e-12)) return null;   // degenerate transform: nothing to fill
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const [u, v] of [[0, 0], [1, 0], [0, H], [1, H]]) {
       const dx = m.a * u + m.c * v + m.e, dy = m.b * u + m.d * v + m.f;
@@ -3972,116 +4062,111 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (dy < y0) y0 = dy;
       if (dy > y1) y1 = dy;
     }
-    // Round INWARD to pixel CENTRES, not outward to pixel edges. putImageData replaces alpha as well
-    // as colour, so a box one pixel wider than the slab would punch a transparent hairline through the
-    // lit ground the caller drew underneath - an erase, not a miss. Centres also make the clamp below
-    // dead code under every transform the app actually uses, which are all axis-aligned scales.
     x0 = Math.max(0, Math.ceil(x0 - 0.5)); y0 = Math.max(0, Math.ceil(y0 - 0.5));
     x1 = Math.min(cw, Math.floor(x1 - 0.5) + 1); y1 = Math.min(ch, Math.floor(y1 - 0.5) + 1);
     const bw = x1 - x0, bh = y1 - y0;
-    if (bw <= 0 || bh <= 0) return;
-    const F = woodField(), KS = (F.K - 1) / F.LMAX, ZS = (F.Z - 1) / WOOD.len;
-    // Resolved out of COL at draw time, like every other colour in the app. The token resolver fills
-    // the default when nobody has picked one, so this works with OVR untouched.
-    const [BR, BG, BB] = hexRGB(COL.woodEarly || '#c49660'), [DR, DG, DB] = hexRGB(COL.woodLate || '#603e22');
-    const [HR, HG, HB] = hexRGB(COL.woodHeart || '#5a3418');
-    const FE = F.FE, NF = FE.length, NA = F.NA;              // no active feature skips the inversion entirely
-    const sq = new Float64Array(NF || 1);                    // each feature's strength at the current pixel
-    const KN = FE.find(f => f.kn > 0) || null;               // the one feature with a knot face, if any
-    const [KR, KG, KB] = hexRGB(COL.woodKnot || '#4a2f18');
-    const band = Math.max(1, Math.min(bh, Math.ceil(2097152 / bw)));   // ~2 Mpx of ImageData at a time
-    const img = g2d.createImageData(bw, band), px = img.data;
-    for (let by = y0; by < y1; by += band) {
-      const rows = Math.min(band, y1 - by);
+    return bw > 0 && bh > 0 ? { iv: m.inverse(), x0, y0, x1, y1, bw, bh } : null;
+  }
+  function paintWoodContent(ident, angleView) {
+    // Wood has no ITEMS and no fluorescent minerals, so it has nothing to say in either diagnostic:
+    // the ident pass colours items by id, and under black light only the UV palette paints. Painting
+    // a flat brown into those would be a lie that looks like data.
+    if (ident || uvMode) return;
+    if (view === 'log') return paintWoodLog();               // the other query on the same field
+    const B = woodRect(); if (!B) return;
+    const { F, KS, ZS, shade } = woodSampler();
+    const out = [0, 0, 0];
+    const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));   // ~2 Mpx of ImageData at a time
+    const img = g2d.createImageData(B.bw, band), px = img.data;
+    for (let by = B.y0; by < B.y1; by += band) {
+      const rows = Math.min(band, B.y1 - by);
       let o = 0;
       for (let y = 0; y < rows; y++) {
-        const dy = by + y + 0.5, dx0 = x0 + 0.5;
+        const dy = by + y + 0.5, dx0 = B.x0 + 0.5;
         // incremental inverse transform: solve the row start, then one add per pixel. General for any
         // affine, and it keeps the slab coordinate exact rather than rebuilt from a scale alone.
-        let su = iv.a * dx0 + iv.c * dy + iv.e, sv = iv.b * dx0 + iv.d * dy + iv.f;
-        for (let x = 0; x < bw; x++, o += 4, su += iv.a, sv += iv.b) {
+        let su = B.iv.a * dx0 + B.iv.c * dy + B.iv.e, sv = B.iv.b * dx0 + B.iv.d * dy + B.iv.f;
+        for (let x = 0; x < B.bw; x++, o += 4, su += B.iv.a, sv += B.iv.b) {
           // CLAMP, never skip: the field extends by at most a pixel at its own edge, which is what any
-          // sampler does. Skipping would mean leaving alpha at 0, and that erases. Only a rotated
-          // transform can reach here, and overpainting a corner is the safer of the two failures.
+          // sampler does. Skipping would leave alpha at 0, and that erases.
           const cu = su < 0 ? 0 : su > 1 ? 1 : su, cvv = sv < 0 ? 0 : sv > H ? H : sv;
           let zi = (cu * WOOD.len * ZS) | 0;
           if (zi > F.Z - 1) zi = F.Z - 1;
-          const ddx = WOOD.plane - F.pax[zi], ddy = (WOOD.y0 + (cvv / H) * WOOD.wid) - F.pay[zi];
-          let rad = Math.sqrt(ddx * ddx + ddy * ddy);
-          if (rad > F.R) rad = F.R;                                // the bark: a board cannot leave the log it came from
-          // INVERTING THE ACCUMULATED SURFACE. The rings are no longer circles, so "which ring is this
-          // point in?" is no longer a lookup on the radius. It is still only a subtraction: take the
-          // concentric answer, correct the radius by the deviation accumulated there, and read again.
-          // The deviation moves by well under a ring width per ring, so one refinement lands it.
-          //
-          // A feature's strength here is its amplitude times its angular lobe times its z window. The
-          // last is how a branch is present at one place along the board and gone at the next. The sum
-          // runs over the list, so this loop never learns how many features there are.
-          let li;
-          if (NF) {
-            const inv = 1 / (rad || 1e-9);
-            for (let q = 0; q < NF; q++) {
-              const f = FE[q], ca = (ddx * f.ux + ddy * f.uy) * inv;
-              sq[q] = f.amp * f.al[((ca + 1) * 0.5 * (NA - 1)) | 0] * f.zw[zi];
-            }
-            let gi = (rad * KS) | 0, dv = 0;
-            for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
-            let rr = rad - dv;
-            gi = (rr > 0 ? rr * KS : 0) | 0; dv = 0;
-            for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
-            rr = rad - dv;
-            li = (rr > 0 ? rr * KS : 0) | 0;
-          } else li = (rad * KS) | 0;
-          let w = F.lut[li]
-            + (woodHash(cvv * 2600, 7) - 0.5) * 0.06               // lengthwise fibre streak
-            + (woodHash(cu * 1700, cvv * 2600) - 0.5) * 0.035;     // fine grain. Without it wood reads as plastic.
-          if (w < 0) w = 0; else if (w > 1.25) w = 1.25;
-          const mv = 1 + F.tv[li], mw = F.tw[li] * 26;             // this ring's value scale and warmth shift
-          let cr = (DR + (BR - DR) * w) * mv + mw, cg = (DG + (BG - DG) * w) * mv,
-              cb = (DB + (BB - DB) * w) * mv - mw;
-          const h = F.th[li];                                      // ...then the material state, on top of it
-          if (h) {                                                 // the ring keeps its own light and dark through the conversion
-            const s = 0.55 + 0.45 * w;
-            cr += (HR * s - cr) * h; cg += (HG * s - cg) * h; cb += (HB * s - cb) * h;
-          }
-          // THE KNOT FACE. Everything above drew wood around the branch; this is the branch itself,
-          // where the plane went through it. Its rings are concentric about the BRANCH axis, so they
-          // run crosswise to the trunk's - which is the whole reason a knot looks like a knot.
-          if (KN) {
-            const tt = ddx * KN.ux + ddy * KN.uy;                  // along the branch, from the pith
-            // A dead branch ENDS at the radius it died at: wood laid down after it was buried is
-            // clear. That is the whole difference between a knot you find on every board and one
-            // that is only in the heart of the log.
-            if (tt > KN.r0 && tt <= KN.rDie) {
-              const te = tt < KN.rDie ? tt : KN.rDie;              // it stopped gaining rings when it died
-              const rb = KN.kn * (te - KN.r0);                     // a cone, not a cylinder
-              const ss = -ddx * KN.uy + ddy * KN.ux, dzz = cu * WOOD.len - KN.zc;
-              const q2 = ss * ss + dzz * dzz;
-              if (q2 < rb * rb) {
-                const dd = Math.sqrt(q2), u2 = (dd * KN.kp) % 1;
-                const lt = u2 > 0.72 ? (u2 - 0.72) / 0.28 : 0;
-                let kv = 1 - 0.55 * lt * lt;                       // its own latewood, at its own pitch
-                const rim = dd / (rb || 1e-9);
-                // INTERGROWN joins live cambium and barely shows a boundary. ENCASED trapped BARK,
-                // which is the black edge, and the reason that knot falls out of a board.
-                if (KN.dead) { kv *= 0.72; if (rim > 0.74) kv *= 0.18; }
-                else if (rim > 0.88) kv *= 0.55;
-                cr = KR * kv; cg = KG * kv; cb = KB * kv;
-              }
-            }
-          }
-          px[o] = cr < 0 ? 0 : cr > 255 ? 255 : cr;
-          px[o + 1] = cg < 0 ? 0 : cg > 255 ? 255 : cg;
-          px[o + 2] = cb < 0 ? 0 : cb > 255 ? 255 : cb;
-          px[o + 3] = 255;
+          shade(WOOD.plane - F.pax[zi], (WOOD.y0 + (cvv / H) * WOOD.wid) - F.pay[zi],
+                zi, cu * WOOD.len, cu, cvv, out);
+          px[o] = out[0]; px[o + 1] = out[1]; px[o + 2] = out[2]; px[o + 3] = 255;
         }
       }
       // putImageData works in device pixels and ignores the transform, which is what is wanted here:
       // the face is already resolved in slab space, so it must not be resampled on the way down.
-      g2d.putImageData(img, x0, by, 0, 0, bw, rows);
+      g2d.putImageData(img, B.x0, by, 0, 0, B.bw, rows);
     }
   }
-
+  // THE LOG VIEW: the same field, cut at z = const instead of x = const. Not a diagram of the log - an
+  // actual section through it, with every feature the board shows, because it is the same sampler.
+  // The saw line is drawn on top, so where a plank comes from is something you look at rather than
+  // something you work out.
+  const LOG_FIT = 0.9;                                       // how much of the slab's height the log fills
+  function logGeom(F) {
+    const sc = (H * LOG_FIT) / (2 * F.R);                    // slab units per log unit
+    return { sc, cx: 0.5, cy: H / 2, zp: WOOD.len / 2, zi: Math.min(F.Z - 1, ((WOOD.len / 2) * (F.Z - 1) / WOOD.len) | 0) };
+  }
+  function paintWoodLog() {
+    const B = woodRect(); if (!B) return;
+    const S = woodSampler(), F = S.F, G = logGeom(F);
+    const [UR, UG, UB] = hexRGB(STONE_BG);                   // the surround, so the section reads as an object
+    const out = [0, 0, 0], R2 = F.R * F.R;
+    const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));
+    const img = g2d.createImageData(B.bw, band), px = img.data;
+    for (let by = B.y0; by < B.y1; by += band) {
+      const rows = Math.min(band, B.y1 - by);
+      let o = 0;
+      for (let y = 0; y < rows; y++) {
+        const dy = by + y + 0.5, dx0 = B.x0 + 0.5;
+        let su = B.iv.a * dx0 + B.iv.c * dy + B.iv.e, sv = B.iv.b * dx0 + B.iv.d * dy + B.iv.f;
+        for (let x = 0; x < B.bw; x++, o += 4, su += B.iv.a, sv += B.iv.b) {
+          const lx = (su - G.cx) / G.sc, ly = (sv - G.cy) / G.sc;      // slab -> log coordinates
+          const ddx = lx - F.pax[G.zi], ddy = ly - F.pay[G.zi];
+          if (ddx * ddx + ddy * ddy > R2) {                            // outside the bark
+            px[o] = UR; px[o + 1] = UG; px[o + 2] = UB; px[o + 3] = 255;
+            continue;
+          }
+          S.shade(ddx, ddy, G.zi, G.zp, lx * 0.5, ly * 0.5, out);
+          px[o] = out[0]; px[o + 1] = out[1]; px[o + 2] = out[2]; px[o + 3] = 255;
+        }
+      }
+      g2d.putImageData(img, B.x0, by, 0, 0, B.bw, rows);
+    }
+    drawLogGuides(F, G);
+  }
+  // The saw, on the section. Everything here is in SLAB units because the transform already is.
+  function drawLogGuides(F, G) {
+    const sx = G.cx + WOOD.plane * G.sc;                     // the cut plane, seen end-on
+    const ya = G.cy + WOOD.y0 * G.sc, yb = G.cy + (WOOD.y0 + WOOD.wid) * G.sc;
+    const lw = 1 / (g2d.getTransform().a || 1);          // slab units per device pixel, taken from
+                                                        // the transform rather than the live zoom:
+                                                        // right at any export size, and it exists
+                                                        // off the main thread
+    g2d.save();
+    g2d.lineCap = 'butt';
+    g2d.strokeStyle = 'rgba(255,255,255,0.28)';              // the whole plane, for context
+    g2d.lineWidth = lw; g2d.beginPath();
+    g2d.moveTo(sx, G.cy - F.R * G.sc); g2d.lineTo(sx, G.cy + F.R * G.sc); g2d.stroke();
+    g2d.strokeStyle = '#8ad4ff';                             // the PLANK: the segment actually taken
+    g2d.lineWidth = lw * 3; g2d.beginPath();
+    g2d.moveTo(sx, ya); g2d.lineTo(sx, yb); g2d.stroke();
+    const px_ = G.cx + F.pax[G.zi] * G.sc, py_ = G.cy + F.pay[G.zi] * G.sc;
+    g2d.fillStyle = '#ff6b6b';                               // the pith, which is not the centre
+    g2d.beginPath(); g2d.arc(px_, py_, lw * 3, 0, 6.2832); g2d.fill();
+    const KN = F.FE.find(f => f.kn > 0);                     // where the branch leaves, if there is one
+    if (KN) {
+      g2d.strokeStyle = 'rgba(255,170,90,0.75)'; g2d.lineWidth = lw * 2; g2d.beginPath();
+      g2d.moveTo(px_, py_);
+      const far = Math.min(KN.rDie, F.R);
+      g2d.lineTo(px_ + KN.ux * far * G.sc, py_ + KN.uy * far * G.sc); g2d.stroke();
+    }
+    g2d.restore();
+  }
   function paintStoneContent(ident, angleView) {
     const uv = uvMode && !ident;                                // black-light: only the UV palette paints; the stone body is dark
     // pinned GROUND — base setter + modulators, always at the bottom (they SET the ground, they aren't content):
@@ -5057,6 +5142,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // discriminator, so it stays on the right side of tools/check-material-fork.mjs.
     const mat = currentMaterial();
     document.getElementById('g-wood').hidden = mat !== 'wood';
+    // The Log view belongs to wood. Switching to stone while looking at one would leave the view
+    // button pressed on a control that is no longer on screen, which is a worse lie than a reset.
+    if (mat !== 'wood' && view === 'log') {
+      view = 'stone';
+      const vs = document.getElementById('v-stone'); if (vs) press('[data-view]', vs);
+    }
     document.body.dataset.mat = mat;                    // the CSS rule above hides what this material lacks
     // "You draw where the lines go" is a stone sentence. In wood you do not draw: you author a log and
     // then mill it, and saying otherwise is the first thing the interface would be lying about.
