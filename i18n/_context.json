@@ -1640,6 +1640,13 @@
   "where": "slider: which way round the trunk the saw plane faces, in degrees. 0 to 179, because 180 is the same plane cut from the other side"
  },
  "sl.wood-treeDia": {"terms": ["wood"], "where": "slider: the log's diameter in feet. A readout you can drag — it shows the size the rings actually came to, and dragging solves once for the ring-width scale rather than pinning the size"},
+ "lbl.kept-cuts": {"terms": ["wood"], "where": "label: the group of saved board cuts the floor is laid from"},
+ "a11y.wood-set": {"terms": ["wood"], "where": "accessible name for the kept-cuts button group"},
+ "tool.keep-cut": {"terms": ["wood"], "where": "button: save the board currently shown, so the floor is laid from it and any others kept"},
+ "tool.clear-cuts": {"terms": ["wood"], "where": "button: discard every kept cut and go back to cutting one log"},
+ "hint.cut-kept": {"placeholders": {"n": "how many cuts are now kept, e.g. 3"}, "terms": ["wood"], "where": "status shown after keeping a cut"},
+ "hint.cuts-cleared": {"terms": ["wood"], "where": "status after discarding every kept cut"},
+ "hint.cuts-full": {"terms": ["wood"], "where": "status when trying to keep a ninth cut"},
  "sl.wood-stage": {"terms": ["wood"], "where": "slider: how many different boards of the one log the floor is cut from. 1 repeats a single board; higher walks down the cant"},
  "sl.wood-rings": {
   "terms": [

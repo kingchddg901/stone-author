@@ -363,9 +363,14 @@
   <div class="sliders" data-mat-only="wood">
     <div class="sl"><label for="wood-stage"><span data-i18n="sl.wood-stage">Boards</span> <output id="wood-stageV"></output></label><input id="wood-stage" type="range" min="1" max="8" step="1"></div>
   </div>
+  <div class="grp" data-mat-only="wood" role="group" aria-label="Kept cuts" data-i18n-attr="aria-label=a11y.wood-set"><span class="lbl" data-i18n="lbl.kept-cuts">Kept cuts</span>
+    <button id="wood-set-add" type="button" data-i18n="tool.keep-cut">Keep this cut</button>
+    <button id="wood-set-clear" type="button" data-i18n="tool.clear-cuts">Clear</button>
+    <output id="wood-set-count"></output>
+  </div>
   <p data-i18n-html="note.lay-tiles"><b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor.
     Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint.
-    In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic.
+    In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely.
     Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.</p>
   </div></details>
   <div id="ground" class="rail">
@@ -852,7 +857,7 @@ window.SA_I18N = (() => {
   "note.each-line-keeps-what-it": "<b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw it, so changing them shapes the next line only. This generates the base structure; the colours here are only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor vein grown while zoomed in comes out shorter, at the scale you are working.",
   "note.granite": "<b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space. A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only specks already down are moved, so what you draw first is older rock.",
   "note.identity": "<b>Identity</b> shows what an animation would read: each line in its own colour, brightening along its length in the direction you drew it; web cracks brighten toward the line that spread them. Nothing had to be traced &mdash; the line was known when it was made.",
-  "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint. In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
+  "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint. In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
   "note.magnet": "<b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab. The Angle view colours every speck by the way it points, so alignment shows as a single colour.",
   "opt.fmt-png": "PNG",
   "opt.fmt-tiff": "TIFF",
@@ -946,6 +951,13 @@ window.SA_I18N = (() => {
   "sl.wood-cutAngle": "Cut angle",
   "sl.wood-treeDia": "Tree size",
   "sl.wood-stage": "Boards",
+  "lbl.kept-cuts": "Kept cuts",
+  "a11y.wood-set": "Kept cuts",
+  "tool.keep-cut": "Keep this cut",
+  "tool.clear-cuts": "Clear",
+  "hint.cut-kept": "Kept \u2014 {n} cut(s). The floor is laid from these now; change anything, even the species, and keep another.",
+  "hint.cuts-cleared": "Cleared. The floor goes back to walking down one log.",
+  "hint.cuts-full": "Eight kept cuts is the limit \u2014 each one is its own log to build.",
   "sl.wood-rings": "Rings",
   "sl.wood-late": "Latewood contrast",
   "sl.wood-juv": "Juvenile",
@@ -1367,7 +1379,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.32';
+  const BUILD = '2026.10.10.34';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2945,7 +2957,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const SW = 1600, SH = Math.round(SW * H);
   // How many boards this floor is cut from. Stone has no cant, so it is always 1 there and every
   // line below collapses to what it was.
-  const stageN = () => (currentMaterial() === 'wood' ? Math.max(1, Math.min(8, Math.round(WOOD.stage) || 1)) : 1);
+  const woodSet = () => (currentMaterial() === 'wood' && Array.isArray(WOOD.set)) ? WOOD.set : [];
+  // How many sources the floor has. A kept set answers first - that is the "depending on choice" -
+  // and the cant answers when there is nothing kept.
+  const stageN = () => {
+    if (currentMaterial() !== 'wood') return 1;
+    const s = woodSet();
+    return s.length ? Math.min(8, s.length) : Math.max(1, Math.min(8, Math.round(WOOD.stage) || 1));
+  };
   function renderStoneOffscreen() {
     // THE SOURCE IS A CANT WHEN WOOD IS STAGED. The painter maps v through yy = y0 + (cvv/H)*wid, so
     // a canvas STAGE times taller simply answers for board positions y0 .. y0 + wid*STAGE - the same
@@ -2967,11 +2986,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // canvas, so a taller canvas on its own paints nothing extra - translating the transform down by
     // one slab height per band is what fills it. Band k is the kth board down the cant; the log field
     // is memoised on WOOD and woodBandY is outside it, so all st bands share one field build.
+    // A KEPT SET PAINTS ITS ENTRIES; otherwise the bands walk the cant. Entries are whole logs, so
+    // each one rebuilds the field - unavoidable, and the reason the set is capped. The cant does not,
+    // because its offset lives outside WOOD.
+    const SET = woodSet(), keep = SET.length ? JSON.stringify(WOOD) : null;
+    const keepOvr = SET.length ? { woodEarly: OVR.woodEarly, woodLate: OVR.woodLate, woodHeart: OVR.woodHeart } : null;
     for (let k = 0; k < st; k++) {
-      woodBandY = st > 1 ? k * WOOD.wid : 0;
+      if (SET.length) {
+        const e = SET[k];
+        for (const key in e) if (key !== 'set' && key !== 'ovr') WOOD[key] = e[key];
+        if (e.ovr) { Object.assign(OVR, e.ovr); recolour(); }   // its own palette, or an ebony paints pale
+        woodBandY = 0;
+      } else woodBandY = st > 1 ? k * WOOD.wid : 0;
       c.setTransform(cw, 0, 0, cw, 0, k * cw * H);
       paintContent(false, false);
     }
+    if (keep) { Object.assign(WOOD, JSON.parse(keep)); Object.assign(OVR, keepOvr); recolour(); }
     woodBandY = 0;
     g2d = prev; stoneReady = true;
   }
@@ -3949,6 +3979,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const WOOD = {
     seed: 770513, trunk: 1,                       // trunk is the SCALE, not the radius - the radius is what
                                                   // the rings add up to, so more years means a bigger log
+    set: [],                                      // KEPT CUTS. Non-empty and the floor is laid from these,
+                                                  // one band each, each free to be a different TREE.
     stage: 1,                                     // THE STAGED SET: how many different boards the floor is
                                                   // cut from. 1 is one board repeated; higher walks down the
                                                   // cant, and high + Shuffled is the mosaic case.
@@ -5674,7 +5706,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   function syncWood() {                                  // after a load, the rail has to agree with the slab
     for (const k of Object.keys(WOOD)) { const el = document.getElementById('wood-' + k); if (el) { el.value = WOOD[k]; showWood(k); } }
-    syncTreeDia();
+    syncTreeDia(); showSetCount();
   }
   // THE TREE SIZE IS A READOUT YOU CAN GRAB, not a setting that is stored. What is stored is the
   // ring-width scale; the diameter is what the rings came to. So this shows the ACTUAL diameter and
@@ -7274,6 +7306,33 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // THE ONE-SHOT SOLVE. R is linear in trunk, so trunk * target / R lands exactly on target - no
   // iteration, and no need for the growth sum at the call site. It runs on the drag and then stops;
   // nothing re-applies it afterwards, which is what keeps growth at year X reaching outward only.
+  // KEEPING A CUT. The snapshot is the whole of WOOD minus the set, so an entry can be a different
+  // TREE and not merely a different board of this one. The array is REPLACED rather than pushed into:
+  // WOOD0 is a deep copy taken at startup and a reset assigns from it, so sharing an array reference
+  // would let keeping a cut write into the pristine defaults and a load would stop being a pure
+  // function of the slab.
+  function showSetCount() {
+    const el = document.getElementById('wood-set-count');
+    if (el) el.textContent = woodSet().length ? String(woodSet().length) : '\u2014';
+  }
+  {
+    const add = document.getElementById('wood-set-add'), clr = document.getElementById('wood-set-clear');
+    if (add) add.addEventListener('click', () => {
+      const cur = Array.isArray(WOOD.set) ? WOOD.set : [];
+      if (cur.length >= 8) { hint(TR('hint.cuts-full')); return; }
+      const snap = JSON.parse(JSON.stringify(WOOD)); delete snap.set;
+      // AND ITS COLOUR, which is not in WOOD. The three wood colours are TOKENS and live in OVR, so a
+      // snapshot of WOOD alone keeps an ebony's rings and paints them in whatever palette happens to be
+      // loaded. Caught by rendering three kept species and getting three pale boards.
+      snap.ovr = { woodEarly: OVR.woodEarly, woodLate: OVR.woodLate, woodHeart: OVR.woodHeart };
+      WOOD.set = [...cur, snap];
+      showSetCount(); redraw(true); hint(TR('hint.cut-kept', { n: WOOD.set.length }));
+    });
+    if (clr) clr.addEventListener('click', () => {
+      WOOD.set = []; showSetCount(); redraw(true); hint(TR('hint.cuts-cleared'));
+    });
+    showSetCount();
+  }
   {
     const el = document.getElementById('wood-treeDia');
     if (el) el.addEventListener('input', () => {
