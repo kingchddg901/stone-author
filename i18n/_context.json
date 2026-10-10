@@ -1600,6 +1600,18 @@
   ],
   "where": "slider: where along the saw plane the board is taken from"
  },
+ "sl.wood-wid": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: how wide the plank is, in the same units as the trunk radius. It may be set WIDER than the log, which is how a live-edge slab is cut"
+ },
+ "sl.wood-cutAngle": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: which way round the trunk the saw plane faces, in degrees. 0 to 179, because 180 is the same plane cut from the other side"
+ },
  "sl.wood-rings": {
   "terms": [
    "wood"

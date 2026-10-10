@@ -429,7 +429,9 @@
     <div class="sliders">
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-cut-note">Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.</span></div>
       <div class="sl"><label for="wood-plane"><span data-i18n="sl.wood-plane">Cut</span> <output id="wood-planeV"></output></label><input id="wood-plane" type="range" min="0.02" max="0.9" step="0.01"></div>
-      <div class="sl"><label for="wood-y0"><span data-i18n="sl.wood-y0">Board position</span> <output id="wood-y0V"></output></label><input id="wood-y0" type="range" min="-0.4" max="0.6" step="0.01"></div>
+      <div class="sl"><label for="wood-y0"><span data-i18n="sl.wood-y0">Board position</span> <output id="wood-y0V"></output></label><input id="wood-y0" type="range" min="-1.3" max="1.3" step="0.01"></div>
+      <div class="sl"><label for="wood-wid"><span data-i18n="sl.wood-wid">Plank width</span> <output id="wood-widV"></output></label><input id="wood-wid" type="range" min="0.05" max="2.6" step="0.01"></div>
+      <div class="sl"><label for="wood-cutAngle"><span data-i18n="sl.wood-cutAngle">Cut angle</span> <output id="wood-cutAngleV"></output></label><input id="wood-cutAngle" type="range" min="0" max="179" step="1"></div>
       <div class="sl"><label for="wood-rings"><span data-i18n="sl.wood-rings">Rings</span> <output id="wood-ringsV"></output></label><input id="wood-rings" type="range" min="40" max="400" step="5"></div>
       <div class="sl"><label for="wood-late"><span data-i18n="sl.wood-late">Latewood contrast</span> <output id="wood-lateV"></output></label><input id="wood-late" type="range" min="0" max="1" step="0.02"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-pith-note">The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.</span></div>
@@ -891,6 +893,8 @@ window.SA_I18N = (() => {
   "sl.specular": "Specular / polish",
   "sl.wood-plane": "Cut",
   "sl.wood-y0": "Board position",
+  "sl.wood-wid": "Plank width",
+  "sl.wood-cutAngle": "Cut angle",
   "sl.wood-rings": "Rings",
   "sl.wood-late": "Latewood contrast",
   "sl.wood-lean": "Pith lean",
@@ -1273,7 +1277,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.14';
+  const BUILD = '2026.10.10.15';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3812,9 +3816,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // when the material is wood, so a stone slab's signature is untouched by wood existing at all.
   const WOOD = {
     seed: 770513, trunk: 1, len: 2.4, wid: 0.44,  // trunk is the SCALE, not the radius - the radius is what
-                                                  // the rings add up to, so more years means a bigger log
+                                                  // the rings add up to, so more years means a bigger log.
+                                                  // wid is the PLANK's width and may exceed the log: that
+                                                  // is not an error, it is how a live-edge slab is cut.
     rings: 220, late: 0.52,                       // the ring profile: how many, and how dark the latewood band
-    plane: 0.27, y0: 0.2,                         // WHERE THE CUT STANDS. plane is the whole quarter-to-cathedral
+    plane: 0.27, y0: 0.2, cutAngle: 0,            // WHERE THE CUT STANDS. plane is the whole quarter-to-cathedral
                                                   // axis, because cos(theta) = plane / r; y0 slides the board
                                                   // along the cut, which is why one board drifts in character.
     lean: 0.01, leanFine: 0.006,                  // pith motion along the plane's normal -> the stripes breathe wider and tighter
@@ -3977,9 +3983,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const KN = FE.find(f => f.kn > 0) || null;               // the one feature with a knot face, if any
     // (ddx, ddy) is the offset from the PITH at this height; zi indexes the pith tables; zp is the
     // height itself; (fu, fv) are whatever the caller wants the surface texture keyed to.
+    // Returns false OUTSIDE THE LOG rather than clamping to the outermost ring. Clamping painted
+    // solid bark out to the slab edge, which reads as the renderer giving up; the truth is that there
+    // is no wood there. The caller decides what to draw instead, and for the board that is the live
+    // edge of a slab wider than the log it came from.
     const shade = (ddx, ddy, zi, zp, fu, fv, out) => {
-      let rad = Math.sqrt(ddx * ddx + ddy * ddy);
-      if (rad > F.R) rad = F.R;                              // the bark: nothing is sampled outside the log
+      const rad = Math.sqrt(ddx * ddx + ddy * ddy);
+      if (rad > F.R) return false;
       // INVERTING THE ACCUMULATED SURFACE. The rings are no longer circles, so "which ring is this
       // point in?" is no longer a lookup on the radius. It is still only a subtraction: take the
       // concentric answer, correct the radius by the deviation accumulated there, and read again.
@@ -4043,6 +4053,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       out[0] = cr < 0 ? 0 : cr > 255 ? 255 : cr;
       out[1] = cg < 0 ? 0 : cg > 255 ? 255 : cg;
       out[2] = cb < 0 ? 0 : cb > 255 ? 255 : cb;
+      return true;
     };
     return { F, KS, ZS, shade };
   }
@@ -4076,6 +4087,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const B = woodRect(); if (!B) return;
     const { F, KS, ZS, shade } = woodSampler();
     const out = [0, 0, 0];
+    const [UR, UG, UB] = hexRGB(STONE_BG);                   // beyond the bark there is no board
+    // A plane is a NORMAL and an offset; the normal used to be nailed to +x. Rotating it about the
+    // trunk axis is two cosines, hoisted, and two multiplies per pixel.
+    const phi = WOOD.cutAngle * Math.PI / 180, cux = Math.cos(phi), cuy = Math.sin(phi);
+    const pcx = WOOD.plane * cux, pcy = WOOD.plane * cuy;
     const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));   // ~2 Mpx of ImageData at a time
     const img = g2d.createImageData(B.bw, band), px = img.data;
     for (let by = B.y0; by < B.y1; by += band) {
@@ -4092,9 +4108,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           const cu = su < 0 ? 0 : su > 1 ? 1 : su, cvv = sv < 0 ? 0 : sv > H ? H : sv;
           let zi = (cu * WOOD.len * ZS) | 0;
           if (zi > F.Z - 1) zi = F.Z - 1;
-          shade(WOOD.plane - F.pax[zi], (WOOD.y0 + (cvv / H) * WOOD.wid) - F.pay[zi],
-                zi, cu * WOOD.len, cu, cvv, out);
-          px[o] = out[0]; px[o + 1] = out[1]; px[o + 2] = out[2]; px[o + 3] = 255;
+          // A plank set wider than the log runs off the end of the wood. That is a LIVE EDGE, not a
+          // failure, and painting the surround is what says so.
+          const yy = WOOD.y0 + (cvv / H) * WOOD.wid;              // across the plank, along the plane
+          if (shade(pcx - yy * cuy - F.pax[zi], pcy + yy * cux - F.pay[zi],
+                    zi, cu * WOOD.len, cu, cvv, out)) {
+            px[o] = out[0]; px[o + 1] = out[1]; px[o + 2] = out[2];
+          } else { px[o] = UR; px[o + 1] = UG; px[o + 2] = UB; }
+          px[o + 3] = 255;
         }
       }
       // putImageData works in device pixels and ignores the transform, which is what is wanted here:
@@ -4115,7 +4136,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const B = woodRect(); if (!B) return;
     const S = woodSampler(), F = S.F, G = logGeom(F);
     const [UR, UG, UB] = hexRGB(STONE_BG);                   // the surround, so the section reads as an object
-    const out = [0, 0, 0], R2 = F.R * F.R;
+    const out = [0, 0, 0];
     const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));
     const img = g2d.createImageData(B.bw, band), px = img.data;
     for (let by = B.y0; by < B.y1; by += band) {
@@ -4127,12 +4148,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         for (let x = 0; x < B.bw; x++, o += 4, su += B.iv.a, sv += B.iv.b) {
           const lx = (su - G.cx) / G.sc, ly = (sv - G.cy) / G.sc;      // slab -> log coordinates
           const ddx = lx - F.pax[G.zi], ddy = ly - F.pay[G.zi];
-          if (ddx * ddx + ddy * ddy > R2) {                            // outside the bark
-            px[o] = UR; px[o + 1] = UG; px[o + 2] = UB; px[o + 3] = 255;
-            continue;
-          }
-          S.shade(ddx, ddy, G.zi, G.zp, lx * 0.5, ly * 0.5, out);
-          px[o] = out[0]; px[o + 1] = out[1]; px[o + 2] = out[2]; px[o + 3] = 255;
+          if (!S.shade(ddx, ddy, G.zi, G.zp, lx * 0.5, ly * 0.5, out)) {   // outside the bark
+            px[o] = UR; px[o + 1] = UG; px[o + 2] = UB;
+          } else { px[o] = out[0]; px[o + 1] = out[1]; px[o + 2] = out[2]; }
+          px[o + 3] = 255;
         }
       }
       g2d.putImageData(img, B.x0, by, 0, 0, B.bw, rows);
@@ -4141,8 +4160,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // The saw, on the section. Everything here is in SLAB units because the transform already is.
   function drawLogGuides(F, G) {
-    const sx = G.cx + WOOD.plane * G.sc;                     // the cut plane, seen end-on
-    const ya = G.cy + WOOD.y0 * G.sc, yb = G.cy + (WOOD.y0 + WOOD.wid) * G.sc;
+    // The plane as a point and a direction, so the guides rotate with the cut instead of assuming it
+    // is vertical. P is where the normal leaves the axis; D runs along the plane.
+    const phi = WOOD.cutAngle * Math.PI / 180, cux = Math.cos(phi), cuy = Math.sin(phi);
+    const Px = WOOD.plane * cux, Py = WOOD.plane * cuy, Dx = -cuy, Dy = cux;
+    const half = Math.sqrt(Math.max(F.R * F.R - WOOD.plane * WOOD.plane, 0));   // the chord, if it meets the log
+    const S2 = (a, b) => [G.cx + a * G.sc, G.cy + b * G.sc];
+    const [ax1, ay1] = S2(Px - Dx * half, Py - Dy * half), [ax2, ay2] = S2(Px + Dx * half, Py + Dy * half);
+    const [bx1, by1] = S2(Px + Dx * WOOD.y0, Py + Dy * WOOD.y0);
+    const [bx2, by2] = S2(Px + Dx * (WOOD.y0 + WOOD.wid), Py + Dy * (WOOD.y0 + WOOD.wid));
     const lw = 1 / (g2d.getTransform().a || 1);          // slab units per device pixel, taken from
                                                         // the transform rather than the live zoom:
                                                         // right at any export size, and it exists
@@ -4151,10 +4177,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     g2d.lineCap = 'butt';
     g2d.strokeStyle = 'rgba(255,255,255,0.28)';              // the whole plane, for context
     g2d.lineWidth = lw; g2d.beginPath();
-    g2d.moveTo(sx, G.cy - F.R * G.sc); g2d.lineTo(sx, G.cy + F.R * G.sc); g2d.stroke();
+    g2d.moveTo(ax1, ay1); g2d.lineTo(ax2, ay2); g2d.stroke();
     g2d.strokeStyle = '#8ad4ff';                             // the PLANK: the segment actually taken
     g2d.lineWidth = lw * 3; g2d.beginPath();
-    g2d.moveTo(sx, ya); g2d.lineTo(sx, yb); g2d.stroke();
+    g2d.moveTo(bx1, by1); g2d.lineTo(bx2, by2); g2d.stroke();
     const px_ = G.cx + F.pax[G.zi] * G.sc, py_ = G.cy + F.pay[G.zi] * G.sc;
     g2d.fillStyle = '#ff6b6b';                               // the pith, which is not the centre
     g2d.beginPath(); g2d.arc(px_, py_, lw * 3, 0, 6.2832); g2d.fill();
@@ -5116,7 +5142,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
   }
   const WDFMT = { rings: v => `${Math.round(v)}`, plane: v => (+v).toFixed(2), y0: v => (+v).toFixed(2),
-                  late: v => (+v).toFixed(2), drift: v => (+v).toFixed(2),
+                  late: v => (+v).toFixed(2), drift: v => (+v).toFixed(2), wid: v => (+v).toFixed(2),
+                  cutAngle: v => `${Math.round(v)}\u00b0`,
                   driftRings: v => `${Math.round(v)}`, sapRings: v => `${Math.round(v)}`,
                   sapFade: v => `${Math.round(v)}`, devAmp: v => (+v).toFixed(2),
                   devAngle: v => `${Math.round(v)}\u00b0`, devSpread: v => (+v).toFixed(1),
