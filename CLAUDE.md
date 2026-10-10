@@ -51,6 +51,7 @@ node tools/check-wake-lock.mjs     # every export path takes and drops the scree
 node tools/check-device-seal.mjs   # the device identity is sealed under the slab, and fails closed
 node tools/check-bleed.mjs         # every blur has bleed behind it; the bloom is probed, not assumed
 node tools/check-fn-refs.mjs       # every line pin in docs/functions.md lands on its function
+node tools/check-material-fork.mjs # the stone/wood/X branch lives at one seam, nowhere else
 ```
 
 The browser harness (`harness/*.mjs`) needs Playwright and runs in CI; it cannot spawn locally here, so CI

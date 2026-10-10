@@ -210,9 +210,14 @@ them; no other pairing does. Measurements and method in
 [`docs/renderer-determinism.md`](docs/renderer-determinism.md), the size ladder in
 [`docs/capabilities.md`](docs/capabilities.md).
 
-**Stone Author is stone-only**: the early Wood family and Knot tool were removed once the stone system
-outgrew them — wood (author a tree by its rings, then "mill" boards as geometry) and metal are envisioned
-as their own future systems that reuse this producer/consumer spine. Next up is a **WebGPU render
+**Stone Author is stone-only today, and is becoming Material Author.** The early Wood family and Knot
+tool were removed once the stone system outgrew them; wood returns not as its own program but as a
+**second path** in this one. A material supplies a field plus a way to query a 2D face out of it —
+stone's query is the identity, because the marks *are* the face, while wood's is a plane through a 3D
+growth-ring field, so one authored tree yields every board. Everything downstream of that face is
+already material-agnostic: layers, tokens, colour, the coat and light tier, warp, masks, tiling, the
+tiled render and the master export. `tools/check-material-fork.mjs` holds the line — the branch lives
+at one seam or it is not a fork. Metal is a later path. Next up is a **WebGPU render
 pipeline** and **layered PSD/PSB export** (one file-layer per authoring layer) — see the roadmap in
 [`docs/architecture.md`](docs/architecture.md) and [`docs/final-render.md`](docs/final-render.md).
 

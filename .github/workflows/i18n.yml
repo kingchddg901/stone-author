@@ -19,6 +19,7 @@ on:
       - 'tools/check-bleed.mjs'
       - 'tools/check-png-meta.mjs'
       - 'tools/check-fn-refs.mjs'
+      - 'tools/check-material-fork.mjs'
       - 'docs/functions.md'
       - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
@@ -34,6 +35,7 @@ on:
       - 'tools/check-bleed.mjs'
       - 'tools/check-png-meta.mjs'
       - 'tools/check-fn-refs.mjs'
+      - 'tools/check-material-fork.mjs'
       - 'docs/functions.md'
       - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
@@ -71,3 +73,5 @@ jobs:
         run: node tools/check-png-meta.mjs
       - name: Every line pin in the function reference lands on its function
         run: node tools/check-fn-refs.mjs
+      - name: The material fork happens in one place or it is not a fork
+        run: node tools/check-material-fork.mjs
