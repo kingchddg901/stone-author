@@ -427,7 +427,15 @@
     </div></details>
     <details class="sec" id="g-wood" hidden open><summary data-i18n="sec.wood">Wood</summary><div class="body">
     <div class="sliders">
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-cut-note">On the Log view you can simply drag the cut: a stroke across the section is the plank, and it sets all four of these at once. Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.</span></div>
+      <div class="grp" style="grid-column:1/-1" role="group" aria-label="Species" data-i18n-attr="aria-label=a11y.species"><span class="lbl" data-i18n="lbl.species">Species</span>
+      <button type="button" data-species="fir" data-i18n="sp.fir">Douglas fir</button>
+      <button type="button" data-species="redwood" data-i18n="sp.redwood">Redwood</button>
+      <button type="button" data-species="oak" data-i18n="sp.oak">White oak</button>
+      <button type="button" data-species="maple" data-i18n="sp.maple">Hard maple</button>
+      <button type="button" data-species="walnut" data-i18n="sp.walnut">Black walnut</button>
+    </div>
+    <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-species-note">A species is a row of numbers, not a mode. Pressing one writes every control below and the three wood colours, and you carry on dragging from there. These are eyeballed starting points informed by wood anatomy, not measurements — the place measured ring widths would land is exactly here.</span></div>
+    <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-cut-note">On the Log view you can simply drag the cut: a stroke across the section is the plank, and it sets all four of these at once. Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.</span></div>
       <div class="sl"><label for="wood-plane"><span data-i18n="sl.wood-plane">Cut</span> <output id="wood-planeV"></output></label><input id="wood-plane" type="range" min="-1.3" max="1.3" step="0.01"></div>
       <div class="sl"><label for="wood-y0"><span data-i18n="sl.wood-y0">Board position</span> <output id="wood-y0V"></output></label><input id="wood-y0" type="range" min="-1.3" max="1.3" step="0.01"></div>
       <div class="sl"><label for="wood-wid"><span data-i18n="sl.wood-wid">Plank width</span> <output id="wood-widV"></output></label><input id="wood-wid" type="range" min="0.05" max="4" step="0.01"></div>
@@ -435,6 +443,15 @@
       <div class="sl"><label for="wood-cutAngle"><span data-i18n="sl.wood-cutAngle">Cut angle</span> <output id="wood-cutAngleV"></output></label><input id="wood-cutAngle" type="range" min="0" max="179" step="1"></div>
       <div class="sl"><label for="wood-rings"><span data-i18n="sl.wood-rings">Rings</span> <output id="wood-ringsV"></output></label><input id="wood-rings" type="range" min="5" max="400" step="5"></div>
       <div class="sl"><label for="wood-late"><span data-i18n="sl.wood-late">Latewood contrast</span> <output id="wood-lateV"></output></label><input id="wood-late" type="range" min="0" max="1" step="0.02"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-growth-note">These are the numbers a species actually differs by. Juvenile is how wide the first rings are, Settles how fast that fades, and Mature the width it lands on. Scatter is year-to-year variation; Bad years is how often a pinched run comes and how deep. Latewood is what fraction of each ring is the dark band and Edge how abruptly it starts — a fir has a narrow, violently sharp band and a maple a soft, almost invisible one.</span></div>
+      <div class="sl"><label for="wood-juv"><span data-i18n="sl.wood-juv">Juvenile</span> <output id="wood-juvV"></output></label><input id="wood-juv" type="range" min="0" max="40" step="0.5"></div>
+      <div class="sl"><label for="wood-decay"><span data-i18n="sl.wood-decay">Settles</span> <output id="wood-decayV"></output></label><input id="wood-decay" type="range" min="2" max="400" step="1"></div>
+      <div class="sl"><label for="wood-floor"><span data-i18n="sl.wood-floor">Mature</span> <output id="wood-floorV"></output></label><input id="wood-floor" type="range" min="0.2" max="20" step="0.1"></div>
+      <div class="sl"><label for="wood-vary"><span data-i18n="sl.wood-vary">Scatter</span> <output id="wood-varyV"></output></label><input id="wood-vary" type="range" min="0" max="1.2" step="0.01"></div>
+      <div class="sl"><label for="wood-dRate"><span data-i18n="sl.wood-dRate">Bad years</span> <output id="wood-dRateV"></output></label><input id="wood-dRate" type="range" min="0" max="0.5" step="0.005"></div>
+      <div class="sl"><label for="wood-dDepth"><span data-i18n="sl.wood-dDepth">How bad</span> <output id="wood-dDepthV"></output></label><input id="wood-dDepth" type="range" min="0.05" max="1" step="0.01"></div>
+      <div class="sl"><label for="wood-lateFrac"><span data-i18n="sl.wood-lateFrac">Latewood</span> <output id="wood-lateFracV"></output></label><input id="wood-lateFrac" type="range" min="0.02" max="0.9" step="0.01"></div>
+      <div class="sl"><label for="wood-lateSharp"><span data-i18n="sl.wood-lateSharp">Latewood edge</span> <output id="wood-lateSharpV"></output></label><input id="wood-lateSharp" type="range" min="0.05" max="4" step="0.05"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-pith-note">The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.</span></div>
       <div class="sl"><label for="wood-lean"><span data-i18n="sl.wood-lean">Pith lean</span> <output id="wood-leanV"></output></label><input id="wood-lean" type="range" min="-0.25" max="0.25" step="0.002"></div>
       <div class="sl"><label for="wood-leanFine"><span data-i18n="sl.wood-leanFine">Lean ripple</span> <output id="wood-leanFineV"></output></label><input id="wood-leanFine" type="range" min="-0.15" max="0.15" step="0.001"></div>
@@ -577,6 +594,7 @@ window.SA_I18N = (() => {
   "a11y.magnet-mode": "Magnet mode",
   "a11y.material": "Material",
   "a11y.pen": "Pen",
+  "a11y.species": "Species",
   "a11y.reality-window": "Reality window",
   "a11y.slab-name": "Slab name",
   "a11y.slab-name-ph": "stone",
@@ -721,6 +739,7 @@ window.SA_I18N = (() => {
   "hint.restored-newer-work": "Picked up newer work you saved on another device.",
   "hint.save-cancelled": "Save cancelled.",
   "hint.save-is-unavailable-here-this-device": "Save is unavailable here; this device remembers your work automatically.",
+  "hint.species-seeded": "{name}: every wood control and the three colours have been set. Drag on from there.",
   "hint.saved-stone-json": "Saved {name}.",
   "hint.saved-stone-json-this-device-also": "Saved {name}. This device also remembers your work automatically.",
   "hint.select-something-first-the-box-on": "Select something first (the ▢ box on a row, or tap a vein with Tune).",
@@ -786,6 +805,7 @@ window.SA_I18N = (() => {
   "lbl.magnet": "Magnet",
   "lbl.material": "Material",
   "lbl.pen": "Pen",
+  "lbl.species": "Species",
   "lbl.scatter": "Scatter",
   "lbl.show-through": "Show through",
   "lbl.spotlight": "Spotlight",
@@ -906,6 +926,14 @@ window.SA_I18N = (() => {
   "sl.wood-cutAngle": "Cut angle",
   "sl.wood-rings": "Rings",
   "sl.wood-late": "Latewood contrast",
+  "sl.wood-juv": "Juvenile",
+  "sl.wood-decay": "Settles",
+  "sl.wood-floor": "Mature",
+  "sl.wood-vary": "Scatter",
+  "sl.wood-dRate": "Bad years",
+  "sl.wood-dDepth": "How bad",
+  "sl.wood-lateFrac": "Latewood",
+  "sl.wood-lateSharp": "Latewood edge",
   "sl.wood-lean": "Pith lean",
   "sl.wood-leanFine": "Lean ripple",
   "sl.wood-wander": "Pith wander",
@@ -935,6 +963,11 @@ window.SA_I18N = (() => {
   "sl.wood-dev2Knot": "Knot",
   "sl.wood-dev2KnotPitch": "Knot pitch",
   "sl.wood-dev2Die": "Died at ring",
+  "sp.fir": "Douglas fir",
+  "sp.redwood": "Redwood",
+  "sp.oak": "White oak",
+  "sp.maple": "Hard maple",
+  "sp.walnut": "Black walnut",
   "sl.spotR": "Beam size",
   "sl.spread": "Spread",
   "sl.strength": "Strength",
@@ -1033,12 +1066,14 @@ window.SA_I18N = (() => {
   "ui.no-colour": "no colour",
   "ui.pass": "pass ",
   "ui.scatter": "scatter ",
+  "ui.wood-species-note": "A species is a row of numbers, not a mode. Pressing one writes every control below and the three wood colours, and you carry on dragging from there. These are eyeballed starting points informed by wood anatomy, not measurements — the place measured ring widths would land is exactly here.",
   "ui.wood-cut-note": "On the Log view you can simply drag the cut: a stroke across the section is the plank, and it sets all four of these at once. Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.",
   "ui.wood-drift-note": "Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.",
   "ui.wood-knot-note": "Everything above draws wood around the branch. Knot draws the branch itself, where the plane went through it rather than past it: its rings are concentric about the branch and so run crosswise to the trunk's. It is a cone widening outward, because the branch gained a ring every year the trunk grew around it, which is why a knot is small on an inner board and large near the bark. Pitch is how tight its own rings are. Died at ring is the difference between the two kinds of knot: a living branch reaches the bark and its wood joins the trunk's, so the knot is sound and on every board; a dead one stops there and is grown over, trapping bark at its edge, so it is black, it falls out of a board, and it is only in the wood laid down before it was buried.",
   "ui.wood-dev2-note": "The second feature is a branch rather than a second lean, and the only difference is that it has a place along the trunk. At indicates where, Reach how far it carries either side. Walk the board past it and the grain sweeps around the branch and then straightens again, because outside the window the feature is not there at all.",
   "ui.wood-wave-note": "The wave family is what makes a tree a species rather than a setting. Three waves round the trunk and along it, shared by every axis the tree has — branches included, which is why a knot looks like it came from this tree. Out of round is how far they push, Lobes how many swellings go round the trunk, Travel how fast they move along it. An interference year is a kink in the family rather than a second mechanism: Anchor is when, Over how long, and To what the amplitude becomes. It ramps, because a step reads as an edit and a ramp reads as growth, and nothing before the anchor moves.",
   "ui.wood-dev-note": "Rings are circles until this is turned up. Eccentricity is how far they bulge off round, and it ACCUMULATES: a bulge grown in year 60 is still in the surface at year 220, because every later ring was laid on top of it. From and Over say which years it came on. Direction aims it, Breadth sets how much of the trunk it covers. This is the thing a branch, a lean or a buried wound all need.",
+  "ui.wood-growth-note": "These are the numbers a species actually differs by. Juvenile is how wide the first rings are, Settles how fast that fades, and Mature the width it lands on. Scatter is year-to-year variation; Bad years is how often a pinched run comes and how deep. Latewood is what fraction of each ring is the dark band and Edge how abruptly it starts — a fir has a narrow, violently sharp band and a maple a soft, almost invisible one.",
   "ui.wood-heart-note": "Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.",
   "ui.wood-pith-note": "The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.",
   "ui.selected": "Selected ▸",
@@ -1294,7 +1329,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.18';
+  const BUILD = '2026.10.10.19';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3839,6 +3874,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                                                   // set the board's proportions against the slab's own, and
                                                   // that ratio is why a round knot can render as an ellipse.
     rings: 220, late: 0.52,                       // the ring profile: how many, and how dark the latewood band
+    juv: 14, decay: 90, floor: 2.2,               // THE GROWTH CURVE: juvenile surge, how fast it fades, and
+    vary: 0.3, dRate: 0.05, dDepth: 0.42,         // the mature width - plus year-to-year scatter and how
+                                                  // often a bad run comes, and how bad. Species data, all of it.
+    lateFrac: 0.28, lateSharp: 0.65,              // what fraction of a ring is latewood, and how abrupt the
+                                                  // transition is: the difference between a fir and a maple
     plane: 0.27, y0: 0.2, cutAngle: 0,            // WHERE THE CUT STANDS. plane is the whole quarter-to-cathedral
                                                   // axis, because cos(theta) = plane / r; y0 slides the board
                                                   // along the cut, which is why one board drifts in character.
@@ -3863,6 +3903,48 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                                                   // runs to the bark; otherwise it stops and is grown over.
   };
   const WOOD0 = JSON.parse(JSON.stringify(WOOD));   // pristine, so a load is a pure function of the slab
+  // SPECIES. A row of numbers, not a mode: pressing one writes the controls and you drag on from
+  // there, exactly as "Palette from family" does for colour.
+  //
+  // THESE ARE EYEBALLED STARTING POINTS, not measurements, and mistaking them for data is the one way
+  // this does harm. What IS from the literature: Douglas fir carries roughly 30 sapwood rings when
+  // mature and has a famously abrupt, wide latewood band; oak is ring-porous, so its earlywood is a
+  // band of large vessels and its latewood fraction is high with a very sharp onset; maple is
+  // diffuse-porous, which is why its ring boundaries are faint. The growth curves, scatter and
+  // drought figures are judgement.
+  //
+  // Measured replacements belong HERE, and the source is ITRDB - raw ring-width series per species,
+  // numbers rather than anyone's photographs. Carry its bias with it: ITRDB samples climate-SENSITIVE
+  // trees, so its rings run narrower and more variable than a sawlog's.
+  const SPECIES = {
+    fir:     { juv: 11, decay: 65, floor: 1.5, vary: 0.26, dRate: 0.06, dDepth: 0.38,
+               lateFrac: 0.34, lateSharp: 0.30, late: 0.78, sapRings: 30, sapFade: 6,
+               drift: 0.30, driftRings: 60, waveAmp: 0.02, waveK: 3,
+               early: '#dcb286', late_: '#7c4a22', heart: '#9a6334' },
+    redwood: { juv: 22, decay: 110, floor: 2.6, vary: 0.34, dRate: 0.05, dDepth: 0.45,
+               lateFrac: 0.22, lateSharp: 0.55, late: 0.56, sapRings: 18, sapFade: 10,
+               drift: 0.55, driftRings: 120, waveAmp: 0.03, waveK: 2,
+               early: '#d79a6a', late_: '#8a3f22', heart: '#7b3519' },
+    oak:     { juv: 13, decay: 80, floor: 1.9, vary: 0.30, dRate: 0.07, dDepth: 0.40,
+               lateFrac: 0.62, lateSharp: 0.18, late: 0.60, sapRings: 14, sapFade: 5,
+               drift: 0.35, driftRings: 80, waveAmp: 0.035, waveK: 4,
+               early: '#d9bd8e', late_: '#8a6a38', heart: '#9b7a44' },
+    maple:   { juv: 9, decay: 70, floor: 1.7, vary: 0.22, dRate: 0.04, dDepth: 0.55,
+               lateFrac: 0.16, lateSharp: 1.60, late: 0.18, sapRings: 90, sapFade: 30,
+               drift: 0.18, driftRings: 110, waveAmp: 0.015, waveK: 2,
+               early: '#eadcc0', late_: '#cdb48c', heart: '#d6c2a0' },
+    walnut:  { juv: 12, decay: 75, floor: 2.0, vary: 0.28, dRate: 0.06, dDepth: 0.44,
+               lateFrac: 0.40, lateSharp: 0.45, late: 0.42, sapRings: 10, sapFade: 4,
+               drift: 0.70, driftRings: 70, waveAmp: 0.03, waveK: 3,
+               early: '#b08a5e', late_: '#4a2f1c', heart: '#3d2415' },
+  };
+  function applySpecies(k) {
+    const s = SPECIES[k]; if (!s) return;
+    for (const key in s) if (key !== 'early' && key !== 'late_' && key !== 'heart') WOOD[key] = s[key];
+    OVR.woodEarly = s.early; OVR.woodLate = s.late_; OVR.woodHeart = s.heart;
+    recolour(); if (ed) ed.values = { ...OVR };
+    syncWood(); redraw(true); saveLocal();
+  }
   function woodField() {                      // ring profile + pith wander, sampled into lookups
     // Memo on the FUNCTION, so the copy serialised into the worker carries it, and keyed on the whole
     // settings object rather than on a list of the fields that happen to matter today. A hand-kept list
@@ -3895,9 +3977,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const wring2 = new Float64Array(n);                 // the wave family's amplitude, year by year
     let acc = 0;
     for (let i = 0; i < n; i++) {
-      const trend = 14 * Math.exp(-i / 90) + 2.2;      // juvenile surge, then the slow years
-      let w = trend * (1 + 0.3 * gss());
-      if (rnd() < 0.05) w *= 0.42;                     // a pinched year: drought, or a taller neighbour
+      const trend = WOOD.juv * Math.exp(-i / Math.max(WOOD.decay, 0.001)) + WOOD.floor;   // juvenile surge, then the slow years
+      let w = trend * (1 + WOOD.vary * gss());
+      if (rnd() < WOOD.dRate) w *= WOOD.dDepth;        // a pinched year: drought, or a taller neighbour
       acc += Math.max(w, 0.6); edge[i] = acc;
       // THE ACCUMULATION, once per feature. This year's eccentric growth added to every previous year's,
       // monotone and non-negative, so the surface only moves outward and the layers cannot fold through
@@ -3916,8 +3998,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // CAUSALITY. Do NOT normalise to a fixed trunk: that makes a change in year 260 rescale year 1, and
     // it was measured doing exactly that - every band on screen moved when the ring count changed. The
     // SCALE is fixed and the RADIUS is derived, so growth at year X only ever reaches outward.
-    let unitAcc = 0;
-    for (let i = 0; i < 220; i++) unitAcc += 14 * Math.exp(-i / 90) + 2.2;   // the mean trend at the default count
+    let unitAcc = 0;                                                         // the mean trend at the default count,
+    for (let i = 0; i < 220; i++) unitAcc += 14 * Math.exp(-i / 90) + 2.2;   // held at the ORIGINAL curve on purpose:
+    // the scale is a fixed unit, not a function of the species, or picking a slower-growing tree would
+    // silently rescale the whole log instead of giving it narrower rings - which is the thing it should
+    // actually do, and the thing the causality fix was for.
     const unit = WOOD.trunk / unitAcc, R = acc * unit;                        // R: what this log actually came to
     for (let i = 0; i < n; i++) { edge[i] *= unit; for (let q = 0; q < DEV.length; q++) wring[q][i] *= unit; }
     // COLOUR, PER RING, AS A CORRELATED WALK - the thing a per-ring random value cannot do. Ring N and
@@ -3951,7 +4036,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const u = hi > lo ? (rad - lo) / (hi - lo) : 0;
       // latewood is a NARROW DARK BAND at the ring's outer edge, abrupt on one side. A sine here is the
       // loudest tell of fake wood; rings all the same width is the second loudest.
-      const late = Math.pow(Math.max(0, Math.min(1, (u - 0.72) / 0.28)), 0.65);
+      const lf = Math.max(WOOD.lateFrac, 0.001);
+      const late = Math.pow(Math.max(0, Math.min(1, (u - (1 - lf)) / lf)), Math.max(WOOD.lateSharp, 0.05));
       lut[i] = (1 - WOOD.late * late) * (1 + 0.05 * Math.sin(k * 2.399));   // + a per-ring value drift
       tv[i] = cv[k] * 0.12 * WOOD.drift; tw[i] = cw[k] * 0.12 * WOOD.drift;
       // How long ago this ring formed, in RINGS, measured from the currently outermost one - wood age,
@@ -5257,6 +5343,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const WDFMT = { rings: v => `${Math.round(v)}`, plane: v => (+v).toFixed(2), y0: v => (+v).toFixed(2),
                   late: v => (+v).toFixed(2), drift: v => (+v).toFixed(2), wid: v => (+v).toFixed(2),
                   len: v => (+v).toFixed(2), waveAmp: v => (+v).toFixed(3),
+                  juv: v => (+v).toFixed(1), decay: v => `${Math.round(v)}`, floor: v => (+v).toFixed(1),
+                  vary: v => (+v).toFixed(2), dRate: v => `${Math.round(v * 100)}%`,
+                  dDepth: v => (+v).toFixed(2), lateFrac: v => `${Math.round(v * 100)}%`,
+                  lateSharp: v => (+v).toFixed(2),
                   waveK: v => `${Math.round(v)}`, waveZ: v => (+v).toFixed(2),
                   anchorAt: v => `${Math.round(v)}`, anchorOver: v => `${Math.round(v)}`,
                   anchorTo: v => `${(+v).toFixed(2)}\u00d7`,
@@ -6818,6 +6908,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
+  for (const b of document.querySelectorAll('[data-species]')) b.addEventListener('click', () => { applySpecies(b.dataset.species); hint(TR('hint.species-seeded', { name: b.textContent })); });
   for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => { setMaterial(b.dataset.mat); press('[data-mat]', b); showGround(); redraw(true); });
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     tool = b.dataset.tool; press('[data-tool]', b); hint();

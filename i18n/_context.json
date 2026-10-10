@@ -847,6 +847,15 @@
   ],
   "where": "transient hint line under the tool palette"
  },
+ "hint.species-seeded": {
+  "terms": [
+   "wood"
+  ],
+  "placeholders": {
+   "name": "the species button's own label, e.g. Douglas fir"
+  },
+  "where": "status line after a species preset is applied; {name} is the species button's label"
+ },
  "lay.banding": {
   "where": "label in the generated colour editor / layers panel"
  },
@@ -1246,11 +1255,23 @@
  "a11y.render": {
   "where": "accessible name for the group of render controls"
  },
+ "a11y.species": {
+  "terms": [
+   "wood"
+  ],
+  "where": "accessible name for the species preset group"
+ },
  "sl.glowlift": {
   "where": "label for a slider in the Render section"
  },
  "lbl.glow-auto": {
   "where": "label beside a toggle in the Render section"
+ },
+ "lbl.species": {
+  "terms": [
+   "wood"
+  ],
+  "where": "group label above the species preset buttons"
  },
  "big.glow-auto": {
   "where": "text on a checkbox that puts the glow lift back on the value measured for this engine"
@@ -1819,6 +1840,85 @@
   ],
   "where": "slider: part of the shared wave family that makes a tree a species"
  },
+ "sl.wood-juv": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the growth curve - how a species puts on width over its life"
+ },
+ "sl.wood-decay": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the growth curve - how a species puts on width over its life"
+ },
+ "sl.wood-floor": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the growth curve - how a species puts on width over its life"
+ },
+ "sl.wood-vary": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the growth curve - how a species puts on width over its life"
+ },
+ "sl.wood-dRate": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the growth curve - how a species puts on width over its life"
+ },
+ "sl.wood-dDepth": {
+  "terms": [
+   "wood"
+  ],
+  "where": "slider: part of the growth curve - how a species puts on width over its life"
+ },
+ "sl.wood-lateFrac": {
+  "terms": [
+   "latewood",
+   "earlywood"
+  ],
+  "where": "slider: what fraction of each ring is the dark latewood band"
+ },
+ "sl.wood-lateSharp": {
+  "terms": [
+   "latewood"
+  ],
+  "where": "slider: how abruptly the latewood begins - sharp in a fir, soft in a maple"
+ },
+ "sp.fir": {
+  "terms": [
+   "wood"
+  ],
+  "where": "species preset button: writes every wood control at once"
+ },
+ "sp.redwood": {
+  "terms": [
+   "wood"
+  ],
+  "where": "species preset button: writes every wood control at once"
+ },
+ "sp.oak": {
+  "terms": [
+   "wood"
+  ],
+  "where": "species preset button: writes every wood control at once"
+ },
+ "sp.maple": {
+  "terms": [
+   "wood"
+  ],
+  "where": "species preset button: writes every wood control at once"
+ },
+ "sp.walnut": {
+  "terms": [
+   "wood"
+  ],
+  "where": "species preset button: writes every wood control at once"
+ },
  "tile.edge.bevel": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
@@ -2263,6 +2363,20 @@
    "knot"
   ],
   "where": "explanatory note above the wave-family and anchor sliders"
+ },
+ "ui.wood-species-note": {
+  "terms": [
+   "wood"
+  ],
+  "where": "note above the species presets, including the warning that the numbers are estimates"
+ },
+ "ui.wood-growth-note": {
+  "terms": [
+   "earlywood",
+   "latewood",
+   "wood"
+  ],
+  "where": "note above the eight growth-curve sliders"
  },
  "unit.in": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
