@@ -324,6 +324,7 @@
  "hint.roll-the-roller-across": "Trascina il rullo sulla lastra. Imprime il suo stampo mentre avanza, partendo dal primo, appoggiato.",
  "op.press": "Pressatura",
  "opt.source-auto": "Scegli tu",
+ "note.sections-need-two": "C'è una sola sezione, quindi ogni piastrella viene da lì — salvane una seconda e potrai scegliere quale piastrella viene da quale.",
  "ui.op-press-note": "la passata di rullo che hai disegnato",
  "sec.unnamed": "Sezione",
  "sec.snagged": "{pat} prelevato",

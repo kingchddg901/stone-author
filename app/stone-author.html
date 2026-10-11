@@ -1069,6 +1069,7 @@ window.SA_I18N = (() => {
   "hint.roll-the-roller-across": "Drag the roller across the slab. It presses its die in as it goes, starting with one, start down.",
   "op.press": "Press",
   "opt.source-auto": "Choose for me",
+  "note.sections-need-two": "One section, so every tile comes from it \u2014 keep a second and you can set which tile comes from which.",
   "ui.op-press-note": "the roller pass you drew",
   "sec.unnamed": "Section",
   "sec.kept-cut": "Kept cut",
@@ -1683,7 +1684,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.28';
+  const BUILD = '2026.10.11.29';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3449,7 +3450,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       : { pattern: T.pattern, n: t.n, m: t.m, pi: t.pi, box: cutBoxFromInstance(t) };
     rec.name = TR('sec.snagged', { pat: T.pattern });    // the pattern is a slug, so it is not translated
     sections = [...SET, rec];
-    showSetCount(); redraw(true); hint(TR('hint.snag-took', { n: sections.length }));
+    showSetCount(); revealSections(); redraw(true); hint(TR('hint.snag-took', { n: sections.length }));
   }
   // How many sources the floor has. A kept set answers first - that is the "depending on choice" -
   // and the cant answers when there is nothing kept.
@@ -9428,6 +9429,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // PARITY, so a single cell shows at most a third of the rosette's five; two by two is exactly the
   // period and every slot appears in it, for every pattern, with no per-pattern table to keep.
   let setterSlot = 0;
+  // SHOW THE THING THAT WAS JUST MADE. Snag succeeded and then nothing on screen moved: the list
+  // and the setter live in Tiles & floor, which is closed by default, 1300 px down a scrolling
+  // column. Measured, not guessed - after a snag the list rendered correctly at top 1369 with
+  // inViewport false. A feature you cannot find is not a feature, and a hint line saying it worked
+  // is the worst version of that, because it says the opposite of what the screen shows.
+  function revealSections() {
+    const el = document.getElementById('sec-list');
+    if (!el) return;
+    for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true;
+    // SCROLL TO THE SETTER, not the list. `nearest` on the list brought the list just into view and
+    // left the setter - the part you act on - at 731 in a 700 px column, still below the fold.
+    // Measured both; the one that is in view has to be the one with the controls on it.
+    const target = document.getElementById('sec-setter');
+    const to = target && !target.hidden ? target : el;
+    if (to.scrollIntoView) to.scrollIntoView({ block: 'center' });
+  }
   const secSwatch = s => { const m = s.mat || (s.slab && s.slab.material) || 'stone';
     return m === 'wood' ? '#8a5a2b' : m === 'glass' ? '#4f8fa8' : '#9a9a93'; };
   function showSetCount() {
@@ -9486,16 +9503,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const lbl = document.createElement('div');
     lbl.className = 'lbl'; lbl.textContent = TR('lbl.tile-source');
     host.appendChild(lbl);
-    const W = 190, Hh = 120, cv = document.createElement('canvas');
-    cv.width = W * 2; cv.height = Hh * 2; cv.style.cssText = 'width:' + W + 'px;height:' + Hh + 'px;cursor:pointer;display:block';
-    const g = cv.getContext('2d'); g.scale(2, 2);
     const cells = [];
     for (let n = 0; n < 2; n++) for (let m = 0; m < 2; m++) pat.polys.forEach((poly, pi) => {
       cells.push({ pi, m, n, pts: poly.map(q => [q[0] + n * pat.ax[0] + m * pat.ay[0], q[1] + n * pat.ax[1] + m * pat.ay[1]]) });
     });
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const c of cells) for (const q of c.pts) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
-    const z = Math.min((W - 8) / (x1 - x0 || 1), (Hh - 8) / (y1 - y0 || 1));
+    // SIZED TO THE MOTIF, not to a fixed box. A 2x2 block of rhombi is far taller than it is wide
+    // and left half of a 190x120 canvas empty, which reads as a widget that failed to draw. Fit
+    // first, then make the canvas the size of what was fitted.
+    const bw = (x1 - x0) || 1, bh = (y1 - y0) || 1;
+    const z = Math.min(182 / bw, 122 / bh);
+    const W = Math.round(bw * z) + 8, Hh = Math.round(bh * z) + 8;
+    const cv = document.createElement('canvas');
+    cv.width = W * 2; cv.height = Hh * 2; cv.style.cssText = 'width:' + W + 'px;height:' + Hh + 'px;cursor:pointer;display:block';
+    const g = cv.getContext('2d'); g.scale(2, 2);
     const px = q => 4 + (q[0] - x0) * z, py = q => 4 + (q[1] - y0) * z;
     const slotOfCell = c => R && N >= R.slots ? R.slotOf(c.pi, c.m, c.n) % R.slots : (((c.m + 2 * c.n) % N) + N) % N;
     const paint = () => {
@@ -9531,6 +9553,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       sel.appendChild(o); });
     const map = (T.slotMap && T.slotMap[slotKey(R && N >= R.slots ? R : null)]) || {};
     sel.value = map[setterSlot] || '';
+    if (L.length < 2) {
+      sel.disabled = true;
+      const note = document.createElement('div');
+      note.className = 'lbl'; note.style.cssText = 'margin-top:4px;opacity:0.8';
+      note.textContent = TR('note.sections-need-two');
+      host.appendChild(note);
+    }
     sel.addEventListener('change', () => {
       const key = slotKey(R && N >= R.slots ? R : null);
       if (!T.slotMap) T.slotMap = {};
@@ -9559,7 +9588,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // by rendering three kept species and getting three pale boards. Keeping the slab keeps that
       // fix and every other one of its kind for free, in any material.
       sections = [...sectionList(), sectionFromHere()];
-      showSetCount(); redraw(true); hint(TR('hint.cut-kept', { n: sections.length }));
+      showSetCount(); revealSections(); redraw(true); hint(TR('hint.cut-kept', { n: sections.length }));
     });
     if (clr) clr.addEventListener('click', () => {
       sections = []; T.slotMap = {}; showSetCount(); redraw(true); hint(TR('hint.cuts-cleared'));
