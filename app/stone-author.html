@@ -1411,7 +1411,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.44';
+  const BUILD = '2026.10.10.45';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4207,14 +4207,26 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     recolour(); if (ed) ed.values = { ...OVR };
     syncWood(); redraw(true); saveLocal();
   }
-  function woodField() {                      // ring profile + pith wander, sampled into lookups
+  // `cfg` asks for the field of ANOTHER tree - a kept cut, a scion - rather than the live one.
+  function woodField(cfg) {                   // ring profile + pith wander, sampled into lookups
     // Memo on the FUNCTION, so the copy serialised into the worker carries it, and keyed on the whole
     // settings object rather than on a list of the fields that happen to matter today. A hand-kept list
     // is a slider that silently does nothing the first time someone forgets to add one; stringifying is
     // a few microseconds against a megapixel loop.
-    const sig = JSON.stringify(WOOD);
-    if (woodField.c && woodField.k === sig) return woodField.c;
-    woodField.k = sig;
+    //
+    // A RING OF FOUR, not one slot. One was right while there was only ever one log; a graft needs the
+    // trunk's field and the scion's in the same pixel loop, and with a single slot they would evict
+    // each other on every sample. A plain object and an array rather than a Map, because this has to
+    // survive being serialised into the worker by source text.
+    const sig = JSON.stringify(cfg || WOOD);
+    if (!woodField.cache) { woodField.cache = {}; woodField.order = []; }
+    if (woodField.cache[sig]) return woodField.cache[sig];
+    // THE SETTINGS ARE SWAPPED, NOT THREADED. The body below reads WOOD in about forty places and
+    // threading a parameter through all of them is forty chances to miss one - and a missed one is a
+    // field that half-belongs to the other tree, silently. Same move renderStoneOffscreen already
+    // makes for a kept cut.
+    const _keep = cfg && cfg !== WOOD ? JSON.stringify(WOOD) : null;
+    if (_keep) for (const _k in cfg) if (_k !== 'set') WOOD[_k] = cfg[_k];
     // THE FEATURE LIST. Flat keys in, a list out: the field code below never learns how many there are,
     // so a third feature is five more keys and a row of sliders rather than another case to write.
     // `zs <= 0` means the feature runs the whole log, and that is the only structural difference
@@ -4443,7 +4455,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl, zoff, fwl, fchar, fzw, FIRE });
+    const out = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl, zoff, fwl, fchar, fzw, FIRE };
+    if (_keep) Object.assign(WOOD, JSON.parse(_keep));   // the live tree is put back before anyone reads it
+    woodField.cache[sig] = out; woodField.order.push(sig);
+    while (woodField.order.length > 4) delete woodField.cache[woodField.order.shift()];
+    return out;
   }
   // A rational atan2, good to under half a degree and costing about ten multiplies. The eye grid needs
   // the ANGLE, and the painter only ever has its cosine and sine; this is the one place in the wood
