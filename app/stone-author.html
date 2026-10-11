@@ -501,7 +501,7 @@
         <button type="button" data-addop="stir" data-i18n="op.add-stir">+ Stir</button>
       </div>
       <div class="sl"><label for="glass-cords"><span data-i18n="sl.glass-cords">Canes</span> <output id="glass-cordsV"></output></label><input id="glass-cords" type="range" min="0" max="1" step="0.01"></div>
-      <div class="sl"><label for="glass-cordN"><span data-i18n="sl.glass-cordN">Cane colours</span> <output id="glass-cordNV"></output></label><input id="glass-cordN" type="range" min="2" max="4" step="1"></div>
+      <div class="sl"><label for="glass-cordN"><span data-i18n="sl.glass-cordN">Cane colours</span> <output id="glass-cordNV"></output></label><input id="glass-cordN" type="range" min="2" max="6" step="1"></div>
       <div class="sl"><label for="glass-cordScale"><span data-i18n="sl.glass-cordScale">Cane count</span> <output id="glass-cordScaleV"></output></label><input id="glass-cordScale" type="range" min="0.3" max="30" step="0.1"></div>
       <div class="sl"><label for="glass-cordWander"><span data-i18n="sl.glass-cordWander">Cane wander</span> <output id="glass-cordWanderV"></output></label><input id="glass-cordWander" type="range" min="0" max="2" step="0.01"></div>
       <div class="sl"><label for="glass-cordLay"><span data-i18n="sl.glass-cordLay">Cane lay-up</span> <output id="glass-cordLayV"></output></label><input id="glass-cordLay" type="range" min="0" max="90" step="1"></div>
@@ -5797,7 +5797,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       FP: Math.max(0.5, GLASS.flutePitch), FD: Math.max(0, GLASS.fluteDepth),
       SD: Math.max(0, Math.min(1, GLASS.seeds)), SST: Math.max(1, GLASS.seedStretch),
       INC: Math.max(0, Math.min(1, GLASS.incl)),
-      CS: Math.max(0.1, GLASS.cordScale), CN: Math.max(2, Math.min(4, Math.round(GLASS.cordN))),
+      CS: Math.max(0.1, GLASS.cordScale), // SIX, because there are six tokens. The cap stayed at 4 when E and F were added for
+      // his five-colour test, which left two colours reachable only from the cells mould -
+      // a set extended in one copy and not the others.
+      CN: Math.max(2, Math.min(6, Math.round(GLASS.cordN))),
       CW: Math.max(0, GLASS.cordWander),
       LC: Math.cos(GLASS.cordLay * Math.PI / 180), LS: Math.sin(GLASS.cordLay * Math.PI / 180),
       TW: Math.max(0, GLASS.cordTwist), LP: Math.max(0, Math.min(0.49, GLASS.cordLap)),

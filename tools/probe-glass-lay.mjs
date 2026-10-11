@@ -44,7 +44,8 @@ function lift(name) {
   throw new Error('unbalanced: ' + name);
 }
 const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'resample', 'warpMaskAt',
-                'mix', 'moonDisp', 'glassWarp', 'glassUnwarp', 'glassUnform', 'glassLay'];
+                'mix', 'moonDisp', 'glassWarp', 'glassUnwarp', 'glassUnform', 'glassLay',
+                'glassBlob', 'glassBlobDepth', 'glassCellSDF', 'glassCellSpread', 'glassDepth'];
 const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
 // G/fam/strHue are app state rather than geometry: the current's SHAPE here is the app's, its seed
 // is not. _wmask empty means warpMaskAt returns 1, which is the real no-discs case.
@@ -53,6 +54,9 @@ const api = new Function('G', 'SLAB_FT',
   'let _wmask = []; let fam = "probe"; const strHue = () => 0.5;\n' +
   NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(G, SLAB_FT);
 const { glassUnform, glassLay, glassWarp } = api;
+// Both read out of the source, because the whole point is whether these two agree.
+const CN_MAX = +(SRC.match(/CN: Math[.]max[(]2, Math[.]min[(](\d+)/) || [, 0])[1];
+const TOKENS = (SRC.match(/key: 'glass[A-F]'/g) || []).length;
 
 const H = 0.62;
 const DRAG = { kind: 'moon', p: { moonReach: 1.6, moonStrength: 2.4 },
@@ -129,6 +133,7 @@ fs.writeFileSync(outPath, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 2
 console.log('wrote', outPath, W + 'x' + HT, '(left column strips, right column radial)');
 console.log('warp field for the stir:', S ? 'built' : 'NULL - the stir op would be a no-op');
 let bad = 0;
+const say = (ok, msg) => { if (!ok) bad++; console.log('  ' + (ok ? 'OK  ' : 'RED ') + msg); };
 console.log('\nDOES THE ORDER MATTER? pixels whose compartment changed when the pair is swapped:');
 for (const [name, A, B, mustDiffer] of PAIRS) {
   const d = differ(field(A, false), field(B, false));
@@ -138,6 +143,28 @@ for (const [name, A, B, mustDiffer] of PAIRS) {
     (mustDiffer ? (ok ? 'order matters, as composition requires' : '<-- IDENTICAL: the ops are SUMMED, not composed')
                 : (ok ? 'commutes, correctly - both are diagonal scales' : '<-- these should commute and do not')));
 }
+// EVERY COLOUR REACHABLE FROM EVERY MOULD. The token set is copied in four places - the painter's
+// canes array, the colour-count clamp, the cells editor's cycle and the blob hash - and a set
+// extended in one copy and not the others is invisible: the render still works, it just quietly
+// cannot say two of the colours. Which is exactly what happened when E and F were added for the
+// five-colour test and the clamp stayed at four.
+console.log('\nEVERY COLOUR, EVERY MOULD');
+say(CN_MAX === TOKENS, `the colour clamp (${CN_MAX}) matches the number of tokens (${TOKENS})`);
+{
+  const probe = [0, -1, 0, 1];
+  const mb = { ...base, OPS: [], CN: TOKENS, MC: null, MW: 0.5, MOB: 0.7, MST: 4, MSQ: 2, MJ: 0.7 };
+  for (const [name, F] of [['strips', { ...mb, MR: false, MB: false }],
+                           ['radial', { ...mb, MR: true, MB: false }],
+                           ['blobs', { ...mb, MR: false, MB: true }]]) {
+    const got = new Set();
+    for (let i = 0; i < 40000; i++) {
+      const x = (i % 200) / 25 - 4, y = ((i / 200) | 0) / 25 - 4;
+      glassLay(x, y, F, probe); if (probe[0] >= 0) got.add(probe[0]);
+    }
+    say(got.size === TOKENS, `${name} reaches all ${TOKENS} colours (got ${[...got].sort((a, b) => a - b).join(',')})`);
+  }
+}
+
 const dm = differ(field([], false), field([], true));
 console.log(`\nmould strips vs radial, no ops: ${(dm * 100).toFixed(1)}% ` +
   (dm > 0.01 ? 'differ - the mould is its own thing, not a warp' : '<-- THE MOULD SHAPE DOES NOTHING'));

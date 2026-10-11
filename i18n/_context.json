@@ -1130,7 +1130,7 @@
   "where": "a material choice button; the stone path, the app's original material"
  },
  "sl.glass-cords": {"terms": ["glass"], "where": "slider: how strongly the canes of colour show. 0 is clear glass"},
- "sl.glass-cordN": {"terms": ["glass"], "where": "slider: how many different cane colours were laid into the melt, 2 to 4"},
+ "sl.glass-cordN": {"terms": ["glass"], "where": "slider: how many different cane colours were laid into the melt, 2 to 6"},
  "sl.glass-cordScale": {"terms": ["glass"], "where": "slider: how many canes there are across the sheet"},
  "sl.glass-cordWander": {"terms": ["glass"], "where": "slider: how much the cane boundaries bend. A hand-drawn cane wanders; a perfectly straight one reads as print"},
  "lay.glass-a": {"terms": ["glass"], "where": "colour token: the first cane of coloured glass"},
