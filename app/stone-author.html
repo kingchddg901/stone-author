@@ -453,8 +453,8 @@
       <button type="button" data-species="birdseye" data-i18n="sp.birdseye">Bird's eye</button>
       <button type="button" data-species="ebony" data-i18n="sp.ebony">Ebony</button>
     </div>
-    <details class="sec" open><summary data-i18n="sec.wood-cut">The cut</summary><div class="body">
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-species-note">A species is a row of numbers, not a mode. Pressing one writes every control below and the three wood colours, and you carry on dragging from there. These are eyeballed starting points informed by wood anatomy, not measurements — the place measured ring widths would land is exactly here.</span></div>
+    <details class="sec" open><summary data-i18n="sec.wood-cut">The cut</summary><div class="body">
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-cut-note">On the Log view you can simply drag the cut: a stroke across the section is the plank, and it sets all four of these at once. Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.</span></div>
       <div class="sl"><label for="wood-plane"><span data-i18n="sl.wood-plane">Cut</span> <output id="wood-planeV"></output></label><input id="wood-plane" type="range" min="-1.3" max="1.3" step="0.01"></div>
       <div class="sl"><label for="wood-y0"><span data-i18n="sl.wood-y0">Board position</span> <output id="wood-y0V"></output></label><input id="wood-y0" type="range" min="-1.3" max="1.3" step="0.01"></div>
@@ -1467,7 +1467,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.63';
+  const BUILD = '2026.10.10.65';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1528,6 +1528,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // layer until tuned. recolour() runs OVR through the kit's resolver into COL, so an unset token
   // falls back to its default / inherited layer, and a reset in the editor truly clears the override.
   let kit = null, ed = null;
+  let colourKitMat = null;                 // which material the colour editor's groups were built for
   const COL = {}, OVR = {}, perItem = {};
   // BLACK LIGHT: a parallel override store (the UV palette). uvMode flips the render + editor to it; non-fluorescent
   // stuff falls to UV_DARK (invisible on the black ground), UV-coloured artifacts glow (bloom). The palette saves with the slab.
@@ -6213,6 +6214,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const vs = document.getElementById('v-stone'); if (vs) press('[data-view]', vs);
     }
     document.body.dataset.mat = mat;                    // the CSS rule above hides what this material lacks
+    // THE COLOUR EDITOR IS PER-MATERIAL, and this is the only place that sees every way the material
+    // can change. Hanging it off the [data-mat] click covered the button and missed the one that
+    // matters: a session RESTORED to wood from storage never clicks anything, so the editor kept the
+    // material it was built with at init - stone - and offered veins and drusy over a wood board.
+    // Guarded on an actual change, because a family click lands here too and rebuilding the kit for
+    // that would be work for nothing.
+    if (colourKitMat !== mat && typeof setupColour === 'function') {
+      colourKitMat = mat; setupColour(); recolour(); mountEditor();
+    }
     // "You draw where the lines go" is a stone sentence. In wood you do not draw: you author a log and
     // then mill it, and saying otherwise is the first thing the interface would be lying about.
     const sub = document.querySelector('.sub');
@@ -7740,10 +7750,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
   for (const b of document.querySelectorAll('[data-species]')) b.addEventListener('click', () => { applySpecies(b.dataset.species); hint(TR('hint.species-seeded', { name: b.textContent })); });
   for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => { setMaterial(b.dataset.mat); press('[data-mat]', b); showGround();
-    // THE EDITOR IS PER-MATERIAL NOW, so its token groups have to be rebuilt when the material
-    // changes - otherwise the filter only ever reflects whichever one was live at startup.
-    // setupColour makes a fresh kit each call, so this cannot leave a duplicate group behind.
-    if (typeof setupColour === 'function') { setupColour(); recolour(); mountEditor(); } redraw(true); });
+ redraw(true); });
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     tool = b.dataset.tool; press('[data-tool]', b); hint();
     const show = tool === 'move' ? 'vein' : tool;
