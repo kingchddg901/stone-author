@@ -480,6 +480,9 @@
       <div class="sl"><label for="wood-vary"><span data-i18n="sl.wood-vary">Scatter</span> <output id="wood-varyV"></output></label><input id="wood-vary" type="range" min="0" max="1.2" step="0.01"></div>
       <div class="sl"><label for="wood-dRate"><span data-i18n="sl.wood-dRate">Bad years</span> <output id="wood-dRateV"></output></label><input id="wood-dRate" type="range" min="0" max="0.5" step="0.005"></div>
       <div class="sl"><label for="wood-dDepth"><span data-i18n="sl.wood-dDepth">How bad</span> <output id="wood-dDepthV"></output></label><input id="wood-dDepth" type="range" min="0.05" max="1" step="0.01"></div>
+      <div class="sl"><label for="wood-dEarly"><span data-i18n="sl.wood-dEarly">Bad years young</span> <output id="wood-dEarlyV"></output></label><input id="wood-dEarly" type="range" min="0" max="3" step="0.05"></div>
+      <div class="sl"><label for="wood-dMid"><span data-i18n="sl.wood-dMid">Bad years middle</span> <output id="wood-dMidV"></output></label><input id="wood-dMid" type="range" min="0" max="3" step="0.05"></div>
+      <div class="sl"><label for="wood-dLate"><span data-i18n="sl.wood-dLate">Bad years old</span> <output id="wood-dLateV"></output></label><input id="wood-dLate" type="range" min="0" max="3" step="0.05"></div>
       <div class="sl"><label for="wood-lateFrac"><span data-i18n="sl.wood-lateFrac">Latewood</span> <output id="wood-lateFracV"></output></label><input id="wood-lateFrac" type="range" min="0.02" max="0.9" step="0.01"></div>
       <div class="sl"><label for="wood-lateSharp"><span data-i18n="sl.wood-lateSharp">Latewood edge</span> <output id="wood-lateSharpV"></output></label><input id="wood-lateSharp" type="range" min="0.05" max="4" step="0.05"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-fibre-note">Ribbon, curl and quilt are not ring effects — they are fibre direction, and they are optical rather than geometric. Wood reflects far more light along the fibre than across it, so where fibres dive into the cut face it reads dark and where they lie along it, light. Figure is how strongly that shows at all. Spiral is a steady helical wind about the trunk; Interlock is the same angle alternating its sign every few years, which is what mahogany is; Curl is a transverse undulation, which is fiddleback. Turn the light angle and the ribbon reverses — that is the tell that it is modelled rather than painted, and end grain shows none of it because every fibre meets that surface square on.</span></div>
@@ -980,6 +983,9 @@ window.SA_I18N = (() => {
   "sl.wood-fireZ": "Fire reach",
   "sl.wood-trunkH": "Trunk height",
   "sl.wood-taper": "Taper",
+  "sl.wood-dEarly": "Bad years young",
+  "sl.wood-dMid": "Bad years middle",
+  "sl.wood-dLate": "Bad years old",
   "sl.wood-flare": "Basal flare",
   "sl.wood-flareH": "Flare height",
   "sl.wood-zBase": "Height up trunk",
@@ -1417,7 +1423,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.51';
+  const BUILD = '2026.10.10.52';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4100,6 +4106,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     dev2Prune: 0,                                 // HOW THE BRANCH ENDED. 0 it died on the tree and was
                                                   // buried in its own bark - a loose knot. 1 it was taken
                                                   // off clean and the live collar healed over sound wood.
+    dEarly: 1, dMid: 1, dLate: 1,                 // BAD YEARS BY LIFE STAGE, as multipliers on the rate.
+                                                  // WHEN a drought falls decides WHERE it shows: an early
+                                                  // one marks the butt, a late one marks every height.
     flare: 0, flareH: 12,                         // BASAL FLARE: how much wider the same year's ring is at
                                                   // the stump, and the height it dies out over. The second
                                                   // cause of taper, and the one a buttress is.
@@ -4281,7 +4290,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (let i = 0; i < n; i++) {
       const trend = WOOD.juv * Math.exp(-i / Math.max(WOOD.decay, 0.001)) + WOOD.floor;   // juvenile surge, then the slow years
       let w = trend * (1 + WOOD.vary * gss());
-      if (rnd() < WOOD.dRate) w *= WOOD.dDepth;        // a pinched year: drought, or a taller neighbour
+      // The rate by life stage, interpolated through early / mid / late rather than banded, because
+      // a hard boundary would put a step in the rings at exactly one year - an edit, not a climate.
+      // rnd() is still drawn once per ring whatever these are, so the sequence never shifts.
+      const du = n > 1 ? i / (n - 1) : 0;
+      const dm = du < 0.5 ? WOOD.dEarly + (WOOD.dMid - WOOD.dEarly) * du * 2
+                          : WOOD.dMid + (WOOD.dLate - WOOD.dMid) * (du - 0.5) * 2;
+      if (rnd() < WOOD.dRate * dm) w *= WOOD.dDepth;   // a pinched year: drought, or a taller neighbour
       acc += Math.max(w, 0.6); edge[i] = acc;
       // THE ACCUMULATION, once per feature. This year's eccentric growth added to every previous year's,
       // monotone and non-negative, so the surface only moves outward and the layers cannot fold through
@@ -5974,7 +5989,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   fireZ: v => `${(+v).toFixed(1)}\u2032`,
                   trunkH: v => `${Math.round(v)}\u2032`, zBase: v => `${(+v).toFixed(1)}\u2032`,
                   taper: v => +v === 0 ? 'cylinder' : (+v).toFixed(2),
-                  flare: v => +v === 0 ? 'none' : (+v).toFixed(2), flareH: v => `${(+v).toFixed(1)}\u2032`, plankLen: v => `${Math.round(v)}\u2033`,
+                  flare: v => +v === 0 ? 'none' : (+v).toFixed(2),
+                  dEarly: v => `\u00d7${(+v).toFixed(2)}`, dMid: v => `\u00d7${(+v).toFixed(2)}`,
+                  dLate: v => `\u00d7${(+v).toFixed(2)}`, flareH: v => `${(+v).toFixed(1)}\u2032`, plankLen: v => `${Math.round(v)}\u2033`,
                   plankVary: v => (+v).toFixed(2), plankStagger: v => (+v).toFixed(2),
                   eyeSpacing: v => `${(+v).toFixed(2)}\u2033`, eyeSize: v => `${(+v).toFixed(2)}\u2033`,
                   eyeDepth: v => (+v).toFixed(2),
