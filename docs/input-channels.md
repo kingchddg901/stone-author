@@ -47,8 +47,11 @@ does this:
 smoothstep(9 / 90, 25 / 90, leanAverage − rest)
 ```
 
-So the channel is a **0..1 "how far past your rest grip"**, ramping over roughly 9° to 25° beyond it —
-not an angle. Three consequences the adapter has to carry, not leave to each tool:
+So the channel is a **0..1 "how far past your rest grip"** — not an angle. The ramp is **fitted
+to the hand**: the 20-stroke calibration measures how far this one actually lays the pen, full effect
+lands there, and the ramp opens a quarter of the way to it. `9°` to `25°` is only the fallback for
+a device that has never been calibrated. A stiff grip laying to 18° got 0.008 of the effect under
+the fixed pair, because that window does not finish until 25°. Three consequences the adapter has to carry, not leave to each tool:
 
 - **Consumers receive the normalised value.** A tool asking for tilt must never see raw degrees.
 - **The authored mouse/touch value lives in the same 0..1 space.** If the explicit control is in degrees
@@ -445,8 +448,9 @@ the rest of this design.
 **One real failure mode to handle.** Near upright, azimuth is *noisy* — a nearly-vertical pen swings its
 reported bearing wildly on tiny wobbles. So the sign has to be **gated by the magnitude**: inside the dead
 zone the sign is not weak, it is meaningless, and must read 0 rather than flickering between ±1. The
-existing `smoothstep(9/90, 25/90, …)` already establishes that dead zone for magnitude; the signed reading
-needs the symmetric version of it, and should inherit the same gate.
+existing lean ramp already establishes that dead zone for magnitude — fitted to the hand where one
+has been measured, `9/90` to `25/90` otherwise; the signed reading needs the symmetric version of it,
+and should inherit the same gate, fitted thresholds and all.
 
 **A side benefit for mouse and touch.** A signed value is far easier to author without a stylus: one
 slider reading *lean left — upright — lean right* is natural, where a 2D azimuth needs a dial. So `signed`

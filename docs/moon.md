@@ -5,7 +5,13 @@
 > hardware supplies those channels directly; mouse and touch supply the unavailable channels through
 > explicit controls. Both produce the same semantic Moon event.
 
-**Status: designed, not implemented.** Chris's design. What ships today is described under
+> **In glass the moon is the stir stick, and that part ships.** Glass has no geometry to push, so it
+> reads the same displacement field inverted — not “where did this point go” but “where was the glass
+> now here before the stick went through”. It drags the melt, the poured colours and the bubbles, and
+> leaves the forming alone, because the crown and the roller’s flutes are pressed after the stick came
+> out. See [`glass.md`](glass.md).
+
+**Status of the moving-body design below: designed, not implemented.** Chris's design. What ships today is described under
 [Where the code stands](#where-the-code-stands), which is a short list — most of the input this needs is
 already being captured and then discarded.
 
