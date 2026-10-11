@@ -473,7 +473,8 @@
     <div class="sliders" data-mat-only="glass" id="s-cells">
       <div class="sl"><label for="glass-mw"><span data-i18n="sl.glass-mw">Cell width W</span> <output id="glass-mwV"></output></label><input id="glass-mw" type="range" min="0.05" max="2" step="0.01"></div>
       <div class="sl"><label for="glass-ml"><span data-i18n="sl.glass-ml">Cell length L</span> <output id="glass-mlV"></output></label><input id="glass-ml" type="range" min="0.05" max="4" step="0.01"></div>
-      <div class="sl"><label for="glass-slump"><span data-i18n="sl.glass-slump">Crept before setting</span> <output id="glass-slumpV"></output></label><input id="glass-slump" type="range" min="0" max="1" step="0.01"></div>
+      <div class="sl"><label for="glass-oblong"><span data-i18n="sl.glass-oblong">Ribbon roundness</span> <output id="glass-oblongV"></output></label><input id="glass-oblong" type="range" min="0" max="1" step="0.01"></div>
+      <div class="sl"><label for="glass-start"><span data-i18n="sl.glass-start">Press from</span> <output id="glass-startV"></output></label><input id="glass-start" type="range" min="1" max="4" step="0.05"></div>
       <div id="cells-list" class="ops"></div>
       <div class="bar"><button type="button" data-addcell="1" data-i18n="cell.add">+ Cell</button></div>
     </div>
@@ -1010,9 +1011,11 @@ window.SA_I18N = (() => {
   "mould.cells": "Cells",
   "sl.glass-mw": "Cell width W",
   "sl.glass-ml": "Cell length L",
-  "sl.glass-slump": "Crept before setting",
-  "ui.slump-hard": "set hard first",
-  "ui.slump-level": "levelled out",
+  "sl.glass-oblong": "Ribbon roundness",
+  "sl.glass-start": "Press from",
+  "ui.ob-square": "square cut",
+  "ui.ob-stadium": "fully rounded",
+  "ui.start-none": "nothing to press",
   "ui.cells-empty": "no compartments \u2014 add one",
   "cell.add": "+ Cell",
   "a11y.cell-w": "Cell width, in units of W",
@@ -1608,7 +1611,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.8';
+  const BUILD = '2026.10.11.9';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4376,11 +4379,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // a key added to either re-dates every master on disk, while a material's own object is signed
   // only when that material is live.
   const GLASS = {
-    slump: 0.5,                                  // HOW FAR IT GOT TOWARD LEVELLING, 0..1 - not a
-                                                 // distance. 0 is glass that set hard before the
-                                                 // barriers came off, so voids stay crisp; 1 is
-                                                 // fluid enough that the void fills and the whole
-                                                 // sheet goes shallower for it.
+    oblong: 0.7,                                 // 0 a ribbon with square corners, 1 a stadium with
+                                                 // semicircular ends. A ROLLED ribbon is neither,
+                                                 // and every straight edge in the field came from
+                                                 // pretending it was a box.
+    start: 2,                                    // STARTING THICKNESS, as a multiple of target. A
+                                                 // ribbon spreads until it is down to target and
+                                                 // then has nothing left to press, so this is what
+                                                 // decides how far it can invade. 2 is invented.
+                                                 // 1 is a ribbon that cannot move at all.
     mw: 0.5, ml: 1,                              // the mould's unit cell, in FEET: W across, L along.
     // AUTHORED COMPARTMENTS, left to right. w and l are in units of mw and ml, c is which
     // colour was poured in. A cell shorter than its neighbours leaves bare glass past its end,
@@ -5257,67 +5264,57 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // creeps into a void, once to find the worst void in the mould - so it is one function. Two
   // copies of a distance would drift, and the drift would be invisible: both would still produce
   // a plausible picture.
-  function glassNearestCell(gc, ga, F, out) {
-    let best = Infinity, bc = -1;
-    const n = F.MC.length, ex = F.MEX, hl = F.MHL;
-    for (let i = 0; i < n; i++) {
-      if (hl[i] <= 0 || ex[i + 1] <= ex[i]) continue;          // a cell with no glass in it
-      const dx = gc < ex[i] ? ex[i] - gc : (gc > ex[i + 1] ? gc - ex[i + 1] : 0);
-      const dy = ga < -hl[i] ? -hl[i] - ga : (ga > hl[i] ? ga - hl[i] : 0);
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < best) { best = d; bc = F.MC[i].c | 0; }
-    }
-    out[0] = best; out[1] = bc;
-  }
-  // THE DEEPEST VOID THIS MOULD MAKES. What the slump is a fraction OF: at 1 the worst void just
-  // closes, whatever shape the cells happen to be, so every position on the control is a real
-  // one. Scaling it to the cell instead - which is what it did first - made the whole top of the
-  // slider a no-op on any mould whose voids were smaller than a cell, which is most of them.
-  function glassSlumpReach(F) {
-    if (!F.MC || !F.MC.length) return 0;
-    const w = F.MEX[F.MEX.length - 1] - F.MEX[0];
-    let hmax = 0; for (const h of F.MHL) if (h > hmax) hmax = h;
-    if (!(w > 0) || !(hmax > 0)) return 0;
-    const near = [0, -1], N = 64;
-    let worst = 0;
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      const gx = F.MEX[0] + (i + 0.5) / N * w, gy = -hmax + (j + 0.5) / N * 2 * hmax;
-      glassNearestCell(gx, gy, F, near);
-      if (near[0] > worst && near[0] < Infinity) worst = near[0];
-    }
-    // A GRID UNDER-MEASURES ITS OWN MAXIMUM: the deepest point of a void can sit between samples,
-    // by up to half a cell diagonal. Without that margin a fully levelled mould keeps a sliver of
-    // bare glass, which is the grid talking and not the glass.
-    return worst > 0 ? worst + 0.5 * Math.sqrt((w / N) * (w / N) + (2 * hmax / N) * (2 * hmax / N)) : 0;
-  }
-  // WHAT THE SLUMP COST IN DEPTH. Filling a void takes glass from somewhere: if the same glass
-  // covers more area it has to be shallower, and because thickness is what makes the tint a
-  // slumped sheet reads paler EVERYWHERE, not only where it crept. The old creep conjured glass -
-  // the invaded strip got colour and nothing else changed - which is the bit that made it a
-  // decoration rather than a flow.
+  // ONE RIBBON, AS A SIGNED DISTANCE. Negative inside, positive outside, zero on its edge - so
+  // "is there glass here" and "how far is the nearest glass" are the sign and the value of one
+  // number, and the shape cannot differ between them.
   //
-  // Measured, not derived. The closed form for "how much of a void is within reach of its walls"
-  // is the shape of the void, and an authored cell list exists precisely to make that arbitrary.
-  // So: poured area against covered area on a coarse grid, 4096 samples a frame. With no voids the
-  // two are equal and this is exactly 1, so a mould that needed no slump is untouched by it.
-  function glassSlumpThin(F) {
-    if (!F.MC || !(F.SLP > 0)) return 1;
-    const w = F.MEX[F.MEX.length - 1] - F.MEX[0];
-    let hmax = 0; for (const h of F.MHL) if (h > hmax) hmax = h;
-    if (!(w > 0) || !(hmax > 0)) return 1;
-    const probe = [0, -1, 0, 1], N = 64;
-    let poured = 0, covered = 0;
-    const keep = F.SLP;
-    for (let pass = 0; pass < 2; pass++) {
-      F.SLP = pass === 0 ? 0 : keep;                   // as poured, then as it ended up
-      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-        const gx = F.MEX[0] + (i + 0.5) / N * w, gy = -hmax + (j + 0.5) / N * 2 * hmax;
-        glassLay(gx, gy, F, probe);
-        if (probe[0] >= 0) { if (pass === 0) poured++; else covered += probe[3]; }
-      }
-    }
-    F.SLP = keep;
-    return covered > poured && poured > 0 ? poured / covered : 1;
+  // A ROLLED RIBBON IS AN OBLONG: square corners at 0, semicircular ends at 1, and a real one in
+  // between. That single fact removes every straight edge the field used to have, because
+  // equidistant between two RECTANGLES is a perpendicular bisector no matter how round the fronts
+  // are - which is why rounding the fronts never touched the facets.
+  // HOW MUCH GLASS ENDED UP OVER THIS SPOT, as a fraction of a ribbon at rest. Full through the
+  // middle, feathering over the last of the rim because rolled dough has no cliff edge, and down
+  // to 1/start out at the limit of what it could afford to spread. One ramp: a rim and a spread
+  // are the same question asked twice.
+  function glassDepth(d, i, F) {
+    const lim = F.MD[i], rim = F.MRIM[i];
+    if (d <= -rim) return 1;
+    const far = d <= 0 ? 0 : (lim > 0 ? d / lim : 1);          // 0 at the edge, 1 where it ran out
+    const edge = d <= 0 ? (rim > 0 ? -d / rim : 1) : 1;        // 0 at the very rim, 1 a rim in
+    const thin = 1 - (1 - 1 / F.MST) * far;
+    return edge * thin;
+  }
+  function glassCellSDF(gc, ga, i, F) {
+    const ex = F.MEX, hl = F.MHL;
+    const cx = (ex[i] + ex[i + 1]) * 0.5, hw = (ex[i + 1] - ex[i]) * 0.5, hh = hl[i];
+    const r = (hw < hh ? hw : hh) * F.MOB;
+    const ax = (gc > cx ? gc - cx : cx - gc) - (hw - r);
+    const ay = (ga > 0 ? ga : -ga) - (hh - r);
+    const qx = ax > 0 ? ax : 0, qy = ay > 0 ? ay : 0;
+    const inner = (ax > ay ? ax : ay);
+    return Math.sqrt(qx * qx + qy * qy) + (inner < 0 ? inner : 0) - r;
+  }
+  // HOW FAR THIS RIBBON CAN AFFORD TO SPREAD. It starts thicker than the sheet wants to be and
+  // thins as it covers more, so it stops when it reaches target: start x A0 is the most area its
+  // material can cover at target thickness. Dilating an oblong by d keeps the core and grows the
+  // radius, so the area is a quadratic in (r + d) and this is just its root - no search, no
+  // iteration, one line per cell per frame.
+  //
+  // THIS IS WHAT STOPS A SLUMP. Not a distance anyone set: running out. A ribbon that runs out
+  // leaves void for a neighbour that has not, and two fronts with different budgets do not meet
+  // halfway, which is where the curved joins come from.
+  function glassCellSpread(i, F) {
+    const ex = F.MEX, hl = F.MHL;
+    const hw = (ex[i + 1] - ex[i]) * 0.5, hh = hl[i];
+    if (!(hw > 0) || !(hh > 0)) return 0;
+    const r = (hw < hh ? hw : hh) * F.MOB;
+    const a = 2 * (hw - r), b = 2 * (hh - r);                  // the straight core it grows from
+    const A0 = a * b + 2 * (a + b) * r + Math.PI * r * r;
+    const want = F.MST * A0;
+    const disc = (a + b) * (a + b) - Math.PI * (a * b - want);
+    if (!(disc > 0)) return 0;
+    const u = (-(a + b) + Math.sqrt(disc)) / Math.PI;          // r + d
+    return u > r ? u - r : 0;
   }
   // A FIVE-POINTED STAR, as a radius per angle. Exact rather than approximate: between an outer
   // vertex and the next inner one the edge is a straight CHORD, and a chord through polar points
@@ -5442,46 +5439,34 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // is what a crown roundel actually had poured into it. A wedge mould is NOT a spin - a spin
     // shears what is already there, and these compartments were radial before anything was done.
     if (F.MR) { const r = Math.sqrt(gc * gc + ga * ga); gc = woodAtan2(ga, gc) * (0.5 + r); ga = r; }
-    // AUTHORED COMPARTMENTS. Each has its own width and its own length, so a short cell leaves a
-    // void past its end - and the field has to be able to answer "nothing was poured here", which
-    // is -1. A mould whose cells are all the same size is a special case of this one, not the
-    // other way round.
+    // AUTHORED RIBBONS. Each has its own width, length and colour, and each is an OBLONG - so a
+    // short one leaves a void past its end and the field has to be able to answer "nothing here",
+    // which is -1.
+    //
+    // WHO GETS A VOID is decided on PROGRESS, not distance: how far into its own budget a ribbon
+    // would be if it reached this point. One that can afford to spread further wins ground a
+    // nearer, poorer one cannot pay for - which is the whole of "they run out and stop, and the
+    // ones with material left invade".
     if (F.MC) {
-      const n = F.MC.length, ex = F.MEX, hl = F.MHL;
-      out[1] = -1; out[2] = 0; out[3] = 1;
-      let idx = -1;
-      for (let i = 0; i < n; i++) if (gc >= ex[i] && gc < ex[i + 1]) { idx = i; break; }
-      const has = i => i >= 0 && i < n && ga >= -hl[i] && ga < hl[i];
-      if (idx >= 0 && has(idx)) {
-        out[0] = F.MC[idx].c | 0;
-        if (F.LP > 0) {                                        // a lap at a shared edge, both present
-          const e = F.LP * F.MW;
-          if (gc - ex[idx] < e && has(idx - 1)) { out[1] = F.MC[idx - 1].c | 0; out[2] = (e - (gc - ex[idx])) / e; }
-          else if (ex[idx + 1] - gc < e && has(idx + 1)) { out[1] = F.MC[idx + 1].c | 0; out[2] = (e - (ex[idx + 1] - gc)) / e; }
-        }
-        return;
+      const n = F.MC.length, md = F.MD;
+      let i1 = -1, p1 = Infinity, d1 = 0, i2 = -1, p2 = Infinity, d2 = 0;
+      for (let i = 0; i < n; i++) {
+        if (!(md[i] >= 0)) continue;
+        const d = glassCellSDF(gc, ga, i, F);
+        const p = d <= 0 ? d : (md[i] > 0 ? d / md[i] : Infinity);   // inside is negative, so it wins outright
+        if (p < p1) { p2 = p1; i2 = i1; d2 = d1; p1 = p; i1 = i; d1 = d; }
+        else if (p < p2) { p2 = p; i2 = i; d2 = d; }
       }
-      // NOTHING WAS POURED HERE - but the barriers came out while it was still soft, so the
-      // nearest glass crept in. Nearest POURED RECTANGLE over every cell: that gets the sideways
-      // invasion and a cell creeping past its own end from the same arithmetic, with no axis
-      // favoured by accident. Two neighbours reaching from opposite sides meet at a seam, because
-      // a label cannot average.
-      out[0] = -1; out[3] = 0;
-      if (F.SLP > 0 && F.MRCH > 0) {
-        // Reach is a fraction of THIS MOULD'S WORST VOID, so 1 closes it and nothing above 1 is
-        // needed - see glassSlumpReach.
-        const reach = F.SLP * F.MRCH;
-        glassNearestCell(gc, ga, F, F.NR);
-        const best = F.NR[0], bc = best <= reach ? F.NR[1] : -1;
-        // A FLOW HAS A LIP, NOT A GRADIENT. Glass that got there is full depth; only the last
-        // stretch before it stopped is thin. Fading over the whole reach would read as a soft
-        // airbrush, which is the one thing a poured edge never looks like.
-        if (bc >= 0) {
-          out[0] = bc;
-          const lip = reach * 0.25;
-          out[3] = best < reach - lip ? 1 : (reach - best) / lip;
-        }
-      }
+      out[0] = -1; out[1] = -1; out[2] = 0; out[3] = 0;
+      if (i1 < 0 || p1 > 1) return;                            // every ribbon ran out before here
+      out[0] = F.MC[i1].c | 0;
+      // ROLLED DOUGH: thickest in the middle, feathering at the rim, and thinner still wherever it
+      // had to spread to get there. One ramp, because they are the same fact - how much glass
+      // ended up over this spot.
+      out[3] = glassDepth(d1, i1, F);
+      // A LAP IS A REAL OVERLAP. Two ribbons rolled into each other both lie in the light path, so
+      // the absorptions add and the seam goes darker. Only where both genuinely have glass here.
+      if (i2 >= 0 && d2 <= 0) { out[1] = F.MC[i2].c | 0; out[2] = glassDepth(d2, i2, F); }
       return;
     }
     const c = gc + F.TW * ga;                                  // the twist, as a shear
@@ -5558,8 +5543,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const F = {
       OPS, MR: GLASS.mould === 'radial', PX: GLASS.paneX, PY: GLASS.paneY,
       MC: GLASS.mould === 'cells' && Array.isArray(GLASS.cells) && GLASS.cells.length ? GLASS.cells : null,
-      MW: Math.max(0.01, GLASS.mw), SLP: Math.max(0, Math.min(1, GLASS.slump)),
-      MRCH: 0, NR: [0, -1],                                    // both filled in once the cells resolve
+      MW: Math.max(0.01, GLASS.mw),
+      MOB: Math.max(0, Math.min(1, GLASS.oblong)),
+      MST: Math.max(1, GLASS.start),                           // starting thickness, in targets
       form: lastW === 'spin' ? 'spun' : lastW === 'roll' ? 'rolled' : lastW === 'blow' ? 'blown' : 'poured',
       TH: Math.max(0.2, GLASS.thick), RM: Math.max(0, GLASS.ream),
       RS: Math.max(0.2, GLASS.reamScale), FR: Math.max(0.05, GLASS.formR),
@@ -5580,8 +5566,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       F.MEX = [-tot * 0.5]; F.MHL = [];
       for (const c of F.MC) { F.MEX.push(F.MEX[F.MEX.length - 1] + (+c.w || 0) * mw); F.MHL.push((+c.l || 0) * ml * 0.5); }
     }
-    if (F.MC) { F.NR = [0, -1]; F.MRCH = glassSlumpReach(F); }
-    const SLTHIN = glassSlumpThin(F);
+    // What each ribbon can afford, and how wide its rim is. Once per frame, not per pixel.
+    if (F.MC) {
+      F.MD = []; F.MRIM = [];
+      for (let i = 0; i < F.MC.length; i++) {
+        F.MD.push(glassCellSpread(i, F));
+        const hw = (F.MEX[i + 1] - F.MEX[i]) * 0.5, hh = F.MHL[i];
+        // A LIP, NOT A HALO. At half the corner radius this ate a third of every ribbon and the
+        // whole sheet read as airbrush - visible at 1x, where nothing can spread and the softness
+        // could only have been the rim. Rolled dough has a definite edge with a short taper on it.
+        F.MRIM.push((hw < hh ? hw : hh) * F.MOB * 0.16);
+      }
+    }
     const REL = Math.max(0, GLASS.relief), TINT = Math.max(0, GLASS.tint);
     const OPQ = Math.max(0, Math.min(1, GLASS.opacity)), OREF = 8;   // mm: the opal's single path
     // Beer-Lambert per channel per millimetre. Green is absorbed least, which is the whole reason a
@@ -5643,7 +5639,6 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // thinner where it landed - and because thickness is what makes the tint, a star reads
           // paler as well as lower. One field, two consequences, like every other thickness here.
           if (press > 0) T -= F.TH * 0.55 * press;
-          T *= SLTHIN;                                            // the slump spread it thinner
           if (T < 0.05) T = 0.05;
           // OPACITY, as a lerp on the PATH LENGTH rather than on the colour. At 0 the thickness
           // decides the depth of the tint and you read the form through it; at 1 every point gets
@@ -5669,6 +5664,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           if (CORD > 0) {
             glassLay(sx, sy, F, lay);                          // which compartment was poured here
             if (lay[0] >= 0) {                                 // -1 is bare glass: nothing reached here
+              // Depth decides how deep the colour reads, which is the same rule the thickness
+              // field already lives by - a thin spread of a colour is a pale one.
               const c = canes[lay[0] % canes.length], s = CORD * 0.6 * lay[3];
               ar += s * c[0]; ag += s * c[1]; ab += s * c[2];
               if (lay[1] >= 0) {                               // a lap: the neighbour is on top too
@@ -6877,8 +6874,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   mw: v => `${(+v).toFixed(2)}\u2032`, ml: v => `${(+v).toFixed(2)}\u2032`,
                   // Named for what it MEANS, not its number: 0 is glass that set hard before the
                   // barriers came off, and that is the end anyone would describe in words.
-                  slump: v => +v === 0 ? TR('ui.slump-hard')
-                           : (+v >= 1 ? TR('ui.slump-level') : `${Math.round(v * 100)}%`)};
+                  oblong: v => +v === 0 ? TR('ui.ob-square')
+                          : (+v >= 1 ? TR('ui.ob-stadium') : `${Math.round(v * 100)}%`),
+                  // Shown as what it IS - how much thicker than the sheet wants to be - because
+                  // 1 is not 'a bit' of anything, it is a ribbon with nothing left to give.
+                  start: v => +v <= 1 ? TR('ui.start-none') : `${(+v).toFixed(2)}\u00d7`};
   function showGlass(k) {
     const out = document.getElementById('glass-' + k + 'V');
     if (out) out.textContent = GLFMT[k] ? GLFMT[k](GLASS[k]) : String(GLASS[k]);

@@ -391,11 +391,17 @@ angle and a twist, radial wedges, or compartments authored one by one with their
 length and colour. Free blobs are a further member of the same partition and need no new
 machinery downstream.
 
-**How far it had set** before the barriers came off is a control, not an aside. At zero they come
-off glass that is already hard: voids stay crisp and nothing invades anything. Above zero the
-nearest poured glass creeps into any space nothing was poured into — which is how a short
-compartment ends up with its neighbours leaning in over its empty end, and the creeping edge is
-thin because what fades is the amount of glass, never the colour.
+**A ribbon is rolled dough, and what stops it spreading is running out.** It is an oblong, not a
+rectangle — which matters more than it sounds, because equidistant between two rectangles is a
+perpendicular bisector, and a field built on rectangles joins its colours along dead-straight
+facets however the fronts are shaped.
+
+Each ribbon starts thicker than the sheet wants to be — 2× target, invented, and invented is fine
+— and thins as it covers more ground, so it stops when it is down to target and there is nothing
+left to press. The reach is therefore **per ribbon**, from a closed form rather than a solver: a
+ribbon that runs out leaves void for a neighbour that has not, and two fronts with different
+budgets do not meet halfway, which is where the curved joins come from. Every operation resets the
+thickness, so there is no running total to carry through the op list.
 
 A roller carries **stamps**, and **C = πD** means the circumference *is* the repeat — not a pitch
 anyone chooses. A piece shorter than C never sees a full revolution, so an arc of the roller never
