@@ -1053,6 +1053,7 @@ window.SA_I18N = (() => {
   "a11y.cell-colour": "Change this cell\u2019s colour",
   "lay.glass-e": "Glass colour E",
   "lay.glass-f": "Glass colour F",
+  "lay.spec-tint": "Metal tint",
   "tool.roller": "Roller",
   "toolhint.roller": "Roll a pass across the slab. The roller presses its die into the glass as it goes — C = πD, so its way round is the repeat, and a piece shorter than that never sees a full turn. Curve the pass and the pattern curves with it. With pressure on, how hard you press sets how deep it bites; with tilt on, leaning across the pass tips that end of the face down.",
   "sl.rollD": "Roller across",
@@ -1183,6 +1184,7 @@ window.SA_I18N = (() => {
   "sl.speckGroups": "Speck colours",
   "sl.speckSubs": "Speck variants",
   "sl.specular": "Specular / polish",
+  "sl.specMetal": "Metal",
   "sl.wood-plane": "Cut",
   "sl.wood-y0": "Board position",
   "sl.wood-wid": "Plank width",
@@ -1663,7 +1665,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.24';
+  const BUILD = '2026.10.11.25';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1727,6 +1729,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { key: 'glassD', labelKey: 'lay.glass-d', label: TR('lay.glass-d'), def: '#8e4b6e', mat: 'glass' },
     { key: 'glassE', labelKey: 'lay.glass-e', label: TR('lay.glass-e'), def: '#c4563f', mat: 'glass' },
     { key: 'glassF', labelKey: 'lay.glass-f', label: TR('lay.glass-f'), def: '#d98324', mat: 'glass' },
+    // WHAT THE HIGHLIGHT IS MADE OF. A dielectric reflects the LIGHT's colour, which is why a
+    // yellow slab under a white sheen reads as yellow paint; a metal reflects its OWN, which is
+    // most of what makes gold read as gold. No `mat`: the coat is above the material fork, and the
+    // same token serves silver, copper or bronze. `def` rather than a seed, so OVR is untouched
+    // and nothing already on disk re-dates.
+    { key: 'specTint', labelKey: 'lay.spec-tint', label: TR('lay.spec-tint'), def: '#ffc64a' },
   ];
   // COL = RESOLVED values the renderer paints from. OVR = the overrides the editor edits and we
   // persist. perItem = id -> layer bucket, for per-id (per-item) colour tokens that inherit their
@@ -1837,7 +1845,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               // anyone sets; the rest are the die on its face and how hard it is leaned on.
               rollD: 6, rollFace: 5, rollStampN: 24, rollStampSize: 1, rollStampRot: 45, rollBite: 1, maskFeather: 0.06, maskWin: 0, maskSpec: 0, maskInvert: 0 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
-  const G = { subsurface: 0, specular: 0, lightAngle: 135, lightTemp: 0, lightX: 0.5, lightY: 0.3125, spotR: 0.25, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0, warpMask: [],
+  const G = { subsurface: 0, specular: 0, specMetal: 0, lightAngle: 135, lightTemp: 0, lightX: 0.5, lightY: 0.3125, spotR: 0.25, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0, warpMask: [],
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
               brecStrength: 0, brecClasts: 24, brecSeam: 1,
               drusyDensity: 0, drusySize: 1, drusyBright: 1, drusyGroups: 1, drusySubs: 1,
@@ -1875,6 +1883,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const COAT_TOKENS = [
     { key: 'subsurface',    min: 0,    max: 2,   step: 0.02, labelKey: 'sl.subsurface' },
     { key: 'specular',      min: 0,    max: 1,   step: 0.02, labelKey: 'sl.specular' },
+    { key: 'specMetal',     min: 0,    max: 1,   step: 0.02, labelKey: 'sl.specMetal' },
     { key: 'lightAngle',    min: -180, max: 180, step: 1,    labelKey: 'sl.lightAngle' },
     { key: 'lightTemp',     min: -1,   max: 1,   step: 0.02, labelKey: 'sl.lightTemp' },
     { key: 'lightSpectrum', min: -1,   max: 1,   step: 0.02, labelKey: 'sl.lightSpectrum', session: true,
@@ -3897,7 +3906,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const sp = G.specular, ang = G.lightAngle * Math.PI / 180;
       const fw = vp ? vp.fw : w, fh = vp ? vp.fh : h, ox = vp ? vp.ox : 0, oy = vp ? vp.oy : 0;   // the hotspot is placed in FULL-image space, then offset into this tile
       const cx = fw * 0.5 + Math.cos(ang) * fw * 0.4 - ox, cy = fh * 0.5 - Math.sin(ang) * fh * 0.4 - oy;
-      const rad = Math.hypot(fw, fh) * 0.45, a = Math.min(1, 0.85 * sp), [lr, lg, lb] = lightRGB();
+      const rad = Math.hypot(fw, fh) * 0.45, a = Math.min(1, 0.85 * sp), [lr, lg, lb] = specRGB();
       const grd = tx.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
       grd.addColorStop(0, `rgba(${lr},${lg},${lb},${a})`); grd.addColorStop(0.35, `rgba(${lr},${lg},${lb},${a * 0.35})`); grd.addColorStop(1, `rgba(${lr},${lg},${lb},0)`);
       tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'screen'; tx.fillStyle = grd; tx.fillRect(0, 0, w, h); tx.globalCompositeOperation = 'source-over'; tx.restore();
@@ -6445,6 +6454,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const N = [255, 250, 242], W = [255, 206, 150], C = [198, 220, 255], t = Math.max(-1, Math.min(1, G.lightTemp || 0));
     const m = t < 0 ? W : C, k = Math.abs(t);
     return [Math.round(N[0] + (m[0] - N[0]) * k), Math.round(N[1] + (m[1] - N[1]) * k), Math.round(N[2] + (m[2] - N[2]) * k)];
+  }
+  // WHAT THE SPECULAR IS MADE OF. A dielectric - stone, glass, varnish - reflects the LIGHT's
+  // colour, so its highlight is near white and a yellow slab under it reads as yellow paint. A
+  // METAL reflects its own colour instead, and that one difference is most of what separates gold
+  // from yellow. specMetal leans the sheen and the glint from the light's colour toward the tint
+  // token; at 0 it IS lightRGB() to the integer, so every slab already on disk paints unchanged.
+  //
+  // The tile-edge chamfer deliberately keeps reading lightRGB(): that is geometry catching the
+  // light, not a surface reflecting it, and tinting it would gild the grout.
+  function specRGB() {
+    const k = Math.max(0, Math.min(1, G.specMetal || 0)), L = lightRGB();
+    if (!k) return L;
+    const n = parseInt(String(COL.specTint || '#ffc64a').slice(1), 16);
+    const M = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    return [0, 1, 2].map(i => Math.round(L[i] + (M[i] - L[i]) * k));
   }
   // The ONE light both the specular sheen and the tile edges read. Dragging the Light tool aims it toward the pointer.
   function setLight(f) {

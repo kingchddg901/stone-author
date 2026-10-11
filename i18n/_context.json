@@ -1179,6 +1179,7 @@
  "a11y.cell-colour": {"terms": ["glass"], "where": "accessible name: step this compartment to the next colour"},
  "lay.glass-e": {"terms": ["glass"], "where": "colour token: the fifth glass colour"},
  "lay.glass-f": {"terms": ["glass"], "where": "colour token: the sixth glass colour"},
+ "lay.spec-tint": {"terms": [], "where": "colour token: the colour a metal highlight reflects. Gold by default; also serves silver, copper, bronze"},
  "sl.glass-oblong": {"terms": ["glass"], "where": "slider: how rounded a laid ribbon is. At 0 it has square corners, at 1 its ends are semicircles. A rolled ribbon is between the two, and this is what keeps the joins between colours from coming out as straight facets"},
  "sl.glass-start": {"terms": ["glass"], "where": "slider: how much thicker than the finished sheet each ribbon starts, as a multiple. A ribbon spreads until it is down to target thickness and then has nothing left to press, so this decides how far it can invade an empty space. At 1 it cannot move at all"},
  "ui.ob-square": {"terms": ["glass"], "where": "slider value at 0: the ribbon has square corners"},
@@ -1639,6 +1640,7 @@
   ],
   "where": "under the \"coat-and-light\" section"
  },
+ "sl.specMetal": {"terms": [], "where": "slider beside Specular. At 0 the highlight is the light's own colour, which is how a dielectric - stone, glass, varnish - behaves. At 1 it is the metal tint's colour instead, which is how a metal behaves, and is most of what makes gold read as gold rather than as yellow paint"},
  "sl.spotR": {
   "where": "under the \"coat-and-light\" section"
  },
