@@ -17,8 +17,13 @@
   /* A control the current material does not have is not dimmed, it is gone. The attribute is on
      the element and the material is on the body, so the tool logic keeps owning its own panels'
      hidden state and this simply overrides while it applies. */
-  body[data-mat="wood"] [data-mat-only="stone"],
-  body[data-mat="stone"] [data-mat-only="wood"] { display: none !important; }
+  /* Written as explicit pairs while there were two materials; with three that is six rules and
+     with four it is twelve. One rule per material instead, and ~= so a control can belong to
+     several ("wood glass"). */
+  body[data-mat="stone"] [data-mat-only]:not([data-mat-only~="stone"]),
+  body[data-mat="wood"] [data-mat-only]:not([data-mat-only~="wood"]),
+  body[data-mat="glass"] [data-mat-only]:not([data-mat-only~="glass"]) { display: none !important; }
+  body[data-mat="glass"] #g-glass { order: -2; }
   /* In wood the material panel goes to the TOP of the rail. Two `order` rules rather than moving
      the markup, because in stone the ground panels have to come back in their own order. */
   body[data-mat="wood"] #ground { order: -2; }
@@ -191,6 +196,7 @@
     <div class="grp" role="group" aria-label="Material" data-i18n-attr="aria-label=a11y.material"><span class="lbl" data-i18n="lbl.material">Material</span>
       <button id="m-stone" type="button" data-mat="stone" aria-pressed="true" data-i18n="mat.stone">Stone</button>
       <button id="m-wood" type="button" data-mat="wood" aria-pressed="false" data-i18n="mat.wood">Wood</button>
+      <button id="m-glass" type="button" data-mat="glass" aria-pressed="false" data-i18n="mat.glass">Glass</button>
     </div>
     <div class="grp" role="group" aria-label="Family" data-mat-only="stone" data-i18n-attr="aria-label=a11y.family"><span class="lbl" data-i18n="lbl.family">Family</span>
       <button id="f-carrara" type="button" data-fam="carrara" data-i18n="fam.carrara">Carrara</button>
@@ -438,6 +444,31 @@
     <div class="sliders" id="g-fog">
       <div id="fog-panel" class="tk" style="grid-column:1/-1"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.to-sculpt-the-haze-select">To sculpt the haze: select the Fog layer, then use Gravity (push clears a window, pull pools) or Magnet.</span></div>
+    </div>
+    </div></details>
+    <details class="sec" id="g-glass" hidden open><summary data-i18n="sec.glass">Glass</summary><div class="body">
+    <div class="grp" role="group" aria-label="Forming" data-i18n-attr="aria-label=a11y.glass-form"><span class="lbl" data-i18n="lbl.forming">Formed by</span>
+      <button type="button" data-form="rolled" data-i18n="glass.rolled">Rolled</button>
+      <button type="button" data-form="spun" data-i18n="glass.spun">Spun</button>
+      <button type="button" data-form="blown" data-i18n="glass.blown">Blown</button>
+      <button type="button" data-form="poured" data-i18n="glass.poured">Poured</button>
+      <button type="button" data-form="flat" data-i18n="glass.flat">Flattened</button>
+    </div>
+    <div class="sliders">
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.glass-note">Rolled, spun, blown and flattened are not looks, they are FORMING PROCESSES — and three of them leave a shape that a pane is then cut out of. A crown disc is spun flat from a bubble, so it is thick at the middle and thin at the rim: a pane taken near the centre carries the bullion where the pontil was, and one taken at the edge is fine tight arcs. Pane X and Pane Y are where in that disc, or along that cylinder, this sheet was cut from, which is the same idea as choosing where in a log a board comes from. What the field actually holds is THICKNESS: path length makes the tint, and because green survives and red and blue do not, a thick sheet goes green — the same reason you see it down the edge of a pane. The slope of that thickness is what you see as light and dark bands through patterned glass. There is no scene behind the sheet yet, so nothing is refracted through it; the slope is the honest cue until there is.</span></div>
+      <div class="sl"><label for="glass-thick"><span data-i18n="sl.glass-thick">Thickness</span> <output id="glass-thickV"></output></label><input id="glass-thick" type="range" min="0.6" max="14" step="0.1"></div>
+      <div class="sl"><label for="glass-tint"><span data-i18n="sl.glass-tint">Iron tint</span> <output id="glass-tintV"></output></label><input id="glass-tint" type="range" min="0" max="2" step="0.01"></div>
+      <div class="sl"><label for="glass-paneX"><span data-i18n="sl.glass-paneX">Pane across</span> <output id="glass-paneXV"></output></label><input id="glass-paneX" type="range" min="-3" max="3" step="0.01"></div>
+      <div class="sl"><label for="glass-paneY"><span data-i18n="sl.glass-paneY">Pane down</span> <output id="glass-paneYV"></output></label><input id="glass-paneY" type="range" min="-3" max="3" step="0.01"></div>
+      <div class="sl"><label for="glass-formR"><span data-i18n="sl.glass-formR">Disc radius</span> <output id="glass-formRV"></output></label><input id="glass-formR" type="range" min="0.2" max="4" step="0.05"></div>
+      <div class="sl"><label for="glass-ream"><span data-i18n="sl.glass-ream">Ream</span> <output id="glass-reamV"></output></label><input id="glass-ream" type="range" min="0" max="1.5" step="0.01"></div>
+      <div class="sl"><label for="glass-reamScale"><span data-i18n="sl.glass-reamScale">Ream scale</span> <output id="glass-reamScaleV"></output></label><input id="glass-reamScale" type="range" min="0.5" max="40" step="0.5"></div>
+      <div class="sl"><label for="glass-flutePitch"><span data-i18n="sl.glass-flutePitch">Flute pitch</span> <output id="glass-flutePitchV"></output></label><input id="glass-flutePitch" type="range" min="0.5" max="40" step="0.5"></div>
+      <div class="sl"><label for="glass-fluteDepth"><span data-i18n="sl.glass-fluteDepth">Flute depth</span> <output id="glass-fluteDepthV"></output></label><input id="glass-fluteDepth" type="range" min="0" max="2" step="0.01"></div>
+      <div class="sl"><label for="glass-seeds"><span data-i18n="sl.glass-seeds">Seeds</span> <output id="glass-seedsV"></output></label><input id="glass-seeds" type="range" min="0" max="1" step="0.01"></div>
+      <div class="sl"><label for="glass-seedStretch"><span data-i18n="sl.glass-seedStretch">Seed stretch</span> <output id="glass-seedStretchV"></output></label><input id="glass-seedStretch" type="range" min="1" max="20" step="0.5"></div>
+      <div class="sl"><label for="glass-incl"><span data-i18n="sl.glass-incl">Inclusions</span> <output id="glass-inclV"></output></label><input id="glass-incl" type="range" min="0" max="0.5" step="0.005"></div>
+      <div class="sl"><label for="glass-relief"><span data-i18n="sl.glass-relief">Relief</span> <output id="glass-reliefV"></output></label><input id="glass-relief" type="range" min="0" max="3" step="0.02"></div>
     </div>
     </div></details>
     <details class="sec" id="g-wood" hidden open><summary data-i18n="sec.wood">Wood</summary><div class="body">
@@ -902,6 +933,29 @@ window.SA_I18N = (() => {
   "mask.win.off": "Off",
   "mask.win.on": "On",
   "mat.stone": "Stone",
+  "mat.glass": "Glass",
+  "sec.glass": "Glass",
+  "lbl.forming": "Formed by",
+  "a11y.glass-form": "Forming process",
+  "glass.rolled": "Rolled",
+  "glass.spun": "Spun",
+  "glass.blown": "Blown",
+  "glass.poured": "Poured",
+  "glass.flat": "Flattened",
+  "ui.glass-note": "Rolled, spun, blown and flattened are not looks, they are FORMING PROCESSES — and three of them leave a shape that a pane is then cut out of. A crown disc is spun flat from a bubble, so it is thick at the middle and thin at the rim: a pane taken near the centre carries the bullion where the pontil was, and one taken at the edge is fine tight arcs. Pane X and Pane Y are where in that disc, or along that cylinder, this sheet was cut from, which is the same idea as choosing where in a log a board comes from. What the field actually holds is THICKNESS: path length makes the tint, and because green survives and red and blue do not, a thick sheet goes green — the same reason you see it down the edge of a pane. The slope of that thickness is what you see as light and dark bands through patterned glass. There is no scene behind the sheet yet, so nothing is refracted through it; the slope is the honest cue until there is.",
+  "sl.glass-thick": "Thickness",
+  "sl.glass-tint": "Iron tint",
+  "sl.glass-paneX": "Pane across",
+  "sl.glass-paneY": "Pane down",
+  "sl.glass-formR": "Disc radius",
+  "sl.glass-ream": "Ream",
+  "sl.glass-reamScale": "Ream scale",
+  "sl.glass-flutePitch": "Flute pitch",
+  "sl.glass-fluteDepth": "Flute depth",
+  "sl.glass-seeds": "Seeds",
+  "sl.glass-seedStretch": "Seed stretch",
+  "sl.glass-incl": "Inclusions",
+  "sl.glass-relief": "Relief",
   "mat.wood": "Wood",
   "note.calibrate": "Twenty short strokes teach the studio <i>your</i> hand: the pressure you actually use, how you normally hold the pen, and what counts as fast for you. Nothing is drawn on the slab while you calibrate, and nothing leaves this device.",
   "note.each-line-keeps-what-it": "<b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw it, so changing them shapes the next line only. This generates the base structure; the colours here are only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor vein grown while zoomed in comes out shorter, at the scale you are working.",
@@ -1467,7 +1521,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.65';
+  const BUILD = '2026.10.11.2';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4081,11 +4135,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // markers; callers switch material through setMaterial and never touch the token.
   // tools/check-material-fork.mjs fails the build otherwise. It is a tripwire against the accidental
   // leak, not a proof - it matches the token, so a helper that leaked the value could still defeat it.
-  let MATERIAL = 'stone';                       // 'stone' | 'wood' | ...
-  function setMaterial(m) { MATERIAL = (m === 'wood') ? 'wood' : 'stone'; }
+  let MATERIAL = 'stone';                       // 'stone' | 'wood' | 'glass'
+  function setMaterial(m) { MATERIAL = (m === 'wood' || m === 'glass') ? m : 'stone'; }
   function currentMaterial() { return MATERIAL; }   // saving a slab reads through here, never the token
   function paintContent(ident, angleView) {
     if (MATERIAL === 'wood') return paintWoodContent(ident, angleView);
+    if (MATERIAL === 'glass') return paintGlassContent(ident, angleView);
     return paintStoneContent(ident, angleView);
   }
   // ---- MATERIAL FORK END ------------------------------------------------------------------------
@@ -4214,6 +4269,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     dev2Die: 0                                    // the ring the branch DIED at. 0 = still alive, so the knot
                                                   // runs to the bark; otherwise it stops and is grown over.
   };
+  // GLASS. Its own object for the same reason WOOD has one: renderSig hashes G and T wholesale, so
+  // a key added to either re-dates every master on disk, while a material's own object is signed
+  // only when that material is live.
+  const GLASS = {
+    form: 'spun',                                // rolled | spun | blown | poured | flat -
+                                                  // a PROCESS, not a look
+    thick: 3.2, tint: 0.5,                        // nominal millimetres, and how much iron is in it
+    ream: 0.4, reamScale: 9,                      // the thickness waviness the forming left behind
+    seeds: 0.2, seedStretch: 4, incl: 0.05,       // what was in the melt: bubbles, which are voids
+                                                  // and thin it, and stones, which thicken it
+    paneX: 0.3, paneY: 0, formR: 1.6,             // WHERE IN THE FORMED OBJECT this pane was cut from
+    flutePitch: 7, fluteDepth: 0.5,               // the rolled texture
+    relief: 0.8,                                  // how hard the slope reads as light and dark
+  };
+  const GLASS0 = JSON.parse(JSON.stringify(GLASS));
   const WOOD0 = JSON.parse(JSON.stringify(WOOD));   // pristine, so a load is a pure function of the slab
   // SPECIES. A row of numbers, not a mode: pressing one writes the controls and you drag on from
   // there, exactly as "Palette from family" does for colour.
@@ -4976,6 +5046,155 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     x1 = Math.min(cw, Math.floor(x1 - 0.5) + 1); y1 = Math.min(ch, Math.floor(y1 - 0.5) + 1);
     const bw = x1 - x0, bh = y1 - y0;
     return bw > 0 && bh > 0 ? { iv: m.inverse(), x0, y0, x1, y1, bw, bh } : null;
+  }
+  // ---- GLASS -------------------------------------------------------------------------------------
+  // THE FIELD IS THICKNESS, in millimetres, and one scalar carries the material:
+  //   path length  -> TINT     Beer-Lambert, green surviving, which is why glass is green edge-on
+  //   its GRADIENT -> RELIEF   a sloped face throws light aside, so slope reads as light and dark
+  //                            bands - which is what you actually SEE through patterned glass
+  //
+  // AND THE FORMING DIRECTION IS THE REST OF IT. Glass is a fluid that was worked in a direction,
+  // and everything in the melt is drawn out along it: a cord becomes a streak, a bubble becomes a
+  // seed, a stone becomes a smear. One anisotropy, and the form chooses which way it points.
+  //   blown  the cylinder axis, constant      spun  RADIAL, so streaks fan from the pontil
+  //   rolled the rolling direction            poured  none at all - nothing was drawn
+  // Poured is the easy one for a reason: no flow field, so its blobs stay round.
+  function glassFlow(ox, oy, F, out) {                 // unit vector the melt was drawn along
+    if (F.form === 'spun') {
+      const r = Math.sqrt(ox * ox + oy * oy) || 1e-6;  // radial: it VARIES with position
+      out[0] = ox / r; out[1] = oy / r;
+    } else if (F.form === 'poured') { out[0] = 0; out[1] = 0; }
+    else if (F.form === 'blown') { out[0] = 0; out[1] = 1; }
+    else { out[0] = 1; out[1] = 0; }                   // rolled and flattened run across the sheet
+  }
+  // Thickness from the forming process alone. Evaluated THREE times per pixel for the gradient, so
+  // the inclusions are deliberately kept out of it - they are a nine-cell search and tripling that
+  // would cost more than the whole rest of the material.
+  function glassFormT(ox, oy, F, fv) {
+    let T = F.TH;
+    // THE STREAK, along the flow: noise compressed across the direction of draw and stretched along
+    // it. This is his "streaks from uneven stretching", and on a spun disc the same term fans out
+    // radially because the direction does.
+    if (F.RM > 0 && (fv[0] || fv[1])) {
+      const a = ox * fv[0] + oy * fv[1];               // along the draw
+      const c = -ox * fv[1] + oy * fv[0];              // across it
+      T *= 1 + F.RM * 0.30 * (fbm2(c * F.RS, a * F.RS * 0.06, 71) - 0.5) * 2;
+    } else if (F.RM > 0) {
+      T *= 1 + F.RM * 0.18 * (fbm2(ox * F.RS * 0.5, oy * F.RS * 0.5, 11) - 0.5) * 2;   // poured: no draw
+    }
+    if (F.form === 'spun') {
+      // CROWN. Spun flat from a bubble, so it thins towards the rim and keeps the pontil boss. A
+      // pane cut near the centre carries the bullion; one cut at the edge is fine arcs.
+      const r = Math.sqrt(ox * ox + oy * oy);
+      T *= 1 - 0.45 * (r < F.FR ? r / F.FR : 1);
+      const b = r / (F.FR * 0.07);
+      T += F.TH * 2.0 * Math.exp(-b * b);
+      T += F.TH * F.RM * 0.14 * Math.sin(r * F.RS * 7);   // and the concentric rings the spin leaves
+    } else if (F.form === 'rolled') {
+      // A TEXTURED ROLLER on one face. A triangle rather than a cosine: it is a roller, not a wave,
+      // and it costs no transcendental.
+      const u = ox * F.FP, f = u - Math.floor(u);
+      T += F.TH * F.FD * (1 - Math.abs(2 * f - 1));
+    }
+    return T > 0.05 ? T : 0.05;
+  }
+  // WHAT WAS IN THE MELT. Bubbles are voids and THIN the sheet; inclusions - unmelted batch, stones,
+  // cords of the wrong chemistry - are the opposite and thicken it. Both are drawn out along the
+  // flow, so both are ellipses aligned to it, and on a poured sheet both stay round.
+  function glassMelt(ox, oy, F, fv, out) {
+    out[0] = 0; out[1] = 0;
+    if (F.SD <= 0 && F.INC <= 0) return;
+    // NOT `fv[0] || 1`. That was meant to cover the poured case, where the flow is (0,0) and there
+    // is nothing to rotate into - but blown's flow is legitimately (0,1), and `0 || 1` is 1, so the
+    // guard quietly turned a vertical draw into a diagonal one. A falsy test cannot tell a
+    // zero VECTOR from a zero COMPONENT; ask the question that was actually meant.
+    const flowing = fv[0] !== 0 || fv[1] !== 0;
+    const ux = flowing ? fv[0] : 1, uy = flowing ? fv[1] : 0;
+    const drawn = flowing ? F.SST : 1;
+    const a0 = ox * ux + oy * uy, c0 = -ox * uy + oy * ux;
+    const cs = 0.06, csa = cs * drawn;
+    const gx = Math.floor(c0 / cs), gy = Math.floor(a0 / csa);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const cx = gx + i, cy = gy + j;
+      const h = woodHash(cx, cy + 991);
+      const jx = (cx + 0.5 + (woodHash(cx, cy) - 0.5) * 0.8) * cs;
+      const jy = (cy + 0.5 + (woodHash(cy, cx + 17) - 0.5) * 0.8) * csa;
+      const dx = (c0 - jx) / (cs * 0.32), dy = (a0 - jy) / (csa * 0.32);
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= 1) continue;
+      const q = 1 - d2;
+      if (h < F.SD) { if (q > out[0]) out[0] = q; }                       // a seed
+      else if (h > 1 - F.INC) { if (q > out[1]) out[1] = q; }             // an inclusion
+    }
+  }
+  function paintGlassContent(ident, angleView) {
+    // Glass has no items and no fluorescent minerals, so like wood it says nothing in either
+    // diagnostic rather than painting a flat colour into them and calling it data.
+    if (ident || uvMode) return;
+    const B = woodRect(); if (!B) return;                       // the rect helper is material-agnostic
+    const F = {
+      form: GLASS.form,
+      TH: Math.max(0.2, GLASS.thick), RM: Math.max(0, GLASS.ream),
+      RS: Math.max(0.2, GLASS.reamScale), FR: Math.max(0.05, GLASS.formR),
+      FP: Math.max(0.5, GLASS.flutePitch), FD: Math.max(0, GLASS.fluteDepth),
+      SD: Math.max(0, Math.min(1, GLASS.seeds)), SST: Math.max(1, GLASS.seedStretch),
+      INC: Math.max(0, Math.min(1, GLASS.incl)),
+    };
+    const REL = Math.max(0, GLASS.relief), TINT = Math.max(0, GLASS.tint);
+    // Beer-Lambert per channel per millimetre. Green is absorbed least, which is the whole reason a
+    // thick sheet looks green down its edge: it is path length, not a pigment.
+    const kr = 0.075 * TINT, kg = 0.022 * TINT, kb = 0.055 * TINT;
+    const ang = G.lightAngle * Math.PI / 180, Lx = Math.cos(ang), Ly = -Math.sin(ang);
+    const [LBR, LBG, LBB] = hexRGB(COL.ground || '#e6e6e4');     // the light behind the sheet
+    const eps = 0.004;                                           // gradient step, in feet
+    const fv = [0, 0], melt = [0, 0];
+    const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));
+    const img = g2d.createImageData(B.bw, band), px = img.data;
+    for (let by = B.y0; by < B.y1; by += band) {
+      const rows = Math.min(band, B.y1 - by);
+      let o = 0;
+      for (let y = 0; y < rows; y++) {
+        const dy = by + y + 0.5, dx0 = B.x0 + 0.5;
+        let su = B.iv.a * dx0 + B.iv.c * dy + B.iv.e, sv = B.iv.b * dx0 + B.iv.d * dy + B.iv.f;
+        for (let x = 0; x < B.bw; x++, o += 4, su += B.iv.a, sv += B.iv.b) {
+          const cu = su < 0 ? 0 : su > 1 ? 1 : su, cvv = sv < 0 ? 0 : sv > H ? H : sv;
+          // WHERE THIS PANE WAS CUT FROM. The pane is a window onto the formed object, exactly as a
+          // board is a plane through a log - which is why Pane across and Pane down change the
+          // character of the sheet and not merely the crop.
+          const ox = GLASS.paneX + (cu - 0.5) * SLAB_FT / 12;
+          const oy = GLASS.paneY + (cvv / H - 0.5) * SLAB_FT * H / 12;
+          glassFlow(ox, oy, F, fv);
+          let T = glassFormT(ox, oy, F, fv);
+          const gu = (glassFormT(ox + eps, oy, F, fv) - T) / eps;   // slope, in mm per foot
+          const gv = (glassFormT(ox, oy + eps, F, fv) - T) / eps;
+          glassMelt(ox, oy, F, fv, melt);
+          if (melt[0] > 0) T -= F.TH * 0.5 * melt[0];               // a bubble is a void
+          if (melt[1] > 0) T += F.TH * 0.6 * melt[1];               // a stone is not
+          if (T < 0.05) T = 0.05;
+          // THE SLOPE IS WHAT YOU SEE. Against an even light a tilted face throws light aside, so
+          // slope reads as a light or dark band depending which way it leans. Nothing is refracted
+          // through the sheet because there is no scene behind a slab yet; this is the honest cue
+          // until there is one.
+          // SATURATE, do not clip. The slope is millimetres per FOOT and a spun disc's concentric
+          // ream runs at tens of radians per foot, so the raw term leaves [0,1] across most of the
+          // sheet and the sheet goes pure black and pure white with the tint invisible under it.
+          // s/(1+|s|) is bounded by construction and stays linear for the small slopes, which is
+          // where all the detail actually is.
+          const sl = (gu * Lx + gv * Ly) * 0.05;
+          let m = 1 + REL * 0.55 * (sl / (1 + (sl < 0 ? -sl : sl))) - 0.45 * melt[0] + 0.25 * melt[1];
+          if (m < 0) m = 0;
+          const r = LBR * Math.exp(-kr * T) * m, g = LBG * Math.exp(-kg * T) * m,
+                b = LBB * Math.exp(-kb * T) * m;
+          px[o] = r > 255 ? 255 : r;
+          px[o + 1] = g > 255 ? 255 : g;
+          px[o + 2] = b > 255 ? 255 : b;
+          px[o + 3] = 255;
+        }
+      }
+      // putImageData works in device pixels and ignores the transform, which is what is wanted: the
+      // band was computed in device space from the inverse affine.
+      g2d.putImageData(img, B.x0, by, 0, 0, B.bw, rows);
+    }
   }
   function paintWoodContent(ident, angleView) {
     // Wood has no ITEMS and no fluorescent minerals, so it has nothing to say in either diagnostic:
@@ -6145,6 +6364,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const out = document.getElementById('wood-' + k + 'V');
     if (out) out.textContent = WDFMT[k] ? WDFMT[k](WOOD[k]) : (+WOOD[k]).toFixed(3);
   }
+  const GLFMT = { thick: v => `${(+v).toFixed(1)}mm`, tint: v => (+v).toFixed(2),
+                  paneX: v => `${(+v).toFixed(2)}\u2032`, paneY: v => `${(+v).toFixed(2)}\u2032`,
+                  formR: v => `${(+v).toFixed(2)}\u2032`, ream: v => (+v).toFixed(2),
+                  reamScale: v => (+v).toFixed(1), flutePitch: v => (+v).toFixed(1),
+                  fluteDepth: v => (+v).toFixed(2), seeds: v => +v === 0 ? 'clear' : (+v).toFixed(2),
+                  seedStretch: v => `${(+v).toFixed(1)}\u00d7`, relief: v => (+v).toFixed(2),
+                  incl: v => +v === 0 ? 'none' : (+v).toFixed(3) };
+  function showGlass(k) {
+    const out = document.getElementById('glass-' + k + 'V');
+    if (out) out.textContent = GLFMT[k] ? GLFMT[k](GLASS[k]) : String(GLASS[k]);
+  }
+  function syncGlass() {
+    for (const k of Object.keys(GLASS)) { const el = document.getElementById('glass-' + k); if (el) { el.value = GLASS[k]; showGlass(k); } }
+    const fb = document.querySelector('[data-form="' + GLASS.form + '"]'); if (fb) press('[data-form]', fb);
+  }
   function syncWood() {                                  // after a load, the rail has to agree with the slab
     for (const k of Object.keys(WOOD)) { const el = document.getElementById('wood-' + k); if (el) { el.value = WOOD[k]; showWood(k); } }
     syncTreeDia(); showSetCount();
@@ -6207,6 +6441,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // discriminator, so it stays on the right side of tools/check-material-fork.mjs.
     const mat = currentMaterial();
     document.getElementById('g-wood').hidden = mat !== 'wood';
+    { const gg = document.getElementById('g-glass'); if (gg) gg.hidden = mat !== 'glass'; }
     // The Log view belongs to wood. Switching to stone while looking at one would leave the view
     // button pressed on a control that is no longer on screen, which is a worse lie than a reset.
     if (mat !== 'wood' && view === 'log') {
@@ -6277,7 +6512,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const expName = (W, ext) => `${fileStem()}-${W}-${lightTag()}-${engineTag()}-${stampTag()}.${ext}`;
 
   function serialize() {
-    return { v: 1, name: slabName, fam, material: currentMaterial(), wood: JSON.parse(JSON.stringify(WOOD)), tool, view, layTiles, guidesOn,
+    return { v: 1, name: slabName, fam, material: currentMaterial(), wood: JSON.parse(JSON.stringify(WOOD)), glass: JSON.parse(JSON.stringify(GLASS)), tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
              layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed, haze: L.haze, transmit: L.transmit, scatter: L.scatter })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden], folders: folders.map(F => ({ name: F.name, v: F.v, c: F.c, members: [...F.members] })),
@@ -6311,6 +6546,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     const reset = (dst, def, src) => { for (const k in dst) delete dst[k]; Object.assign(dst, JSON.parse(JSON.stringify(def))); if (src) Object.assign(dst, JSON.parse(JSON.stringify(src))); };
     reset(G, G0, o.G); reset(T, T0, o.T); reset(NEXT, NEXT0, o.NEXT);   // HARD reset to defaults, THEN apply the slab — a load never inherits the previous slab's non-saved keys
+    reset(GLASS, GLASS0, o.glass);                                    // and glass, by the same rule
     reset(WOOD, WOOD0, o.wood);                                       // same rule for the wood settings; woodField re-keys itself off them
     cloudSig = bandSig = brecSig = ''; last = null;                     // invalidate the render caches so nothing survives a load
     clearUserLayers();                                                                                   // drop the previous slab's user layers, reset the active layer to the bucket defaults
@@ -6866,7 +7102,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
     for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
-    showGround(); syncWood(); syncLayerUI(); syncGranite(); syncFog(); hint();
+    showGround(); syncWood(); syncGlass(); syncLayerUI(); syncGranite(); syncFog(); hint();
   }
   // Revoking a blob URL while the browser is still writing the file CANCELS the download, and the old
   // one-second timer was set when an export was a few megabytes. At 800 MB the write is nowhere near
@@ -7073,6 +7309,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // byte-identical; wood starts its own. This is also why the wood settings are not in G: G is
         // hashed wholesale, so one key added there would have moved every master that exists.
         ...(s.material === 'wood' ? { material: s.material, wood: s.wood } : {}),
+        // Glass the same way: unchanged when off, so no stone or wood master re-dates.
+        ...(s.material === 'glass' ? { material: s.material, glass: s.glass } : {}),
       }))).toString(16);
     } catch (_) { return null; }
   };
@@ -7783,6 +8021,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // `seed` is not art direction. `trunk` deliberately has NO slider of its own: it is the ring-width
   // scale, and a scale is not a thing anyone wants to drag - what they want is the size it produces,
   // which is what Tree size gives them by solving for it.
+  // GLASS binds the same way, against its own object and its own prefix. `form` is a string and has
+  // buttons rather than a slider, so the numeric loop skips it exactly as wood's skips its seed.
+  for (const k of Object.keys(GLASS)) {
+    const el = document.getElementById('glass-' + k); if (!el) continue;
+    el.value = GLASS[k]; showGlass(k);
+    el.addEventListener('input', () => { GLASS[k] = +el.value; showGlass(k); redraw(true); });
+  }
+  for (const b of document.querySelectorAll('[data-form]')) b.addEventListener('click', () => {
+    GLASS.form = b.dataset.form; press('[data-form]', b); redraw(true);
+  });
+  press('[data-form]', document.querySelector('[data-form="' + GLASS.form + '"]'));
   for (const k of Object.keys(WOOD)) {
     const el = document.getElementById('wood-' + k); if (!el) continue;
     el.value = WOOD[k]; showWood(k);
