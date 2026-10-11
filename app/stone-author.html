@@ -528,6 +528,7 @@
       <div class="sl"><label for="wood-dev2Knot"><span data-i18n="sl.wood-dev2Knot">Knot</span> <output id="wood-dev2KnotV"></output></label><input id="wood-dev2Knot" type="range" min="0" max="0.5" step="0.005"></div>
       <div class="sl"><label for="wood-dev2KnotPitch"><span data-i18n="sl.wood-dev2KnotPitch">Knot pitch</span> <output id="wood-dev2KnotPitchV"></output></label><input id="wood-dev2KnotPitch" type="range" min="10" max="400" step="5"></div>
       <div class="sl"><label for="wood-dev2Die"><span data-i18n="sl.wood-dev2Die">Died at ring</span> <output id="wood-dev2DieV"></output></label><input id="wood-dev2Die" type="range" min="0" max="400" step="1"></div>
+      <div class="sl"><label for="wood-dev2Prune"><span data-i18n="sl.wood-dev2Prune">Taken off</span> <output id="wood-dev2PruneV"></output></label><input id="wood-dev2Prune" type="range" min="0" max="1" step="0.01"></div>
     </div>
     </div></details>
     <details class="sec" data-mat-only="stone" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
@@ -965,6 +966,7 @@ window.SA_I18N = (() => {
   "sl.wood-len": "Plank length",
   "sl.wood-cutAngle": "Cut angle",
   "sl.wood-treeDia": "Tree size",
+  "sl.wood-dev2Prune": "Taken off",
   "sl.wood-stage": "Boards",
   "sl.wood-fireAt": "Fire year",
   "sl.wood-fireSeverity": "Fire severity",
@@ -1409,7 +1411,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.43';
+  const BUILD = '2026.10.10.44';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4070,6 +4072,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     fireAt: 0, fireAngle: 0, fireWidth: 55,       // FIRE YEARS: the ring it burned in (0 = never), which way
     fireHeal: 40, fireSeverity: 0.7, fireZ: 12,   // the wound faces, how wide the kill, how many rings to
                                                   // close it, how bad, and how far up the butt it reaches.
+    dev2Prune: 0,                                 // HOW THE BRANCH ENDED. 0 it died on the tree and was
+                                                  // buried in its own bark - a loose knot. 1 it was taken
+                                                  // off clean and the live collar healed over sound wood.
     trunkH: 60, zBase: 0, taper: 0.3,             // THE TAPER, as GROWTH: total trunk height, how far up this
                                                   // board sits, and how fast the leader climbed. The rings
                                                   // a height never saw are ABSENT there, not thinner.
@@ -4217,7 +4222,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const DEV = [
       { a: WOOD.devAmp, g: WOOD.devAngle, s: WOOD.devSpread, st: WOOD.devStart, rp: WOOD.devRamp, z: 0, zs: 0 },
       { a: WOOD.dev2Amp, g: WOOD.dev2Angle, s: WOOD.dev2Spread, st: WOOD.dev2Start, rp: WOOD.dev2Ramp,
-        z: WOOD.dev2Z, zs: WOOD.dev2ZSpan, kn: WOOD.dev2Knot, kp: WOOD.dev2KnotPitch, die: WOOD.dev2Die },
+        z: WOOD.dev2Z, zs: WOOD.dev2ZSpan, kn: WOOD.dev2Knot, kp: WOOD.dev2KnotPitch, die: WOOD.dev2Die, prune: WOOD.dev2Prune },
     ].filter(d => d.a > 0);
     // GUARD THE STRUCTURAL VALUES HERE, not at the slider. deserialize applies o.wood straight out of
     // a saved file, so these three arrive from outside: a slab carrying rings: -1 threw
@@ -4378,7 +4383,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const dead = d.die > 0, di = Math.max(0, Math.min(n - 1, Math.round(d.die)));
       return { amp: d.a, ux: Math.cos(dir), uy: Math.sin(dir), al, zw, wl: wl[q],
                kn: d.kn > 0 ? d.kn : 0, kp: d.kp, zc: d.z, r0: edge[si],
-               dead, rDie: dead ? edge[di] : Infinity };
+               dead, rDie: dead ? edge[di] : Infinity, prune: Math.max(0, Math.min(1, d.prune || 0)) };
     });
     // The axis is a curve, not a line: a lean plus a slow wander. This is what stops straight grain
     // rendering as ruled parallel lines, and it is where cathedral arches come from on a tangent plane.
@@ -4707,8 +4712,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
             const rim = dd / (rb || 1e-9);
             // INTERGROWN joins live cambium and barely shows a boundary. ENCASED trapped BARK, which
             // is the black edge, and the reason that knot falls out of a board.
-            if (KN.dead) { kv *= 0.72; if (rim > 0.74) kv *= 0.18; }
-            else if (rim > 0.88) kv *= 0.55;
+            // PRUNED OR DIED. Bark is the whole difference: it is the layer that stops the knot ever
+            // joining the wood round it. Taken off clean and there is no bark to bury, so the collar
+            // closes on sound wood and the knot stays tight - darker than the trunk, but continuous
+            // with it. Blended rather than switched, because a stub half stripped before burial is
+            // an ordinary thing to find.
+            if (KN.dead) {
+              const pr = KN.prune;
+              kv *= 0.72 + 0.2 * pr;                          // sound heartwood is darker, not dead
+              if (rim > 0.74) kv *= 0.18 + (0.55 - 0.18) * pr;   // the bark ring, fading out as it is pruned away
+            } else if (rim > 0.88) kv *= 0.55;
             cr = KR * kv; cg = KG * kv; cb = KB * kv;
           }
         }
@@ -5895,6 +5908,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   dev2ZSpan: v => (+v).toFixed(2), dev2Start: v => `${Math.round(v)}`,
                   dev2Ramp: v => `${Math.round(v)}`, dev2Knot: v => (+v).toFixed(3),
                   dev2KnotPitch: v => `${Math.round(v)}`,
+                  dev2Prune: v => +v === 0 ? 'died on the tree' : (+v >= 1 ? 'taken off clean' : (+v).toFixed(2)),
                   dev2Die: v => +v === 0 ? 'alive' : `${Math.round(v)}` };
   function showWood(k) {                                 // one slider's readout, from WOOD rather than from the input
     const out = document.getElementById('wood-' + k + 'V');
