@@ -43,6 +43,10 @@ HOOK = (
     "    cutBoxFromInstance, cutScale, coverSrc, snagTile, sectionList, sectionFromHere,\n"
     "    sectionOf, SLOT_INK, GROUPS, groupsFor, rosetteOf, redraw, specRGB, lightRGB, COL, G,\n"
     "    renderTiledParallel, renderTiled, renderCoreSrc, currentMaterial,\n"
+    # corePaintsThis is a const declared far below this hook, so naming it here is a temporal dead
+    # zone and the whole IIFE throws at load. Reached through a thunk instead.
+    "    tilePool, renderOneTile, tiledPlan, tilePainted, tiffPlan,\n"
+    "    corePaintsThis: () => corePaintsThis(),\n"
     "    setSections(a) { sections = a; },\n"
     # PAINT THE SLAB UNDER AN ARBITRARY TRANSFORM. The offscreen painter only ever uses
     # setTransform(cw,0,0,cw,0,ty) - a whole slab, scaled to fit. The open question is whether the

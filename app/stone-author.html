@@ -1684,7 +1684,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.30';
+  const BUILD = '2026.10.11.31';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4431,8 +4431,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
     s += `paintContent(false,false);\n`;
     s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:false,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
-    s += `var inner=new OffscreenCanvas(d.tileW,d.tileH);inner.getContext('2d').drawImage(tc,d.bleed,d.bleed,d.tileW,d.tileH,0,0,d.tileW,d.tileH);\n`;
-    s += `var bmp=inner.transferToImageBitmap();self.postMessage({i:d.i,tx0:d.tx0,ty0:d.ty0,bmp:bmp},[bmp]);};`;
+    // keepBleed: the export reads its quarters at [bleed + sx*store), so it wants the bled tile
+    // exactly as renderOneTile returns it. Cropping here and re-offsetting there would be two
+    // places to get the same arithmetic right.
+    s += `var out=tc;if(!d.keepBleed){out=new OffscreenCanvas(d.tileW,d.tileH);out.getContext('2d').drawImage(tc,d.bleed,d.bleed,d.tileW,d.tileH,0,0,d.tileW,d.tileH);}\n`;
+    s += `var bmp=out.transferToImageBitmap();self.postMessage({i:d.i,tx0:d.tx0,ty0:d.ty0,bmp:bmp},[bmp]);};`;
     return s;
   }
   async function renderTiledParallel(W, opts) {
@@ -10721,12 +10724,84 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
              renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
              tileMB: Math.round((ts + 2 * bleed) ** 2 * 4 / 1e6) };
   }
+  // WHAT THE SERIALISED CORE REPRODUCES EXACTLY, and nothing else. Measured, not assumed: with
+  // these three false the parallel and sequential paths differ by zero bytes.
+  const corePaintsThis = () => !uvMode && !(!layTiles && G.backlight > 0) &&
+    !gatherMasks().some(w => w.show != null) &&
+    typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
+  let EXP_FORCE_SEQ = false;                               // the differential test flips this
+  // A POOL THAT PAINTS AHEAD. Tiles are consumed in order - the sink is indexed but the stats, the
+  // timing and the blank-tile retry all read in sequence - so the win comes from having the next few
+  // already in flight. Bounded by the plan's own memory arithmetic, because that budget was written
+  // for ONE tile at a time and N in flight multiply it.
+  async function tilePool(W, p) {
+    if (EXP_FORCE_SEQ || !corePaintsThis()) return null;
+    const room = Math.floor(p.budgetMB / Math.max(1, p.tileMB));
+    const n = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8, room));
+    if (n < 2) return null;                                // one worker is slower than no worker
+    const bs = W / COAT_REF, finalW = W, finalH = p.FH;
+    const [clB, bdB, brB] = await Promise.all([
+      layVis('clouds') && G.cloudStrength > 0 ? createImageBitmap(ensureClouds()) : null,
+      layVis('bands') && G.bandStrength > 0 ? createImageBitmap(ensureBands()) : null,
+      layVis('breccia') && G.brecStrength > 0 ? createImageBitmap(ensureBreccia()) : null,
+    ]);
+    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum,
+                    spotOn, hidden: [...hidden], material: currentMaterial(), marks };
+    const url = URL.createObjectURL(new Blob([renderCoreSrc()], { type: 'application/javascript' }));
+    const pool = [];
+    try {
+      for (let i = 0; i < n; i++) {
+        const w = new Worker(url);
+        const [cl, bd, br] = await Promise.all([clB ? createImageBitmap(clB) : null, bdB ? createImageBitmap(bdB) : null, brB ? createImageBitmap(brB) : null]);
+        await new Promise((res, rej) => {
+          w.onmessage = e => { if (e.data.type === 'ready') res(); };
+          w.onerror = e => rej(new Error('render worker: ' + (e.message || 'failed to start')));
+          w.postMessage({ type: 'init', ...state, cl, bd, br }, [cl, bd, br].filter(Boolean));
+        });
+        pool.push({ w, busy: false });
+      }
+    } catch (e) { for (const q of pool) q.w.terminate(); URL.revokeObjectURL(url); throw e; }
+    if (clB) clB.close(); if (bdB) bdB.close(); if (brB) brB.close();
+    const inflight = new Map();                            // n -> Promise<ImageBitmap>
+    const start = (idx) => {
+      if (idx >= p.renders || inflight.has(idx)) return;
+      const q = pool.find(x => !x.busy);
+      if (!q) return;
+      q.busy = true;
+      const gx = idx % p.rAcross, gy = (idx / p.rAcross) | 0;
+      inflight.set(idx, new Promise((res, rej) => {
+        q.w.onmessage = e => { q.busy = false; res(e.data.bmp); };
+        q.w.onerror = e => { q.busy = false; rej(new Error('render worker: ' + (e.message || 'threw'))); };
+        q.w.postMessage({ i: idx, tx0: gx * p.ts, ty0: gy * p.ts, tileW: p.ts, tileH: p.ts, keepBleed: true,
+                          ew: p.ts + 2 * p.bleed, eh: p.ts + 2 * p.bleed, ex0: gx * p.ts - p.bleed,
+                          ey0: gy * p.ts - p.bleed, bleed: p.bleed, bs, finalW, finalH });
+      }));
+    };
+    return {
+      workers: n,
+      async tile(idx) {
+        start(idx);
+        for (let k = 1; k < n; k++) start(idx + k);        // keep the rest of the pool fed
+        const bmp = await inflight.get(idx);
+        inflight.delete(idx);
+        for (let k = 1; k <= n; k++) start(idx + k);
+        const c = document.createElement('canvas');
+        c.width = p.ts + 2 * p.bleed; c.height = p.ts + 2 * p.bleed;
+        c.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
+        return c;
+      },
+      retire(idx) { const q = inflight.get(idx); inflight.delete(idx); if (q) q.then(b => b.close(), () => {}); },
+      close() { for (const q of pool) q.w.terminate(); URL.revokeObjectURL(url);
+                for (const [, q] of inflight) q.then(b => b.close(), () => {}); inflight.clear(); },
+    };
+  }
   async function exportTiff(W) {
     if (exporting) return; exporting = true; wakeOn(); sealing = sealDevice();
     const btn = document.getElementById('export'), selW = document.getElementById('expres');
     const selF = document.getElementById('expfmt');
     btn.disabled = selW.disabled = selF.disabled = true;
-    expReset();
+    let pool = null;                                       // out here so the finally can close it: a
+    expReset();                                            // throw mid-export must not leak a worker per core
     hint(TR('hint.exporting-render', { w: W }));
     try {
       expStat(TR('exp.preparing'), null); await breathe();
@@ -10745,6 +10820,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // Written BEFORE the first tile, so a device that never comes back has still left a record.
       if (!forcedTile()) markAttempt(p.ts, W);
       const tileMs = [], tileBytes = [];
+      // The pool paints ahead where the core reproduces this picture exactly; null everywhere else,
+      // and the loop below is then the loop it always was.
+      pool = await tilePool(W, p);
       // HOW MUCH LIGHT THE MASTER ACTUALLY CARRIES. A lost bloom leaves a file that is whole, correctly
       // sized, fully drawn, correctly signed and half as bright — the only symptom is the brightness
       // itself, and until now reading it meant decoding 10.7 GB after the fact. The pixels are already in
@@ -10768,7 +10846,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // whole-canvas: the backing is there or it is not.
         let c = null;
         for (let attempt = 1; ; attempt++) {
-          c = renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
+          // THE RETRY IS ALWAYS ON THIS THREAD. A worker that handed back an unallocated backing is
+          // in no state to be asked again, and the point of the retry is to get the tile, not to
+          // find out whose fault it was. First attempt uses the pool when there is one.
+          c = (pool && attempt === 1) ? await pool.tile(n)
+                                      : renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
           if (tilePainted(c)) break;
           c.width = 1; c.height = 1;                       // hand the failed allocation back first
           if (attempt >= 2) { forgetTile(W); throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders })); }
@@ -10792,6 +10874,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         c.width = 1; c.height = 1;                         // only now: every quarter has been read
         tileMs.push(Math.round(performance.now() - tTile)); tileBytes.push(tb);
       }
+      if (pool) { pool.close(); pool = null; }
       proveTile(p.ts, W);                                  // settled: every render after this one matches it
       const msRender = Date.now() - tR;
       expStat(TR('exp.saving'), 0.96); await breathe();
@@ -10846,6 +10929,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         plan: { budgetMB: p.budgetMB, memShare: p.memShare, mem: navigator.deviceMemory || null,
                 proven: p.proven || undefined, tried: p.trail },
         toDisk: sink.toDisk, bytes,
+        workers: pool ? pool.workers : undefined,          // absent = painted on this thread
         ms: { render: msRender, total: Date.now() - expT0 },
         // Paired on purpose: time ALONE cannot say why a tile was slow. Against its own byte count it
         // can -- time that tracks bytes is the picture being dense, time that spikes where bytes did
@@ -10870,6 +10954,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } catch (e) {
       expStat(TR('hint.export-failed-msg', { err: errWhere(e) }), -1);
     } finally {
+      if (pool) { pool.close(); pool = null; }             // idempotent: the success path closes it too
       btn.disabled = selW.disabled = selF.disabled = false; exporting = false; wakeOff(); expFreeze();
     }
   }
