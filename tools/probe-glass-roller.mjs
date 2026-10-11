@@ -34,15 +34,20 @@ function lift(name) {
   }
   throw new Error('unbalanced: ' + name);
 }
-const NEEDED = ['resample', 'pressureReal', 'pressFactor', 'tiltReal',
+const NEEDED = ['resample', 'pressureReal', 'pressFactor', 'penPress', 'tiltReal',
                 'leanProfile', 'penAxis', 'rollerPath', 'rollerBake', 'rollerAt', 'rollerHand',
                 'starR', 'rollStampAt'];
 const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
-// smoothstep is an arrow const rather than a declaration, so it comes across by its own line -
-// still taken from the source, because leanProfile's thresholds are measured through it.
+// Arrow consts rather than declarations, so they come across by their own lines - still taken from
+// the source, because leanProfile's thresholds and penPress's range are both measured through them.
+// calProfile is left null here: this probe is about the roller, and the hand's own calibration has
+// its own probe. With it null the pressure curve is the uncalibrated one, which is what a run on a
+// machine that never calibrated would get.
 const SMOOTH = SRC.match(/^ *const smoothstep = .*$/m)[0];
+const RANGE = SRC.match(/^ *const PRESS_LO = .*$/m)[0];
 const api = new Function('SLAB_FT',
-  SMOOTH + '\n' + NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(SLAB_FT);
+  'let calProfile = null;\n' + SMOOTH + '\n' + RANGE + '\n' +
+  NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(SLAB_FT);
 const { rollerBake, rollerAt, rollerHand, rollStampAt } = api;
 
 const H = 0.62;

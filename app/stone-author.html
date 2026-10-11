@@ -1638,7 +1638,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.11';
+  const BUILD = '2026.10.11.12';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2225,6 +2225,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // PEN PRESSURE rides on each sample as a fourth value, null for anything but a pen. It only
   // counts as real when it VARIES: hardware without pressure reports a flat 0.5 while pressed.
+  // WHAT WE KNOW ABOUT THIS HAND ON THIS DEVICE. Declared HERE, beside the channels that read it,
+  // rather than down in the calibration section that fills it: `let` has a dead zone, the readers
+  // are three thousand lines above the old declaration, and the cost of being wrong about whether
+  // any of them can be reached during init is the whole app failing to start. Not a risk worth
+  // reasoning about when moving one line removes it.
+  let calProfile = null;
   function pressureReal(S) {
     if (!S || S.length < 3 || S.some(q => q[3] == null)) return false;
     return new Set(S.map(q => q[3].toFixed(3))).size >= 3;
@@ -2240,8 +2246,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const target = Math.min(Math.max(u, 0), 1) * total;
       let i = 1; while (i < cum.length - 1 && cum[i] < target) i++;
       const seg = (cum[i] - cum[i - 1]) || 1e-9, f = Math.min(1, Math.max(0, (target - cum[i - 1]) / seg));
-      return 0.15 + 1.7 * (ps[i - 1] + (ps[i] - ps[i - 1]) * f);
+      return penPress(ps[i - 1] + (ps[i] - ps[i - 1]) * f);
     };
+  }
+  // THIS HAND'S PRESSURE, ON THIS DEVICE. 0.15 + 1.7*p assumes a hand that uses the whole sensor,
+  // and the calibration section's own note says they do not: a real one spends most of a stroke in
+  // the bottom tenth. Measured light / natural / hard remap the INPUT; the output range is
+  // unchanged, because how much a vein may thin or thicken is art direction and not a property of
+  // anybody's grip.
+  //
+  // Piecewise through the middle rather than a line across the ends: the natural stroke is the one
+  // that has to come out neutral, and every hand's light and hard are lopsided about it.
+  const PRESS_LO = 0.15, PRESS_HI = 1.85;            // what 0.15 + 1.7*p gave at 0 and at 1
+  function penPress(p) {
+    const C = calProfile && calProfile.press;
+    if (!C || !(C.hi > C.lo) || !(C.mid > C.lo) || !(C.hi > C.mid)) return PRESS_LO + 1.7 * p;
+    if (p <= C.mid) {
+      const u = (p - C.lo) / (C.mid - C.lo);
+      return PRESS_LO + (1 - PRESS_LO) * (u < 0 ? 0 : u > 1 ? 1 : u);
+    }
+    const u = (p - C.mid) / (C.hi - C.mid);
+    return 1 + (PRESS_HI - 1) * (u < 0 ? 0 : u > 1 ? 1 : u);
   }
   // PEN LEAN rides as a fifth value: 0 upright, 1 laid flat. Real only when it varies, like pressure.
   function tiltReal(S) {
@@ -2263,7 +2288,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (let i = 1; i < S.length; i++) cum.push(cum[i - 1] + Math.hypot(S[i][0] - S[i - 1][0], S[i][1] - S[i - 1][1]));
     const total = cum[cum.length - 1] || 1e-9;
     if (rest == null) { const head = S.slice(0, Math.min(8, S.length)).map(q => q[4]).sort((a, b) => a - b); rest = head[head.length >> 1]; }
-    const ls = S.map((_, i) => { let a = 0, c = 0; for (let j = Math.max(0, i - 8); j <= Math.min(S.length - 1, i + 8); j++) { a += S[j][4]; c++; } return smoothstep(9 / 90, 25 / 90, a / c - rest); });
+    // HOW FAR PAST THE GRIP IS "LEANING", for this hand. 9 and 25 degrees were a guess at someone's
+    // range; the calibration measured where this one actually gets to when it lays the pen down.
+    // Full effect at that, starting a quarter of the way there - so a hand that can only lay the pen
+    // to 30 degrees still reaches the full effect, and one that goes to 70 is not saturated by a
+    // shrug. Falls back to the original pair when nothing has been measured.
+    const L = calProfile && calProfile.lean, span = L && L.max > rest ? L.max - rest : null;
+    const t0 = span ? span * 0.25 : 9 / 90, t1 = span || 25 / 90;
+    const ls = S.map((_, i) => { let a = 0, c = 0; for (let j = Math.max(0, i - 8); j <= Math.min(S.length - 1, i + 8); j++) { a += S[j][4]; c++; } return smoothstep(t0, t1, a / c - rest); });
     return u => {
       const target = Math.min(Math.max(u, 0), 1) * total;
       let i = 1; while (i < cum.length - 1 && cum[i] < target) i++;
@@ -6337,10 +6369,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // purpose be soft from its first point, instead of measured against its own start.
   let hoverLean = [], gripLean = [];
   const med = a => { const v = a.slice().sort((x, y) => x - y); return v[v.length >> 1]; };
+  // The live grip first, because it is the grip you have right now. Then hover. Then the CALIBRATED
+  // rest, which is the whole point of having measured it: a fresh session used to fall through to
+  // null and let each stroke guess its own baseline from its own first eight samples - which is
+  // circular, since those samples are the thing being normalised.
   function restLean() {
     if (gripLean.length >= 60) return med(gripLean);
     const t = performance.now(), v = hoverLean.filter(h => t - h.t < 500).map(h => h.v);
-    return v.length >= 5 ? med(v) : null;
+    if (v.length >= 5) return med(v);
+    const L = calProfile && calProfile.lean;
+    return L && L.rest > 0 ? L.rest : null;
   }
   let gesture = null;                                   // { type: 'draw'|'pan'|'pinch'|'branch', ... }
   const local = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
@@ -7552,7 +7590,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const CAL_PHASES = ['natural', 'hard', 'light', 'laid', 'quick'];   // 4 strokes each = 20
   const CAL_PER = 4;
   let cal = null;                              // the run in progress
-  let calProfile = null;                       // what we know about this hand on this device
+  // calProfile is declared up with the pen channels that read it - see there for why.
   const srt = a => a.slice().sort((x, y) => x - y);
   const pct = (a, f) => a.length ? srt(a)[Math.min(a.length - 1, Math.round(f * (a.length - 1)))] : null;
   const mid = a => pct(a, 0.5);
