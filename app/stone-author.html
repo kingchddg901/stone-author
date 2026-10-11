@@ -473,7 +473,7 @@
     <div class="sliders" data-mat-only="glass" id="s-cells">
       <div class="sl"><label for="glass-mw"><span data-i18n="sl.glass-mw">Cell width W</span> <output id="glass-mwV"></output></label><input id="glass-mw" type="range" min="0.05" max="2" step="0.01"></div>
       <div class="sl"><label for="glass-ml"><span data-i18n="sl.glass-ml">Cell length L</span> <output id="glass-mlV"></output></label><input id="glass-ml" type="range" min="0.05" max="4" step="0.01"></div>
-      <div class="sl"><label for="glass-slump"><span data-i18n="sl.glass-slump">Set before unmoulding</span> <output id="glass-slumpV"></output></label><input id="glass-slump" type="range" min="0" max="0.3" step="0.005"></div>
+      <div class="sl"><label for="glass-slump"><span data-i18n="sl.glass-slump">Crept before setting</span> <output id="glass-slumpV"></output></label><input id="glass-slump" type="range" min="0" max="1" step="0.01"></div>
       <div id="cells-list" class="ops"></div>
       <div class="bar"><button type="button" data-addcell="1" data-i18n="cell.add">+ Cell</button></div>
     </div>
@@ -1012,6 +1012,7 @@ window.SA_I18N = (() => {
   "sl.glass-ml": "Cell length L",
   "sl.glass-slump": "Crept before setting",
   "ui.slump-hard": "set hard first",
+  "ui.slump-level": "levelled out",
   "ui.cells-empty": "no compartments \u2014 add one",
   "cell.add": "+ Cell",
   "a11y.cell-w": "Cell width, in units of W",
@@ -1607,7 +1608,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.7';
+  const BUILD = '2026.10.11.8';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4375,9 +4376,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // a key added to either re-dates every master on disk, while a material's own object is signed
   // only when that material is live.
   const GLASS = {
-    slump: 0.04,                                 // FEET the soft glass crept once the barriers came
-                                                 // out. 0 means it had set hard first, which is a
-                                                 // different object: crisp voids, no invasion.
+    slump: 0.5,                                  // HOW FAR IT GOT TOWARD LEVELLING, 0..1 - not a
+                                                 // distance. 0 is glass that set hard before the
+                                                 // barriers came off, so voids stay crisp; 1 is
+                                                 // fluid enough that the void fills and the whole
+                                                 // sheet goes shallower for it.
     mw: 0.5, ml: 1,                              // the mould's unit cell, in FEET: W across, L along.
     // AUTHORED COMPARTMENTS, left to right. w and l are in units of mw and ml, c is which
     // colour was poured in. A cell shorter than its neighbours leaves bare glass past its end,
@@ -5250,6 +5253,72 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       else if (h > 1 - F.INC) { if (q > out[1]) out[1] = q; }             // an inclusion
     }
   }
+  // HOW FAR THE NEAREST POURED GLASS IS, and whose it is. Asked twice - once to decide what
+  // creeps into a void, once to find the worst void in the mould - so it is one function. Two
+  // copies of a distance would drift, and the drift would be invisible: both would still produce
+  // a plausible picture.
+  function glassNearestCell(gc, ga, F, out) {
+    let best = Infinity, bc = -1;
+    const n = F.MC.length, ex = F.MEX, hl = F.MHL;
+    for (let i = 0; i < n; i++) {
+      if (hl[i] <= 0 || ex[i + 1] <= ex[i]) continue;          // a cell with no glass in it
+      const dx = gc < ex[i] ? ex[i] - gc : (gc > ex[i + 1] ? gc - ex[i + 1] : 0);
+      const dy = ga < -hl[i] ? -hl[i] - ga : (ga > hl[i] ? ga - hl[i] : 0);
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < best) { best = d; bc = F.MC[i].c | 0; }
+    }
+    out[0] = best; out[1] = bc;
+  }
+  // THE DEEPEST VOID THIS MOULD MAKES. What the slump is a fraction OF: at 1 the worst void just
+  // closes, whatever shape the cells happen to be, so every position on the control is a real
+  // one. Scaling it to the cell instead - which is what it did first - made the whole top of the
+  // slider a no-op on any mould whose voids were smaller than a cell, which is most of them.
+  function glassSlumpReach(F) {
+    if (!F.MC || !F.MC.length) return 0;
+    const w = F.MEX[F.MEX.length - 1] - F.MEX[0];
+    let hmax = 0; for (const h of F.MHL) if (h > hmax) hmax = h;
+    if (!(w > 0) || !(hmax > 0)) return 0;
+    const near = [0, -1], N = 64;
+    let worst = 0;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const gx = F.MEX[0] + (i + 0.5) / N * w, gy = -hmax + (j + 0.5) / N * 2 * hmax;
+      glassNearestCell(gx, gy, F, near);
+      if (near[0] > worst && near[0] < Infinity) worst = near[0];
+    }
+    // A GRID UNDER-MEASURES ITS OWN MAXIMUM: the deepest point of a void can sit between samples,
+    // by up to half a cell diagonal. Without that margin a fully levelled mould keeps a sliver of
+    // bare glass, which is the grid talking and not the glass.
+    return worst > 0 ? worst + 0.5 * Math.sqrt((w / N) * (w / N) + (2 * hmax / N) * (2 * hmax / N)) : 0;
+  }
+  // WHAT THE SLUMP COST IN DEPTH. Filling a void takes glass from somewhere: if the same glass
+  // covers more area it has to be shallower, and because thickness is what makes the tint a
+  // slumped sheet reads paler EVERYWHERE, not only where it crept. The old creep conjured glass -
+  // the invaded strip got colour and nothing else changed - which is the bit that made it a
+  // decoration rather than a flow.
+  //
+  // Measured, not derived. The closed form for "how much of a void is within reach of its walls"
+  // is the shape of the void, and an authored cell list exists precisely to make that arbitrary.
+  // So: poured area against covered area on a coarse grid, 4096 samples a frame. With no voids the
+  // two are equal and this is exactly 1, so a mould that needed no slump is untouched by it.
+  function glassSlumpThin(F) {
+    if (!F.MC || !(F.SLP > 0)) return 1;
+    const w = F.MEX[F.MEX.length - 1] - F.MEX[0];
+    let hmax = 0; for (const h of F.MHL) if (h > hmax) hmax = h;
+    if (!(w > 0) || !(hmax > 0)) return 1;
+    const probe = [0, -1, 0, 1], N = 64;
+    let poured = 0, covered = 0;
+    const keep = F.SLP;
+    for (let pass = 0; pass < 2; pass++) {
+      F.SLP = pass === 0 ? 0 : keep;                   // as poured, then as it ended up
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const gx = F.MEX[0] + (i + 0.5) / N * w, gy = -hmax + (j + 0.5) / N * 2 * hmax;
+        glassLay(gx, gy, F, probe);
+        if (probe[0] >= 0) { if (pass === 0) poured++; else covered += probe[3]; }
+      }
+    }
+    F.SLP = keep;
+    return covered > poured && poured > 0 ? poured / covered : 1;
+  }
   // A FIVE-POINTED STAR, as a radius per angle. Exact rather than approximate: between an outer
   // vertex and the next inner one the edge is a straight CHORD, and a chord through polar points
   // (r1,0) and (r2,s) has radius r1*r2*sin(s) / (r1*sin(a) + r2*sin(s-a)) at angle a. Checks out at
@@ -5398,18 +5467,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // favoured by accident. Two neighbours reaching from opposite sides meet at a seam, because
       // a label cannot average.
       out[0] = -1; out[3] = 0;
-      if (F.SLP > 0) {
-        let best = F.SLP, bc = -1;
-        for (let i = 0; i < n; i++) {
-          if (hl[i] <= 0 || ex[i + 1] <= ex[i]) continue;
-          const dx = gc < ex[i] ? ex[i] - gc : (gc > ex[i + 1] ? gc - ex[i + 1] : 0);
-          const dy = ga < -hl[i] ? -hl[i] - ga : (ga > hl[i] ? ga - hl[i] : 0);
-          const d = Math.sqrt(dx * dx + dy * dy);
-          if (d < best) { best = d; bc = F.MC[i].c | 0; }
+      if (F.SLP > 0 && F.MRCH > 0) {
+        // Reach is a fraction of THIS MOULD'S WORST VOID, so 1 closes it and nothing above 1 is
+        // needed - see glassSlumpReach.
+        const reach = F.SLP * F.MRCH;
+        glassNearestCell(gc, ga, F, F.NR);
+        const best = F.NR[0], bc = best <= reach ? F.NR[1] : -1;
+        // A FLOW HAS A LIP, NOT A GRADIENT. Glass that got there is full depth; only the last
+        // stretch before it stopped is thin. Fading over the whole reach would read as a soft
+        // airbrush, which is the one thing a poured edge never looks like.
+        if (bc >= 0) {
+          out[0] = bc;
+          const lip = reach * 0.25;
+          out[3] = best < reach - lip ? 1 : (reach - best) / lip;
         }
-        // The leading edge of a creep is THIN. Fading the amount of glass, never the colour, is
-        // what keeps this a slump rather than a blend.
-        if (bc >= 0) { out[0] = bc; out[3] = 1 - best / F.SLP; }
       }
       return;
     }
@@ -5487,7 +5558,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const F = {
       OPS, MR: GLASS.mould === 'radial', PX: GLASS.paneX, PY: GLASS.paneY,
       MC: GLASS.mould === 'cells' && Array.isArray(GLASS.cells) && GLASS.cells.length ? GLASS.cells : null,
-      MW: Math.max(0.01, GLASS.mw), SLP: Math.max(0, GLASS.slump),
+      MW: Math.max(0.01, GLASS.mw), SLP: Math.max(0, Math.min(1, GLASS.slump)),
+      MRCH: 0, NR: [0, -1],                                    // both filled in once the cells resolve
       form: lastW === 'spin' ? 'spun' : lastW === 'roll' ? 'rolled' : lastW === 'blow' ? 'blown' : 'poured',
       TH: Math.max(0.2, GLASS.thick), RM: Math.max(0, GLASS.ream),
       RS: Math.max(0.2, GLASS.reamScale), FR: Math.max(0.05, GLASS.formR),
@@ -5508,6 +5580,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       F.MEX = [-tot * 0.5]; F.MHL = [];
       for (const c of F.MC) { F.MEX.push(F.MEX[F.MEX.length - 1] + (+c.w || 0) * mw); F.MHL.push((+c.l || 0) * ml * 0.5); }
     }
+    if (F.MC) { F.NR = [0, -1]; F.MRCH = glassSlumpReach(F); }
+    const SLTHIN = glassSlumpThin(F);
     const REL = Math.max(0, GLASS.relief), TINT = Math.max(0, GLASS.tint);
     const OPQ = Math.max(0, Math.min(1, GLASS.opacity)), OREF = 8;   // mm: the opal's single path
     // Beer-Lambert per channel per millimetre. Green is absorbed least, which is the whole reason a
@@ -5569,6 +5643,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // thinner where it landed - and because thickness is what makes the tint, a star reads
           // paler as well as lower. One field, two consequences, like every other thickness here.
           if (press > 0) T -= F.TH * 0.55 * press;
+          T *= SLTHIN;                                            // the slump spread it thinner
           if (T < 0.05) T = 0.05;
           // OPACITY, as a lerp on the PATH LENGTH rather than on the colour. At 0 the thickness
           // decides the depth of the tint and you read the form through it; at 1 every point gets
@@ -6802,7 +6877,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   mw: v => `${(+v).toFixed(2)}\u2032`, ml: v => `${(+v).toFixed(2)}\u2032`,
                   // Named for what it MEANS, not its number: 0 is glass that set hard before the
                   // barriers came off, and that is the end anyone would describe in words.
-                  slump: v => +v === 0 ? TR('ui.slump-hard') : `${(+v * 12).toFixed(1)}\u2033`};
+                  slump: v => +v === 0 ? TR('ui.slump-hard')
+                           : (+v >= 1 ? TR('ui.slump-level') : `${Math.round(v * 100)}%`)};
   function showGlass(k) {
     const out = document.getElementById('glass-' + k + 'V');
     if (out) out.textContent = GLFMT[k] ? GLFMT[k](GLASS[k]) : String(GLASS[k]);

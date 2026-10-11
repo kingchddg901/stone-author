@@ -1176,6 +1176,7 @@
  "a11y.cell-colour": {"terms": ["glass"], "where": "accessible name: step this compartment to the next colour"},
  "lay.glass-e": {"terms": ["glass"], "where": "colour token: the fifth glass colour"},
  "lay.glass-f": {"terms": ["glass"], "where": "colour token: the sixth glass colour"},
+ "ui.slump-level": {"terms": ["glass"], "where": "slider value at 1: the glass stayed fluid long enough to level right out, so no void is left"},
  "mat.glass": {"terms": ["glass"], "where": "button: switch the slab to the glass material"},
  "sec.glass": {"terms": ["glass"], "where": "section heading for the glass controls"},
  "lbl.forming": {"terms": ["glass"], "where": "label: which process formed this sheet"},

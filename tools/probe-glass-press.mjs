@@ -36,13 +36,14 @@ function lift(name) {
   throw new Error('unbalanced: ' + name);
 }
 const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'mix', 'resample', 'warpMaskAt',
-                'moonDisp', 'glassWarp', 'glassUnwarp', 'starR', 'rollStamp', 'glassUnform', 'glassLay'];
+                'moonDisp', 'glassWarp', 'glassUnwarp', 'starR', 'rollStamp', 'glassUnform', 'glassLay',
+                'glassNearestCell', 'glassSlumpReach', 'glassSlumpThin'];
 const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
 const G = { warp: 0, cloudScale: 1, cloudX: 0, cloudY: 0 };
 const api = new Function('G', 'SLAB_FT',
   'let _wmask = []; let fam = "probe"; const strHue = () => 0.5;\n' +
   NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(G, SLAB_FT);
-const { glassUnform, glassLay } = api;
+const { glassUnform, glassLay, glassSlumpThin, glassSlumpReach } = api;
 
 // ---- his numbers --------------------------------------------------------------------------------
 const W = 0.5, L = 1;
@@ -67,16 +68,22 @@ const baseF = { MC: CELLS, MEX: EX, MHL: HL, MW: W, MR: false, PX: 0, PY: 0, H: 
                 CS: 3, CN: 3, CW: 0, RS: 6, LC: 1, LS: 0, TW: 0, LP: 0 };
 
 const PPF = 300, PW = Math.round(TOT * PPF), PH = Math.round(L * PPF), PAD = 26;
-const ROWS = [['barriers lifted off SET glass (slump 0)', 0, false],
-              ['part set: the neighbours creep in', 0.04, false],
-              ['and pressed', 0.04, true]];
+// A sweep, because the question is not "does it creep" but "what stops it". Nothing stops it
+// except how far it got before it set, so that is the axis.
+const ROWS = [['set hard before unmoulding (0%)', 0, false],
+              ['a quarter of the way to level', 0.25, false],
+              ['most of the way (60%)', 0.6, false],
+              ['levelled right out (100%)', 1, false],
+              ['levelled, and pressed', 1, true]];
 const WID = PW, HT = (PH + PAD) * ROWS.length;
 const px = Buffer.alloc(WID * HT * 3, 236);
 const gth = [0, 0, 0], lay = [0, -1, 0, 1];
 const stats = [];
 
 ROWS.forEach(([label, slump, pressed], r) => {
-  const F = { ...baseF, SLP: slump, OPS: pressed ? [ROLL] : [] };
+  const F = { ...baseF, SLP: slump, NR: [0, -1], OPS: pressed ? [ROLL] : [] };
+  F.MRCH = glassSlumpReach(F);              // the worst void: what the slump is a fraction OF
+  const thin = glassSlumpThin(F);
   let bare = 0, crept = 0, starPx = 0;
   const hitTracks = new Set();
   for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
@@ -86,15 +93,17 @@ ROWS.forEach(([label, slump, pressed], r) => {
     let R, Gc, B;
     if (lay[0] < 0) { R = Gc = B = 232; bare++; }             // bare glass
     else {
-      const c = INK[lay[0] % INK.length], a = lay[3];
-      if (a < 0.999) crept++;
+      // Depth, honestly: the slump's thinning applies to the whole sheet, and the creeping lip
+      // is thinner still. Thickness is what makes a tint, so both show as paler.
+      const c = INK[lay[0] % INK.length], a = lay[3] * thin;
+      if (lay[3] < 0.999) crept++;
       R = 232 + (c[0] - 232) * a; Gc = 232 + (c[1] - 232) * a; B = 232 + (c[2] - 232) * a;
     }
     if (gth[2] > 0) { starPx++; hitTracks.add(Math.round(ox * 48)); R += (255 - R) * 0.55; Gc += (255 - Gc) * 0.55; B += (255 - B) * 0.55; }
     const o = ((r * (PH + PAD) + PAD + y) * WID + x) * 3;
     px[o] = R; px[o + 1] = Gc; px[o + 2] = B;
   }
-  stats.push({ label, bare, crept, starPx, tracks: hitTracks.size });
+  stats.push({ label, slump, bare, crept, starPx, thin, tracks: hitTracks.size });
 });
 
 const raw = Buffer.alloc((WID * 3 + 1) * HT);
@@ -128,15 +137,26 @@ console.log(`  ${NSTAMP} stamps ${STEP_DEG} deg apart, so only those within ${(L
             `${Math.floor(L / C_FT * 360 / STEP_DEG) + 1} of ${NSTAMP}`);
 console.log(`  face ${FACE} ft vs glass ${TOT} ft: stamps outside +-${TOT / 2} ft miss the piece entirely`);
 console.log('\nMEASURED');
-for (const s of stats) console.log(`  ${s.label.padEnd(38)} bare ${(s.bare / total * 100).toFixed(1).padStart(5)}%` +
-  `  crept ${(s.crept / total * 100).toFixed(1).padStart(5)}%  star ${(s.starPx / total * 100).toFixed(2).padStart(5)}%  tracks hit ${s.tracks}`);
-const hard = stats[0], soft = stats[1], prs = stats[2];
+for (const s of stats) console.log(`  ${s.label.padEnd(32)} bare ${(s.bare / total * 100).toFixed(1).padStart(5)}%` +
+  `  crept ${(s.crept / total * 100).toFixed(1).padStart(5)}%  depth ${(s.thin * 100).toFixed(1).padStart(5)}%` +
+  `  star ${(s.starPx / total * 100).toFixed(2).padStart(5)}%  tracks ${s.tracks}`);
+const hard = stats[0], soft = stats[1], full = stats[3], prs = stats[4];
+// THE MASS CLAIM. The void is 2 x (0.5 x 0.25) = 0.25 of 4 sq ft, so a sheet that fills it
+// completely must end up 3.75/4 = 93.75% as deep. That figure is arrived at from his dimensions,
+// NOT from the renderer, which is the only reason it can disagree with it.
+const voidArea = 2 * (1 * W) * (0.5 * L * 0.5), sheet = TOT * L;
+const expect = (sheet - voidArea) / sheet;
 let bad = 0;
 const say = (ok, msg) => { if (!ok) bad++; console.log('  ' + (ok ? 'OK  ' : 'RED ') + msg); };
 console.log('\nCLAIMS');
-say(hard.crept === 0, 'set hard: nothing creeps (slump 0 is genuinely off)');
+say(hard.crept === 0 && hard.thin === 1, 'set hard: nothing creeps and nothing thins - the control is genuinely off');
 say(soft.crept > 0, 'part set: the neighbours DO invade the void past Green');
 say(soft.bare < hard.bare, `part set leaves less bare glass (${(soft.bare / total * 100).toFixed(1)}% vs ${(hard.bare / total * 100).toFixed(1)}%)`);
+say(full.bare === 0, `levelled: the void is GONE (${(full.bare / total * 100).toFixed(2)}% bare left)`);
+say(Math.abs(full.thin - expect) < 0.01,
+    `levelled depth ${(full.thin * 100).toFixed(1)}% against ${(expect * 100).toFixed(2)}% from his dimensions` +
+    ` - filling a void costs exactly the area it added`);
+say(full.thin < hard.thin, 'the slump makes the WHOLE sheet shallower, not just where it crept');
 say(prs.starPx > 0, 'the roller actually hit the glass');
 say(prs.tracks > 1, `the stamps are staggered: ${prs.tracks} separate tracks, not one line`);
 process.exit(bad ? 1 : 0);
