@@ -136,9 +136,21 @@ for (const path of paths) {
   // be made. sigma is the widest blur the slab applied, which is what a canvas has to be able to carry.
   if (m.light) console.log(`  light    mean ${m.light.mean}, lit>40 ${m.light.lit40}%  (sampled 1/${m.light.every} as written)` +
                            `${m.sigma ? `   blur sigma ${m.sigma}px` : '   no blur in this render'}`);
-  if (m.bloomDraw) console.log(`           drawn glow, lift ${m.glowLift === undefined ? 'NOT RECORDED (build predates the stamp)' : m.glowLift}` +
-                               `${m.glowAuto ? ' from the sigma fit' : ' fixed'}` +
-                               `${m.glowLift === -0.304 ? '   the WebKit constant' : ''}`);
+  // AN ABSENT LIFT HAS MORE THAN ONE CAUSE, and this said "build predates the stamp" for all of them.
+  // The app records it as `BLOOM_DRAW && uvMode ? lift : undefined`, so a DAYLIGHT master has no halo
+  // to lift and its absence carries no information at all - yet every daylight master read as a
+  // provenance gap. The record says which: spectrum 0 is daylight, and there the answer is certain.
+  // Off daylight it is genuinely two causes - an old build, or no UV colour active at that stop, which
+  // leaves uvMode false - and the record cannot separate them, so it says two rather than picking one.
+  // On a provenance tool, naming one cause out of two is worse than naming neither.
+  if (m.bloomDraw) {
+    const lift = m.glowLift === undefined
+      ? (m.spectrum === 0 ? 'none drawn — a daylight master has no halo to lift'
+                          : 'NOT RECORDED — an older build, or no UV colour active at this stop')
+      : `lift ${m.glowLift}${m.glowAuto ? ' from the sigma fit' : ' fixed'}` +
+        (m.glowLift === -0.304 ? '   the WebKit constant' : '');
+    console.log(`           drawn glow, ${lift}`);
+  }
   // A master rendered with ?dim=off exists BECAUSE the light gate refused it, so its light figure is the
   // evidence in a question about that gate. Reading it without knowing that is how a deliberate
   // experiment gets quoted back later as a normal result.
