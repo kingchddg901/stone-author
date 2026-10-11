@@ -151,8 +151,8 @@ function census(name, slotOf, centreIs) {
     '   with a repeated slot: ' + broken + (broken ? '   <-- CONSTRAINT BROKEN' : '   (none)'));
   return broken;
 }
-console.log('\n  NO SLOT MAY REPEAT INSIDE A ROSETTE, checked on who actually touches whom:');
 let bad = 0;
+console.log('\n  NO SLOT MAY REPEAT INSIDE A ROSETTE, checked on who actually touches whom:');
 bad += census('octagon', OCT_SLOT, pi => pi === 0);
 bad += census('rhombus', RHOMBUS_SLOT, pi => pi === 1);
 
@@ -231,6 +231,35 @@ for (const name of ['rhombus', 'octagon', 'cairo']) {
 for (const name of ['rhombus']) {
   const row = [5, 6, 7, 8].map(N => { const r = mesh(name, N); return 'N=' + N + ' ' + String(r.edge).padStart(4) + '%'; });
   console.log('    ' + name.padEnd(8) + ' sharing an EDGE:      ' + row.join('   '));
+}
+
+// ===== IS IT JUST A SMALL REPEATING TABLE? ============================================================
+// If the assignment is periodic, the whole selector can be read off a few rows instead of
+// reasoned about - and periodicity is a claim that negative cell indices are very good at
+// breaking, because JavaScript's % keeps the sign of the dividend.
+console.log('\n  THE SIMPLE FORM: build a table from one period, replay it everywhere, compare:');
+for (const name of ['octagon', 'rhombus', 'cairo']) {
+  T.pattern = name;
+  const { polys } = PATTERNS[name](U);
+  const k = PATTERNS_ROSETTE[name].slots;
+  for (const N of [5, 6, 7, 8]) {
+    const P2 = 2 * Math.ceil(N / k);                     // parity (2) x class size, in each axis
+    const pos = (v, M) => ((v % M) + M) % M;
+    // the table, from one period of the real thing
+    const tbl = [];
+    for (let m = 0; m < P2; m++) { tbl[m] = [];
+      for (let n = 0; n < P2; n++) tbl[m][n] = polys.map((_, pi) => sectionOf({ pi, m, n }, N)); }
+    // replay it over a wide range, negatives included
+    let same = 0, diff = 0;
+    for (let m = -40; m <= 40; m++) for (let n = -40; n <= 40; n++) polys.forEach((_, pi) => {
+      const fromTable = tbl[pos(m, P2)][pos(n, P2)][pi];
+      if (fromTable === sectionOf({ pi, m, n }, N)) same++; else diff++;
+    });
+    if (diff) bad++;
+    console.log('    ' + name.padEnd(8) + ' N=' + N + '  period ' + P2 + 'x' + P2 +
+      ' x ' + polys.length + ' polys = ' + (P2 * P2 * polys.length) + ' entries' +
+      (diff ? '   <-- ' + diff + ' DISAGREE, it is not periodic' : '   agrees on all ' + same));
+  }
 }
 
 console.log('\n  EVERY SECTION REACHABLE, and no rosette repeating one:');
