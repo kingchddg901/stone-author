@@ -36,7 +36,12 @@ const begins = [], ends = [], uses = [];
 lines.forEach((l, i) => {
   if (l.includes(BEGIN)) begins.push(i + 1);
   else if (l.includes(END)) ends.push(i + 1);
-  else if (TOKEN.test(l)) uses.push(i + 1);
+  // A COMMENT CANNOT READ A VARIABLE, so a full-line comment is prose and not a use. Without this
+  // the gate flags its own subject every time anyone WRITES about the fork - which it did, on two
+  // comment lines, while the code they describe calls the sanctioned accessor and never touches
+  // the discriminator. Only whole-line comments are skipped: a trailing one shares its line with
+  // code, and stripping that safely means knowing where the strings are.
+  else if (!l.trim().startsWith('//') && TOKEN.test(l)) uses.push(i + 1);
 });
 
 const fail = [];

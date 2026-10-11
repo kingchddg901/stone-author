@@ -1467,7 +1467,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.62';
+  const BUILD = '2026.10.10.63';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1511,17 +1511,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // is theirs and is shown untouched. Only an untouched built-in resolves through the pack.
   const layName = L => (L && L.labelKey && TR(L.labelKey)) || (L && L.label) || (L && L.key) || '';
   const COLOUR_TOKENS = [
-    { key: 'ground', labelKey: 'lay.base-ground', label: TR('lay.base-ground') }, { key: 'major', label: TR('lay.major-veins') }, { key: 'minor', label: TR('lay.minor-veins') },
-    { key: 'web', labelKey: 'lay.fracture-web', label: TR('lay.fracture-web') }, { key: 'micro', label: TR('lay.micro-specks') }, { key: 'styl', label: TR('lay.stylolite-seam') },
-    { key: 'drusy', labelKey: 'lay.drusy-sparkle', label: TR('lay.drusy-sparkle') }, { key: 'halo', label: TR('lay.vein-halo') },
+    { key: 'ground', labelKey: 'lay.base-ground', label: TR('lay.base-ground') }, { key: 'major', mat: 'stone', label: TR('lay.major-veins') }, { key: 'minor', mat: 'stone', label: TR('lay.minor-veins') },
+    { key: 'web', mat: 'stone', labelKey: 'lay.fracture-web', label: TR('lay.fracture-web') }, { key: 'micro', mat: 'stone', label: TR('lay.micro-specks') }, { key: 'styl', mat: 'stone', label: TR('lay.stylolite-seam') },
+    { key: 'drusy', mat: 'stone', labelKey: 'lay.drusy-sparkle', label: TR('lay.drusy-sparkle') }, { key: 'halo', mat: 'stone', label: TR('lay.vein-halo') },
     // Wood's two. `def` rather than a seed: seedColours writes into OVR, OVR is hashed by renderSig,
     // and two keys written there at boot would re-date every master on disk. An unset token resolves
     // from its default, so COL.woodEarly exists while OVR stays exactly as it was before wood.
-    { key: 'woodEarly', labelKey: 'lay.wood-earlywood', label: TR('lay.wood-earlywood'), def: '#c49660' },
-    { key: 'woodLate', labelKey: 'lay.wood-latewood', label: TR('lay.wood-latewood'), def: '#603e22' },
-    { key: 'woodHeart', labelKey: 'lay.wood-heartwood', label: TR('lay.wood-heartwood'), def: '#5a3418' },
-    { key: 'woodKnot', labelKey: 'lay.wood-knot', label: TR('lay.wood-knot'), def: '#4a2f18' },
-    { key: 'woodMineral', labelKey: 'lay.wood-mineral', label: TR('lay.wood-mineral'), def: '#5d6152' },
+    { key: 'woodEarly', labelKey: 'lay.wood-earlywood', label: TR('lay.wood-earlywood'), def: '#c49660', mat: 'wood' },
+    { key: 'woodLate', labelKey: 'lay.wood-latewood', label: TR('lay.wood-latewood'), def: '#603e22', mat: 'wood' },
+    { key: 'woodHeart', labelKey: 'lay.wood-heartwood', label: TR('lay.wood-heartwood'), def: '#5a3418', mat: 'wood' },
+    { key: 'woodKnot', labelKey: 'lay.wood-knot', label: TR('lay.wood-knot'), def: '#4a2f18', mat: 'wood' },
+    { key: 'woodMineral', labelKey: 'lay.wood-mineral', label: TR('lay.wood-mineral'), def: '#5d6152', mat: 'wood' },
   ];
   // COL = RESOLVED values the renderer paints from. OVR = the overrides the editor edits and we
   // persist. perItem = id -> layer bucket, for per-id (per-item) colour tokens that inherit their
@@ -1703,10 +1703,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //   ground fill -> base | web crack -> web | speck -> micro | vein line -> L.major ? major : minor
   const LAYERS = [
     { key: 'base', labelKey: 'lay.base-ground', label: TR('lay.base-ground') },
-    { key: 'web', labelKey: 'lay.fracture-web', label: TR('lay.fracture-web') },
-    { key: 'micro', labelKey: 'lay.micro-specks', label: TR('lay.micro-specks') },
-    { key: 'minor', labelKey: 'lay.minor-veins', label: TR('lay.minor-veins') },
-    { key: 'major', labelKey: 'lay.major-veins', label: TR('lay.major-veins') },
+    { key: 'web', mat: 'stone', labelKey: 'lay.fracture-web', label: TR('lay.fracture-web') },
+    { key: 'micro', mat: 'stone', labelKey: 'lay.micro-specks', label: TR('lay.micro-specks') },
+    { key: 'minor', mat: 'stone', labelKey: 'lay.minor-veins', label: TR('lay.minor-veins') },
+    { key: 'major', mat: 'stone', labelKey: 'lay.major-veins', label: TR('lay.major-veins') },
   ];
   // LIVE layer controls (preview art-direction over the canonical set). Each render layer flattens into
   // a consumer BUCKET (what VA/dashboard export by key); today it is 1:1, but this shape lets step 3 add
@@ -5595,8 +5595,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const t = document.getElementById('colour-toggle');
     if (!window.TTK) { if (t) { t.disabled = true; t.textContent = TR('ui.colour-editor-unavailable'); } return; }
     kit = TTK.createThemeKit({ prefix: '--stone-' });
-    kit.registerTokenGroup({ id: 'colour', label: TR('lay.colour-per-layer'), tokens: COLOUR_TOKENS.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: CARRARA_COL[tk.key] ?? tk.def })) });
-    kit.registerTokenGroup({ id: 'effects', label: TR('lay.effects-per-layer'), tokens: FX_LAYERS.flatMap(k => {
+    // ONLY THIS MATERIAL'S TOKENS. The fork fixed the renderer; the editor was still offering wood
+    // five colours nothing stone paints, and offering wood six stone layers that do not exist in it.
+    const MTOK = COLOUR_TOKENS.filter(tk => !tk.mat || tk.mat === currentMaterial());
+    kit.registerTokenGroup({ id: 'colour', label: TR('lay.colour-per-layer'), tokens: MTOK.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: CARRARA_COL[tk.key] ?? tk.def })) });
+    // The whole effects group is stone layers - major, minor, web, micro, styl, drusy - so in wood
+    // it is not registered rather than registered empty.
+    if (currentMaterial() === 'stone') kit.registerTokenGroup({ id: 'effects', label: TR('lay.effects-per-layer'), tokens: FX_LAYERS.flatMap(k => {
       const lbl = layName(COLOUR_TOKENS.find(t => t.key === k)) || k;
       return [
         { key: k + 'Blend', label: lbl + ' — blend', type: 'select', default: 'normal', options: BLENDS.map(b => ({ value: b, label: b })) },
@@ -7734,7 +7739,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
   for (const b of document.querySelectorAll('[data-species]')) b.addEventListener('click', () => { applySpecies(b.dataset.species); hint(TR('hint.species-seeded', { name: b.textContent })); });
-  for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => { setMaterial(b.dataset.mat); press('[data-mat]', b); showGround(); redraw(true); });
+  for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => { setMaterial(b.dataset.mat); press('[data-mat]', b); showGround();
+    // THE EDITOR IS PER-MATERIAL NOW, so its token groups have to be rebuilt when the material
+    // changes - otherwise the filter only ever reflects whichever one was live at startup.
+    // setupColour makes a fresh kit each call, so this cannot leave a duplicate group behind.
+    if (typeof setupColour === 'function') { setupColour(); recolour(); mountEditor(); } redraw(true); });
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     tool = b.dataset.tool; press('[data-tool]', b); hint();
     const show = tool === 'move' ? 'vein' : tool;
