@@ -612,6 +612,8 @@
  "tool.moon": "Luna",
  "tool.move": "Sposta",
  "tool.pour": "Colata",
+ "tool.slottest": "Colori delle posizioni",
+ "hint.rosette-wants": "Questo motivo dispone {n} piastrelle attorno a ogni centro e nessuna può ripetersi — hai {have} sezioni, quindi sta usando un taglio semplice. Conservane qualcuna in più.",
  "tool.shuffle": "Mescolate",
  "tool.styl": "Stilolite",
  "tool.tune": "Regola",

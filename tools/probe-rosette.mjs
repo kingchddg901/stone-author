@@ -155,4 +155,56 @@ console.log('\n  NO SLOT MAY REPEAT INSIDE A ROSETTE, checked on who actually to
 let bad = 0;
 bad += census('octagon', OCT_SLOT, pi => pi === 0);
 bad += census('rhombus', RHOMBUS_SLOT, pi => pi === 1);
+
+// ===== AND THE SELECTOR ON TOP OF IT ================================================================
+// The app's own sectionOf, lifted, so the probe cannot drift from what the floor actually does.
+const T = { pattern: null };
+const APP_ROSETTE = (SRC.match(/const ROSETTE = \{[\s\S]*?\n {2}\};/) || [''])[0];
+// The app's own table, evaluated, so the slot counts here are not a second copy to keep in step.
+const PATTERNS_ROSETTE = new Function(
+  'const ev = v => ((v % 2) + 2) % 2;\n' + APP_ROSETTE + '\nreturn ROSETTE;')();
+const sectionOf = new Function('T', 'PATTERNS',
+  'const ev = v => ((v % 2) + 2) % 2;\n' + APP_ROSETTE +
+  '\nconst rosetteOf = () => ROSETTE[T.pattern] || null;\n' +
+  lift('sectionOf') + '\nreturn sectionOf;')(T, PATTERNS);
+
+console.log('\n  EVERY SECTION REACHABLE, and no rosette repeating one:');
+for (const [name, centreIs] of [['octagon', pi => pi === 0], ['rhombus', pi => pi === 1], ['cairo', null]]) {
+  T.pattern = name;
+  const { polys, ax, ay } = PATTERNS[name](U);
+  for (const N of [4, 5, 6, 7, 8]) {
+    const used = new Set();
+    const tiles = [];
+    for (let n = -7; n <= 7; n++) for (let m = -7; m <= 7; m++) polys.forEach((poly, pi) => {
+      const sec = sectionOf({ pi, m, n }, N);
+      used.add(sec);
+      tiles.push({ pi, m, n, sec, pts: poly.map(q => [R(q[0] + m * ax[0] + n * ay[0]), R(q[1] + m * ax[1] + n * ay[1])]) });
+    });
+    let dup = 0, rose = 0;
+    if (centreIs) {
+      const at = new Map(), vkey = q => q[0] + ',' + q[1];
+      tiles.forEach((t2, i) => t2.pts.forEach(q => { const k2 = vkey(q); (at.get(k2) || at.set(k2, []).get(k2)).push(i); }));
+      const nbr = tiles.map(() => new Map());
+      for (const ids of at.values()) for (const a of ids) for (const b of ids) if (a !== b) nbr[a].set(b, (nbr[a].get(b) || 0) + 1);
+      tiles.forEach((t2, i) => {
+        if (!centreIs(t2.pi) || Math.abs(t2.m) > 5 || Math.abs(t2.n) > 5) return;
+        const around = [...nbr[i].entries()].filter(([, c]) => c >= 2).map(([j]) => tiles[j]).filter(q => !centreIs(q.pi));
+        const secs = [t2.sec, ...around.map(q => q.sec)];
+        rose++; if (new Set(secs).size !== secs.length) dup++;
+      });
+    }
+    // BELOW THE SLOT COUNT THE RULE IS UNSATISFIABLE - five slots cannot hold four sections without
+    // doubling one - so repeats there are the declared fall-back, not a defect. Expecting them is
+    // the difference between a probe that tests the rule and one that tests the easy half of it.
+    const slots = (PATTERNS_ROSETTE[name] || {}).slots || 1;
+    const shouldHold = N >= slots;
+    const allUsed = used.size === N;
+    if (!allUsed) bad++;
+    if (shouldHold && dup) bad++;
+    console.log('    ' + name.padEnd(8) + ' N=' + N + '  reached ' + used.size + '/' + N +
+      (allUsed ? '' : '  <-- SECTIONS UNREACHABLE') +
+      (centreIs ? '   rosettes ' + rose + ', repeating ' + dup +
+        (dup ? (shouldHold ? '  <-- RULE BROKEN' : '   (expected: ' + N + ' < ' + slots + ' slots)') : '') : ''));
+  }
+}
 process.exit(bad ? 1 : 0);

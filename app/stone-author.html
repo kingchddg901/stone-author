@@ -386,6 +386,7 @@
     <button id="u-in" type="button" data-unit="in" aria-pressed="true" data-i18n="unit.in">inches</button>
     <button id="u-mm" type="button" data-unit="mm" aria-pressed="false" data-i18n="unit.mm">mm</button>
     <button id="t-joints" type="button" aria-pressed="true" data-i18n="tool.joints">Show hairline joints</button>
+    <button id="t-slottest" type="button" aria-pressed="false" data-i18n="tool.slottest">Slot colours</button>
   </div>
   <div class="sliders" data-mat-only="wood">
     <div class="sl"><label for="wood-stage"><span data-i18n="sl.wood-stage">Boards</span> <output id="wood-stageV"></output></label><input id="wood-stage" type="range" min="1" max="8" step="1"></div>
@@ -1340,7 +1341,9 @@ window.SA_I18N = (() => {
   "tool.moon": "Moon",
   "tool.move": "Move",
   "tool.pour": "Pour",
+  "hint.rosette-wants": "This pattern sets {n} tiles around each centre and none may repeat — you have {have} sections, so it is laying a plain cut instead. Keep a few more.",
   "tool.shuffle": "Shuffled",
+  "tool.slottest": "Slot colours",
   "tool.styl": "Stylolite",
   "tool.tune": "Tune",
   "tool.vein": "Vein",
@@ -1640,7 +1643,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.17';
+  const BUILD = '2026.10.11.21';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1822,7 +1825,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               lens: 0, lensPitch: 10, lensType: 'fresnel' };
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
-              chipIn: 0.6, shuffle: false, units: 'in', joints: true };
+              chipIn: 0.6, shuffle: false, units: 'in', joints: true, slotTest: false };
   let layTiles = false;
   // Pristine defaults, captured before any edit. deserialize() resets to these before applying a slab, so a
   // load is a PURE FUNCTION of the slab: a key absent from the save falls to its default, never a leftover from
@@ -3348,6 +3351,54 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (currentMaterial() !== 'wood') return 1;
     return Math.max(1, Math.min(8, Math.round(WOOD.stage) || 1));
   };
+  // WHAT A SLOT IS, per pattern. A slot is a position TYPE, not a position - which is what lets a
+  // shared tile keep one identity while every centre still sees a full set of different
+  // neighbours. Checked against the real adjacency by tools/probe-rosette.mjs: for both rosettes,
+  // every centre has exactly four neighbours and no rosette repeats a slot.
+  //
+  // Patterns not named here are plain cuts: one slot, and the sections simply cycle per cell.
+  // Flat, maximally separated, and never tinted by the light: these are identities, not glass.
+  const SLOT_INK = ['#c4302b', '#2e8b57', '#2f6f8f', '#7a3b8e', '#d98324', '#8e8e96', '#c8c846', '#46c8c8'];
+  const ev = v => ((v % 2) + 2) % 2;
+  const ROSETTE = {
+    // the octagon, and the square at each of its corners, told apart by the parity of its cell
+    octagon: { slots: 5, slotOf: (pi, m, n) => pi === 0 ? 0 : 1 + ev(m) * 2 + ev(n) },
+    // the standing diamond, and the four laid ones around it
+    rhombus: { slots: 5, slotOf: (pi, m, n) => pi === 1 ? 0 : 1 + (pi === 0 ? 0 : 1) * 2 + ev(m) },
+    // four pentagon orientations; CAIRO8 holds two copies of the motif, so eight polys are four types
+    cairo: { slots: 4, slotOf: (pi) => [0, 1, 2, 3, 2, 3, 0, 1][pi] },
+  };
+  // KEYED ON T.pattern, and checked against the pattern table at startup. A mistyped key here is
+  // SILENT: ROSETTE[undefined] is undefined, which this reads as "a plain cut" - a real state, so
+  // nothing errors and the floor still looks like a floor. It cost a render to spot (as T.pat,
+  // which is not what the field is called) and only the slot-colour view showed it.
+  for (const k in ROSETTE) if (!PATTERNS[k]) console.error('ROSETTE: no such pattern', k);   // developer check, never shown
+  const rosetteOf = () => ROSETTE[T.pattern] || null;
+  // WHICH SECTION THIS TILE IS CUT FROM.
+  //
+  // Section s belongs to slot class (s mod k), so two different slots can never land on the same
+  // section and the no-repeat rule holds by construction rather than by being checked. Within a
+  // class the pick varies by cell, which is what puts the extra sections to work: with 8 sections
+  // and 5 slots, slots 0..2 each alternate between two and the floor stops reading as a repeat.
+  //
+  // Below k sections the rule is UNSATISFIABLE - there are not enough to go round - so it says so
+  // rather than quietly doubling one up.
+  function sectionOf(t2, N) {
+    if (N <= 1) return 0;
+    const R = rosetteOf();
+    if (!R || N < R.slots) {                              // a plain cut, or too few to fill a rosette
+      return (((t2.m + 2 * t2.n) % N) + N) % N;
+    }
+    const k = R.slots, slot = R.slotOf(t2.pi, t2.m, t2.n) % k;
+    const cls = Math.floor((N - 1 - slot) / k) + 1;       // how many sections wear this slot
+    // THE PICK MUST NOT CORRELATE WITH THE SLOT. The square slots are DEFINED by the parities of m
+    // and n, so a pick built from m and n directly is constant inside a slot - (3m + 5n) is always
+    // even where m and n both are - and that slot's extra sections can never appear at all. Half
+    // the palette was unreachable and the floor still looked plausible. Shifting down past the
+    // parity the slot already spent is what makes the two independent.
+    const pick = cls > 1 ? (((((t2.m >> 1) * 3 + (t2.n >> 1) * 5) % cls) + cls) % cls) : 0;
+    return slot + pick * k;
+  }
   function renderStoneOffscreen() {
     // THE SOURCE IS A CANT WHEN WOOD IS STAGED. The painter maps v through yy = y0 + (cvv/H)*wid, so
     // a canvas STAGE times taller simply answers for board positions y0 .. y0 + wid*STAGE - the same
@@ -3440,10 +3491,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // shift moves the sample a whole board down the cant. In order, k follows the lattice ROW, so
       // the floor walks down the log the way a flitch is stacked and neighbouring rows are
       // neighbouring boards. Shuffled draws k per piece - that plus a high stage is the mosaic.
+      // WHICH SOURCE THIS PIECE CAME OFF. Shuffled still draws one per piece. In order, a pattern
+      // with a rosette gets the slot rule; everything else walks the lattice as it always did.
+      let band = 0;
       if (STAGE > 1) {
         const [rs] = sub(mix(t.n, t.m, t.pi, 4242), 1);
-        const k = T.shuffle ? Math.min(STAGE - 1, (rs() * STAGE) | 0) : ((t.m % STAGE) + STAGE) % STAGE;
-        shift = [shift[0], shift[1] + k * H];
+        band = T.shuffle ? Math.min(STAGE - 1, (rs() * STAGE) | 0) : sectionOf(t, STAGE);
+        shift = [shift[0], shift[1] + band * H];
+      }
+      // THE ASSIGNMENT, SHOWN. An assignment is invisible under stone, and the only way to see a
+      // rosette repeat is to strip the material off and leave the identity.
+      if (T.slotTest) {
+        ctx.save();
+        ctx.beginPath(); poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath();
+        ctx.fillStyle = SLOT_INK[band % SLOT_INK.length]; ctx.fill();
+        ctx.restore();
+        continue;
       }
       ctx.save();
       ctx.beginPath(); poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath(); ctx.clip();
@@ -8008,7 +8071,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType); pv('data-mwin', NEXT.maskWin); pv('data-minv', NEXT.maskInvert);
     const tog = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', !!on); };
     tog('pen-pressure', NEXT.pressure); tog('pen-tilt', NEXT.tilt); tog('guides', guidesOn);
-    tog('laytiles', layTiles); tog('t-joints', T.joints); tog('m-hover', hoverMag); tog('warp-holdmajor', layAt('major').warp === 0);
+    tog('laytiles', layTiles); tog('t-joints', T.joints); tog('t-slottest', !!T.slotTest); tog('m-hover', hoverMag); tog('warp-holdmajor', layAt('major').warp === 0);
     for (const id of Object.keys(G)) { const el = document.getElementById(id); if (el) { el.value = G[id]; document.getElementById(id + 'V').textContent = GFMT[id] ? GFMT[id](G[id]) : `${(+G[id]).toFixed(2)}×`; } }
     for (const id of Object.keys(NEXT)) { const el = document.getElementById(id); if (el) { el.value = NEXT[id]; document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; } }
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
@@ -9208,12 +9271,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   });
   const lt = document.getElementById('laytiles');
   lt.addEventListener('click', () => { layTiles = !layTiles; lt.setAttribute('aria-pressed', layTiles); redraw(false); });
-  for (const b of document.querySelectorAll('[data-pat]')) b.addEventListener('click', () => { T.pattern = b.dataset.pat; press('[data-pat]', b); if (!layTiles) { layTiles = true; lt.setAttribute('aria-pressed', true); } redraw(false); });
+  for (const b of document.querySelectorAll('[data-pat]')) b.addEventListener('click', () => {
+    T.pattern = b.dataset.pat; press('[data-pat]', b);
+    if (!layTiles) { layTiles = true; lt.setAttribute('aria-pressed', true); }
+    // SAY WHEN THE RULE CANNOT HOLD. A rosette wants one section per slot; below that it falls back
+    // to a plain cut and doubles sections up inside a motif, which is the one thing the selector
+    // exists to avoid. Degrading quietly would leave the user looking at a repeat they did not ask
+    // for and cannot see a reason for.
+    const R = ROSETTE[T.pattern];
+    if (R && sectionList().length && sectionList().length < R.slots)
+      hint(TR('hint.rosette-wants', { n: R.slots, have: sectionList().length }));
+    redraw(false);
+  });
   for (const b of document.querySelectorAll('[data-edge]')) b.addEventListener('click', () => { T.edge = b.dataset.edge; press('[data-edge]', b); redraw(false); });
   for (const b of document.querySelectorAll('[data-lay]')) b.addEventListener('click', () => { T.shuffle = b.dataset.lay === 'shuffle'; press('[data-lay]', b); redraw(false); });
   for (const b of document.querySelectorAll('[data-unit]')) b.addEventListener('click', () => { T.units = b.dataset.unit; press('[data-unit]', b); for (const id of Object.keys(TFMT)) { const el = document.getElementById(id === 'chipsize' ? 'chipsize' : id); if (el) document.getElementById(id + 'V').textContent = TFMT[id](+el.value); } });
   const jb = document.getElementById('t-joints');
   jb.addEventListener('click', () => { T.joints = !T.joints; jb.setAttribute('aria-pressed', T.joints); redraw(false); });
+  // SLOT COLOURS: strip the material off and leave the identity, because which tile came from
+  // which section is invisible once there is stone on it - and a rosette repeating is exactly
+  // the thing you cannot see through marble.
+  { const sb = document.getElementById('t-slottest');
+    if (sb) sb.addEventListener('click', () => { T.slotTest = !T.slotTest;
+      sb.setAttribute('aria-pressed', T.slotTest); redraw(false); }); }
   for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) {
     const el = document.getElementById(id);
     const show = () => { document.getElementById(id + 'V').textContent = TFMT[id](+el.value); };
