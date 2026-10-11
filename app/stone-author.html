@@ -393,7 +393,7 @@
     <div class="sl"><label for="wood-plankVary"><span data-i18n="sl.wood-plankVary">Length variation</span> <output id="wood-plankVaryV"></output></label><input id="wood-plankVary" type="range" min="0" max="1" step="0.01"></div>
     <div class="sl"><label for="wood-plankStagger"><span data-i18n="sl.wood-plankStagger">Joint stagger</span> <output id="wood-plankStaggerV"></output></label><input id="wood-plankStagger" type="range" min="0" max="1" step="0.01"></div>
   </div>
-  <div class="grp" data-mat-only="wood" role="group" aria-label="Kept cuts" data-i18n-attr="aria-label=a11y.wood-set"><span class="lbl" data-i18n="lbl.kept-cuts">Kept cuts</span>
+  <div class="grp" role="group" aria-label="Kept cuts" data-i18n-attr="aria-label=a11y.wood-set"><span class="lbl" data-i18n="lbl.kept-cuts">Kept cuts</span>
     <button id="wood-set-add" type="button" data-i18n="tool.keep-cut">Keep this cut</button>
     <button id="wood-set-clear" type="button" data-i18n="tool.clear-cuts">Clear</button>
     <output id="wood-set-count"></output>
@@ -1050,6 +1050,8 @@ window.SA_I18N = (() => {
   "hint.roll-the-roller-across": "Drag the roller across the slab. It presses its die in as it goes, starting with one, start down.",
   "op.press": "Press",
   "ui.op-press-note": "the roller pass you drew",
+  "sec.unnamed": "Section",
+  "sec.kept-cut": "Kept cut",
   "mat.glass": "Glass",
   "sec.glass": "Glass",
   "lbl.forming": "Formed by",
@@ -1638,7 +1640,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.16';
+  const BUILD = '2026.10.11.17';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3315,13 +3317,36 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const SW = 1600, SH = Math.round(SW * H);
   // How many boards this floor is cut from. Stone has no cant, so it is always 1 there and every
   // line below collapses to what it was.
-  const woodSet = () => (currentMaterial() === 'wood' && Array.isArray(WOOD.set)) ? WOOD.set : [];
+  // SECTIONS: the sources a floor is laid from, each one a whole slab record and therefore able to
+  // be a different MATERIAL from the one on screen. They were wood's "kept cuts", which could only
+  // ever be wood - a cut was a WOOD snapshot and three colour tokens, so it had no way to say
+  // "this one is glass".
+  let sections = [];
+  const sectionList = () => Array.isArray(sections) ? sections : [];
+  // A section is the slab as it stands, named. `sections` is stripped out of the embedded record
+  // for the obvious reason: a slab that contains its own sections contains itself.
+  function sectionFromHere(name) {
+    const slab = serialize(); delete slab.sections;
+    return { id: 'sec' + (Date.now().toString(36)) + Math.floor(Math.random() * 1e4).toString(36),
+             name: name || TR('sec.unnamed'), mat: slab.material, slab };
+  }
+  // A KEPT CUT, READ FORWARD. It was never anything but "the slab of the day, with these wood
+  // settings and these three colours", so that is exactly what it becomes - against the record it
+  // is being loaded beside, which is the slab it was kept from.
+  function sectionFromWoodCut(e, base) {
+    const slab = JSON.parse(JSON.stringify(base)); delete slab.sections;
+    slab.material = 'wood';
+    slab.wood = {}; for (const k in e) if (k !== 'set' && k !== 'ovr') slab.wood[k] = e[k];
+    if (e.ovr) slab.OVR = { ...slab.OVR, ...e.ovr };
+    return { id: 'cut' + Math.random().toString(36).slice(2, 9), name: TR('sec.kept-cut'), mat: 'wood', slab };
+  }
   // How many sources the floor has. A kept set answers first - that is the "depending on choice" -
   // and the cant answers when there is nothing kept.
   const stageN = () => {
+    const s = sectionList();
+    if (s.length) return Math.min(8, s.length);          // sections answer first, in any material
     if (currentMaterial() !== 'wood') return 1;
-    const s = woodSet();
-    return s.length ? Math.min(8, s.length) : Math.max(1, Math.min(8, Math.round(WOOD.stage) || 1));
+    return Math.max(1, Math.min(8, Math.round(WOOD.stage) || 1));
   };
   function renderStoneOffscreen() {
     // THE SOURCE IS A CANT WHEN WOOD IS STAGED. The painter maps v through yy = y0 + (cvv/H)*wid, so
@@ -3359,19 +3384,23 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const want = WOOD.y0 + k * WOOD.wid;
       return lo + (((want - lo) % rng) + rng) % rng - WOOD.y0;
     };
-    const SET = woodSet(), keep = SET.length ? JSON.stringify(WOOD) : null;
-    const keepOvr = SET.length ? { woodEarly: OVR.woodEarly, woodLate: OVR.woodLate, woodHeart: OVR.woodHeart } : null;
-    for (let k = 0; k < st; k++) {
-      if (SET.length) {
-        const e = SET[k];
-        for (const key in e) if (key !== 'set' && key !== 'ovr') WOOD[key] = e[key];
-        if (e.ovr) { Object.assign(OVR, e.ovr); recolour(); }   // its own palette, or an ebony paints pale
+    const SET = sectionList();
+    if (SET.length) {
+      // Each section is a whole slab, so each one is swapped in entire - material included. The
+      // hand-rolled version here could only put WOOD and three colour tokens back, which is right
+      // until a section is glass.
+      withSlabs(SET.slice(0, st).map(s => s.slab), (_, k) => {
         woodBandY = 0;
-      } else woodBandY = st > 1 ? cantBand(k) : 0;
-      c.setTransform(cw, 0, 0, cw, 0, k * cw * H);
-      paintContent(false, false);
+        c.setTransform(cw, 0, 0, cw, 0, k * cw * H);
+        paintContent(false, false);
+      });
+    } else {
+      for (let k = 0; k < st; k++) {
+        woodBandY = st > 1 ? cantBand(k) : 0;
+        c.setTransform(cw, 0, 0, cw, 0, k * cw * H);
+        paintContent(false, false);
+      }
     }
-    if (keep) { Object.assign(WOOD, JSON.parse(keep)); Object.assign(OVR, keepOvr); recolour(); }
     woodBandY = 0;
     g2d = prev; stoneReady = true;
   }
@@ -4948,9 +4977,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // THE SCION. A kept cut is a whole tree, so grafting is fetching its field and its colours -
     // the cache was built to hold the trunk's and this one at the same time.
     const gIx = Math.max(0, Math.min(8, Math.round(WOOD.graft) || 0));
-    const gAll = woodSet(), GE = gIx > 0 && gAll[gIx - 1] ? gAll[gIx - 1] : null;
+    // A section is a whole slab now, so the scion's tree is at .slab.wood and its palette at
+    // .slab.OVR. And a section that is not wood cannot be one: there is no ring field in a sheet
+    // of glass, so it grafts nothing rather than handing woodField an object with no rings in it.
+    const gAll = sectionList(), gSec = gIx > 0 ? gAll[gIx - 1] : null;
+    const GE = gSec && gSec.slab && gSec.slab.material === 'wood' ? gSec.slab.wood : null;
     const GF = GE ? woodField(GE) : null, GKS = GF ? (GF.K - 1) / GF.LMAX : 0;
-    const gov = (GE && GE.ovr) || {};
+    const gov = (gSec && gSec.slab && gSec.slab.OVR) || {};
     const [GBR, GBG, GBB] = hexRGB(gov.woodEarly || '#c49660');
     const [GDR, GDG, GDB] = hexRGB(gov.woodLate || '#603e22');
     const MINL = WOOD.mineral;
@@ -7347,14 +7380,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
              layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed, haze: L.haze, transmit: L.transmit, scatter: L.scatter })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden], folders: folders.map(F => ({ name: F.name, v: F.v, c: F.c, members: [...F.members] })),
+             sections: sections.map(s => JSON.parse(JSON.stringify(s))),
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
   }
   function deserialize(o) {
     if (!o || o.v !== 1 || !Array.isArray(o.marks)) return false;
     slabName = typeof o.name === 'string' ? o.name : '';   // absent on a slab saved before names existed
     { const el = document.getElementById('slabname'); if (el) el.value = slabName; }
-    fam = FAM[o.fam] ? o.fam : 'carrara';                 // a retired family (e.g. wood) falls back to Carrara
-    setMaterial(o.material);                              // absent on every slab saved before materials: stone
     // LOADING ARMS MOVE, WHATEVER THE SLAB SAVED. A slab records the tool that was active when it was
     // written, and the gallery slab here records "moon" - so loading it leaves a drawing tool armed on a
     // picture the user has just declared they want unchanged. On a tablet one stray tap while scrolling
@@ -7375,6 +7407,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { const ub = document.getElementById('uv-toggle'); if (ub) ub.setAttribute('aria-pressed', 'false');
       const so = document.getElementById('spot-toggle'); if (so) so.setAttribute('aria-pressed', 'false');
     }
+    applySlabState(o);                                    // everything that IS the slab; no DOM in it
+    stoneReady = false; buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
+  }
+  // EVERYTHING THAT IS THE SLAB, and nothing that is the screen. Split out of deserialize so that
+  // something other than a LOAD can put a slab into the engine - which is what baking a section
+  // from another material needs. The loader keeps the half that fills the name field, arms the
+  // Move tool, un-presses UV and the spotlight and remounts the panels; none of that may happen
+  // while a tile is being baked.
+  function applySlabState(o) {
+    fam = FAM[o.fam] ? o.fam : 'carrara';                 // a retired family (e.g. wood) falls back to Carrara
+    setMaterial(o.material);                              // absent on every slab saved before materials: stone
     const reset = (dst, def, src) => { for (const k in dst) delete dst[k]; Object.assign(dst, JSON.parse(JSON.stringify(def))); if (src) Object.assign(dst, JSON.parse(JSON.stringify(src))); };
     reset(G, G0, o.G); reset(T, T0, o.T); reset(NEXT, NEXT0, o.NEXT);   // HARD reset to defaults, THEN apply the slab — a load never inherits the previous slab's non-saved keys
     reset(GLASS, GLASS0, o.glass);                                    // and glass, by the same rule
@@ -7386,6 +7429,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       GLASS.mould = o.glass.form === 'spun' ? 'radial' : 'strips';
     }
     reset(WOOD, WOOD0, o.wood);                                       // same rule for the wood settings; woodField re-keys itself off them
+    // SECTIONS, and a slab saved when they were wood's kept cuts read forward into them. The cut
+    // was always "this slab with these wood settings and these three colours", so that is what it
+    // becomes - against this very record, which is the slab it was kept from.
+    if (Array.isArray(o.sections)) sections = o.sections.map(s => JSON.parse(JSON.stringify(s)));
+    else if (o.wood && Array.isArray(o.wood.set) && o.wood.set.length)
+      sections = o.wood.set.map(e => sectionFromWoodCut(e, o));
+    else sections = [];
+    delete WOOD.set;                                   // one list answers "which source", not two
     cloudSig = bandSig = brecSig = ''; last = null;                     // invalidate the render caches so nothing survives a load
     clearUserLayers();                                                                                   // drop the previous slab's user layers, reset the active layer to the bucket defaults
     layAt('micro').density = 1; layAt('micro').size = 1; layAt('micro').seed = 7070;                     // reset the default granite field
@@ -7432,7 +7483,30 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     mountLayerPanels();                                       // ...and the panels that point at a layer
     marks = o.marks.filter(m => m.kind !== 'knot').map(m => ({ ...m }));   // drop retired knot marks
     nextId = o.nextId || (marks.reduce((n, m) => Math.max(n, m.id || 0), 0) + 1);
-    stoneReady = false; buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
+    cloudSig = bandSig = brecSig = ''; last = null;       // the caches belong to the slab that is leaving
+    stoneReady = false;
+  }
+  // PAINT SOMETHING THAT IS NOT THE CURRENT SLAB, and leave no trace of having done it.
+  //
+  // The snapshot goes through serialize() deliberately: that is already the complete definition of
+  // what a slab IS, so anything it forgets is a bug in SAVING - one place, already load-bearing -
+  // rather than a second list here that has to be kept in step with it.
+  //
+  // finally, not just a trailing restore: if the painter throws halfway through a section, the
+  // user's own slab must still come back. Losing it to an exception in a tile bake would be the
+  // worst failure this file could have.
+  function withSlab(rec, fn) {
+    const back = serialize();
+    try { applySlabState(rec); return fn(); }
+    finally { applySlabState(back); }
+  }
+  // THE SAME THING FOR A RUN OF THEM: one snapshot and one restore around the whole set rather
+  // than a pair per section. The restore is still in a finally, so it is the same promise at an
+  // eighth of the cost when a floor is laid from eight sources.
+  function withSlabs(recs, each) {
+    const back = serialize();
+    try { for (let i = 0; i < recs.length; i++) { applySlabState(recs[i]); each(recs[i], i); } }
+    finally { applySlabState(back); }
   }
   // ---- EXPORT CEILING ------------------------------------------------------------------------------
   // renderTiled bounds the SCRATCH buffers, but its assembly canvas is still full size — 16384 x 10240
@@ -8991,23 +9065,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // function of the slab.
   function showSetCount() {
     const el = document.getElementById('wood-set-count');
-    if (el) el.textContent = woodSet().length ? String(woodSet().length) : '\u2014';
+    if (el) el.textContent = sectionList().length ? String(sectionList().length) : '\u2014';
   }
   {
     const add = document.getElementById('wood-set-add'), clr = document.getElementById('wood-set-clear');
     if (add) add.addEventListener('click', () => {
-      const cur = Array.isArray(WOOD.set) ? WOOD.set : [];
-      if (cur.length >= 8) { hint(TR('hint.cuts-full')); return; }
-      const snap = JSON.parse(JSON.stringify(WOOD)); delete snap.set;
-      // AND ITS COLOUR, which is not in WOOD. The three wood colours are TOKENS and live in OVR, so a
-      // snapshot of WOOD alone keeps an ebony's rings and paints them in whatever palette happens to be
-      // loaded. Caught by rendering three kept species and getting three pale boards.
-      snap.ovr = { woodEarly: OVR.woodEarly, woodLate: OVR.woodLate, woodHeart: OVR.woodHeart };
-      WOOD.set = [...cur, snap];
-      showSetCount(); redraw(true); hint(TR('hint.cut-kept', { n: WOOD.set.length }));
+      if (sectionList().length >= 8) { hint(TR('hint.cuts-full')); return; }
+      // THE WHOLE SLAB, not a snapshot of one material's settings. The old version kept WOOD plus
+      // the three wood colour tokens, because the tokens live in OVR and a snapshot of WOOD alone
+      // keeps an ebony's rings and paints them in whatever palette happens to be loaded - caught
+      // by rendering three kept species and getting three pale boards. Keeping the slab keeps that
+      // fix and every other one of its kind for free, in any material.
+      sections = [...sectionList(), sectionFromHere()];
+      showSetCount(); redraw(true); hint(TR('hint.cut-kept', { n: sections.length }));
     });
     if (clr) clr.addEventListener('click', () => {
-      WOOD.set = []; showSetCount(); redraw(true); hint(TR('hint.cuts-cleared'));
+      sections = []; showSetCount(); redraw(true); hint(TR('hint.cuts-cleared'));
     });
     showSetCount();
   }

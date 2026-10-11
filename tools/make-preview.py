@@ -31,5 +31,17 @@ anchor = '<meta charset="utf-8">'
 if anchor not in text:
     sys.exit("anchor not found in %s - has the head changed?" % SRC.name)
 i = text.index(anchor) + len(anchor)
-OUT.write_text(text[:i] + "\n" + SHIM + text[i:], encoding="utf-8")
+out = text[:i] + "\n" + SHIM + text[i:]
+
+# A TEST HOOK, in the preview copy only. The engine is one IIFE, so nothing inside it can be
+# reached from a page script - and the pieces most worth testing, withSlab above all, are exactly
+# the ones that must not become a production surface. Injected beside the definition rather than
+# exported, so the shipped file has no idea this exists.
+HOOK = "\n  window.__probe = { withSlab, serialize, applySlabState };\n"
+MARK = "  function withSlab(rec, fn) {"
+if MARK in out:
+    out = out.replace(MARK, HOOK + MARK, 1)
+else:
+    print("  note: withSlab not found, so the preview has no test hook")
+OUT.write_text(out, encoding="utf-8")
 print("wrote %s (%d bytes)" % (OUT.relative_to(ROOT), OUT.stat().st_size))

@@ -1194,6 +1194,8 @@
  "hint.roll-the-roller-across": {"terms": ["glass"], "where": "shown when a roller pass was too short to be a pass"},
  "op.press": {"terms": ["glass"], "where": "name of an operation in the list: a drawn roller pass. It presses a pattern in; it does not stretch the sheet, which is what the Roll operation does"},
  "ui.op-press-note": {"terms": ["glass"], "where": "shown beside a press in the operation list instead of an amount: a drawn pass takes its settings from the roller panel at the moment it was drawn, not from a slider in the list"},
+ "sec.unnamed": {"terms": [], "where": "default name for a section kept from the slab - a source the floor can be laid from. Sections can be different materials from each other"},
+ "sec.kept-cut": {"terms": ["wood"], "where": "name given to a section converted from a slab saved when these were wood-only kept cuts"},
  "mat.glass": {"terms": ["glass"], "where": "button: switch the slab to the glass material"},
  "sec.glass": {"terms": ["glass"], "where": "section heading for the glass controls"},
  "lbl.forming": {"terms": ["glass"], "where": "label: which process formed this sheet"},

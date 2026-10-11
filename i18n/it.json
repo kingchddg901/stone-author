@@ -318,6 +318,8 @@
  "hint.roll-the-roller-across": "Trascina il rullo sulla lastra. Imprime il suo stampo mentre avanza, partendo dal primo, appoggiato.",
  "op.press": "Pressatura",
  "ui.op-press-note": "la passata di rullo che hai disegnato",
+ "sec.unnamed": "Sezione",
+ "sec.kept-cut": "Taglio conservato",
  "mat.glass": "Vetro",
  "sec.glass": "Vetro",
  "lbl.forming": "Formato per",
