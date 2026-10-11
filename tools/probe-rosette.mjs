@@ -168,6 +168,30 @@ const sectionOf = new Function('T', 'PATTERNS',
   '\nconst rosetteOf = () => ROSETTE[T.pattern] || null;\n' +
   lift('sectionOf') + '\nreturn sectionOf;')(T, PATTERNS);
 
+// A polygon's area, so the share by AREA can be printed beside the share by TILE.
+const polyArea = P2 => { let a = 0; for (let i = 0, j = P2.length - 1; i < P2.length; j = i++)
+  a += P2[j][0] * P2[i][1] - P2[i][0] * P2[j][1]; return Math.abs(a) / 2; };
+
+console.log('\n  COUNT CELLS, NOT PIXELS. Both shares, for the same assignment:');
+for (const name of ['octagon', 'rhombus', 'cairo']) {
+  T.pattern = name;
+  const { polys } = PATTERNS[name](U);
+  const byTile = {}, byArea = {};
+  let nT = 0, nA = 0;
+  // An EVEN window. The slots are keyed on cell PARITY, so an odd one over-samples one parity and
+  // the shares come out lopsided for a reason that is the sampling rather than the rule.
+  for (let n = -6; n < 6; n++) for (let m = -6; m < 6; m++) polys.forEach((poly, pi) => {
+    const sec = sectionOf({ pi, m, n }, 5), A = polyArea(poly);
+    byTile[sec] = (byTile[sec] || 0) + 1; nT++;
+    byArea[sec] = (byArea[sec] || 0) + A; nA += A;
+  });
+  const fmt = (o, tot) => Object.keys(o).sort((a, b) => a - b)
+    .map(k => (o[k] / tot * 100).toFixed(0).padStart(3) + '%').join(' ');
+  console.log('    ' + name.padEnd(8) + ' by tile ' + fmt(byTile, nT) + '    by area ' + fmt(byArea, nA));
+}
+console.log('    the octagon centre is ~83% of the AREA and HALF the TILES, one per cell. Both true;');
+console.log('    only the second one is evidence about the assignment.');
+
 console.log('\n  EVERY SECTION REACHABLE, and no rosette repeating one:');
 for (const [name, centreIs] of [['octagon', pi => pi === 0], ['rhombus', pi => pi === 1], ['cairo', null]]) {
   T.pattern = name;
