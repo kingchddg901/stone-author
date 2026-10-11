@@ -467,6 +467,8 @@
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-taper-note">A tree grows upward as well as outward, so a ring laid down when the leader was at thirty feet does not exist at a hundred and fifty — the wood up there is only the rings added after the apex passed it. That is what makes a trunk narrow toward the top: not thinner rings, but FEWER of them. Taper is how hard the leader's climb tracks the year it was growing in. Height is put on a year at a time, and the increment comes from that same year's ring — so the drought that pinched a ring also stalled the leader, from one climate signal rather than two inventions. Zero is the perfect cylinder — the leader was always at full height, so every ring runs the whole stem. Raise it and the climb slows: a half gives the straight cone, and towards one the leader creeps up a few feet a year while the radius is laid down early, so the butt gathers far more rings than the top and the stem comes to a point. Height up trunk is where this board was cut, and because a board spans a range of heights it really does cross wood of different ages.</span></div>
       <div class="sl"><label for="wood-trunkH"><span data-i18n="sl.wood-trunkH">Trunk height</span> <output id="wood-trunkHV"></output></label><input id="wood-trunkH" type="range" min="6" max="275" step="1"></div>
       <div class="sl"><label for="wood-taper"><span data-i18n="sl.wood-taper">Taper</span> <output id="wood-taperV"></output></label><input id="wood-taper" type="range" min="0" max="1" step="0.01"></div>
+      <div class="sl"><label for="wood-flare"><span data-i18n="sl.wood-flare">Basal flare</span> <output id="wood-flareV"></output></label><input id="wood-flare" type="range" min="0" max="2" step="0.02"></div>
+      <div class="sl"><label for="wood-flareH"><span data-i18n="sl.wood-flareH">Flare height</span> <output id="wood-flareHV"></output></label><input id="wood-flareH" type="range" min="1" max="60" step="0.5"></div>
       <div class="sl"><label for="wood-zBase"><span data-i18n="sl.wood-zBase">Height up trunk</span> <output id="wood-zBaseV"></output></label><input id="wood-zBase" type="range" min="0" max="275" step="0.5"></div>
       <div class="sl"><label for="wood-treeDia"><span data-i18n="sl.wood-treeDia">Tree size</span> <output id="wood-treeDiaV"></output></label><input id="wood-treeDia" type="range" min="0.2" max="36.5" step="0.02"></div>
       <div class="sl"><label for="wood-rings"><span data-i18n="sl.wood-rings">Rings</span> <output id="wood-ringsV"></output></label><input id="wood-rings" type="range" min="5" max="3200" step="5"></div>
@@ -978,6 +980,8 @@ window.SA_I18N = (() => {
   "sl.wood-fireZ": "Fire reach",
   "sl.wood-trunkH": "Trunk height",
   "sl.wood-taper": "Taper",
+  "sl.wood-flare": "Basal flare",
+  "sl.wood-flareH": "Flare height",
   "sl.wood-zBase": "Height up trunk",
   "sl.wood-plankLen": "Plank length",
   "sl.wood-plankVary": "Length variation",
@@ -1413,7 +1417,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.49';
+  const BUILD = '2026.10.10.51';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4096,6 +4100,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     dev2Prune: 0,                                 // HOW THE BRANCH ENDED. 0 it died on the tree and was
                                                   // buried in its own bark - a loose knot. 1 it was taken
                                                   // off clean and the live collar healed over sound wood.
+    flare: 0, flareH: 12,                         // BASAL FLARE: how much wider the same year's ring is at
+                                                  // the stump, and the height it dies out over. The second
+                                                  // cause of taper, and the one a buttress is.
     trunkH: 60, zBase: 0, taper: 0.3,             // THE TAPER, as GROWTH: total trunk height, how far up this
                                                   // board sits, and how fast the leader climbed. The rings
                                                   // a height never saw are ABSENT there, not thinner.
@@ -4306,7 +4313,19 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const FIRE = kf > 0;
     const kh = Math.min(n - 1, kf + Math.max(1, Math.round(WOOD.fireHeal)));
     const fring = new Float64Array(n);
-    if (FIRE) for (let i = 0; i < n; i++) fring[i] = i < kf ? 0 : edge[Math.min(i, kh)] - edge[kf];
+    if (FIRE) {
+      // A LENS. Growing while the wound is open, then falling back to nothing as the callus closes
+      // it and rounds the trunk out. Held open forever - which is what this did - the deficit pushes
+      // the corrected read past the bark across the whole sector, so EVERY outer pixel in it charred
+      // however old the fire was: a burn in ring 151 of 4000 wore a black face on the bark.
+      const heal = Math.max(1, kh - kf), dmax = edge[kh] - edge[kf];
+      for (let i = 0; i < n; i++) {
+        if (i < kf) { fring[i] = 0; continue; }
+        if (i <= kh) { fring[i] = edge[i] - edge[kf]; continue; }   // open: dead cambium adds nothing
+        const u = (i - kh) / heal;                                   // closing: the callus catches up
+        fring[i] = u >= 1 ? 0 : dmax * (1 - u);
+      }
+    }
     const unit = WOOD.trunk / unitAcc, R = acc * unit;                        // R: what this log actually came to
     for (let i = 0; i < n; i++) { edge[i] *= unit; fring[i] *= unit;
       for (let q = 0; q < DEV.length; q++) wring[q][i] *= unit; }
@@ -4482,13 +4501,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const u = 1 - h / Math.max(WOOD.fireZ, 0.01);
       fzw[i] = u <= 0 ? 0 : (u >= 1 ? 1 : u * u * (3 - 2 * u));
     }
+    // HOW MUCH WIDER THIS YEAR'S RING IS DOWN HERE. Stored as the reciprocal so the hot loop
+    // multiplies; 1 everywhere once the flare has died out, which is most of the tree.
+    const ginv = new Float32Array(Z);
+    const fl = Math.max(0, WOOD.flare), flH = Math.max(0.1, WOOD.flareH);
+    for (let i = 0; i < Z; i++) {
+      const h = Math.max(0, WOOD.zBase + WOOD.len * i / (Z - 1));
+      ginv[i] = fl > 0 ? 1 / (1 + fl * Math.exp(-h / flH)) : 1;
+    }
     const pax = new Float32Array(Z), pay = new Float32Array(Z);
     for (let i = 0; i < Z; i++) {
       const z = WOOD.len * i / (Z - 1);
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    const out = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl, zoff, fwl, fchar, fzw, FIRE };
+    const out = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl, zoff, ginv, fwl, fchar, fzw, FIRE };
     if (_keep) Object.assign(WOOD, JSON.parse(_keep));   // the live tree is put back before anyone reads it
     woodField.cache[sig] = out; woodField.order.push(sig);
     while (woodField.order.length > 4) delete woodField.cache[woodField.order.shift()];
@@ -4557,7 +4584,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const FE = F.FE, NF = FE.length, NA = F.NA;              // no active feature skips the inversion entirely
     const WV = F.WV, WVA = F.wv, WK = F.WK, NW = F.NW;       // the tree's wave family and its anchored envelope
     const WAVY = WOOD.waveAmp > 0;                           // zero skips the recurrence, not just the result
-    const FSP = F.fsp, FCZ = F.fcz, UREL = F.urel, RWL = F.rwl, ZOFF = F.zoff, GLOSS = WOOD.gloss;
+    const FSP = F.fsp, FCZ = F.fcz, UREL = F.urel, RWL = F.rwl, ZOFF = F.zoff, GINV = F.ginv, GLOSS = WOOD.gloss;
     // THE FIRE'S DIRECTION AND SECTOR, as cosines so no angle is ever taken. The shoulders are soft
     // because a wound does not end at a hard edge - the cambium nearest the kill survives damaged.
     const FIRE = F.FIRE, FWL = F.fwl, FCHAR = F.fchar, FZW = F.fzw;
@@ -4599,7 +4626,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // whole field is indexed by. That single add is the taper: rings, latewood, colour, the
       // heartwood front and the bark all answer for the right wood with no further change.
       const rad0 = Math.sqrt(ddx * ddx + ddy * ddy);
-      const rad = rad0 + ZOFF[zi];
+      // The flare scales what the taper left: zoff adds back the rings this height never saw,
+      // ginv says how much wider the ones it DID see were laid down here.
+      const rad = rad0 * GINV[zi] + ZOFF[zi];
       if (rad > F.R) return false;                 // the bark, closer in the higher you go
       // INVERTING THE ACCUMULATED SURFACE. The rings are no longer circles, so "which ring is this
       // point in?" is no longer a lookup on the radius. It is still only a subtraction: take the
@@ -5944,7 +5973,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   fireAngle: v => `${Math.round(v)}\u00b0`, fireHeal: v => `${Math.round(v)}`,
                   fireZ: v => `${(+v).toFixed(1)}\u2032`,
                   trunkH: v => `${Math.round(v)}\u2032`, zBase: v => `${(+v).toFixed(1)}\u2032`,
-                  taper: v => +v === 0 ? 'cylinder' : (+v).toFixed(2), plankLen: v => `${Math.round(v)}\u2033`,
+                  taper: v => +v === 0 ? 'cylinder' : (+v).toFixed(2),
+                  flare: v => +v === 0 ? 'none' : (+v).toFixed(2), flareH: v => `${(+v).toFixed(1)}\u2032`, plankLen: v => `${Math.round(v)}\u2033`,
                   plankVary: v => (+v).toFixed(2), plankStagger: v => (+v).toFixed(2),
                   eyeSpacing: v => `${(+v).toFixed(2)}\u2033`, eyeSize: v => `${(+v).toFixed(2)}\u2033`,
                   eyeDepth: v => (+v).toFixed(2),
@@ -5984,7 +6014,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // sixty feet up, so the taper can be held against a real tree rather than against taste.
   const treeDiaAt = () => {
     const F = woodField();
-    return Math.max(0, F.R - F.zoff[(F.Z - 1) >> 1]) * 2;   // the board's middle: the height the section shows
+    const zi = (F.Z - 1) >> 1;                             // the board's middle: the height the section shows
+    return Math.max(0, F.R - F.zoff[zi]) / (F.ginv[zi] || 1) * 2;
   };
   function syncTreeDia() {
     const el = document.getElementById('wood-treeDia'); if (!el) return;

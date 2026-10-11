@@ -1652,6 +1652,8 @@
  "sl.wood-plankStagger": {"terms": ["wood"], "where": "slider: how far each row's end joints shift from the row below, 0 = joints stack into columns"},
  "tile.pat.plank": {"terms": ["wood"], "where": "button: the plank-run floor layout, rows of varying-length boards with staggered end joints"},
  "sl.wood-trunkH": {"terms": ["wood"], "where": "slider: the whole tree's height from stump to apex, in feet"},
+ "sl.wood-flare": {"terms": ["wood"], "where": "slider: how much wider the same year's ring is laid at the stump than higher up - the butt swell"},
+ "sl.wood-flareH": {"terms": ["wood"], "where": "slider: the height over which the basal flare dies out, in feet"},
  "sl.wood-taper": {"terms": ["wood"], "where": "slider: how hard the leader's yearly height increment tracks that year's ring width. 0 means it was always at full height, so the trunk is a cylinder"},
  "sl.wood-zBase": {"terms": ["wood"], "where": "slider: how far up the trunk this board was cut, in feet above the stump"},
  "ui.wood-taper-note": {"terms": ["wood"], "where": "explains that a trunk narrows because higher wood has FEWER rings, not thinner ones"},
