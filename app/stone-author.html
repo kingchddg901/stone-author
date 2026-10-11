@@ -372,6 +372,9 @@
     <button id="wood-set-clear" type="button" data-i18n="tool.clear-cuts">Clear</button>
     <output id="wood-set-count"></output>
   </div>
+  <div class="sliders" data-mat-only="wood">
+    <div class="sl"><label for="wood-graft"><span data-i18n="sl.wood-graft">Graft branch from</span> <output id="wood-graftV"></output></label><input id="wood-graft" type="range" min="0" max="8" step="1"></div>
+  </div>
   <p data-i18n-html="note.lay-tiles"><b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor.
     Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint.
     In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Plank run is the one layout that is not a repeating pattern: rows of boards of differing lengths with their end joints staggered. The plank is the board you cut — its width and its longest length come from the Plank controls above, not from Size — so Plank length is a nominal that Length variation scatters around, and Joint stagger is how far each row's joints shift from the row below. At zero they stack into columns, which is exactly what a floor is laid to avoid.
@@ -977,6 +980,7 @@ window.SA_I18N = (() => {
   "sl.wood-treeDia": "Tree size",
   "sl.wood-dev2Rise": "Branch rise",
   "sl.wood-dev2Prune": "Taken off",
+  "sl.wood-graft": "Graft branch from",
   "sl.wood-stage": "Boards",
   "sl.wood-fireAt": "Fire year",
   "sl.wood-fireSeverity": "Fire severity",
@@ -1430,7 +1434,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.59';
+  const BUILD = '2026.10.10.60';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4114,6 +4118,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     dev2Prune: 0,                                 // HOW THE BRANCH ENDED. 0 it died on the tree and was
                                                   // buried in its own bark - a loose knot. 1 it was taken
                                                   // off clean and the live collar healed over sound wood.
+    graft: 0,                                     // THE GRAFT: which kept cut this branch grew from. 0 is the
+                                                  // tree's own wood; any other and the knot is another species.
     mineral: 0, mineralSize: 0.42,                // MINERAL STAIN: strength, the thickness of a streak and
     mineralSpacing: 0.6,                            // how far apart, both in inches. Colour only - the wood
                                                   // is sound, it has just drunk something.
@@ -4274,7 +4280,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // field that half-belongs to the other tree, silently. Same move renderStoneOffscreen already
     // makes for a kept cut.
     const _keep = cfg && cfg !== WOOD ? JSON.stringify(WOOD) : null;
-    if (_keep) for (const _k in cfg) if (_k !== 'set') WOOD[_k] = cfg[_k];
+    // `ovr` goes with `set`: a kept cut carries one and WOOD does not, and Object.assign cannot
+    // take a key away again - it would stick to WOOD, reach renderSig and land in every slab
+    // saved from then on.
+    if (_keep) for (const _k in cfg) if (_k !== 'set' && _k !== 'ovr') WOOD[_k] = cfg[_k];
     // THE FEATURE LIST. Flat keys in, a list out: the field code below never learns how many there are,
     // so a third feature is five more keys and a row of sliders rather than another case to write.
     // `zs <= 0` means the feature runs the whole log, and that is the only structural difference
@@ -4627,6 +4636,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const [HR, HG, HB] = hexRGB(COL.woodHeart || '#5a3418');
     const [KR, KG, KB] = hexRGB(COL.woodKnot || '#4a2f18');
     const [NR, NG, NB] = hexRGB(COL.woodMineral || '#5d6152');
+    // THE SCION. A kept cut is a whole tree, so grafting is fetching its field and its colours -
+    // the cache was built to hold the trunk's and this one at the same time.
+    const gIx = Math.max(0, Math.min(8, Math.round(WOOD.graft) || 0));
+    const gAll = woodSet(), GE = gIx > 0 && gAll[gIx - 1] ? gAll[gIx - 1] : null;
+    const GF = GE ? woodField(GE) : null, GKS = GF ? (GF.K - 1) / GF.LMAX : 0;
+    const gov = (GE && GE.ovr) || {};
+    const [GBR, GBG, GBB] = hexRGB(gov.woodEarly || '#c49660');
+    const [GDR, GDG, GDB] = hexRGB(gov.woodLate || '#603e22');
     const MINL = WOOD.mineral;
     // Streak spacing sets the field's scale; streak width sets how much of it clears the threshold.
     // A wider streak is a LOWER bar, which is why one number can set coverage and the other its size.
@@ -4850,9 +4867,23 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   dd += (sk * WV[0].zc[zi] + ck * WV[0].zs[zi]) * WVA[(rad * KS) | 0] * 0.5;
                   if (dd < 0) dd = 0;
             }
-            const u2 = (dd * KN.kp) % 1;
-            const lt = u2 > 0.72 ? (u2 - 0.72) / 0.28 : 0;
-            let kv = 1 - 0.55 * lt * lt;                       // its own latewood, at its own pitch
+            // ITS RINGS, FROM WHICHEVER TREE IT IS. Grafted, they are the scion's real rings read at
+            // the branch's own radius - its growth curve, its scatter, its bad years, its colour walk,
+            // by the same recipe the trunk's own wood uses. Ungrafted, the old synthetic pitch: a
+            // periodic ring with no history, which is all a knot of the tree's own wood needs.
+            let kv, kcr = KR, kcg = KG, kcb = KB;
+            if (GF) {
+              const gq = (dd * GKS) | 0, gl = gq < GF.K ? gq : GF.K - 1;
+              const gw = GF.lut[gl], gmv = 1 + GF.tv[gl], gmw = GF.tw[gl] * 26;
+              kcr = (GDR + (GBR - GDR) * gw) * gmv + gmw;
+              kcg = (GDG + (GBG - GDG) * gw) * gmv;
+              kcb = (GDB + (GBB - GDB) * gw) * gmv - gmw;
+              kv = 1;
+            } else {
+              const u2 = (dd * KN.kp) % 1;
+              const lt = u2 > 0.72 ? (u2 - 0.72) / 0.28 : 0;
+              kv = 1 - 0.55 * lt * lt;                         // its own latewood, at its own pitch
+            }
             const rim = dd / (rb || 1e-9);
             // INTERGROWN joins live cambium and barely shows a boundary. ENCASED trapped BARK, which
             // is the black edge, and the reason that knot falls out of a board.
@@ -4866,7 +4897,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               kv *= 0.72 + 0.2 * pr;                          // sound heartwood is darker, not dead
               if (rim > 0.74) kv *= 0.18 + (0.55 - 0.18) * pr;   // the bark ring, fading out as it is pruned away
             } else if (rim > 0.88) kv *= 0.55;
-            cr = KR * kv; cg = KG * kv; cb = KB * kv;
+            cr = kcr * kv; cg = kcg * kv; cb = kcb * kv;
           }
         }
       }
@@ -6032,6 +6063,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   interlockRings: v => `${Math.round(v)}`, curl: v => `${(+v).toFixed(1)}\u00b0`,
                   curlRate: v => (+v).toFixed(1), eyes: v => (+v).toFixed(2),
                   stage: v => `${Math.round(v)}`,
+                  graft: v => +v === 0 ? 'own wood' : `kept cut ${Math.round(v)}`,
                   fireAt: v => +v === 0 ? 'never' : `ring ${Math.round(v)}`,
                   fireSeverity: v => (+v).toFixed(2), fireWidth: v => `${Math.round(v)}\u00b0`,
                   fireAngle: v => `${Math.round(v)}\u00b0`, fireHeal: v => `${Math.round(v)}`,
