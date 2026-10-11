@@ -456,6 +456,13 @@
     </div>
     <div class="sliders">
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.glass-note">Rolled, spun, blown and flattened are not looks, they are FORMING PROCESSES — and three of them leave a shape that a pane is then cut out of. A crown disc is spun flat from a bubble, so it is thick at the middle and thin at the rim: a pane taken near the centre carries the bullion where the pontil was, and one taken at the edge is fine tight arcs. Pane X and Pane Y are where in that disc, or along that cylinder, this sheet was cut from, which is the same idea as choosing where in a log a board comes from. What the field actually holds is THICKNESS: path length makes the tint, and because green survives and red and blue do not, a thick sheet goes green — the same reason you see it down the edge of a pane. The slope of that thickness is what you see as light and dark bands through patterned glass. There is no scene behind the sheet yet, so nothing is refracted through it; the slope is the honest cue until there is.</span></div>
+      <div class="sl"><label for="glass-cords"><span data-i18n="sl.glass-cords">Canes</span> <output id="glass-cordsV"></output></label><input id="glass-cords" type="range" min="0" max="1" step="0.01"></div>
+      <div class="sl"><label for="glass-cordN"><span data-i18n="sl.glass-cordN">Cane colours</span> <output id="glass-cordNV"></output></label><input id="glass-cordN" type="range" min="2" max="4" step="1"></div>
+      <div class="sl"><label for="glass-cordScale"><span data-i18n="sl.glass-cordScale">Cane count</span> <output id="glass-cordScaleV"></output></label><input id="glass-cordScale" type="range" min="0.3" max="30" step="0.1"></div>
+      <div class="sl"><label for="glass-cordWander"><span data-i18n="sl.glass-cordWander">Cane wander</span> <output id="glass-cordWanderV"></output></label><input id="glass-cordWander" type="range" min="0" max="2" step="0.01"></div>
+      <div class="sl"><label for="glass-cordLay"><span data-i18n="sl.glass-cordLay">Cane lay-up</span> <output id="glass-cordLayV"></output></label><input id="glass-cordLay" type="range" min="0" max="90" step="1"></div>
+      <div class="sl"><label for="glass-cordTwist"><span data-i18n="sl.glass-cordTwist">Gather twist</span> <output id="glass-cordTwistV"></output></label><input id="glass-cordTwist" type="range" min="0" max="3" step="0.05"></div>
+      <div class="sl"><label for="glass-cordLap"><span data-i18n="sl.glass-cordLap">Cane overlap</span> <output id="glass-cordLapV"></output></label><input id="glass-cordLap" type="range" min="0" max="0.45" step="0.01"></div>
       <div class="sl"><label for="glass-thick"><span data-i18n="sl.glass-thick">Thickness</span> <output id="glass-thickV"></output></label><input id="glass-thick" type="range" min="0.6" max="14" step="0.1"></div>
       <div class="sl"><label for="glass-tint"><span data-i18n="sl.glass-tint">Iron tint</span> <output id="glass-tintV"></output></label><input id="glass-tint" type="range" min="0" max="2" step="0.01"></div>
       <div class="sl"><label for="glass-paneX"><span data-i18n="sl.glass-paneX">Pane across</span> <output id="glass-paneXV"></output></label><input id="glass-paneX" type="range" min="-3" max="3" step="0.01"></div>
@@ -933,6 +940,21 @@ window.SA_I18N = (() => {
   "mask.win.off": "Off",
   "mask.win.on": "On",
   "mat.stone": "Stone",
+  "sl.glass-cords": "Canes",
+  "sl.glass-cordN": "Cane colours",
+  "sl.glass-cordScale": "Cane count",
+  "sl.glass-cordWander": "Cane wander",
+  "lay.glass-a": "Glass cane A",
+  "lay.glass-b": "Glass cane B",
+  "lay.glass-c": "Glass cane C",
+  "lay.glass-d": "Glass cane D",
+  "sl.glass-cordLay": "Cane lay-up",
+  "sl.glass-cordTwist": "Gather twist",
+  "sl.glass-cordLap": "Cane overlap",
+  "ui.lay-along": "along the rod",
+  "ui.lay-around": "around the rod",
+  "ui.twist-none": "straight",
+  "ui.lap-butted": "butted",
   "mat.glass": "Glass",
   "sec.glass": "Glass",
   "lbl.forming": "Formed by",
@@ -1521,7 +1543,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.2';
+  const BUILD = '2026.10.11.4';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1576,6 +1598,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { key: 'woodHeart', labelKey: 'lay.wood-heartwood', label: TR('lay.wood-heartwood'), def: '#5a3418', mat: 'wood' },
     { key: 'woodKnot', labelKey: 'lay.wood-knot', label: TR('lay.wood-knot'), def: '#4a2f18', mat: 'wood' },
     { key: 'woodMineral', labelKey: 'lay.wood-mineral', label: TR('lay.wood-mineral'), def: '#5d6152', mat: 'wood' },
+    // Glass's canes. Four, defaulted, and signed only under glass - the same shape the wood
+    // colours take, for the same reason: an unset token resolves from its default, so OVR is
+    // untouched and no master already on disk re-dates.
+    { key: 'glassA', labelKey: 'lay.glass-a', label: TR('lay.glass-a'), def: '#9fd8c8', mat: 'glass' },
+    { key: 'glassB', labelKey: 'lay.glass-b', label: TR('lay.glass-b'), def: '#2f6f8f', mat: 'glass' },
+    { key: 'glassC', labelKey: 'lay.glass-c', label: TR('lay.glass-c'), def: '#c8923f', mat: 'glass' },
+    { key: 'glassD', labelKey: 'lay.glass-d', label: TR('lay.glass-d'), def: '#8e4b6e', mat: 'glass' },
   ];
   // COL = RESOLVED values the renderer paints from. OVR = the overrides the editor edits and we
   // persist. perItem = id -> layer bucket, for per-id (per-item) colour tokens that inherit their
@@ -4281,6 +4310,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                                                   // and thin it, and stones, which thicken it
     paneX: 0.3, paneY: 0, formR: 1.6,             // WHERE IN THE FORMED OBJECT this pane was cut from
     flutePitch: 7, fluteDepth: 0.5,               // the rolled texture
+    cords: 0, cordScale: 5, cordN: 3,             // THE SECOND FIELD: canes of colour drawn into the
+    cordWander: 0.35,                             // melt. A LABEL per point, never a blend - which is
+    cordLay: 0, cordTwist: 0, cordLap: 0,         // what lets them fold past each other and not mix.
+                                                  // Lay, twist and lap belong to the LAY-UP, not to any
+                                                  // forming: they are set on the rod, before it moves.
+                                                  // what lets them fold past each other and not mix.
     relief: 0.8,                                  // how hard the slope reads as light and dark
   };
   const GLASS0 = JSON.parse(JSON.stringify(GLASS));
@@ -5127,6 +5162,63 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       else if (h > 1 - F.INC) { if (q > out[1]) out[1] = q; }             // an inclusion
     }
   }
+  // ===== THE LAY-UP, AND WHY IT HAS TO COME FIRST ==============================================
+  // YOU CANNOT FORM WHAT IS NOT THERE. The ribbons are laid onto the gather while it is still a
+  // small hot cylinder; only then is it drawn, spun, rolled, or simply poured out. So the colour
+  // field is authored in GATHER coordinates and each forming process is an inverse MAP back into
+  // them - it is not a direction the bands are derived from. The first build had that backwards,
+  // and reading the band direction off the flow quietly assumed every lay-up ran along the draw.
+  //
+  // Gather coordinates are (around the rod, along the rod):
+  //   blown   drawn up the axis, split and opened flat: across the sheet is AROUND, up it is ALONG
+  //   spun    opened at the lip and spun out, so the axis becomes the RADIUS and around becomes the
+  //           ANGLE. This is the whole pinwheel: parallel ribbons up a rod, under a map that turns
+  //           the rod's axis into a radius, ARE radial wedges. Nothing special-cases it.
+  //   rolled  extended along the roll, so the roll direction is ALONG and across it is AROUND
+  //   poured  never drawn, so the map is the identity and the lay-up survives exactly as laid
+  //
+  // THE DRAW RATIO IS NOT A NEW CONTROL. It is seedStretch - the same stretch already measured on
+  // the bubbles. One stretch, two consequences: seeds drawn into ellipses and ribbons spread apart.
+  function glassGather(sx, sy, F, out) {
+    if (F.form === 'spun') {
+      const r = Math.sqrt(sx * sx + sy * sy);
+      out[0] = woodAtan2(sy, sx) * (0.5 + r);          // around -> the angle, opening out with r
+      out[1] = r;                                      // along  -> the radius
+    } else if (F.form === 'poured') {
+      out[0] = sx; out[1] = sy;                        // nothing was drawn; as laid, so as found
+    } else if (F.form === 'blown') {
+      out[0] = sx; out[1] = sy / F.SST;                // drawn up the cylinder
+    } else {
+      out[0] = sy; out[1] = sx / F.SST;                // rolled and flattened: drawn along the roll
+    }
+  }
+  // WHICH RIBBON IS HERE, read in gather coordinates and nowhere else. An integer, never a mixture:
+  // sampling a LABEL through a deformation cannot average, so two ribbons fold past each other and
+  // stay two ribbons without a line of code enforcing it.
+  //
+  // LAY is the angle they were laid at - 0 runs them along the rod, 90 wraps them around it - and
+  // TWIST shears the circumference by axial position, which is what twisting a gather does: a
+  // straight ribbon becomes a helix, and a helix unrolls to a slant. Both are properties of the
+  // lay-up, so both happen here, and neither knows which forming follows.
+  //
+  // THE LAP IS A STACK, NOT A BLEND. Ribbons pressed side by side overlap at their edges, and where
+  // they overlap the light goes through BOTH of them - two filters in series, so the absorptions ADD
+  // and the seam goes darker. That is the observed thing, and it is the one way two colours meet
+  // here without either becoming a third.
+  function glassLay(gc, ga, F, out) {
+    const c = gc + F.TW * ga;                                  // the twist, as a shear
+    let p = c * F.LC - ga * F.LS;                              // across the ribbons
+    // The wander is hand-laying, so it is laid too - which means the draw stretches it along with
+    // everything else, for free, because it is evaluated in gather coordinates.
+    p += F.CW * 0.25 * (fbm2(gc * F.RS * 0.35, ga * F.RS * 0.35, 311) - 0.5) * 2;
+    const ph = p * F.CS, fl = Math.floor(ph), f = ph - fl;
+    let i = fl % F.CN; if (i < 0) i += F.CN;
+    out[0] = i; out[1] = -1; out[2] = 0;
+    if (F.LP > 0) {
+      if (f < F.LP) { out[1] = (i + F.CN - 1) % F.CN; out[2] = (F.LP - f) / F.LP; }
+      else if (f > 1 - F.LP) { out[1] = (i + 1) % F.CN; out[2] = (f - 1 + F.LP) / F.LP; }
+    }
+  }
   function paintGlassContent(ident, angleView) {
     // Glass has no items and no fluorescent minerals, so like wood it says nothing in either
     // diagnostic rather than painting a flat colour into them and calling it data.
@@ -5139,6 +5231,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       FP: Math.max(0.5, GLASS.flutePitch), FD: Math.max(0, GLASS.fluteDepth),
       SD: Math.max(0, Math.min(1, GLASS.seeds)), SST: Math.max(1, GLASS.seedStretch),
       INC: Math.max(0, Math.min(1, GLASS.incl)),
+      CS: Math.max(0.1, GLASS.cordScale), CN: Math.max(2, Math.min(4, Math.round(GLASS.cordN))),
+      CW: Math.max(0, GLASS.cordWander),
+      LC: Math.cos(GLASS.cordLay * Math.PI / 180), LS: Math.sin(GLASS.cordLay * Math.PI / 180),
+      TW: Math.max(0, GLASS.cordTwist), LP: Math.max(0, Math.min(0.49, GLASS.cordLap)),
     };
     const REL = Math.max(0, GLASS.relief), TINT = Math.max(0, GLASS.tint);
     // Beer-Lambert per channel per millimetre. Green is absorbed least, which is the whole reason a
@@ -5146,8 +5242,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const kr = 0.075 * TINT, kg = 0.022 * TINT, kb = 0.055 * TINT;
     const ang = G.lightAngle * Math.PI / 180, Lx = Math.cos(ang), Ly = -Math.sin(ang);
     const [LBR, LBG, LBB] = hexRGB(COL.ground || '#e6e6e4');     // the light behind the sheet
+    // EACH CANE'S OWN ABSORPTION. A colour is what it does NOT absorb, so k runs with (1 - channel)
+    // and the thickness decides the path length: the same cane is deep where the sheet is thick and
+    // pale where it is thin, which is how one colour varies across a hand-made sheet without ever
+    // turning into another.
+    const CORD = Math.max(0, Math.min(1, GLASS.cords));
+    const canes = [COL.glassA || '#9fd8c8', COL.glassB || '#2f6f8f',
+                   COL.glassC || '#c8923f', COL.glassD || '#8e4b6e'].map(h => {
+      const [cr, cg, cb] = hexRGB(h);
+      return [(1 - cr / 255), (1 - cg / 255), (1 - cb / 255)];
+    });
     const eps = 0.004;                                           // gradient step, in feet
-    const fv = [0, 0], melt = [0, 0];
+    const fv = [0, 0], melt = [0, 0], gth = [0, 0], lay = [0, -1, 0];
     const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));
     const img = g2d.createImageData(B.bw, band), px = img.data;
     for (let by = B.y0; by < B.y1; by += band) {
@@ -5163,11 +5269,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // character of the sheet and not merely the crop.
           const ox = GLASS.paneX + (cu - 0.5) * SLAB_FT / 12;
           const oy = GLASS.paneY + (cvv / H - 0.5) * SLAB_FT * H / 12;
-          glassFlow(ox, oy, F, fv);
-          let T = glassFormT(ox, oy, F, fv);
-          const gu = (glassFormT(ox + eps, oy, F, fv) - T) / eps;   // slope, in mm per foot
-          const gv = (glassFormT(ox, oy + eps, F, fv) - T) / eps;
-          glassMelt(ox, oy, F, fv, melt);
+          // SAMPLED AT (sx, sy). The same as (ox, oy) today; separate so that the stir - the moon
+          // as a displacement field - becomes a change to these two lines and nothing else.
+          const sx = ox, sy = oy;
+          glassFlow(sx, sy, F, fv);
+          let T = glassFormT(sx, sy, F, fv);
+          const gu = (glassFormT(sx + eps, sy, F, fv) - T) / eps;   // slope, in mm per foot
+          const gv = (glassFormT(sx, sy + eps, F, fv) - T) / eps;
+          glassMelt(sx, sy, F, fv, melt);
           if (melt[0] > 0) T -= F.TH * 0.5 * melt[0];               // a bubble is a void
           if (melt[1] > 0) T += F.TH * 0.6 * melt[1];               // a stone is not
           if (T < 0.05) T = 0.05;
@@ -5183,8 +5292,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           const sl = (gu * Lx + gv * Ly) * 0.05;
           let m = 1 + REL * 0.55 * (sl / (1 + (sl < 0 ? -sl : sl))) - 0.45 * melt[0] + 0.25 * melt[1];
           if (m < 0) m = 0;
-          const r = LBR * Math.exp(-kr * T) * m, g = LBG * Math.exp(-kg * T) * m,
-                b = LBB * Math.exp(-kb * T) * m;
+          // The cane decides WHICH absorption; the thickness decides how much of it. No blend
+          // anywhere, so two canes can fold past each other all day and stay two canes.
+          let ar = kr, ag = kg, ab = kb;
+          if (CORD > 0) {
+            glassGather(sx, sy, F, gth);                       // where on the rod did this come from
+            glassLay(gth[0], gth[1], F, lay);                  // and which ribbon was laid there
+            const c = canes[lay[0]], s = CORD * 0.6;
+            ar += s * c[0]; ag += s * c[1]; ab += s * c[2];
+            if (lay[1] >= 0) {                                 // a lap: the neighbour is on top too
+              const d = canes[lay[1]], sw = s * lay[2];
+              ar += sw * d[0]; ag += sw * d[1]; ab += sw * d[2];
+            }
+          }
+          const r = LBR * Math.exp(-ar * T) * m, g = LBG * Math.exp(-ag * T) * m,
+                b = LBB * Math.exp(-ab * T) * m;
           px[o] = r > 255 ? 255 : r;
           px[o + 1] = g > 255 ? 255 : g;
           px[o + 2] = b > 255 ? 255 : b;
@@ -6370,7 +6492,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   reamScale: v => (+v).toFixed(1), flutePitch: v => (+v).toFixed(1),
                   fluteDepth: v => (+v).toFixed(2), seeds: v => +v === 0 ? 'clear' : (+v).toFixed(2),
                   seedStretch: v => `${(+v).toFixed(1)}\u00d7`, relief: v => (+v).toFixed(2),
-                  incl: v => +v === 0 ? 'none' : (+v).toFixed(3) };
+                  incl: v => +v === 0 ? 'none' : (+v).toFixed(3),
+                  cords: v => +v === 0 ? 'clear' : (+v).toFixed(2),
+                  cordN: v => `${Math.round(v)}`, cordScale: v => (+v).toFixed(1),
+                  cordWander: v => (+v).toFixed(2),
+                  // Worded, because the ends are the two lay-ups anyone actually names.
+                  cordLay: v => +v === 0 ? TR('ui.lay-along') : (+v === 90 ? TR('ui.lay-around')
+                          : `${Math.round(v)}\u00b0`),
+                  cordTwist: v => +v === 0 ? TR('ui.twist-none') : (+v).toFixed(2),
+                  cordLap: v => +v === 0 ? TR('ui.lap-butted') : (+v).toFixed(2) };
   function showGlass(k) {
     const out = document.getElementById('glass-' + k + 'V');
     if (out) out.textContent = GLFMT[k] ? GLFMT[k](GLASS[k]) : String(GLASS[k]);
