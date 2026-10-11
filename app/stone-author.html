@@ -257,7 +257,7 @@
     <button id="t-light" type="button" data-tool="light" data-i18n="tool.light">Light</button>
     <button id="t-move" type="button" data-tool="move" data-i18n="tool.move">Move</button>
   </div>
-  <div class="grp" role="group" aria-label="Pen" data-mat-only="stone" data-i18n-attr="aria-label=a11y.pen"><span class="lbl" data-i18n="lbl.pen">Pen</span>
+  <div class="grp" role="group" aria-label="Pen" data-mat-only="stone glass" data-i18n-attr="aria-label=a11y.pen"><span class="lbl" data-i18n="lbl.pen">Pen</span>
     <button id="pen-pressure" type="button" aria-pressed="false" data-i18n="btn.pen-pressure">Pressure</button>
     <button id="pen-tilt" type="button" aria-pressed="false" data-i18n="btn.pen-tilt">Tilt</button>
     <span class="stat" id="penlive" data-i18n="btn.penlive">hold the pen over the slab to read it</span>
@@ -1638,7 +1638,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.13';
+  const BUILD = '2026.10.11.15';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5636,7 +5636,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       } else if (k === 'press' && F.ROLL) {
         // A DRAWN PASS. The roller's own coordinates: how far ALONG it, how far ACROSS. Outside
         // the face it simply did not touch, which is why a pass is a mark and not a mode.
-        const B = F.ROLL[op.ri | 0];
+        const B = op.ri >= 0 ? F.ROLL[op.ri] : null;
         if (B) {
           const cu = (x - F.PX) * 12 / SLAB_FT + 0.5;
           const cvv = (y - F.PY) * 12 / SLAB_FT + 0.5 * F.H;
@@ -5860,25 +5860,26 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // it takes its settings from when it was drawn rather than from the panel now - and its place
     // in the order is the user's, which is why it goes in the list instead of being applied last.
     F.ROLL = []; F.PV = [0, 0]; F.PH = [1, 0];
+    const bound = new Set();
     for (const m of marks) {
       if (m.kind !== 'roller') continue;
       const B = rollerBake(m, H); if (!B) continue;
       const P = m.p || {}, n = Math.max(0, Math.round(P.rollStampN || 0));
-      const ri = F.ROLL.push(B) - 1;
-      // Staggered along the face so no two share a track, and evenly round so the step is 360/n -
-      // which is his 24 at 15 degrees without anyone having to say 15.
+      // BIND ONLY. The row was created when the pass was drawn; this fills in what the mark says,
+      // every frame, because the mark's settings are its own and the bake is this frame's.
+      const o = OPS.find(q => q && q.k === 'press' && q.mid === m.id);
+      if (!o) continue;                                        // the row was removed: so is the pass
       const face = Math.max(0.05, P.rollFace || 5);
-      const st = Array.from({ length: n }, (_, i) => ({
+      o.ri = F.ROLL.push(B) - 1;
+      o.D = Math.max(0.25, P.rollD || 6);
+      o.face = face;
+      o.bite = Math.max(0, P.rollBite == null ? 1 : P.rollBite);
+      // Staggered along the face so no two share a track, and evenly round so the step is 360/n -
+      // 24 stamps is 15 degrees apart without anyone having to say 15.
+      o.st = Array.from({ length: n }, (_, i) => ({
         a: i * 360 / n, x: -face / 2 + (i + 0.5) * (face / n),
         rot: P.rollStampRot || 0, r: Math.max(0.05, P.rollStampSize || 1) }));
-      if (!OPS.some(o => o && o.k === 'press' && o.mid === m.id)) {
-        OPS.push({ k: 'press', mid: m.id, ri, D: Math.max(0.25, P.rollD || 6), face,
-                   bite: Math.max(0, P.rollBite == null ? 1 : P.rollBite), st });
-      } else {
-        const o = OPS.find(q => q && q.k === 'press' && q.mid === m.id);
-        o.ri = ri; o.D = Math.max(0.25, P.rollD || 6); o.face = face;
-        o.bite = Math.max(0, P.rollBite == null ? 1 : P.rollBite); o.st = st;
-      }
+      bound.add(o);
     }
     F.RU0 = [];
     {
@@ -5896,6 +5897,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         F.RU0.push(m);
       }
     }
+    // A PRESS WHOSE MARK HAS GONE binds to nothing. Pointing it at -1 rather than leaving last
+    // frame's index is the difference between drawing nothing and drawing somebody else's pass.
+    for (const o of OPS) if (o && o.k === 'press' && !bound.has(o)) o.ri = -1;
     if (F.S && !OPS.some(o => o && o.k === 'stir')) OPS.push({ k: 'stir' });   // a drawn moon implies one
     const eps = 0.004;                                           // gradient step, in feet
     const fv = [0, 0], melt = [0, 0], gth = [0, 0, 0], lay = [0, -1, 0, 1];
@@ -6542,7 +6546,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // rest comes along because tilt is measured FROM the grip, and the grip at the moment the
       // pass began is the only one that was true for it.
       if (pathLen(g.samples) < 0.02) { nextId--; hint(TR('hint.roll-the-roller-across')); }
-      else commit({ id, kind: 'roller', seed, samples: g.samples, rest: g.rest });
+      else {
+        commit({ id, kind: 'roller', seed, samples: g.samples, rest: g.rest });
+        // The pass is an OPERATION, and the list is where operations live - so it goes in here,
+        // when the user draws it, not later from inside the painter. A row you cannot see is a row
+        // you cannot reorder or remove, which is most of what the list is for.
+        (GLASS.ops = Array.isArray(GLASS.ops) ? GLASS.ops : []).push({ k: 'press', mid: id });
+        drawOps();
+      }
     } else if (g.type === 'draw' && tool === 'moon') {
       if (pathLen(g.samples) < 0.02) { nextId--; hint(TR('hint.drag-the-moon-across-the-slab')); }
       else commit({ id, kind: 'moon', seed, samples: g.samples });
