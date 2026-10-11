@@ -95,6 +95,11 @@ function panel(buf, ox, oy, name, slotOf) {
 // rule and then stopped being copies of it. The census passed on the stale pair while the shipped
 // rule was giving every rhombus rosette four sections instead of five - a test that agrees with
 // itself rather than with the code.
+const liftConst = re => {
+  const m = SRC.match(re);
+  if (!m) throw new Error('probe cannot find ' + re + ' - has it been renamed?');
+  return m[0];
+};
 const APP_GROUPS = (SRC.match(/const GROUPS = \{[\s\S]*?\n {2}\};/) || [''])[0];
 if (!APP_GROUPS) throw new Error('probe: cannot find the app\'s GROUPS table');
 // The app's own table, evaluated, so the slot counts here are not a second copy to keep in step.
@@ -196,13 +201,64 @@ if (census('rhombus', RETIRED, pi => pi === 1) === 0) {
 
 // ===== AND THE SELECTOR ON TOP OF IT ================================================================
 // The app's own sectionOf, lifted, so the probe cannot drift from what the floor actually does.
-const T = { pattern: null, grouping: null };
-const sectionOf = new Function('T', 'PATTERNS',
+// A slot can be PINNED to a named section, so sectionOf now reaches for pinnedSection and slotKey.
+// Both are lifted rather than stubbed: a stub returning "never pinned" would keep this file running
+// while making the whole pin path invisible to it, which is the shape of a test that cannot fail.
+const T = { pattern: null, grouping: null, slotMap: {} };
+let SECTIONS = [];
+const sectionOf = new Function('T', 'PATTERNS', 'sectionList',
   'const ev = v => ((v % 2) + 2) % 2;\n' + APP_GROUPS +
   '\nconst groupsFor = () => GROUPS[T.pattern] || null;' +
   '\nconst rosetteOf = () => { const g = groupsFor(); return g ? (g.find(x => x.key === T.grouping) || g[0]) : null; };\n' +
-  lift('sectionOf') + '\nreturn sectionOf;')(T, PATTERNS);
+  liftConst(/const slotKey = [^\n]*/) + '\n' + liftConst(/const pinnedSection = [\s\S]*?\n {2}\};/) + '\n' +
+  lift('sectionOf') + '\nreturn sectionOf;')(T, PATTERNS, () => SECTIONS);
 
+// ===== A SLOT PINNED TO A NAMED SECTION =============================================================
+// The tile setter binds a position in the motif to one section. Four things have to hold, and each
+// is checked against a case where the pinned answer DIFFERS from the derived one - pinning slot 0
+// to the section that slot 0 would have picked anyway proves nothing, and that is the first test I
+// wrote.
+{
+  const name = 'rhombus';
+  T.pattern = name; T.grouping = 'hex';
+  const { polys } = PATTERNS[name](U);
+  SECTIONS = [{ id: 'A' }, { id: 'B' }, { id: 'C' }];
+  const N = 3;
+  const seenAt = (n0) => {                               // section index per slot, over a block of cells
+    const m = {};
+    for (let n = -4; n <= 4; n++) for (let m2 = -4; m2 <= 4; m2++) polys.forEach((_, pi) => {
+      (m[pi] = m[pi] || new Set()).add(sectionOf({ pi, m: m2, n }, n0));
+    });
+    return [0, 1, 2].map(k => [...m[k]].sort().join('/')).join(' ');
+  };
+  const seen = () => seenAt(N);
+  T.slotMap = {};
+  const derived = seen();
+  T.slotMap = { 'rhombus:hex': { 1: 'C' } };             // C is index 2; derived slot 1 is 1
+  const pinned = seen();
+  SECTIONS = [{ id: 'C' }, { id: 'A' }, { id: 'B' }];    // C to the front: index 0
+  const moved = seen();
+  SECTIONS = [{ id: 'A' }, { id: 'B' }];                 // C dropped: the id no longer resolves
+  const dropped = seenAt(2);
+  T.slotMap = {};
+  const droppedNoPin = seenAt(2);                        // the same thing with no pin at all
+  T.slotMap = { 'rhombus:hex': { 1: 'C' } };
+  SECTIONS = [{ id: 'A' }, { id: 'B' }, { id: 'C' }];
+  T.grouping = 'rosette';                                // same slot number, different grouping key
+  const otherGroup = seen();
+  T.grouping = 'hex'; T.slotMap = {}; SECTIONS = [];
+  const rows = [
+    ['a pin lands, and differs from the derived pick', pinned === '0 2 2', derived === '0 1 2', derived + '  ->  ' + pinned],
+    ['it is by ID, so a reorder moves it', moved === '0 0 2', pinned !== moved, pinned + '  ->  ' + moved],
+    ['an id that no longer resolves falls back', dropped === droppedNoPin, dropped !== pinned, dropped + '  (no pin: ' + droppedNoPin + ')'],
+    ['the key is per grouping, not just per pattern', otherGroup !== pinned, true, otherGroup],
+  ];
+  console.log('\n  A SLOT PINNED TO A NAMED SECTION:');
+  for (const [title, ok, discriminating, detail] of rows) {
+    if (!ok || !discriminating) bad++;
+    console.log('    ' + (ok ? (discriminating ? 'ok  ' : 'DECO') : 'FAIL') + '  ' + title.padEnd(48) + detail);
+  }
+}
 // ===== THE SECOND GROUPING: THE HEXAGON =============================================================
 // Three rhombi, one per orientation. It PARTITIONS where the rosette overlaps, so the slot is
 // simply the orientation - and because each hexagon takes one of each, the rule holds for both

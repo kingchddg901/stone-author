@@ -403,11 +403,13 @@
     <div class="sl"><label for="wood-plankVary"><span data-i18n="sl.wood-plankVary">Length variation</span> <output id="wood-plankVaryV"></output></label><input id="wood-plankVary" type="range" min="0" max="1" step="0.01"></div>
     <div class="sl"><label for="wood-plankStagger"><span data-i18n="sl.wood-plankStagger">Joint stagger</span> <output id="wood-plankStaggerV"></output></label><input id="wood-plankStagger" type="range" min="0" max="1" step="0.01"></div>
   </div>
-  <div class="grp" role="group" aria-label="Kept cuts" data-i18n-attr="aria-label=a11y.wood-set"><span class="lbl" data-i18n="lbl.kept-cuts">Kept cuts</span>
-    <button id="wood-set-add" type="button" data-i18n="tool.keep-cut">Keep this cut</button>
-    <button id="wood-set-clear" type="button" data-i18n="tool.clear-cuts">Clear</button>
-    <output id="wood-set-count"></output>
+  <div class="grp" role="group" aria-label="Sections" data-i18n-attr="aria-label=a11y.sections"><span class="lbl" data-i18n="lbl.sections">Sections</span>
+    <button id="sec-add" type="button" data-i18n="tool.keep-cut">Keep this cut</button>
+    <button id="sec-clear" type="button" data-i18n="tool.clear-cuts">Clear</button>
+    <output id="sec-count"></output>
   </div>
+  <div id="sec-list" class="tk" style="grid-column:1/-1"></div>
+  <div id="sec-setter" class="tk" style="grid-column:1/-1" hidden></div>
   <div class="sliders" data-mat-only="wood">
     <div class="sl"><label for="wood-graft"><span data-i18n="sl.wood-graft">Graft branch from</span> <output id="wood-graftV"></output></label><input id="wood-graft" type="range" min="0" max="8" step="1"></div>
   </div>
@@ -1065,6 +1067,7 @@ window.SA_I18N = (() => {
   "note.roller": "C = πD, so the roller’s way round IS the repeat along the pass — not a pitch you set. The stamps are staggered along the face so no two share a track, and the pass always starts with one, start down. A piece shorter than C never sees a full turn, so part of the roller never touches it. With pressure on, how hard you press sets how deep it bites; with tilt on, leaning the pen across the pass tips that end of the face down.",
   "hint.roll-the-roller-across": "Drag the roller across the slab. It presses its die in as it goes, starting with one, start down.",
   "op.press": "Press",
+  "opt.source-auto": "Choose for me",
   "ui.op-press-note": "the roller pass you drew",
   "sec.unnamed": "Section",
   "sec.kept-cut": "Kept cut",
@@ -1225,11 +1228,17 @@ window.SA_I18N = (() => {
   "sl.wood-plankStagger": "Joint stagger",
   "tile.pat.plank": "Plank run",
   "lbl.kept-cuts": "Kept cuts",
+  "lbl.sections": "Sections",
+  "lbl.tile-source": "Tile source",
   "a11y.wood-set": "Kept cuts",
+  "a11y.sections": "Sections",
+  "a11y.section-name": "Section name",
+  "a11y.tile-source": "Which section this tile is cut from",
   "tool.keep-cut": "Keep this cut",
   "tool.clear-cuts": "Clear",
   "hint.cut-kept": "Kept \u2014 {n} cut(s). The floor is laid from these now; change anything, even the species, and keep another.",
   "hint.cuts-cleared": "Cleared. The floor goes back to walking down one log.",
+  "hint.section-dropped": "Dropped \u2014 {n} left. Any tile that was set to it goes back to choosing for itself.",
   "hint.snag-needs-tiles": "Turn Lay tiles on first \u2014 Snag takes a tile, so there have to be tiles to take.",
   "hint.snag-tap-a-tile": "Tap on a tile. Snag keeps the piece you point at, at the coordinates it was cut from.",
   "hint.snag-took": "Snagged \u2014 {n} section(s). Every tile laid from it now shows that same piece, at nine times the detail.",
@@ -1349,6 +1358,9 @@ window.SA_I18N = (() => {
   "tip.tap-again-to-delete-no-undo": "Tap × again to delete — no undo",
   "tip.tap-make-active-double-tap-rename": "Tap = make active · double-tap = rename",
   "tip.un-hide-render-it-again": "Un-hide — render it again",
+  "tip.section-up": "Move this section up the list",
+  "tip.section-down": "Move this section down the list",
+  "tip.section-drop": "Drop this section",
   "tip.w-lit-this-layer-follows-warp": "W lit = this layer follows warp; dim = held still",
   "tool.branch": "Branch",
   "tool.chip": "Chip",
@@ -1669,7 +1681,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.26';
+  const BUILD = '2026.10.11.27';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1858,7 +1870,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true, slotTest: false,
-              grouping: null };   // null = the pattern's first grouping, so an old slab lands where it always did
+              grouping: null, slotMap: {} };   // null = the pattern's first grouping, so an old slab lands where it always did
   let layTiles = false;
   // Pristine defaults, captured before any edit. deserialize() resets to these before applying a slab, so a
   // load is a PURE FUNCTION of the slab: a key absent from the save falls to its default, never a leftover from
@@ -3504,13 +3516,30 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // Below k sections the rule is UNSATISFIABLE - there are not enough to go round - so it says so
   // rather than quietly doubling one up.
+  // A SLOT CAN BE PINNED TO A NAMED SECTION. Keyed on pattern AND grouping, because a slot number
+  // means a different position in each - rosette n2 and hexagon n2 are not the same tile - and
+  // stored by the section's ID rather than its place in the list, so reordering the list moves the
+  // sections and not the assignment. An id that no longer resolves falls back to the derived pick
+  // instead of erroring or holding an empty slot: deleting a section must not strand the floor.
+  const slotKey = R => T.pattern + ':' + (R ? R.key : 'cut');
+  const pinnedSection = (R, slot, N) => {
+    const m = T.slotMap && T.slotMap[slotKey(R)];
+    const id = m && m[slot];
+    if (!id) return -1;
+    const ix = sectionList().findIndex(s => s.id === id);
+    return ix >= 0 && ix < N ? ix : -1;
+  };
   function sectionOf(t2, N) {
     if (N <= 1) return 0;
     const R = rosetteOf();
     if (!R || N < R.slots) {                              // a plain cut, or too few to fill a rosette
-      return (((t2.m + 2 * t2.n) % N) + N) % N;
+      const cut = (((t2.m + 2 * t2.n) % N) + N) % N;
+      const pin = pinnedSection(null, cut, N);
+      return pin >= 0 ? pin : cut;
     }
     const k = R.slots, slot = R.slotOf(t2.pi, t2.m, t2.n) % k;
+    const pin = pinnedSection(R, slot, N);
+    if (pin >= 0) return pin;
     const cls = Math.floor((N - 1 - slot) / k) + 1;       // how many sections wear this slot
     // THE PICK MUST NOT CORRELATE WITH THE SLOT. The square slots are DEFINED by the parities of m
     // and n, so a pick built from m and n directly is constant inside a slot - (3m + 5n) is always
@@ -9387,12 +9416,130 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // WOOD0 is a deep copy taken at startup and a reset assigns from it, so sharing an array reference
   // would let keeping a cut write into the pristine defaults and a load would stop being a pure
   // function of the slab.
+  // ---- THE SECTION LIST, AND THE TILE SETTER ------------------------------------------------------
+  // Sections were data with no face: a count, a Keep button and a Clear button, so the only way to
+  // tell one from another was to delete the lot and start again. The list names them, reorders them
+  // and drops one; the setter answers the other half - WHICH of them a given tile is cut from -
+  // which until now was derived and never chosen.
+  //
+  // THE PRIMITIVE IS DRAWN AS A 2x2 BLOCK OF CELLS, not one. A slot is a shape TYPE times a cell
+  // PARITY, so a single cell shows at most a third of the rosette's five; two by two is exactly the
+  // period and every slot appears in it, for every pattern, with no per-pattern table to keep.
+  let setterSlot = 0;
+  const secSwatch = s => { const m = s.mat || (s.slab && s.slab.material) || 'stone';
+    return m === 'wood' ? '#8a5a2b' : m === 'glass' ? '#4f8fa8' : '#9a9a93'; };
   function showSetCount() {
-    const el = document.getElementById('wood-set-count');
+    const el = document.getElementById('sec-count');
     if (el) el.textContent = sectionList().length ? String(sectionList().length) : '\u2014';
+    drawSectionList(); drawSetter();
+  }
+  function drawSectionList() {
+    const host = document.getElementById('sec-list');
+    if (!host) return;
+    const L = sectionList();
+    host.innerHTML = '';
+    if (!L.length) { host.hidden = true; return; }
+    host.hidden = false;
+    L.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'grp';
+      row.style.cssText = 'display:flex;align-items:center;gap:4px;margin:2px 0';
+      const dot = document.createElement('span');
+      dot.style.cssText = 'width:12px;height:12px;border-radius:3px;flex:0 0 auto;background:' + secSwatch(s);
+      dot.title = s.mat || '';
+      const nm = document.createElement('input');
+      nm.type = 'text'; nm.value = s.name || ''; nm.style.cssText = 'flex:1 1 auto;min-width:40px';
+      nm.setAttribute('aria-label', TR('a11y.section-name'));
+      nm.addEventListener('input', () => { s.name = nm.value; saveLocal(); drawSetter(); });
+      const btn = (label, title, fn) => { const b = document.createElement('button');
+        b.type = 'button'; b.textContent = label; b.title = title;
+        b.addEventListener('click', fn); return b; };
+      const move = d => { const j = i + d; if (j < 0 || j >= L.length) return;
+        const a = L.slice(); const [x] = a.splice(i, 1); a.splice(j, 0, x); sections = a;
+        showSetCount(); redraw(true); };
+      row.append(dot, nm,
+        btn('\u2191', TR('tip.section-up'), () => move(-1)),
+        btn('\u2193', TR('tip.section-down'), () => move(1)),
+        btn('\u00d7', TR('tip.section-drop'), () => {
+          // Pins are by id, so dropping a section simply leaves its slots unresolved and they fall
+          // back to the derived pick. Nothing has to be rewritten, and nothing is stranded.
+          sections = L.filter((_, k) => k !== i);
+          showSetCount(); redraw(true); hint(TR('hint.section-dropped', { n: sections.length }));
+        }));
+      host.appendChild(row);
+    });
+  }
+  // The motif, drawn from the pattern's own polys, each tile in its slot colour and clickable.
+  function drawSetter() {
+    const host = document.getElementById('sec-setter');
+    if (!host) return;
+    const L = sectionList(), N = stageN();
+    if (!L.length || !layTiles) { host.hidden = true; host.innerHTML = ''; return; }
+    const R = rosetteOf(), k = R && N >= R.slots ? R.slots : N;
+    const pat = PATTERNS[T.pattern] && PATTERNS[T.pattern](T.sizeIn);
+    if (!pat || !pat.polys) { host.hidden = true; host.innerHTML = ''; return; }
+    if (setterSlot >= k) setterSlot = 0;
+    host.hidden = false;
+    host.innerHTML = '';
+    const lbl = document.createElement('div');
+    lbl.className = 'lbl'; lbl.textContent = TR('lbl.tile-source');
+    host.appendChild(lbl);
+    const W = 190, Hh = 120, cv = document.createElement('canvas');
+    cv.width = W * 2; cv.height = Hh * 2; cv.style.cssText = 'width:' + W + 'px;height:' + Hh + 'px;cursor:pointer;display:block';
+    const g = cv.getContext('2d'); g.scale(2, 2);
+    const cells = [];
+    for (let n = 0; n < 2; n++) for (let m = 0; m < 2; m++) pat.polys.forEach((poly, pi) => {
+      cells.push({ pi, m, n, pts: poly.map(q => [q[0] + n * pat.ax[0] + m * pat.ay[0], q[1] + n * pat.ax[1] + m * pat.ay[1]]) });
+    });
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const c of cells) for (const q of c.pts) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
+    const z = Math.min((W - 8) / (x1 - x0 || 1), (Hh - 8) / (y1 - y0 || 1));
+    const px = q => 4 + (q[0] - x0) * z, py = q => 4 + (q[1] - y0) * z;
+    const slotOfCell = c => R && N >= R.slots ? R.slotOf(c.pi, c.m, c.n) % R.slots : (((c.m + 2 * c.n) % N) + N) % N;
+    const paint = () => {
+      g.clearRect(0, 0, W, Hh);
+      for (const c of cells) {
+        const sl = slotOfCell(c);
+        g.beginPath(); c.pts.forEach((q, j) => j ? g.lineTo(px(q), py(q)) : g.moveTo(px(q), py(q))); g.closePath();
+        const ix = pinnedSection(R && N >= R.slots ? R : null, sl, N);
+        g.fillStyle = ix >= 0 ? secSwatch(L[ix]) : SLOT_INK[sl % SLOT_INK.length];
+        g.globalAlpha = sl === setterSlot ? 1 : 0.4; g.fill(); g.globalAlpha = 1;
+        g.strokeStyle = sl === setterSlot ? '#fff' : '#20222a'; g.lineWidth = sl === setterSlot ? 2 : 1; g.stroke();
+      }
+    };
+    paint();
+    cv.addEventListener('click', e => {
+      const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+      for (const c of cells) {                           // even-odd, the same test the floor uses
+        let inside = false, P = c.pts;
+        for (let a = 0, b = P.length - 1; a < P.length; b = a++)
+          if ((py(P[a]) > my) !== (py(P[b]) > my) && mx < (px(P[b]) - px(P[a])) * (my - py(P[a])) / (py(P[b]) - py(P[a])) + px(P[a])) inside = !inside;
+        if (inside) { setterSlot = slotOfCell(c); drawSetter(); return; }
+      }
+    });
+    host.appendChild(cv);
+    const sel = document.createElement('select');
+    sel.style.cssText = 'width:100%;margin-top:4px';
+    sel.setAttribute('aria-label', TR('a11y.tile-source'));
+    const auto = document.createElement('option');
+    auto.value = ''; auto.textContent = TR('opt.source-auto');
+    sel.appendChild(auto);
+    L.forEach(s => { const o = document.createElement('option');
+      o.value = s.id; o.textContent = (s.name || TR('sec.unnamed')) + ' \u00b7 ' + (s.mat || '');
+      sel.appendChild(o); });
+    const map = (T.slotMap && T.slotMap[slotKey(R && N >= R.slots ? R : null)]) || {};
+    sel.value = map[setterSlot] || '';
+    sel.addEventListener('change', () => {
+      const key = slotKey(R && N >= R.slots ? R : null);
+      if (!T.slotMap) T.slotMap = {};
+      if (!T.slotMap[key]) T.slotMap[key] = {};
+      if (sel.value) T.slotMap[key][setterSlot] = sel.value; else delete T.slotMap[key][setterSlot];
+      saveLocal(); drawSetter(); redraw(true);
+    });
+    host.appendChild(sel);
   }
   {
-    const add = document.getElementById('wood-set-add'), clr = document.getElementById('wood-set-clear');
+    const add = document.getElementById('sec-add'), clr = document.getElementById('sec-clear');
     if (add) add.addEventListener('click', () => {
       if (sectionList().length >= 8) { hint(TR('hint.cuts-full')); return; }
       // THE WHOLE SLAB, not a snapshot of one material's settings. The old version kept WOOD plus
@@ -9404,7 +9551,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       showSetCount(); redraw(true); hint(TR('hint.cut-kept', { n: sections.length }));
     });
     if (clr) clr.addEventListener('click', () => {
-      sections = []; showSetCount(); redraw(true); hint(TR('hint.cuts-cleared'));
+      sections = []; T.slotMap = {}; showSetCount(); redraw(true); hint(TR('hint.cuts-cleared'));
     });
     showSetCount();
   }
@@ -9531,7 +9678,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     penlive.textContent = `pressure ${e.pressure.toFixed(2)} · lean ${Math.round(v * 90)}°` + (r != null ? ` · rest ${Math.round(r * 90)}°` : '');
   });
   const lt = document.getElementById('laytiles');
-  lt.addEventListener('click', () => { layTiles = !layTiles; lt.setAttribute('aria-pressed', layTiles); redraw(false); });
+  lt.addEventListener('click', () => { layTiles = !layTiles; lt.setAttribute('aria-pressed', layTiles); showSetCount(); redraw(false); });
   // SAY WHEN THE RULE CANNOT HOLD. A grouping wants one section per slot; below that it falls back
   // to a plain cut and doubles sections up inside a motif, which is the one thing the selector
   // exists to avoid. Degrading quietly would leave the user looking at a repeat they did not ask
@@ -9556,11 +9703,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-pat]')) b.addEventListener('click', () => {
     T.pattern = b.dataset.pat; press('[data-pat]', b);
     if (!layTiles) { layTiles = true; lt.setAttribute('aria-pressed', true); }
-    syncGroups(); sayIfShort();
+    syncGroups(); sayIfShort(); showSetCount();
     redraw(false);
   });
   for (const b of document.querySelectorAll('[data-group]')) b.addEventListener('click', () => {
-    T.grouping = b.dataset.group; syncGroups(); sayIfShort(); redraw(true);
+    T.grouping = b.dataset.group; syncGroups(); sayIfShort(); showSetCount(); redraw(true);
   });
   for (const b of document.querySelectorAll('[data-edge]')) b.addEventListener('click', () => { T.edge = b.dataset.edge; press('[data-edge]', b); redraw(false); });
   for (const b of document.querySelectorAll('[data-lay]')) b.addEventListener('click', () => { T.shuffle = b.dataset.lay === 'shuffle'; press('[data-lay]', b); redraw(false); });

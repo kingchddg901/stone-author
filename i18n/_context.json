@@ -1199,6 +1199,7 @@
  "note.roller": {"terms": ["glass"], "where": "the roller panel's note: C = pi*D is the repeat, the stamps are staggered, the pass starts with one stamp down, a short piece never sees a full turn, and what pressure and tilt do"},
  "hint.roll-the-roller-across": {"terms": ["glass"], "where": "shown when a roller pass was too short to be a pass"},
  "op.press": {"terms": ["glass"], "where": "name of an operation in the list: a drawn roller pass. It presses a pattern in; it does not stretch the sheet, which is what the Roll operation does"},
+ "opt.source-auto": {"terms": [], "where": "first option in the tile-source select: leave this tile to the automatic assignment instead of pinning it to one section"},
  "ui.op-press-note": {"terms": ["glass"], "where": "shown beside a press in the operation list instead of an amount: a drawn pass takes its settings from the roller panel at the moment it was drawn, not from a slider in the list"},
  "sec.unnamed": {"terms": [], "where": "default name for a section kept from the slab - a source the floor can be laid from. Sections can be different materials from each other"},
  "sec.snagged": {"placeholders": {"pat": "the tiling pattern's own slug, e.g. rhombus - an identifier, never translated"}, "terms": [], "where": "default name for a section taken from a single tile: that one piece of stone, at the coordinates it was cut from, reusable as a source the floor is laid from"},
@@ -1739,11 +1740,17 @@
  },
  "sl.wood-treeDia": {"terms": ["wood"], "where": "slider: the log's diameter in feet. A readout you can drag — it shows the size the rings actually came to, and dragging solves once for the ring-width scale rather than pinning the size"},
  "lbl.kept-cuts": {"terms": ["wood"], "where": "label: the group of saved board cuts the floor is laid from"},
+ "lbl.sections": {"terms": [], "where": "label on the Sections group: the sources a floor is laid from, each a whole slab and possibly a different material"},
+ "lbl.tile-source": {"terms": [], "where": "label above the tile setter: a small picture of the pattern's motif where you click a tile and choose which section it is cut from"},
  "a11y.wood-set": {"terms": ["wood"], "where": "accessible name for the kept-cuts button group"},
+ "a11y.sections": {"terms": [], "where": "accessible name for the Sections button group"},
+ "a11y.section-name": {"terms": [], "where": "accessible name for the text field that renames a section in the list"},
+ "a11y.tile-source": {"terms": [], "where": "accessible name for the select that binds the clicked tile to a section"},
  "tool.keep-cut": {"terms": ["wood"], "where": "button: save the board currently shown, so the floor is laid from it and any others kept"},
  "tool.clear-cuts": {"terms": ["wood"], "where": "button: discard every kept cut and go back to cutting one log"},
  "hint.cut-kept": {"placeholders": {"n": "how many cuts are now kept, e.g. 3"}, "terms": ["wood"], "where": "status shown after keeping a cut"},
  "hint.cuts-cleared": {"terms": ["wood"], "where": "status after discarding every kept cut"},
+ "hint.section-dropped": {"placeholders": {"n": "how many sections are left, e.g. 3"}, "terms": [], "where": "status shown after deleting one section from the list"},
  "hint.snag-needs-tiles": {"terms": [], "where": "status when Snag is used while the floor is not laid as tiles"},
  "hint.snag-tap-a-tile": {"terms": [], "where": "status when a Snag tap misses every tile"},
  "hint.snag-took": {"placeholders": {"n": "how many sections are now kept, e.g. 3"}, "terms": [], "where": "status shown after snagging a tile"},
@@ -2315,6 +2322,9 @@
  "tip.un-hide-render-it-again": {
   "where": "tooltip on a generated control (hover text)"
  },
+ "tip.section-up": {"terms": [], "where": "tooltip on the up arrow in the section list. Order matters: it is the order the floor hands sections out in"},
+ "tip.section-down": {"terms": [], "where": "tooltip on the down arrow in the section list"},
+ "tip.section-drop": {"terms": [], "where": "tooltip on the delete button in the section list"},
  "tip.w-lit-this-layer-follows-warp": {
   "terms": [
    "warp"
