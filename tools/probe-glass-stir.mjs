@@ -10,6 +10,8 @@
  *   THE BAKE  a 161-wide grid standing in for a function that walks the whole pass.
  *
  * So each is measured rather than asserted, against the app's own functions lifted from source.
+ * It runs in Node for the reason given in probe-glass-lay.mjs: a canvas read from the browser pane
+ * can silently return the frame painted at load, so ablate any probe that reads one.
  * What it does NOT cover: mask discs. _wmask is left empty, which is the real no-mask case, and
  * warpMaskAt is the app's own - but a run with chaos discs down is not tested here.
  *

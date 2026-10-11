@@ -1,10 +1,13 @@
 /**
  * Render the LAY-UP field on its own, straight out of the app's real functions.
  *
- * The browser pane cannot drive this app: requestAnimationFrame is never serviced there, so the
- * canvas holds whatever was painted once at load and every "render" reads the same stale frame.
- * That is a measurement artifact that looks exactly like a finding - twelve identical cells - so
- * the harness moved off the browser entirely.
+ * The browser pane resisted driving this app. The pane stops servicing requestAnimationFrame when
+ * the desktop window is not in front, and the redraw's `queued` guard then latches on a frame that
+ * will never run - so the canvas holds whatever was painted at load and every "render" reads the
+ * same stale frame. Twelve identical cells, which looks exactly like a finding and is not one.
+ * ABLATE any canvas probe: paint something yourself and assert it gets overwritten.
+ * (Shimming rAF after load cannot clear the latch. Serving a copy with the shim prepended BEFORE
+ * the app's own script can - that route was not needed once the functions came out to Node.)
  *
  * It extracts glassGather and glassLay BY SOURCE from app/stone-author.html and calls them. It does
  * not reimplement them, because a probe driving a copy proves something about the copy. The one

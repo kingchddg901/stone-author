@@ -175,9 +175,13 @@ inverse *map* back into them, never a direction the bands are derived from.
 The stir is probed by `tools/probe-glass-stir.mjs`, which checks the three things reading cannot:
 the sign, the slab-to-feet conversion, and the bake against the function it replaces.
 Verified by `tools/probe-glass-lay.mjs`, which lifts `glassGather` and `glassLay` out of the source
-and renders the lay-up field alone. It runs in Node on purpose: the app cannot be driven from a
-browser pane, where `requestAnimationFrame` is never serviced and every read returns the one frame
-painted at load — twelve identical cells that look exactly like a finding.
+and renders the lay-up field alone. It runs in Node because the app resisted being driven from a
+browser pane: the pane stops servicing `requestAnimationFrame` when the desktop window is not in
+front, and the redraw's `queued` guard then latches on a frame that will never run, so every canvas
+read returns the one frame painted at load. That surfaced as twelve identical cells, which looks
+exactly like a finding and is not one — **ablate any canvas probe** by painting something yourself
+and asserting it gets overwritten. Shimming rAF after load cannot clear the latch; serving a copy
+with the shim prepended *before* the app's script can.
 
 Wood's functions are **not yet listed here**; that gap predates the glass path.
 ## Build pipeline
