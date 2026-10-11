@@ -362,6 +362,36 @@ uniforms. Full detail and the canvas colour menu in [`colour-layer.md`](colour-l
 
 ---
 
+## Glass — why the colour cannot mix
+
+The model the glass path is built against, in the order it happens:
+
+> **Mould — pour — partial set — barriers out — stir — form.**
+
+Glass is poured into a set of moulds, left to set part-way, and only then are the barriers lifted
+and the stick put through it. Every property the renderer needs falls out of that sequence rather
+than being imposed on top of it:
+
+- **Immiscibility is a fact of manufacture, not a rule.** Each colour went into its own
+  compartment and was already stiff before anything could diffuse. So the field holds a *label* —
+  which colour is here — and sampling a label through a deformation cannot average. Two colours
+  go around each other and stay two colours with nothing enforcing it.
+- **The stir comes before the forming.** The stick drags what is in the melt, the colours and the
+  bubbles. The crown's profile and the roller's flutes are pressed after it came out, so they are
+  read at the unstirred position. See `glassStir` / `glassUnstir`.
+- **The forming is a map, never a direction.** You cannot form what is not there, so the colour
+  field is authored in the mould's own coordinates and each process maps back into them. This is
+  why a spun disc shows a pinwheel without a line of code about pinwheels. See `glassGather`.
+- **A lap darkens, it does not blend.** Barriers pulled while the glass is only part-set let one
+  colour slump over its neighbour. The light then crosses both, so the absorptions add — two
+  filters in series. An average would be the one thing the whole model exists to avoid.
+
+The mould layout is a **partition of the plane into labelled cells**. Parallel strips, with a lay
+angle and a twist, are the family that ships; radial wedges and free blobs are further members of
+the same partition and need no new machinery downstream. **How far it had set** is the control
+that is still missing — it is what decides whether the stick smears a compartment or merely
+shifts a lobe that holds its shape.
+
 ## Status & roadmap
 
 **Done:** save-the-source + autosave · first-class layer control · the primitives batch

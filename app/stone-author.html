@@ -241,7 +241,7 @@
     <button id="t-chip" type="button" data-mat-only="stone" data-tool="chip" data-i18n="tool.chip">Chip</button>
     <button id="t-tune" type="button" data-mat-only="stone" data-tool="tune" data-i18n="tool.tune">Tune</button>
     <button id="t-cloud" type="button" data-mat-only="stone" data-tool="cloud" data-i18n="tool.cloud">Cloud</button>
-    <button id="t-moon" type="button" data-mat-only="stone" data-tool="moon" data-i18n="tool.moon">Moon</button>
+    <button id="t-moon" type="button" data-mat-only="stone glass" data-tool="moon" data-i18n="tool.moon">Moon</button>
     <button id="t-mask" type="button" data-mat-only="stone" data-tool="mask" data-i18n="tool.mask">Mask</button>
     <button id="t-light" type="button" data-tool="light" data-i18n="tool.light">Light</button>
     <button id="t-move" type="button" data-tool="move" data-i18n="tool.move">Move</button>
@@ -294,7 +294,7 @@
     <div class="sl"><label for="strength"><span data-i18n="sl.strength">Strength</span> <output id="strengthV"></output></label><input id="strength" type="range" min="0.05" max="0.9" step="0.01"></div>
     <div class="sl"><label for="reach"><span data-i18n="sl.reach">Reach</span> <output id="reachV"></output></label><input id="reach" type="range" min="0.3" max="3" step="0.05"></div>
   </div>
-  <div class="sliders" data-mat-only="stone" id="s-moon" hidden>
+  <div class="sliders" data-mat-only="stone glass" id="s-moon" hidden>
     <div class="sl"><label for="moonReach"><span data-i18n="sl.moonReach">Ball size</span> <output id="moonReachV"></output></label><input id="moonReach" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="moonStrength"><span data-i18n="sl.moonStrength">Pull</span> <output id="moonStrengthV"></output></label><input id="moonStrength" type="range" min="0.2" max="3" step="0.05"></div>
   </div>
@@ -1255,7 +1255,7 @@ window.SA_I18N = (() => {
   "toolhint.light": "Drag to move the light. It lights the polish sheen (Specular) and the tile edges — one light for both. Light angle sets it precisely.",
   "toolhint.magnet": "Drag to comb the specks like iron filings. The pen’s angle is the magnet: upright fans them out from the tip, laid over combs them along its lean. Slow passes align harder.",
   "toolhint.mask": "Tap for an island, or drag to size one. It freezes the warp inside — an island of normalcy. Turn the reality window on and it shows daylight through, so under a UV/psyker light it stays a window of normal stone.",
-  "toolhint.moon": "Drag a moon across the slab. Like gravity, but it drags what it passes into its wake — a powerful local warp, hardest under the ball, fading at its edge. Ball size and pull set the reach and force; passes stack.",
+  "toolhint.moon": "Drag a moon across the slab. Like gravity, but it drags what it passes into its wake — a powerful local warp, hardest under the ball, fading at its edge. Ball size and pull set the reach and force; passes stack. In glass it is the stir stick: there is no geometry to push, so it drags the MELT - the poured colours and the bubbles - and leaves the forming alone, because the crown and the roller's flutes are pressed after the stick came out.",
   "toolhint.move": "Drag to move around. Pinch, or use + and −, to zoom.",
   "toolhint.pour": "Draw a line and lift. Specks pour along it: slow pools, fast thins, sharp bends fling drops.",
   "toolhint.styl": "Draw a line. It becomes a stylolite — a toothy pressure-dissolution seam of interlocking columns, dark on light stone and pale on dark.",
@@ -1543,7 +1543,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.4';
+  const BUILD = '2026.10.11.5';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2909,10 +2909,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     return chaos < 0 ? m : m * chaos;                     // any chaos disc ⇒ warp lives only inside their union
   }
-  function applyMoon(m, W) {
+  // HOW FAR THE MOON PUSHED WHAT WAS HERE. One question with two askers: stone warps its GEOMETRY
+  // through it, and glass - which has none - samples its field back through it. Lifted out of
+  // applyMoon so the two cannot drift; a stir that disagreed with the warp would be a second moon.
+  // Returns null when the pass is too short to have a direction.
+  function moonDisp(m) {
     const M = m.p, R = 0.08 * (M.moonReach || 1), st = 0.5 * (M.moonStrength || 1), R2 = R * R;
-    const path = resample(m.samples, 0.006); if (path.length < 2) return;
-    const disp = (x, y) => {                              // forward-warp: the ball's motion summed along the pass, weighted by proximity
+    const path = resample(m.samples, 0.006); if (path.length < 2) return null;
+    return (x, y) => {                                    // forward-warp: the ball's motion summed along the pass, weighted by proximity
       let ax = 0, ay = 0;
       for (let i = 1; i < path.length; i++) {
         const dx = x - path[i][0], dy = y - path[i][1], d2 = dx * dx + dy * dy; if (d2 > R2) continue;
@@ -2920,6 +2924,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
       return [ax * st, ay * st];
     };
+  }
+  function applyMoon(m, W) {
+    const disp = moonDisp(m); if (!disp) return;
     const wp = (q, w) => { const mk = warpMaskAt(q[0], q[1]); if (!mk) return; const [a, b] = disp(q[0], q[1]); q[0] += a * w * mk; q[1] += b * w * mk; };
     const wp2 = (s, w) => { const mk = warpMaskAt(s.x, s.y); if (!mk) return; const [a, b] = disp(s.x, s.y); s.x += a * w * mk; s.y += b * w * mk; };
     for (const L of geo.lines) { const w = W(L.layer || (L.major ? 'major' : 'minor')); if (w) for (const q of L.pts) wp(q, w); }
@@ -5219,6 +5226,41 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       else if (f > 1 - F.LP) { out[1] = (i + 1) % F.CN; out[2] = (f - 1 + F.LP) / F.LP; }
     }
   }
+  // THE STIR, BAKED. disp() walks the whole resampled pass - around 170 points - so asking it per
+  // pixel is 170 x 600k. On this grid it is 170 x ~16k and bilinear in between, which is the same
+  // field at a cost that is not absurd. In SLAB coordinates, because that is where the stick was
+  // actually dragged; the painter converts when it subtracts.
+  //
+  // Returns null when nothing stirred, which is the signal to skip the whole path.
+  function glassStir(H, moons) {
+    const fns = moons.map(moonDisp).filter(Boolean);
+    if (!fns.length) return null;
+    const nx = 161, ny = Math.max(33, Math.round(160 * H) + 1);
+    const u = new Float32Array(nx * ny), v = new Float32Array(nx * ny);
+    for (let j = 0; j < ny; j++) {
+      const vy = (j / (ny - 1)) * H;
+      for (let i = 0; i < nx; i++) {
+        const vx = i / (nx - 1), mk = warpMaskAt(vx, vy);
+        if (!mk) continue;
+        let ax = 0, ay = 0;
+        for (const d of fns) { const r = d(vx, vy); ax += r[0]; ay += r[1]; }
+        u[j * nx + i] = ax * mk; v[j * nx + i] = ay * mk;
+      }
+    }
+    return { u, v, nx, ny, H };
+  }
+  // WHERE THE GLASS NOW HERE CAME FROM. The baked field says where a point WENT, and a field has no
+  // points to follow, so the question is read backwards - which is the minus sign, and it is the
+  // one thing about this that is easy to get the wrong way round.
+  function glassUnstir(S, cu, cvv, out) {
+    const fx = cu * (S.nx - 1), fy = (cvv / S.H) * (S.ny - 1);
+    let i0 = fx | 0, j0 = fy | 0;
+    if (i0 > S.nx - 2) i0 = S.nx - 2; if (i0 < 0) i0 = 0;
+    if (j0 > S.ny - 2) j0 = S.ny - 2; if (j0 < 0) j0 = 0;
+    const tx = fx - i0, ty = fy - j0, k = j0 * S.nx + i0, k2 = k + S.nx;
+    out[0] = -((S.u[k] * (1 - tx) + S.u[k + 1] * tx) * (1 - ty) + (S.u[k2] * (1 - tx) + S.u[k2 + 1] * tx) * ty);
+    out[1] = -((S.v[k] * (1 - tx) + S.v[k + 1] * tx) * (1 - ty) + (S.v[k2] * (1 - tx) + S.v[k2 + 1] * tx) * ty);
+  }
   function paintGlassContent(ident, angleView) {
     // Glass has no items and no fluorescent minerals, so like wood it says nothing in either
     // diagnostic rather than painting a flat colour into them and calling it data.
@@ -5252,6 +5294,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const [cr, cg, cb] = hexRGB(h);
       return [(1 - cr / 255), (1 - cg / 255), (1 - cb / 255)];
     });
+    // ===== THE STIR =============================================================================
+    // LAY UP -> STIR -> FORM. The stick goes through the melt, so it drags what is IN the melt: the
+    // ribbons and the bubbles. It does NOT touch the forming - the crown's profile and the roller's
+    // flutes are pressed after the stick came out, and stirring them would be forming something
+    // that had not been formed yet.
+    const moons = marks.filter(m => m.kind === 'moon');
+    if (moons.length) _wmask = gatherMasks();                    // the protected islands, as the warp reads them
+    const STIR = moons.length ? glassStir(H, moons) : null;
+    const back = [0, 0];
     const eps = 0.004;                                           // gradient step, in feet
     const fv = [0, 0], melt = [0, 0], gth = [0, 0], lay = [0, -1, 0];
     const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));
@@ -5269,14 +5320,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // character of the sheet and not merely the crop.
           const ox = GLASS.paneX + (cu - 0.5) * SLAB_FT / 12;
           const oy = GLASS.paneY + (cvv / H - 0.5) * SLAB_FT * H / 12;
-          // SAMPLED AT (sx, sy). The same as (ox, oy) today; separate so that the stir - the moon
-          // as a displacement field - becomes a change to these two lines and nothing else.
-          const sx = ox, sy = oy;
-          glassFlow(sx, sy, F, fv);
-          let T = glassFormT(sx, sy, F, fv);
-          const gu = (glassFormT(sx + eps, sy, F, fv) - T) / eps;   // slope, in mm per foot
-          const gv = (glassFormT(sx, sy + eps, F, fv) - T) / eps;
-          glassMelt(sx, sy, F, fv, melt);
+          // WHERE THIS GLASS WAS BEFORE THE STICK WENT THROUGH. Subtracted, not added: the baked
+          // field says where a point went, and what is wanted is where this one came from.
+          let sx = ox, sy = oy;
+          if (STIR) {
+            glassUnstir(STIR, cu, cvv, back);                    // already negated: where it came FROM
+            sx += back[0] * SLAB_FT / 12;                        // slab units into the object's feet
+            sy += back[1] * SLAB_FT / 12;
+          }
+          // The forming reads the UNSTIRRED position, because it happened after the stick came out.
+          glassFlow(ox, oy, F, fv);
+          let T = glassFormT(ox, oy, F, fv);
+          const gu = (glassFormT(ox + eps, oy, F, fv) - T) / eps;   // slope, in mm per foot
+          const gv = (glassFormT(ox, oy + eps, F, fv) - T) / eps;
+          glassMelt(sx, sy, F, fv, melt);                           // bubbles are in the melt: they move
           if (melt[0] > 0) T -= F.TH * 0.5 * melt[0];               // a bubble is a void
           if (melt[1] > 0) T += F.TH * 0.6 * melt[1];               // a stone is not
           if (T < 0.05) T = 0.05;

@@ -2357,7 +2357,7 @@
   "where": "the hint line under the tool palette, shown while the mask tool is selected"
  },
  "toolhint.moon": {
-  "where": "the hint line under the tool palette, shown while the moon tool is selected"
+  "where": "the hint line under the tool palette, shown while the moon tool is selected. The tool does TWO jobs: in stone it warps the vein geometry, in glass it stirs the molten mix. Keep both, and keep them distinct - a reader who only gets one will use it wrong under the other material"
  },
  "toolhint.move": {
   "where": "the hint line under the tool palette, shown while the move tool is selected"
