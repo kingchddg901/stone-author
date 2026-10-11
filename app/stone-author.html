@@ -1684,7 +1684,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.29';
+  const BUILD = '2026.10.11.30';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4377,20 +4377,55 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // cloud/band/breccia modulators are built once on the main thread and posted as bitmaps (ensure* is stubbed).
   function renderCoreSrc() {
     // hexRGB/rgbHex/mixHexAt travel with them: emit blends between spectrum stops and cannot be serialised
-    // without them. (This core has no live caller — renderTiledParallel measured a no-op — but a serialised
-    // copy that references a function it does not carry is a trap for whoever revives it.)
+    // without them.
+    //
+    // THE NO-OP RESULT WAS MEASURED ON STONE AND DOES NOT HOLD FOR GLASS. Stone evaluates its field
+    // once per sample; glass walks its forming ops backwards for every one of them, which is
+    // arithmetic a core can be thrown at. Measured on a real 8-op glass slab at 2560 x 1600, 20
+    // tiles: one worker 15.1 s, two 11.0, four 5.5, eight 3.6 — 4.25x across eight — against the
+    // sequential tiled path's 7.9 s, so 2.2x end to end even at a tile size that punishes this path.
+    //
+    // THE PENALTY IS THE BLEED MARGIN, and it amortises: at one worker against the sequential path,
+    // 256 px tiles cost 4.06x, 512 px 1.80x, 1024 px 1.12x. The export renders 4096 px tiles, where
+    // it is gone — so the 2.2x above is a floor, not a ceiling.
+    //
+    // STILL NO PRODUCTION CALLER, and not for want of working: renderTiledParallel assembles one
+    // full canvas, which 65535 x 40959 cannot be. Wiring it to the export means feeding the TIFF
+    // sink out of order, which its indexed add() already allows. That is a separate change.
+    //
+    // It had also stopped working entirely: MATERIAL is what paintContent forks on and was never
+    // declared here, so a free-variable read threw on the first line for EVERY material. Nothing
+    // reported that, because the pool attached onmessage and no onerror, so a worker that threw
+    // left both promises unsettled and the caller hung for ever. Both fixed; the parallel output is
+    // pixel-identical to the sequential path, 0 differing bytes of 2.6 MB, against a control that
+    // renders the sequential path twice and also differs by 0.
     const fns = { emit, beamPts, layAt, layVis, layOp, adjOf, filterOf, weightOf, fxOn, fxOff, lightRGB, idColour, strHue, runs, applyLens, applyCoat, hexRGB, rgbHex, mixHexAt, emitAt, idxAt, strainColour, adjOf, paintFogLayer, paintWebLayer, paintSpecksLayer, paintDrusyLayer, paintStylLayer, paintVeinLayer, paintStoneContent, mix, mulberry32, gaussOf, sub,
       woodField, woodHash, woodSampler, woodRect, logGeom, drawLogGuides, paintWoodLog,
-      paintWoodContent, paintContent, setMaterial };
+      paintWoodContent, paintContent, setMaterial,
+      // GLASS, which the fork has been able to reach since the materials landed and this core
+      // could not. paintContent dispatches on MATERIAL, so without these a glass slab threw on
+      // its first line - and so did a stone one, for want of the token itself.
+      glassFlow, glassFormT, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
+      glassCellSpread, glassUnform, glassLay, glassWarp, glassUnwarp, rollerBake, paintGlassContent,
+      rollStamp, rollStampAt, rollerAt, rollerHand, rollerPath, moonDisp, warpMaskAt, gatherMasks,
+      fbm2, woodAtan2,
+      resample, smoothPath, handRoute, pathLen, segD, tangent, roughen, lineGeom, curvature, sinuate,
+      vnoise, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
     s += `var WOOD=${JSON.stringify(WOOD)},LOG_FIT=${LOG_FIT};\n`;
+    s += `var GLASS=${JSON.stringify(GLASS)},IN=${IN},SLAB_FT=${SLAB_FT};\n`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
     s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,view,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;
+    // MATERIAL is what paintContent forks on, and it was never declared here at all - a free
+    // variable in a worker throws on read, so this core could paint NO material, not just not
+    // glass. marks and _wmask travel for the same reason: the glass painter reads the mark list
+    // for its moon and roller passes, and warpMaskAt caches into _wmask.
+    s += MATERIAL_DECL + `var marks=[],_wmask=null;\n`;
     s += `var ensureClouds=()=>__cl,ensureBands=()=>__bd,ensureBreccia=()=>__br;\n`;
     s += `var document={createElement:()=>new OffscreenCanvas(1,1)};\n`;
     for (const n in fns) s += `var ${n}=${fns[n].toString()};\n`;
     s += `self.onmessage=function(e){var d=e.data;\n`;
-    s += `if(d.type==='init'){geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
+    s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
     s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
     s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_DARK;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=COL.ground;tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
@@ -4413,7 +4448,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       modBitmap(layVis('bands') && G.bandStrength > 0, ensureBands),
       modBitmap(layVis('breccia') && G.brecStrength > 0, ensureBreccia),
     ]);
-    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, spotOn, hidden: [...hidden] };
+    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, spotOn, hidden: [...hidden],
+                    material: currentMaterial(), marks };
     const url = URL.createObjectURL(new Blob([renderCoreSrc()], { type: 'application/javascript' }));
     const pool = [];
     for (let i = 0; i < nWorkers; i++) {
@@ -4421,7 +4457,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // each worker needs its own bitmap copies (transfer consumes them)
       const [cl, bd, br] = await Promise.all([clB ? createImageBitmap(clB) : null, bdB ? createImageBitmap(bdB) : null, brB ? createImageBitmap(brB) : null]);
       const xfer = [cl, bd, br].filter(Boolean);
-      const ready = new Promise(res => { w.onmessage = e => { if (e.data.type === 'ready') res(); }; });
+      const ready = new Promise((res, rej) => {
+        w.onmessage = e => { if (e.data.type === 'ready') res(); };
+        w.onerror = e => rej(new Error('render worker: ' + (e.message || 'failed to start')));
+      });
       w.postMessage({ type: 'init', ...state, cl, bd, br }, xfer);
       await ready; pool.push(w);
     }
@@ -4432,7 +4471,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const fc = document.createElement('canvas'); fc.width = finalW; fc.height = finalH; const fx = fc.getContext('2d');
     // dispatch round-robin, collect
     let next = 0, done = 0;
-    await new Promise(resolve => {
+    const run = new Promise((resolve, reject) => {
+      for (const w of pool) w.onerror = e => reject(new Error('render worker: ' + (e.message || 'threw')));
       const send = (w, t) => {
         w.onmessage = e => {
           fx.drawImage(e.data.bmp, e.data.tx0, e.data.ty0); e.data.bmp.close(); done++;
@@ -4443,7 +4483,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       };
       for (const w of pool) { if (next < tiles.length) send(w, tiles[next++]); }
     });
-    for (const w of pool) w.terminate(); URL.revokeObjectURL(url);
+    try { await run; } finally { for (const w of pool) w.terminate(); URL.revokeObjectURL(url); }
     if (clB) clB.close(); if (bdB) bdB.close(); if (brB) brB.close();
     if (!uvMode && G.lens > 0) applyLens(fc, fx);
     applyWindows(fc, finalW);
@@ -4665,6 +4705,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let MATERIAL = 'stone';                       // 'stone' | 'wood' | 'glass'
   function setMaterial(m) { MATERIAL = (m === 'wood' || m === 'glass') ? m : 'stone'; }
   function currentMaterial() { return MATERIAL; }   // saving a slab reads through here, never the token
+  // THE SAME DECLARATION, FOR A SERIALISED COPY OF THE ENGINE. The worker render core is this file's
+  // own functions put through toString(), so it needs the discriminator declared in its scope too -
+  // and writing that line in the generator would name the token outside these markers, which the
+  // gate refuses and should. It is emitted from here instead, where the token already lives, and the
+  // worker then switches through setMaterial exactly as every other caller does.
+  const MATERIAL_DECL = "var MATERIAL='stone';";
   function paintContent(ident, angleView) {
     if (MATERIAL === 'wood') return paintWoodContent(ident, angleView);
     if (MATERIAL === 'glass') return paintGlassContent(ident, angleView);

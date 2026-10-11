@@ -42,6 +42,7 @@ HOOK = (
     "    tileInstances, PATTERNS, stageN, stoneC, renderStoneOffscreen, tileInstanceAt,\n"
     "    cutBoxFromInstance, cutScale, coverSrc, snagTile, sectionList, sectionFromHere,\n"
     "    sectionOf, SLOT_INK, GROUPS, groupsFor, rosetteOf, redraw, specRGB, lightRGB, COL, G,\n"
+    "    renderTiledParallel, renderTiled, renderCoreSrc, currentMaterial,\n"
     "    setSections(a) { sections = a; },\n"
     # PAINT THE SLAB UNDER AN ARBITRARY TRANSFORM. The offscreen painter only ever uses
     # setTransform(cw,0,0,cw,0,ty) - a whole slab, scaled to fit. The open question is whether the
