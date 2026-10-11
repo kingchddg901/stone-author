@@ -95,11 +95,15 @@ function panel(buf, ox, oy, name, slotOf) {
 // rule and then stopped being copies of it. The census passed on the stale pair while the shipped
 // rule was giving every rhombus rosette four sections instead of five - a test that agrees with
 // itself rather than with the code.
-const APP_ROSETTE = (SRC.match(/const ROSETTE = \{[\s\S]*?\n {2}\};/) || [''])[0];
-if (!APP_ROSETTE) throw new Error('probe: cannot find the app\'s ROSETTE table');
+const APP_GROUPS = (SRC.match(/const GROUPS = \{[\s\S]*?\n {2}\};/) || [''])[0];
+if (!APP_GROUPS) throw new Error('probe: cannot find the app\'s GROUPS table');
 // The app's own table, evaluated, so the slot counts here are not a second copy to keep in step.
-const PATTERNS_ROSETTE = new Function(
-  'const ev = v => ((v % 2) + 2) % 2;\n' + APP_ROSETTE + '\nreturn ROSETTE;')();
+// A pattern now lists SEVERAL groupings; index 0 is the one it has always used, so every census
+// below keeps measuring what it measured before, and the others are taken by name.
+const PATTERNS_GROUPS = new Function(
+  'const ev = v => ((v % 2) + 2) % 2;\n' + APP_GROUPS + '\nreturn GROUPS;')();
+const groupNamed = (pat, key) => (PATTERNS_GROUPS[pat] || []).find(g => g.key === key);
+const PATTERNS_ROSETTE = Object.fromEntries(Object.entries(PATTERNS_GROUPS).map(([k, v]) => [k, v[0]]));
 const even = v => ((v % 2) + 2) % 2;
 const OCT_SLOT = PATTERNS_ROSETTE.octagon.slotOf;
 const RHOMBUS_SLOT = PATTERNS_ROSETTE.rhombus.slotOf;
@@ -192,11 +196,61 @@ if (census('rhombus', RETIRED, pi => pi === 1) === 0) {
 
 // ===== AND THE SELECTOR ON TOP OF IT ================================================================
 // The app's own sectionOf, lifted, so the probe cannot drift from what the floor actually does.
-const T = { pattern: null };
+const T = { pattern: null, grouping: null };
 const sectionOf = new Function('T', 'PATTERNS',
-  'const ev = v => ((v % 2) + 2) % 2;\n' + APP_ROSETTE +
-  '\nconst rosetteOf = () => ROSETTE[T.pattern] || null;\n' +
+  'const ev = v => ((v % 2) + 2) % 2;\n' + APP_GROUPS +
+  '\nconst groupsFor = () => GROUPS[T.pattern] || null;' +
+  '\nconst rosetteOf = () => { const g = groupsFor(); return g ? (g.find(x => x.key === T.grouping) || g[0]) : null; };\n' +
   lift('sectionOf') + '\nreturn sectionOf;')(T, PATTERNS);
+
+// ===== THE SECOND GROUPING: THE HEXAGON =============================================================
+// Three rhombi, one per orientation. It PARTITIONS where the rosette overlaps, so the slot is
+// simply the orientation - and because each hexagon takes one of each, the rule holds for both
+// handednesses at once. The rosette is two of these sharing the standing diamond, which is where
+// its five comes from: 3 + 3 - 1.
+//
+// The two families are not guessed. Measured on the app's own tileInstances, every interior
+// standing diamond lies in exactly two hexagons, at 0@(0,0)+2@(0,0) and 0@(-1,0)+2@(-1,1). Those
+// offsets are ASSERTED here rather than assumed: if the pattern's polys ever move, the three tiles
+// stop sharing edges and this says so instead of quietly censusing the wrong triples.
+{
+  const name = 'rhombus';
+  const { polys, ax, ay } = PATTERNS[name](U);
+  const place = (pi, n, m) => polys[pi].map(q => [R(q[0] + n * ax[0] + m * ay[0]), R(q[1] + n * ax[1] + m * ay[1])]);
+  const vkey = q => q[0] + ',' + q[1];
+  const sharesEdge = (a, b) => {
+    const A = new Set(a.map(vkey));
+    return b.filter(q => A.has(vkey(q))).length >= 2;
+  };
+  const FAMILIES = [[[0, 0, 0], [1, 0, 0], [2, 0, 0]], [[0, -1, 0], [1, 0, 0], [2, -1, 1]]];
+  let notAHexagon = 0, hexes = 0, repeatHex = 0, repeatPlainCut = 0;
+  for (let n = -5; n <= 5; n++) for (let m = -5; m <= 5; m++) {
+    for (const fam of FAMILIES) {
+      const tri = fam.map(([pi, dn, dm]) => ({ pi, n: n + dn, m: m + dm, pts: place(pi, n + dn, m + dm) }));
+      if (!(sharesEdge(tri[0].pts, tri[1].pts) && sharesEdge(tri[1].pts, tri[2].pts) && sharesEdge(tri[0].pts, tri[2].pts))) { notAHexagon++; continue; }
+      hexes++;
+      T.pattern = name;
+      T.grouping = 'hex';
+      const byHex = tri.map(t2 => sectionOf(t2, 3));
+      if (new Set(byHex).size !== 3) repeatHex++;
+      // ABLATION: the same three tiles under the grouping that CANNOT fill them. At three sections
+      // the rosette wants five, so sectionOf falls through to the plain-cut lattice cycle - which
+      // is what shipped, and is exactly the floor that never draws a cube.
+      T.grouping = 'rosette';
+      const byCut = tri.map(t2 => sectionOf(t2, 3));
+      if (new Set(byCut).size !== 3) repeatPlainCut++;
+    }
+  }
+  T.grouping = null;
+  const ok = notAHexagon === 0 && repeatHex === 0, bites = repeatPlainCut > 0;
+  if (!ok || !bites) bad++;
+  console.log('\n  THE SECOND GROUPING - the rhombus hexagon, three rhombi, one per orientation:');
+  console.log('    ' + hexes + ' hexagons over two families' +
+    (notAHexagon ? '   <-- ' + notAHexagon + ' TRIPLES DO NOT SHARE EDGES, the offsets are wrong' : '   all three tiles share edges') +
+    '\n    at 3 sections, hexagons repeating a section: ' + repeatHex + (repeatHex ? '   <-- CONSTRAINT BROKEN' : '   (none)') +
+    '\n    ablated(group by rosette at 3, which falls to a plain cut): ' + repeatPlainCut +
+    (bites ? ' repeat - so the cube floor was not reachable' : '   <-- STILL CLEAN, this census cannot fail'));
+}
 
 // A polygon's area, so the share by AREA can be printed beside the share by TILE.
 const polyArea = P2 => { let a = 0; for (let i = 0, j = P2.length - 1; i < P2.length; j = i++)

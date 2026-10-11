@@ -370,6 +370,14 @@
     <button id="p-rhombus" type="button" data-pat="rhombus" aria-pressed="false" data-i18n="tile.pat.rhombus">Rhombus</button>
     <button id="p-octagon" type="button" data-pat="octagon" aria-pressed="false" data-i18n="tile.pat.octagon">Octagon</button>
   </div>
+  <div class="grp" id="grp-grouping" role="group" aria-label="Grouping" data-i18n-attr="aria-label=a11y.grouping" hidden><span class="lbl" data-i18n="lbl.grouping">Group by</span>
+    <button id="g-rosette" type="button" data-group="rosette" aria-pressed="true" data-i18n="group.rosette">Rosette</button>
+    <button id="g-hex" type="button" data-group="hex" aria-pressed="false" data-i18n="group.hex">Hexagon</button>
+    <!-- One button per grouping a pattern can offer; syncGroups shows only the ones it HAS, and
+         hides the whole row where there is no choice to make. Cairo's single grouping is keyed
+         'cell' and has its strings ready, but no button: an unreachable control is surface, not a
+         seam, and the seam is the GROUPS array plus this generic [data-group] handler. -->
+  </div>
   <div class="sliders" id="s-tiles">
     <div class="sl"><label for="tsize"><span data-i18n="sl.tsize">Tile size</span> <output id="tsizeV"></output></label><input id="tsize" type="range" min="2" max="36" step="1"></div>
     <div class="sl"><label for="tgrout"><span data-i18n="sl.tgrout">Grout</span> <output id="tgroutV"></output></label><input id="tgrout" type="range" min="0.03125" max="0.5" step="0.03125"></div>
@@ -761,6 +769,7 @@ window.SA_I18N = (() => {
   "a11y.stone-slab-draw-on-it": "Stone slab. Draw on it to author veins, cracks and pours; tap a vein with the branch tool to grow a minor vein.",
   "a11y.tile-options": "Tile options",
   "a11y.tiles": "Tiles",
+  "a11y.grouping": "Grouping",
   "a11y.tool": "Tool",
   "a11y.vein-variant": "Vein variant",
   "a11y.view": "View",
@@ -970,6 +979,10 @@ window.SA_I18N = (() => {
   "lbl.show-through": "Show through",
   "lbl.spotlight": "Spotlight",
   "lbl.tiles": "Tiles",
+  "lbl.grouping": "Group by",
+  "group.rosette": "Rosette",
+  "group.hex": "Hexagon",
+  "group.cell": "Cell",
   "lbl.tool": "Tool",
   "lbl.units": "Units",
   "lbl.variant": "Variant",
@@ -1348,6 +1361,7 @@ window.SA_I18N = (() => {
   "tool.move": "Move",
   "tool.pour": "Pour",
   "hint.rosette-wants": "This pattern sets {n} tiles around each centre and none may repeat — you have {have} sections, so it is laying a plain cut instead. Keep a few more.",
+  "hint.grouping-smaller-fits": "This grouping sets {n} tiles per motif and none may repeat \u2014 you have {have}. \u2014 Group by {alt} wants only {altn}.",
   "tool.shuffle": "Shuffled",
   "tool.slottest": "Slot colours",
   "tool.styl": "Stylolite",
@@ -1649,7 +1663,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.23';
+  const BUILD = '2026.10.11.24';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1831,7 +1845,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               lens: 0, lensPitch: 10, lensType: 'fresnel' };
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
-              chipIn: 0.6, shuffle: false, units: 'in', joints: true, slotTest: false };
+              chipIn: 0.6, shuffle: false, units: 'in', joints: true, slotTest: false,
+              grouping: null };   // null = the pattern's first grouping, so an old slab lands where it always did
   let layTiles = false;
   // Pristine defaults, captured before any edit. deserialize() resets to these before applying a slab, so a
   // load is a PURE FUNCTION of the slab: a key absent from the save falls to its default, never a leftover from
@@ -3426,25 +3441,47 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Flat, maximally separated, and never tinted by the light: these are identities, not glass.
   const SLOT_INK = ['#c4302b', '#2e8b57', '#2f6f8f', '#7a3b8e', '#d98324', '#8e8e96', '#c8c846', '#46c8c8'];
   const ev = v => ((v % 2) + 2) % 2;
-  const ROSETTE = {
+  // A pattern declares one or more GROUPINGS. A grouping is a motif - the set of tiles that must
+  // not repeat a section - plus the slot each tile takes inside it. It was called ROSETTE when a
+  // rosette was the only kind there was; the name is now what it IS, because the rhombus has two
+  // and the second one is not a rosette.
+  const GROUPS = {
     // the octagon, and the square at each of its corners, told apart by the parity of its cell
-    octagon: { slots: 5, slotOf: (pi, m, n) => pi === 0 ? 0 : 1 + ev(m) * 2 + ev(n) },
+    octagon: [{ key: 'rosette', slots: 5, slotOf: (pi, m, n) => pi === 0 ? 0 : 1 + ev(m) * 2 + ev(n) }],
     // The standing diamond, and the four laid ones around it. WHICH four is not a guess: measured
     // off the real lattice, the neighbours of the standing diamond at (n, m) are pi 0 at (n-1, m)
     // and (n, m), and pi 2 at (n-1, m+1) and (n, m). So the pi-0 pair shares m and differs only in
     // n, while the pi-2 pair differs in both - which is why each orientation is split by a
     // DIFFERENT axis. Splitting both by m, as this did, gave the two pi-0 neighbours the same slot
     // and every rosette four sections instead of five.
-    rhombus: { slots: 5, slotOf: (pi, m, n) => pi === 1 ? 0 : pi === 0 ? 1 + ev(n) : 3 + ev(m) },
+    //
+    // AND THE ROSETTE IS TWO HEXES SHARING THE STANDING DIAMOND, which is the second grouping and
+    // the reason there are five. Measured, 41 of 41 interior diamonds: each one lies in exactly
+    // TWO hexagons - 0@(0,0)+2@(0,0) and 0@(-1,0)+2@(-1,1) - whose union is exactly five tiles and
+    // whose only shared tile is the diamond itself.
+    rhombus: [
+      { key: 'rosette', slots: 5, slotOf: (pi, m, n) => pi === 1 ? 0 : pi === 0 ? 1 + ev(n) : 3 + ev(m) },
+      // THE HEXAGON, which is three rhombi, one per orientation. It partitions - measured, every
+      // tile lies in exactly one hexagon of a given handedness, against the rosette's two - so the
+      // no-repeat rule needs nothing cleverer than the orientation itself, and it holds for BOTH
+      // handednesses at once because each hexagon takes one of each. Three sections then draw the
+      // isometric cube, which is the oldest thing this tiling does and was not reachable at all:
+      // below the rosette's five it fell through to the plain-cut lattice cycle, and all three
+      // orientations landed on all three sections.
+      { key: 'hex', slots: 3, slotOf: (pi) => pi },
+    ],
     // four pentagon orientations; CAIRO8 holds two copies of the motif, so eight polys are four types
-    cairo: { slots: 4, slotOf: (pi) => [0, 1, 2, 3, 2, 3, 0, 1][pi] },
+    cairo: [{ key: 'cell', slots: 4, slotOf: (pi) => [0, 1, 2, 3, 2, 3, 0, 1][pi] }],
   };
   // KEYED ON T.pattern, and checked against the pattern table at startup. A mistyped key here is
-  // SILENT: ROSETTE[undefined] is undefined, which this reads as "a plain cut" - a real state, so
+  // SILENT: GROUPS[undefined] is undefined, which this reads as "a plain cut" - a real state, so
   // nothing errors and the floor still looks like a floor. It cost a render to spot (as T.pat,
   // which is not what the field is called) and only the slot-colour view showed it.
-  for (const k in ROSETTE) if (!PATTERNS[k]) console.error('ROSETTE: no such pattern', k);   // developer check, never shown
-  const rosetteOf = () => ROSETTE[T.pattern] || null;
+  for (const k in GROUPS) if (!PATTERNS[k]) console.error('GROUPS: no such pattern', k);   // developer check, never shown
+  // The chosen grouping, or the pattern's first - so a slab saved before there was a choice, and a
+  // key that no longer exists, both land on the one the pattern has always used.
+  const groupsFor = () => GROUPS[T.pattern] || null;
+  const rosetteOf = () => { const g = groupsFor(); return g ? (g.find(x => x.key === T.grouping) || g[0]) : null; };
   // WHICH SECTION THIS TILE IS CUT FROM.
   //
   // Section s belongs to slot class (s mod k), so two different slots can never land on the same
@@ -8178,6 +8215,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
     pv('data-mat', currentMaterial()); pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
     pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : 'order'); pv('data-unit', T.units);
+    if (typeof syncGroups === 'function') syncGroups();   // which groupings this pattern HAS, not just which is pressed
     pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType); pv('data-mwin', NEXT.maskWin); pv('data-minv', NEXT.maskInvert);
     const tog = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', !!on); };
     tog('pen-pressure', NEXT.pressure); tog('pen-tilt', NEXT.tilt); tog('guides', guidesOn);
@@ -9381,17 +9419,35 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   });
   const lt = document.getElementById('laytiles');
   lt.addEventListener('click', () => { layTiles = !layTiles; lt.setAttribute('aria-pressed', layTiles); redraw(false); });
+  // SAY WHEN THE RULE CANNOT HOLD. A grouping wants one section per slot; below that it falls back
+  // to a plain cut and doubles sections up inside a motif, which is the one thing the selector
+  // exists to avoid. Degrading quietly would leave the user looking at a repeat they did not ask
+  // for and cannot see a reason for. With a second grouping to offer, it also says so: the rhombus
+  // hexagon wants three where the rosette wants five, and that is a usable answer, not a refusal.
+  function sayIfShort() {
+    const R = rosetteOf(), have = sectionList().length;
+    if (!R || !have || have >= R.slots) return;
+    const other = (groupsFor() || []).filter(g => g !== R && g.slots <= have).sort((a, b) => b.slots - a.slots)[0];
+    hint(other ? TR('hint.grouping-smaller-fits', { n: R.slots, have, alt: TR('group.' + other.key), altn: other.slots })
+               : TR('hint.rosette-wants', { n: R.slots, have }));
+  }
+  function syncGroups() {                                // only shown where there is a choice to make
+    const g = groupsFor(), many = !!(g && g.length > 1);
+    const row = document.getElementById('grp-grouping');
+    if (row) row.hidden = !many;
+    if (!many) return;
+    for (const b of row.querySelectorAll('[data-group]'))
+      b.hidden = !g.some(x => x.key === b.dataset.group),
+      b.setAttribute('aria-pressed', String(rosetteOf().key === b.dataset.group));
+  }
   for (const b of document.querySelectorAll('[data-pat]')) b.addEventListener('click', () => {
     T.pattern = b.dataset.pat; press('[data-pat]', b);
     if (!layTiles) { layTiles = true; lt.setAttribute('aria-pressed', true); }
-    // SAY WHEN THE RULE CANNOT HOLD. A rosette wants one section per slot; below that it falls back
-    // to a plain cut and doubles sections up inside a motif, which is the one thing the selector
-    // exists to avoid. Degrading quietly would leave the user looking at a repeat they did not ask
-    // for and cannot see a reason for.
-    const R = ROSETTE[T.pattern];
-    if (R && sectionList().length && sectionList().length < R.slots)
-      hint(TR('hint.rosette-wants', { n: R.slots, have: sectionList().length }));
+    syncGroups(); sayIfShort();
     redraw(false);
+  });
+  for (const b of document.querySelectorAll('[data-group]')) b.addEventListener('click', () => {
+    T.grouping = b.dataset.group; syncGroups(); sayIfShort(); redraw(true);
   });
   for (const b of document.querySelectorAll('[data-edge]')) b.addEventListener('click', () => { T.edge = b.dataset.edge; press('[data-edge]', b); redraw(false); });
   for (const b of document.querySelectorAll('[data-lay]')) b.addEventListener('click', () => { T.shuffle = b.dataset.lay === 'shuffle'; press('[data-lay]', b); redraw(false); });

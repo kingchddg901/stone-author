@@ -41,7 +41,7 @@ HOOK = (
     "\n  window.__probe = { withSlab, serialize, applySlabState, H, SW, T, inFr,\n"
     "    tileInstances, PATTERNS, stageN, stoneC, renderStoneOffscreen, tileInstanceAt,\n"
     "    cutBoxFromInstance, cutScale, coverSrc, snagTile, sectionList, sectionFromHere,\n"
-    "    sectionOf, SLOT_INK, ROSETTE,\n"
+    "    sectionOf, SLOT_INK, GROUPS, groupsFor, rosetteOf,\n"
     "    setSections(a) { sections = a; },\n"
     # PAINT THE SLAB UNDER AN ARBITRARY TRANSFORM. The offscreen painter only ever uses
     # setTransform(cw,0,0,cw,0,ty) - a whole slab, scaled to fit. The open question is whether the

@@ -102,6 +102,7 @@
  "a11y.tiles": {
   "where": "accessibility label (aria-label), not visible on screen"
  },
+ "a11y.grouping": {"terms": [], "where": "accessible name for the grouping button group"},
  "a11y.tool": {
   "where": "accessibility label (aria-label), not visible on screen"
  },
@@ -1057,6 +1058,10 @@
  "lbl.tiles": {
   "where": "in the \"Tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
+ "lbl.grouping": {"terms": [], "where": "label on the grouping buttons, beside the tile patterns: which motif the no-repeat rule applies to"},
+ "group.rosette": {"terms": [], "where": "grouping button. A rosette is a centre tile and the ring around it; rosettes OVERLAP, sharing their ring tiles with their neighbours"},
+ "group.hex": {"terms": [], "where": "grouping button for the rhombus tiling: three rhombi, one per orientation, forming a hexagon. Hexagons do not overlap. Three sections then draw the isometric cube"},
+ "group.cell": {"terms": [], "where": "grouping button: the pattern's own repeating cell"},
  "lbl.tool": {
   "where": "in the \"Tool\" group/panel"
  },
@@ -2370,6 +2375,7 @@
  },
  "tool.slottest": {"terms": [], "where": "button: show each tile as a flat colour standing for the section it was cut from, instead of the material. A diagnostic - it is the only way to see whether a pattern repeats a section inside one of its motifs"},
  "hint.rosette-wants": {"terms": [], "placeholders": {"n": "how many tiles the pattern sets around each centre, so how many sections it needs", "have": "how many sections the user has kept so far"}, "where": "shown when a rosette pattern is chosen but there are too few sections to fill its slots without repeating one inside a motif. {n} is how many sections the pattern needs, {have} is how many the user has kept. It falls back to a plain cut rather than doubling one up"},
+ "hint.grouping-smaller-fits": {"placeholders": {"n": "tiles this grouping needs, e.g. 5", "have": "how many sections are kept, e.g. 3", "alt": "the name of the other grouping, already translated, e.g. Hexagon", "altn": "tiles that other grouping needs, e.g. 3"}, "terms": [], "where": "status when there are too few sections for the chosen grouping but enough for another one the pattern offers"},
  "tool.shuffle": {
   "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
  },
