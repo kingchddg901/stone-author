@@ -1423,7 +1423,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.52';
+  const BUILD = '2026.10.10.55';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6034,8 +6034,36 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const zi = (F.Z - 1) >> 1;                             // the board's middle: the height the section shows
     return Math.max(0, F.R - F.zoff[zi]) / (F.ginv[zi] || 1) * 2;
   };
+  // THE SAW HAS TO REACH THE TREE. Cut offset, board position and width stop at numbers that were
+  // the whole log when the log was two feet through; on a 36 ft Sherman they confine every board to
+  // the innermost few percent. Rescaled from the log's own radius rather than opened to a big fixed
+  // number, which would make a small log undraggable - one percent of a +/-20 ft travel is four
+  // inches, and on a 2 ft log the entire useful band is narrower than that.
+  //
+  // The stored values stay in FEET, so nothing migrates and no saved board moves; only the end of
+  // the slider does. And they only ever widen - narrowing could clamp a value a slab legitimately
+  // holds and move someone's cut without saying so.
+  function syncWoodReach() {
+    // The OUTER radius at the board's height, not the field's raw R. plane and y0 are in the local
+    // frame, so on a flared butt the bark sits at (R - zoff)/g - further out than R - and sizing the
+    // reach off R leaves the last couple of feet of a buttress unreachable.
+    const R = treeDiaAt() / 2;
+    const reach = Math.max(1.3, R * 1.25);               // a little past the bark, for the live edge
+    // It tracks the tree DOWN as well as up, or one visit to a 36 ft Sherman leaves a 2 ft log with
+    // an 18 ft slider - the same unusability, inverted. The thing that actually had to be protected
+    // was clamping a value someone is holding, so that is what is guarded: never shrink below what
+    // the control currently carries.
+    for (const k of ['plane', 'y0']) {
+      const el = document.getElementById('wood-' + k); if (!el) continue;
+      const lim = Math.max(reach, Math.abs(+el.value) || 0);
+      el.max = lim.toFixed(2); el.min = (-lim).toFixed(2);
+    }
+    const w = document.getElementById('wood-wid');
+    if (w) w.max = Math.max(4, R * 2.2, +w.value || 0).toFixed(2);
+  }
   function syncTreeDia() {
     const el = document.getElementById('wood-treeDia'); if (!el) return;
+    syncWoodReach();
     const d = treeDiaAt();
     el.value = d;
     const out = document.getElementById('wood-treeDiaV');
