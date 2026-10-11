@@ -1,6 +1,7 @@
-# STATE — Glass: material path 3 in Stone Author
+# Glass: material path 3 in Stone Author
 
-Settled at build 2026.10.11.13. Companion to [`wood.md`](wood.md); the reader-facing summary is in
+**LOCKED at build 2026.10.11.16.** Complete and in use; the open items below are directions, not
+debts. Companion to [`wood.md`](wood.md); the reader-facing summary is in
 [`architecture.md`](architecture.md) under “Glass — why the colour cannot mix”.
 
 ## The model, in one line
@@ -136,10 +137,16 @@ time the path curved. Measured on a *curving* pass: across spreads the bite 0.25
 
 ## Open
 
-- **Stretch along a drawn pass** — needs path coords → world.
-- **Refraction** — nothing behind the sheet yet. Also what would enable glass over wood.
-- `seedStretch` overlaps the blow/roll ops: both elongate bubbles. Harmless, unresolved.
-- The `press` op re-appends if removed from the list while its mark exists (same as `stir`).
+- **Stretch along a drawn pass** — needs the inverse map from path coordinates back to world. A
+  drawn pass presses; it does not stretch, and that is why it is its own op rather than a `roll`.
+- **Refraction** — nothing behind the sheet yet, so nothing is refracted through it and the slope
+  of the thickness is the honest cue. It is also what would let glass sit over wood.
+- `seedStretch` overlaps the blow and roll ops: both elongate bubbles, so a drawn-out sheet gets it
+  twice. Harmless at the defaults, unresolved in principle.
+- The scatter control is load-bearing in a way that is not obvious: at zero, every blob has
+  identical neighbours at identical distances, so every watershed is a straight line and the tray
+  comes out as a square-celled quilt rather than as blobs. **If the blobs ever read as tiled, check
+  the scatter before the budget.**
 
 ## Probes — all in `tools/`, all run in Node
 
