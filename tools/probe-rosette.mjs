@@ -192,6 +192,47 @@ for (const name of ['octagon', 'rhombus', 'cairo']) {
 console.log('    the octagon centre is ~83% of the AREA and HALF the TILES, one per cell. Both true;');
 console.log('    only the second one is evidence about the assignment.');
 
+// ===== DOES ONE SECTION FUSE INTO A MESH? =============================================================
+// On TILES, not pixels: grout separates every tile, so a pixel flood-fill can only ever find one
+// of them and reports the same number whatever the assignment is. Corner-touching is counted as
+// well as edge-sharing, because a standing diamond meets other standing diamonds at its points and
+// the eye joins them into a lattice even though no two share a side.
+function mesh(name, N) {
+  const { polys, ax, ay } = PATTERNS[name](U);
+  T.pattern = name;
+  const tiles = [];
+  for (let n = -9; n < 9; n++) for (let m = -9; m < 9; m++) polys.forEach((poly, pi) => {
+    tiles.push({ sec: sectionOf({ pi, m, n }, N),
+                 pts: poly.map(q => [R(q[0] + m * ax[0] + n * ay[0]), R(q[1] + m * ax[1] + n * ay[1])]) });
+  });
+  const at = new Map(), vkey = q => q[0] + ',' + q[1];
+  tiles.forEach((t2, i) => t2.pts.forEach(q => { const k = vkey(q); (at.get(k) || at.set(k, []).get(k)).push(i); }));
+  const shared = tiles.map(() => new Map());
+  for (const ids of at.values()) for (const a of ids) for (const b of ids) if (a !== b)
+    shared[a].set(b, (shared[a].get(b) || 0) + 1);
+  const largest = minShared => {
+    const seen = new Uint8Array(tiles.length); let best = 0;
+    for (let i = 0; i < tiles.length; i++) {
+      if (seen[i]) continue;
+      let n2 = 0; const st = [i]; seen[i] = 1;
+      while (st.length) { const q = st.pop(); n2++;
+        for (const [j, c] of shared[q]) if (!seen[j] && c >= minShared && tiles[j].sec === tiles[q].sec) { seen[j] = 1; st.push(j); } }
+      if (n2 > best) best = n2;
+    }
+    return +(best / tiles.length * 100).toFixed(1);
+  };
+  return { edge: largest(2), corner: largest(1) };
+}
+console.log('\n  DOES ONE SECTION FUSE INTO A MESH? largest run of same-section tiles, as % of all tiles:');
+for (const name of ['rhombus', 'octagon', 'cairo']) {
+  const row = [5, 6, 7, 8].map(N => { const r = mesh(name, N); return 'N=' + N + ' ' + String(r.corner).padStart(4) + '%'; });
+  console.log('    ' + name.padEnd(8) + ' touching at a CORNER: ' + row.join('   '));
+}
+for (const name of ['rhombus']) {
+  const row = [5, 6, 7, 8].map(N => { const r = mesh(name, N); return 'N=' + N + ' ' + String(r.edge).padStart(4) + '%'; });
+  console.log('    ' + name.padEnd(8) + ' sharing an EDGE:      ' + row.join('   '));
+}
+
 console.log('\n  EVERY SECTION REACHABLE, and no rosette repeating one:');
 for (const [name, centreIs] of [['octagon', pi => pi === 0], ['rhombus', pi => pi === 1], ['cairo', null]]) {
   T.pattern = name;
