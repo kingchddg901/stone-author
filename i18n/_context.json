@@ -1662,6 +1662,7 @@
  "sl.wood-fireHeal": {"terms": ["wood"], "where": "slider: how many rings the surviving wood took to close over the wound"},
  "sl.wood-fireZ": {"terms": ["wood"], "where": "slider: how far up the butt the scar reaches, in feet"},
  "ui.wood-fire-note": {"terms": ["wood"], "where": "explains that a fire kills cambium on one side only, leaving a buried lens with a charred face"},
+ "sl.wood-dev2Rise": {"terms": ["wood"], "where": "slider: how steeply the branch climbs away from the trunk, in degrees. 0 is straight out horizontally"},
  "sl.wood-dev2Prune": {"terms": ["wood"], "where": "slider: how the branch ended. 0 it died on the tree and was buried in its own bark, a loose knot; 1 it was taken off clean and healed sound, a tight knot"},
  "sl.wood-stage": {"terms": ["wood"], "where": "slider: how many different boards of the one log the floor is cut from. 1 repeats a single board; higher walks down the cant"},
  "sl.wood-rings": {

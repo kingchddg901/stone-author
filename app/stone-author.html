@@ -529,6 +529,7 @@
       <div class="sl"><label for="wood-dev2KnotPitch"><span data-i18n="sl.wood-dev2KnotPitch">Knot pitch</span> <output id="wood-dev2KnotPitchV"></output></label><input id="wood-dev2KnotPitch" type="range" min="10" max="400" step="5"></div>
       <div class="sl"><label for="wood-dev2Die"><span data-i18n="sl.wood-dev2Die">Died at ring</span> <output id="wood-dev2DieV"></output></label><input id="wood-dev2Die" type="range" min="0" max="400" step="1"></div>
       <div class="sl"><label for="wood-dev2Prune"><span data-i18n="sl.wood-dev2Prune">Taken off</span> <output id="wood-dev2PruneV"></output></label><input id="wood-dev2Prune" type="range" min="0" max="1" step="0.01"></div>
+      <div class="sl"><label for="wood-dev2Rise"><span data-i18n="sl.wood-dev2Rise">Branch rise</span> <output id="wood-dev2RiseV"></output></label><input id="wood-dev2Rise" type="range" min="0" max="80" step="1"></div>
     </div>
     </div></details>
     <details class="sec" data-mat-only="stone" id="g-granite" hidden><summary data-i18n="sec.granite-ground">Granite ground</summary><div class="body">
@@ -966,6 +967,7 @@ window.SA_I18N = (() => {
   "sl.wood-len": "Plank length",
   "sl.wood-cutAngle": "Cut angle",
   "sl.wood-treeDia": "Tree size",
+  "sl.wood-dev2Rise": "Branch rise",
   "sl.wood-dev2Prune": "Taken off",
   "sl.wood-stage": "Boards",
   "sl.wood-fireAt": "Fire year",
@@ -1411,7 +1413,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.45';
+  const BUILD = '2026.10.10.46';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4072,6 +4074,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     fireAt: 0, fireAngle: 0, fireWidth: 55,       // FIRE YEARS: the ring it burned in (0 = never), which way
     fireHeal: 40, fireSeverity: 0.7, fireZ: 12,   // the wound faces, how wide the kill, how many rings to
                                                   // close it, how bad, and how far up the butt it reaches.
+    dev2Rise: 0,                                  // HOW STEEPLY THE BRANCH CLIMBS off the trunk, in degrees.
+                                                  // 0 is straight out, which is the one angle no tree grows.
     dev2Prune: 0,                                 // HOW THE BRANCH ENDED. 0 it died on the tree and was
                                                   // buried in its own bark - a loose knot. 1 it was taken
                                                   // off clean and the live collar healed over sound wood.
@@ -4234,7 +4238,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const DEV = [
       { a: WOOD.devAmp, g: WOOD.devAngle, s: WOOD.devSpread, st: WOOD.devStart, rp: WOOD.devRamp, z: 0, zs: 0 },
       { a: WOOD.dev2Amp, g: WOOD.dev2Angle, s: WOOD.dev2Spread, st: WOOD.dev2Start, rp: WOOD.dev2Ramp,
-        z: WOOD.dev2Z, zs: WOOD.dev2ZSpan, kn: WOOD.dev2Knot, kp: WOOD.dev2KnotPitch, die: WOOD.dev2Die, prune: WOOD.dev2Prune },
+        z: WOOD.dev2Z, zs: WOOD.dev2ZSpan, kn: WOOD.dev2Knot, kp: WOOD.dev2KnotPitch, die: WOOD.dev2Die, prune: WOOD.dev2Prune, rise: WOOD.dev2Rise },
     ].filter(d => d.a > 0);
     // GUARD THE STRUCTURAL VALUES HERE, not at the slider. deserialize applies o.wood straight out of
     // a saved file, so these three arrive from outside: a slab carrying rings: -1 threw
@@ -4393,9 +4397,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // year 90" and "the knot stops here" are the same statement rather than two numbers to keep in
       // step. Alive is Infinity: the branch simply never stops, and every test below passes.
       const dead = d.die > 0, di = Math.max(0, Math.min(n - 1, Math.round(d.die)));
-      return { amp: d.a, ux: Math.cos(dir), uy: Math.sin(dir), al, zw, wl: wl[q],
-               kn: d.kn > 0 ? d.kn : 0, kp: d.kp, zc: d.z, r0: edge[si],
-               dead, rDie: dead ? edge[di] : Infinity, prune: Math.max(0, Math.min(1, d.prune || 0)) };
+      // THE BRANCH AXIS IN THREE DIMENSIONS, with the two perpendiculars its own rings are measured
+      // round. u is taken as (-sinA, cosA, 0) rather than from a cross product with the vertical,
+      // because that one is always perpendicular to the axis and never degenerates, however steep.
+      const el = Math.max(0, Math.min(85, d.rise || 0)) * Math.PI / 180;
+      const cE = Math.cos(el), sE = Math.sin(el), cA = Math.cos(dir), sA = Math.sin(dir);
+      // r0 and rDie are TRUNK RADII. A rising branch travels 1/cosE further along its own axis to
+      // reach a given radius, so the axial window widens by that and "died at ring 120" keeps
+      // meaning the trunk radius at ring 120 instead of shrinking as the branch is tilted.
+      const ia = 1 / Math.max(cE, 0.09);
+      return { amp: d.a, ux: cA, uy: sA, al, zw, wl: wl[q],
+               ax: cE * cA, ay: cE * sA, az: sE,
+               px: -sA, py: cA,                            // u: across, in the horizontal plane
+               qx: -sE * cA, qy: -sE * sA, qz: cE,         // v = a x u: across, out of it
+               kn: d.kn > 0 ? d.kn : 0, kp: d.kp, zc: d.z, r0: edge[si] * ia,
+               dead, rDie: dead ? edge[di] * ia : Infinity, prune: Math.max(0, Math.min(1, d.prune || 0)) };
     });
     // The axis is a curve, not a line: a lean plus a slow wander. This is what stops straight grain
     // rendering as ruled parallel lines, and it is where cathedral arches come from on a tangent plane.
@@ -4701,14 +4717,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // the plane went through it. Its rings are concentric about the BRANCH axis, so they run
       // crosswise to the trunk's - which is the whole reason a knot looks like a knot.
       if (KN) {
-        const tt = ddx * KN.ux + ddy * KN.uy;                  // along the branch, from the pith
+        const dzz = zp - KN.zc;
+        const tt = ddx * KN.ax + ddy * KN.ay + dzz * KN.az;    // along the branch, from the pith
         // A dead branch ENDS at the radius it died at: wood laid down after it was buried is clear.
         // That is the difference between a knot on every board and one only in the heart of the log.
         if (tt > KN.r0 && tt <= KN.rDie) {
           const te = tt < KN.rDie ? tt : KN.rDie;              // it stopped gaining rings when it died
           const rb = KN.kn * (te - KN.r0);                     // a cone, not a cylinder
-          const ss = -ddx * KN.uy + ddy * KN.ux, dzz = zp - KN.zc;
-          const q2 = ss * ss + dzz * dzz;
+          // Across the axis by Pythagoras: |p|^2 - tt^2. rad0^2 + dzz^2 IS |p|^2 and rad0 is already
+          // in hand, so this is one multiply and a subtract rather than two multiplies and an add.
+          const ss = ddx * KN.px + ddy * KN.py;
+          const q2 = Math.max(0, rad0 * rad0 + dzz * dzz - tt * tt);
               if (q2 < rb * rb) {
             // THE BRANCH SHARES THE TREE'S WAVE FAMILY. Its own rings are pushed by the same
             // waves, read at its own angle about its own axis, so a knot looks like it came from
@@ -4716,7 +4735,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
             // draws on it.
             let dd = Math.sqrt(q2);
             if (WAVY) {
-                  const iq = 1 / (dd || 1e-9), bc = ss * iq, bs = dzz * iq;
+                  const bb = ddx * KN.qx + ddy * KN.qy + dzz * KN.qz;   // the second perpendicular
+                  const iq = 1 / (dd || 1e-9), bc = ss * iq, bs = bb * iq;
                   let ck = 1, sk = 0;
                   for (let h = 0; h < WK; h++) { const x = ck * bc - sk * bs; sk = sk * bc + ck * bs; ck = x; }
                   dd += (sk * WV[0].zc[zi] + ck * WV[0].zs[zi]) * WVA[(rad * KS) | 0] * 0.5;
@@ -5924,6 +5944,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   dev2ZSpan: v => (+v).toFixed(2), dev2Start: v => `${Math.round(v)}`,
                   dev2Ramp: v => `${Math.round(v)}`, dev2Knot: v => (+v).toFixed(3),
                   dev2KnotPitch: v => `${Math.round(v)}`,
+                  dev2Rise: v => +v === 0 ? 'straight out' : `${Math.round(v)}\u00b0`,
                   dev2Prune: v => +v === 0 ? 'died on the tree' : (+v >= 1 ? 'taken off clean' : (+v).toFixed(2)),
                   dev2Die: v => +v === 0 ? 'alive' : `${Math.round(v)}` };
   function showWood(k) {                                 // one slider's readout, from WOOD rather than from the input
