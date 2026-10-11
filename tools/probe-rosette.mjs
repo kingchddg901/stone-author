@@ -25,6 +25,15 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = fs.readFileSync(path.join(HERE, '..', 'app', 'stone-author.html'), 'utf8');
+
+// THE PROBE MUST LAY TILES THE WAY THE APP DOES. It did not: tileInstances places a cell at
+// n*ax + m*ay and this file placed it at m*ax + n*ay, so every census here measured a lattice with
+// m and n exchanged. Octagon survived that because its rule reads BOTH parities and is symmetric
+// under the swap; rhombus did not, and the probe cheerfully certified a slot rule under which two
+// of the four tiles around every standing diamond take the same section. Asserted rather than
+// commented, because the convention is the app's to change.
+if (!/q\[0\] \+ n \* ax\[0\] \+ m \* ay\[0\]/.test(SRC))
+  throw new Error('probe: the app no longer places a cell at n*ax + m*ay - this file lays its lattice by hand and must be changed to match');
 function lift(n) {
   const at = SRC.indexOf('function ' + n + '(');
   let d = 0;
@@ -58,7 +67,7 @@ function panel(buf, ox, oy, name, slotOf) {
   const cell = PATTERNS[name](U);
   const { polys, ax, ay } = cell;
   for (let n = -6; n <= 10; n++) for (let m = -6; m <= 22; m++) {
-    const tx = m * ax[0] + n * ay[0], ty = m * ax[1] + n * ay[1];
+    const tx = n * ax[0] + m * ay[0], ty = n * ax[1] + m * ay[1];
     polys.forEach((p, pi) => {
       const pts = p.map(q => [q[0] + tx + 40, q[1] + ty + Hh / 2]);
       const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
@@ -79,9 +88,21 @@ function panel(buf, ox, oy, name, slotOf) {
 // THE RULE, for both rosette patterns: a slot is a shape TYPE times a cell PARITY, and the centre
 // shape takes one slot of its own. The four around a centre then differ because the cells that
 // contribute them differ in parity - which is a fact about the lattice, checked below, not a hope.
+// WHICH parity differs is not the same for both orientations of the rhombus, and that is the
+// whole of it: the pi-0 pair around a standing diamond shares m, the pi-2 pair does not.
+//
+// LIFTED, NEVER COPIED. These were two hand-written functions that began as copies of the app's
+// rule and then stopped being copies of it. The census passed on the stale pair while the shipped
+// rule was giving every rhombus rosette four sections instead of five - a test that agrees with
+// itself rather than with the code.
+const APP_ROSETTE = (SRC.match(/const ROSETTE = \{[\s\S]*?\n {2}\};/) || [''])[0];
+if (!APP_ROSETTE) throw new Error('probe: cannot find the app\'s ROSETTE table');
+// The app's own table, evaluated, so the slot counts here are not a second copy to keep in step.
+const PATTERNS_ROSETTE = new Function(
+  'const ev = v => ((v % 2) + 2) % 2;\n' + APP_ROSETTE + '\nreturn ROSETTE;')();
 const even = v => ((v % 2) + 2) % 2;
-const OCT_SLOT = (pi, m, n) => pi === 0 ? 0 : 1 + even(m) * 2 + even(n);
-const RHOMBUS_SLOT = (pi, m, n) => pi === 1 ? 0 : 1 + (pi === 0 ? 0 : 1) * 2 + even(m);
+const OCT_SLOT = PATTERNS_ROSETTE.octagon.slotOf;
+const RHOMBUS_SLOT = PATTERNS_ROSETTE.rhombus.slotOf;
 
 const PANELS = [
   ['octagon', 'octagon: centre + four corners by cell parity = FIVE',
@@ -123,7 +144,7 @@ function census(name, slotOf, centreIs) {
   const tiles = [];
   for (let n = -5; n <= 5; n++) for (let m = -5; m <= 5; m++)
     polys.forEach((poly, pi) => tiles.push({ pi, m, n, slot: slotOf(pi, m, n),
-      pts: poly.map(q => [R(q[0] + m * ax[0] + n * ay[0]), R(q[1] + m * ax[1] + n * ay[1])]) }));
+      pts: poly.map(q => [R(q[0] + n * ax[0] + m * ay[0]), R(q[1] + n * ax[1] + m * ay[1])]) }));
   // share an EDGE = share two vertices
   const vkey = q => q[0] + ',' + q[1];
   const at = new Map();
@@ -156,13 +177,22 @@ console.log('\n  NO SLOT MAY REPEAT INSIDE A ROSETTE, checked on who actually to
 bad += census('octagon', OCT_SLOT, pi => pi === 0);
 bad += census('rhombus', RHOMBUS_SLOT, pi => pi === 1);
 
+// ABLATED, so the two clean lines above are worth something. The retired rhombus rule split BOTH
+// orientations by m - and the pi-0 pair around a standing diamond shares m, so two of the four
+// took the same slot and every rosette had four sections instead of five. It survived for as long
+// as it did because this file laid its tiles at m*ax + n*ay while the app lays them at n*ax + m*ay,
+// and under that exchange the broken rule looks fine. If it ever reads clean here again, this
+// census has stopped being able to see the thing it exists to see.
+console.log('  ablation - the retired rule, which split both orientations by m:');
+const RETIRED = (pi, m, n) => pi === 1 ? 0 : 1 + (pi === 0 ? 0 : 1) * 2 + even(m);
+if (census('rhombus', RETIRED, pi => pi === 1) === 0) {
+  console.log('    ^ THE ABLATION READ CLEAN - this census cannot catch a repeated slot');
+  bad++;
+}
+
 // ===== AND THE SELECTOR ON TOP OF IT ================================================================
 // The app's own sectionOf, lifted, so the probe cannot drift from what the floor actually does.
 const T = { pattern: null };
-const APP_ROSETTE = (SRC.match(/const ROSETTE = \{[\s\S]*?\n {2}\};/) || [''])[0];
-// The app's own table, evaluated, so the slot counts here are not a second copy to keep in step.
-const PATTERNS_ROSETTE = new Function(
-  'const ev = v => ((v % 2) + 2) % 2;\n' + APP_ROSETTE + '\nreturn ROSETTE;')();
 const sectionOf = new Function('T', 'PATTERNS',
   'const ev = v => ((v % 2) + 2) % 2;\n' + APP_ROSETTE +
   '\nconst rosetteOf = () => ROSETTE[T.pattern] || null;\n' +
@@ -203,7 +233,7 @@ function mesh(name, N) {
   const tiles = [];
   for (let n = -9; n < 9; n++) for (let m = -9; m < 9; m++) polys.forEach((poly, pi) => {
     tiles.push({ sec: sectionOf({ pi, m, n }, N),
-                 pts: poly.map(q => [R(q[0] + m * ax[0] + n * ay[0]), R(q[1] + m * ax[1] + n * ay[1])]) });
+                 pts: poly.map(q => [R(q[0] + n * ax[0] + m * ay[0]), R(q[1] + n * ax[1] + m * ay[1])]) });
   });
   const at = new Map(), vkey = q => q[0] + ',' + q[1];
   tiles.forEach((t2, i) => t2.pts.forEach(q => { const k = vkey(q); (at.get(k) || at.set(k, []).get(k)).push(i); }));
@@ -272,7 +302,7 @@ for (const [name, centreIs] of [['octagon', pi => pi === 0], ['rhombus', pi => p
     for (let n = -7; n <= 7; n++) for (let m = -7; m <= 7; m++) polys.forEach((poly, pi) => {
       const sec = sectionOf({ pi, m, n }, N);
       used.add(sec);
-      tiles.push({ pi, m, n, sec, pts: poly.map(q => [R(q[0] + m * ax[0] + n * ay[0]), R(q[1] + m * ax[1] + n * ay[1])]) });
+      tiles.push({ pi, m, n, sec, pts: poly.map(q => [R(q[0] + n * ax[0] + m * ay[0]), R(q[1] + n * ax[1] + m * ay[1])]) });
     });
     let dup = 0, rose = 0;
     if (centreIs) {

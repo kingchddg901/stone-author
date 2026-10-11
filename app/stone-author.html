@@ -1649,7 +1649,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.22';
+  const BUILD = '2026.10.11.23';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3429,8 +3429,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const ROSETTE = {
     // the octagon, and the square at each of its corners, told apart by the parity of its cell
     octagon: { slots: 5, slotOf: (pi, m, n) => pi === 0 ? 0 : 1 + ev(m) * 2 + ev(n) },
-    // the standing diamond, and the four laid ones around it
-    rhombus: { slots: 5, slotOf: (pi, m, n) => pi === 1 ? 0 : 1 + (pi === 0 ? 0 : 1) * 2 + ev(m) },
+    // The standing diamond, and the four laid ones around it. WHICH four is not a guess: measured
+    // off the real lattice, the neighbours of the standing diamond at (n, m) are pi 0 at (n-1, m)
+    // and (n, m), and pi 2 at (n-1, m+1) and (n, m). So the pi-0 pair shares m and differs only in
+    // n, while the pi-2 pair differs in both - which is why each orientation is split by a
+    // DIFFERENT axis. Splitting both by m, as this did, gave the two pi-0 neighbours the same slot
+    // and every rosette four sections instead of five.
+    rhombus: { slots: 5, slotOf: (pi, m, n) => pi === 1 ? 0 : pi === 0 ? 1 + ev(n) : 3 + ev(m) },
     // four pentagon orientations; CAIRO8 holds two copies of the motif, so eight polys are four types
     cairo: { slots: 4, slotOf: (pi) => [0, 1, 2, 3, 2, 3, 0, 1][pi] },
   };
