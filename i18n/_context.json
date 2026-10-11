@@ -1195,6 +1195,7 @@
  "op.press": {"terms": ["glass"], "where": "name of an operation in the list: a drawn roller pass. It presses a pattern in; it does not stretch the sheet, which is what the Roll operation does"},
  "ui.op-press-note": {"terms": ["glass"], "where": "shown beside a press in the operation list instead of an amount: a drawn pass takes its settings from the roller panel at the moment it was drawn, not from a slider in the list"},
  "sec.unnamed": {"terms": [], "where": "default name for a section kept from the slab - a source the floor can be laid from. Sections can be different materials from each other"},
+ "sec.snagged": {"placeholders": {"pat": "the tiling pattern's own slug, e.g. rhombus - an identifier, never translated"}, "terms": [], "where": "default name for a section taken from a single tile: that one piece of stone, at the coordinates it was cut from, reusable as a source the floor is laid from"},
  "sec.kept-cut": {"terms": ["wood"], "where": "name given to a section converted from a slab saved when these were wood-only kept cuts"},
  "mat.glass": {"terms": ["glass"], "where": "button: switch the slab to the glass material"},
  "sec.glass": {"terms": ["glass"], "where": "section heading for the glass controls"},
@@ -1736,6 +1737,9 @@
  "tool.clear-cuts": {"terms": ["wood"], "where": "button: discard every kept cut and go back to cutting one log"},
  "hint.cut-kept": {"placeholders": {"n": "how many cuts are now kept, e.g. 3"}, "terms": ["wood"], "where": "status shown after keeping a cut"},
  "hint.cuts-cleared": {"terms": ["wood"], "where": "status after discarding every kept cut"},
+ "hint.snag-needs-tiles": {"terms": [], "where": "status when Snag is used while the floor is not laid as tiles"},
+ "hint.snag-tap-a-tile": {"terms": [], "where": "status when a Snag tap misses every tile"},
+ "hint.snag-took": {"placeholders": {"n": "how many sections are now kept, e.g. 3"}, "terms": [], "where": "status shown after snagging a tile"},
  "hint.cuts-full": {"terms": ["wood"], "where": "status when trying to keep a ninth cut"},
  "sl.wood-plankLen": {"terms": ["wood"], "where": "slider: nominal plank length in inches, capped at the board's own length"},
  "sl.wood-plankVary": {"terms": ["wood"], "where": "slider: how much plank lengths differ from the nominal, 0 = all identical"},
@@ -2318,6 +2322,7 @@
   ],
   "where": "in the \"Tool\" group/panel"
  },
+ "tool.snag": {"terms": [], "where": "tool button in the \"Tool\" group/panel. Tap a laid tile and it becomes a section - that exact piece, repeated, rendered from its own coordinates"},
  "tool.cloud": {
   "where": "in the \"Tool\" group/panel"
  },

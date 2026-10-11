@@ -37,7 +37,30 @@ out = text[:i] + "\n" + SHIM + text[i:]
 # reached from a page script - and the pieces most worth testing, withSlab above all, are exactly
 # the ones that must not become a production surface. Injected beside the definition rather than
 # exported, so the shipped file has no idea this exists.
-HOOK = "\n  window.__probe = { withSlab, serialize, applySlabState };\n"
+HOOK = (
+    "\n  window.__probe = { withSlab, serialize, applySlabState, H, SW, T, inFr,\n"
+    "    tileInstances, PATTERNS, stageN, stoneC, renderStoneOffscreen, tileInstanceAt,\n"
+    "    cutBoxFromInstance, cutScale, coverSrc, snagTile, sectionList, sectionFromHere,\n"
+    "    setSections(a) { sections = a; },\n"
+    # PAINT THE SLAB UNDER AN ARBITRARY TRANSFORM. The offscreen painter only ever uses
+    # setTransform(cw,0,0,cw,0,ty) - a whole slab, scaled to fit. The open question is whether the
+    # painter is a function of POSITION, which is the only thing that lets a window of the slab be
+    # rendered on its own, so the transform has to be the probe's to choose.
+    "    paintInto(cv, tf) {\n"
+    "      const c = cv.getContext('2d'), prev = g2d; g2d = c;\n"
+    "      c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);\n"
+    # The SAME background the offscreen lays down, or a comparison against a real band measures the
+    # ground fill instead of the stone: STONE_BG is near black and COL.ground is pale marble, which
+    # came out as a mean difference of 188 of 255 and swamped the thing being tested.
+    "      c.fillStyle = STONE_BG; c.fillRect(0, 0, cv.width, cv.height);\n"
+    "      if (layVis('base')) { c.globalAlpha = layOp('base'); c.fillStyle = COL.ground;\n"
+    "        c.fillRect(0, 0, cv.width, cv.height); c.globalAlpha = 1; }\n"
+    "      c.lineCap = 'round'; c.lineJoin = 'round';\n"
+    "      c.setTransform(tf[0], tf[1], tf[2], tf[3], tf[4], tf[5]);\n"
+    "      try { paintContent(false, false); } finally { g2d = prev; }\n"
+    "      return cv;\n"
+    "    } };\n"
+)
 MARK = "  function withSlab(rec, fn) {"
 if MARK in out:
     out = out.replace(MARK, HOOK + MARK, 1)

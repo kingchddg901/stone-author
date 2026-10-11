@@ -254,6 +254,7 @@
     <button id="t-moon" type="button" data-mat-only="stone glass" data-tool="moon" data-i18n="tool.moon">Moon</button>
     <button id="t-roller" type="button" data-mat-only="glass" data-tool="roller" data-i18n="tool.roller">Roller</button>
     <button id="t-mask" type="button" data-mat-only="stone" data-tool="mask" data-i18n="tool.mask">Mask</button>
+    <button id="t-snag" type="button" data-tool="snag" data-i18n="tool.snag">Snag</button>
     <button id="t-light" type="button" data-tool="light" data-i18n="tool.light">Light</button>
     <button id="t-move" type="button" data-tool="move" data-i18n="tool.move">Move</button>
   </div>
@@ -1053,6 +1054,7 @@ window.SA_I18N = (() => {
   "ui.op-press-note": "the roller pass you drew",
   "sec.unnamed": "Section",
   "sec.kept-cut": "Kept cut",
+  "sec.snagged": "Snagged {pat}",
   "mat.glass": "Glass",
   "sec.glass": "Glass",
   "lbl.forming": "Formed by",
@@ -1213,6 +1215,9 @@ window.SA_I18N = (() => {
   "tool.clear-cuts": "Clear",
   "hint.cut-kept": "Kept \u2014 {n} cut(s). The floor is laid from these now; change anything, even the species, and keep another.",
   "hint.cuts-cleared": "Cleared. The floor goes back to walking down one log.",
+  "hint.snag-needs-tiles": "Turn Lay tiles on first \u2014 Snag takes a tile, so there have to be tiles to take.",
+  "hint.snag-tap-a-tile": "Tap on a tile. Snag keeps the piece you point at, at the coordinates it was cut from.",
+  "hint.snag-took": "Snagged \u2014 {n} section(s). Every tile laid from it now shows that same piece, at nine times the detail.",
   "hint.cuts-full": "Eight kept cuts is the limit \u2014 each one is its own log to build.",
   "sl.wood-rings": "Rings",
   "sl.wood-late": "Latewood contrast",
@@ -1331,6 +1336,7 @@ window.SA_I18N = (() => {
   "tip.w-lit-this-layer-follows-warp": "W lit = this layer follows warp; dim = held still",
   "tool.branch": "Branch",
   "tool.chip": "Chip",
+  "tool.snag": "Snag",
   "tool.cloud": "Cloud",
   "tool.gravity": "Gravity",
   "tool.inorder": "In order",
@@ -1643,7 +1649,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.21';
+  const BUILD = '2026.10.11.22';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3314,6 +3320,45 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     return out;
   }
+  // ---- A TILE, TAKEN AS A SECTION ------------------------------------------------------------------
+  // "I select a particular rhombus and have that exported as a rhombus, to be used later." What a
+  // tile IS, as data, is a WINDOW on the slab: poly - shift is already exactly where it was cut
+  // from, computed for every tile and until now folded into the blit offset and thrown away. The
+  // painter is a function of POSITION, so that window can be rendered on its own: measured in all
+  // three materials, painting only the box with slab coordinates kept and the transform magnified
+  // is PIXEL-IDENTICAL to cropping it out of a full slab render (mean 0, max 0), while the same
+  // comparison with the origin moved 160 px diverges at 6-37, so the claim can fail.
+  //
+  // It is not a saving, it is resolution. A 14 in rhombus gets 77 x 44 pixels of a 700 x 438 band
+  // today and is stretched over a far larger tile; windowed into the same band it gets 700 x 404 -
+  // 9.1x linear detail, for 256 ms against 275 ms. Slightly CHEAPER, because fewer veins cross a
+  // small box than cross a whole slab.
+  //
+  // WRAPPED AND CLAMPED into the slab, deliberately. A tile's window drifts with kerf and shuffle
+  // and can sit past the slab edge, where drawTiles wraps it - but a window render cannot wrap, and
+  // outside the slab rectangle the painter has nothing to say, so an unclamped box would come back
+  // as bare background. Wrap the origin, then pull it in until the box fits.
+  function cutBoxFromInstance(t) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of t.poly) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
+    x0 -= t.shift[0]; x1 -= t.shift[0]; y0 -= t.shift[1]; y1 -= t.shift[1];   // poly - shift: the slab
+    const w = Math.min(1, x1 - x0), h = Math.min(H, y1 - y0);
+    const wrap = (v, m) => ((v % m) + m) % m;
+    return [Math.min(wrap(x0, 1), 1 - w), Math.min(wrap(y0, H), H - h), w, h];
+  }
+  // HOW BIG THE CUT IS PAINTED. Uniform scale - the stone is never distorted - and the tighter of
+  // the two ratios, so the box always lands inside the band it has been given however long and thin
+  // the tile is.
+  const cutScale = (cw, bandPx, box) => Math.min(cw / box[2], bandPx / box[3]);
+  // COVER, never stretch. A cut is one tile's box, and the tiles it is laid into need not share its
+  // shape - a cut from a standing diamond can land on a laid one. Fitting by the tighter ratio and
+  // centring crops the cut instead of distorting the stone, and when the two shapes DO agree it
+  // uses the whole box with no offset at all.
+  function coverSrc(sw, sh, dw, dh) {
+    const sc = Math.min(sw / dw, sh / dh);               // source pixels per destination unit
+    const w = dw * sc, h = dh * sc;
+    return [(sw - w) / 2, (sh - h) / 2, w, h];
+  }
   // The authored stone, rendered once to an offscreen the size of the slab, reused by every tile.
   const stoneC = document.createElement('canvas');
   let stoneReady = false;
@@ -3342,6 +3387,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     slab.wood = {}; for (const k in e) if (k !== 'set' && k !== 'ovr') slab.wood[k] = e[k];
     if (e.ovr) slab.OVR = { ...slab.OVR, ...e.ovr };
     return { id: 'cut' + Math.random().toString(36).slice(2, 9), name: TR('sec.kept-cut'), mat: 'wood', slab };
+  }
+  // SNAG THE TILE UNDER THE FINGER. The slab it records is the one that tile is SHOWING, not the one
+  // on the controls: once a floor is laid from sections the tile in front of you is section
+  // sectionOf(t), and keeping the live slab instead would hand back a different stone from the one
+  // that was pointed at. Snagging a tile that is ALREADY a cut has nothing new to take - the stone
+  // in front of you IS that cut - so its box is carried across rather than re-measured, which would
+  // otherwise measure a tile against an already-magnified band and nest one window inside another.
+  function snagTile(fx, fy) {
+    if (!layTiles) { hint(TR('hint.snag-needs-tiles')); return; }
+    if (sectionList().length >= 8) { hint(TR('hint.cuts-full')); return; }
+    const t = tileInstanceAt(fx, fy);
+    if (!t) { hint(TR('hint.snag-tap-a-tile')); return; }
+    const SET = sectionList();
+    const src = SET.length ? SET[Math.min(SET.length - 1, sectionOf(t, stageN()))] : null;
+    const rec = src ? JSON.parse(JSON.stringify(src)) : sectionFromHere();
+    rec.id = 'cut' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+    rec.cut = src && src.cut ? src.cut
+      : { pattern: T.pattern, n: t.n, m: t.m, pi: t.pi, box: cutBoxFromInstance(t) };
+    rec.name = TR('sec.snagged', { pat: T.pattern });    // the pattern is a slug, so it is not translated
+    sections = [...SET, rec];
+    showSetCount(); redraw(true); hint(TR('hint.snag-took', { n: sections.length }));
   }
   // How many sources the floor has. A kept set answers first - that is the "depending on choice" -
   // and the cant answers when there is nothing kept.
@@ -3440,16 +3506,32 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // Each section is a whole slab, so each one is swapped in entire - material included. The
       // hand-rolled version here could only put WOOD and three colour tokens back, which is right
       // until a section is glass.
+      // CLIPPED TO ITS OWN BAND. A full-slab transform exactly fills its band, so nothing ever
+      // needed a clip; a CUT band is the slab magnified ~9x and the other 8/9ths of it would land
+      // in the neighbouring bands. The clip goes round every band, cut or not, because a painter
+      // that overshoots the slab edge was bleeding into the next board either way.
       withSlabs(SET.slice(0, st).map(s => s.slab), (_, k) => {
         woodBandY = 0;
-        c.setTransform(cw, 0, 0, cw, 0, k * cw * H);
+        const cut = SET[k] && SET[k].cut;
+        c.setTransform(1, 0, 0, 1, 0, 0); c.save();
+        c.beginPath(); c.rect(0, k * cw * H, cw, cw * H); c.clip();
+        if (cut) {
+          const kz = cutScale(cw, cw * H, cut.box);
+          c.setTransform(kz, 0, 0, kz, -cut.box[0] * kz, -cut.box[1] * kz + k * cw * H);
+        } else {
+          c.setTransform(cw, 0, 0, cw, 0, k * cw * H);
+        }
         paintContent(false, false);
+        c.restore();
       });
     } else {
       for (let k = 0; k < st; k++) {
         woodBandY = st > 1 ? cantBand(k) : 0;
+        c.setTransform(1, 0, 0, 1, 0, 0); c.save();
+        c.beginPath(); c.rect(0, k * cw * H, cw, cw * H); c.clip();
         c.setTransform(cw, 0, 0, cw, 0, k * cw * H);
         paintContent(false, false);
+        c.restore();
       }
     }
     woodBandY = 0;
@@ -3477,7 +3559,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const px = 1 / (Wc * V.z);
     ctx.fillStyle = GROUT; ctx.fillRect(V.cx - 0.6 / V.z, V.cy - 0.6 / V.z, 1.2 / V.z, 1.2 / V.z);
     const pat = PATTERNS[T.pattern](T.sizeIn);
-    const inst = tileInstances(), chips = chipMap();
+    const inst = tileInstances(), chips = chipMap(), SET = sectionList();
     const STAGE = stageN(), HS = H * STAGE;                // HS: the source's own height in slab units
     if (pat.overlap) inst.sort((a, b) => b.ctr[1] - a.ctr[1]);       // lower scales first, upper cover their tops
     const rng = mulberry32(1234567);
@@ -3515,9 +3597,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // draw the slab image repeated across the tile's box so it is always stone, never bare grout.
       let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
       for (const q of poly) { if (q[0] < bx0) bx0 = q[0]; if (q[0] > bx1) bx1 = q[0]; if (q[1] < by0) by0 = q[1]; if (q[1] > by1) by1 = q[1]; }
-      const i0 = Math.floor(bx0 + shift[0]), i1 = Math.floor(bx1 + shift[0]);
-      const j0 = Math.floor((by0 + shift[1]) / HS), j1 = Math.floor((by1 + shift[1]) / HS);
-      for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) ctx.drawImage(stoneC, i - shift[0], j * HS - shift[1], 1, HS);
+      // A CUT SECTION'S BAND IS THE TILE ITSELF, so there is nothing to wrap and no shift to apply:
+      // one draw, the band's box covering this tile's box. That is what makes every tile laid from
+      // the cut show the SAME piece of stone rather than walking across the slab - which is the
+      // whole point of snagging one.
+      const cutRec = SET[band] && SET[band].cut;
+      if (cutRec) {
+        const bandPx = stoneC.width * H, kz = cutScale(stoneC.width, bandPx, cutRec.box);
+        const src = coverSrc(cutRec.box[2] * kz, cutRec.box[3] * kz, bx1 - bx0, by1 - by0);
+        ctx.drawImage(stoneC, src[0], band * bandPx + src[1], src[2], src[3], bx0, by0, bx1 - bx0, by1 - by0);
+      } else {
+        const i0 = Math.floor(bx0 + shift[0]), i1 = Math.floor(bx1 + shift[0]);
+        const j0 = Math.floor((by0 + shift[1]) / HS), j1 = Math.floor((by1 + shift[1]) / HS);
+        for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) ctx.drawImage(stoneC, i - shift[0], j * HS - shift[1], 1, HS);
+      }
       ctx.restore();
       if (pat.overlap) {                                // scales overlap - outline each in order so the scallop of the one below stays visible
         ctx.strokeStyle = GROUT; ctx.lineWidth = Math.max(px, inFr(T.groutIn) * 0.7);
@@ -3548,14 +3641,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
     }
   }
-  function whichTile(fx, fy) {
-    for (const t of tileInstances()) { let inside = false, P = t.poly;
+  // WHICH TILE, as the instance. Chip only ever wanted a key and an edge, but snagging a tile needs
+  // the whole thing - its lattice position and, above all, its shift, which is where on the slab it
+  // was cut from. Split out rather than copied so there is one hit test, not two that can disagree.
+  function tileInstanceAt(fx, fy) {
+    for (const t of tileInstances()) { let inside = false; const P = t.poly;
       for (let i = 0, j = P.length - 1; i < P.length; j = i++) if ((P[i][1] > fy) !== (P[j][1] > fy) && fx < (P[j][0] - P[i][0]) * (fy - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) inside = !inside;
-      if (inside) { // nearest edge
-        let be = 0, bd = Infinity; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], ex = b[0] - a[0], ey = b[1] - a[1], tt = Math.max(0, Math.min(1, ((fx - a[0]) * ex + (fy - a[1]) * ey) / (ex * ex + ey * ey || 1))); const d = Math.hypot(fx - (a[0] + ex * tt), fy - (a[1] + ey * tt)); if (d < bd) { bd = d; be = i; } }
-        return { key: t.key, edge: be }; }
+      if (inside) return t;
     }
     return null;
+  }
+  function whichTile(fx, fy) {
+    const t = tileInstanceAt(fx, fy);
+    if (!t) return null;
+    const P = t.poly;                                    // nearest edge
+    let be = 0, bd = Infinity; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], ex = b[0] - a[0], ey = b[1] - a[1], tt = Math.max(0, Math.min(1, ((fx - a[0]) * ex + (fy - a[1]) * ey) / (ex * ex + ey * ey || 1))); const d = Math.hypot(fx - (a[0] + ex * tt), fy - (a[1] + ey * tt)); if (d < bd) { bd = d; be = i; } }
+    return { key: t.key, edge: be };
   }
 
   // ---- drawing
@@ -6625,6 +6726,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const hit = whichTile(f[0], f[1]);
       if (hit) commit({ id, kind: 'chip', seed, tileKey: hit.key, edge: hit.edge });
       else hint(layTiles ? TR('hint.tap-on-a-tile-to-chip') : TR('hint.turn-lay-tiles-on-first-then'));
+    } else if (g.type === 'draw' && tool === 'snag') {
+      nextId--;                                          // Snag makes no mark - it TAKES a section
+      const f = toFrame(...g.e0 || [0, 0]);
+      snagTile(f[0], f[1]);
     } else if (g.type === 'draw' && tool === 'tune') {
       nextId--;                                          // Tune makes no mark — it SELECTS an artifact (vein / web spread / seam)
       const f = toFrame(...g.e0 || [0, 0]);
