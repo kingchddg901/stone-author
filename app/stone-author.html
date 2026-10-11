@@ -252,6 +252,7 @@
     <button id="t-tune" type="button" data-mat-only="stone" data-tool="tune" data-i18n="tool.tune">Tune</button>
     <button id="t-cloud" type="button" data-mat-only="stone" data-tool="cloud" data-i18n="tool.cloud">Cloud</button>
     <button id="t-moon" type="button" data-mat-only="stone glass" data-tool="moon" data-i18n="tool.moon">Moon</button>
+    <button id="t-roller" type="button" data-mat-only="glass" data-tool="roller" data-i18n="tool.roller">Roller</button>
     <button id="t-mask" type="button" data-mat-only="stone" data-tool="mask" data-i18n="tool.mask">Mask</button>
     <button id="t-light" type="button" data-tool="light" data-i18n="tool.light">Light</button>
     <button id="t-move" type="button" data-tool="move" data-i18n="tool.move">Move</button>
@@ -307,6 +308,15 @@
   <div class="sliders" data-mat-only="stone glass" id="s-moon" hidden>
     <div class="sl"><label for="moonReach"><span data-i18n="sl.moonReach">Ball size</span> <output id="moonReachV"></output></label><input id="moonReach" type="range" min="0.3" max="3" step="0.05"></div>
     <div class="sl"><label for="moonStrength"><span data-i18n="sl.moonStrength">Pull</span> <output id="moonStrengthV"></output></label><input id="moonStrength" type="range" min="0.2" max="3" step="0.05"></div>
+  </div>
+  <div class="sliders" data-mat-only="glass" id="s-roller" hidden>
+    <div class="sl"><label for="rollD"><span data-i18n="sl.rollD">Roller across</span> <output id="rollDV"></output></label><input id="rollD" type="range" min="1" max="24" step="0.25"></div>
+    <div class="sl"><label for="rollFace"><span data-i18n="sl.rollFace">Roller face</span> <output id="rollFaceV"></output></label><input id="rollFace" type="range" min="0.2" max="8" step="0.05"></div>
+    <div class="sl"><label for="rollStampN"><span data-i18n="sl.rollStampN">Stamps round it</span> <output id="rollStampNV"></output></label><input id="rollStampN" type="range" min="0" max="48" step="1"></div>
+    <div class="sl"><label for="rollStampSize"><span data-i18n="sl.rollStampSize">Stamp across</span> <output id="rollStampSizeV"></output></label><input id="rollStampSize" type="range" min="0.1" max="4" step="0.05"></div>
+    <div class="sl"><label for="rollStampRot"><span data-i18n="sl.rollStampRot">Stamp turned</span> <output id="rollStampRotV"></output></label><input id="rollStampRot" type="range" min="0" max="90" step="1"></div>
+    <div class="sl"><label for="rollBite"><span data-i18n="sl.rollBite">Bite</span> <output id="rollBiteV"></output></label><input id="rollBite" type="range" min="0" max="1.5" step="0.01"></div>
+    <p class="note" data-i18n="note.roller">C = πD, so the roller’s way round IS the repeat along the pass — not a pitch you set. The stamps are staggered along the face so no two share a track, and the pass always starts with one, start down. A piece shorter than C never sees a full turn, so part of the roller never touches it. With pressure on, how hard you press sets how deep it bites; with tilt on, leaning the pen across the pass tips that end of the face down.</p>
   </div>
   <div class="sliders" data-mat-only="stone" id="s-mask" hidden>
     <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.island">Island</span><div class="grp" role="group" aria-label="Island sense" data-i18n-attr="aria-label=a11y.island-sense">
@@ -1028,6 +1038,18 @@ window.SA_I18N = (() => {
   "a11y.cell-colour": "Change this cell\u2019s colour",
   "lay.glass-e": "Glass colour E",
   "lay.glass-f": "Glass colour F",
+  "tool.roller": "Roller",
+  "toolhint.roller": "Roll a pass across the slab. The roller presses its die into the glass as it goes — C = πD, so its way round is the repeat, and a piece shorter than that never sees a full turn. Curve the pass and the pattern curves with it. With pressure on, how hard you press sets how deep it bites; with tilt on, leaning across the pass tips that end of the face down.",
+  "sl.rollD": "Roller across",
+  "sl.rollFace": "Roller face",
+  "sl.rollStampN": "Stamps round it",
+  "sl.rollStampSize": "Stamp across",
+  "sl.rollStampRot": "Stamp turned",
+  "sl.rollBite": "Bite",
+  "note.roller": "C = πD, so the roller’s way round IS the repeat along the pass — not a pitch you set. The stamps are staggered along the face so no two share a track, and the pass always starts with one, start down. A piece shorter than C never sees a full turn, so part of the roller never touches it. With pressure on, how hard you press sets how deep it bites; with tilt on, leaning the pen across the pass tips that end of the face down.",
+  "hint.roll-the-roller-across": "Drag the roller across the slab. It presses its die in as it goes, starting with one, start down.",
+  "op.press": "Press",
+  "ui.op-press-note": "the roller pass you drew",
   "mat.glass": "Glass",
   "sec.glass": "Glass",
   "lbl.forming": "Formed by",
@@ -1616,7 +1638,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.10';
+  const BUILD = '2026.10.11.11';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1785,7 +1807,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // change applies forward and never rewrites what is already down.
   const NEXT = { pressure: false, tilt: false, gauge: 1, rough: 1, breaks: 1, branches: 1, blen: 1, gauge2: 1, spread: 1, density: 1, stretch: 1,
               prate: 1500, pwidth: 1, pfling: 1, defl: 1, fold: 1, sign: 1, strength: 0.5, reach: 1, mag: 1, mstrength: 0.6, mreach: 1, mheight: 1,
-              stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1, maskFeather: 0.06, maskWin: 0, maskSpec: 0, maskInvert: 0 };
+              stylAmp: 1, stylTooth: 1, stylWidth: 1, variant: 'natural', varAmt: 1, moonReach: 1, moonStrength: 1,
+              // THE ROLLER. Diameter decides the repeat (C = pi*D) and is therefore not a pitch
+              // anyone sets; the rest are the die on its face and how hard it is leaned on.
+              rollD: 6, rollFace: 5, rollStampN: 24, rollStampSize: 1, rollStampRot: 45, rollBite: 1, maskFeather: 0.06, maskWin: 0, maskSpec: 0, maskInvert: 0 };
   // THE GROUND is the slab's, not a line's: one of it, so its settings apply at once
   const G = { subsurface: 0, specular: 0, lightAngle: 135, lightTemp: 0, lightX: 0.5, lightY: 0.3125, spotR: 0.25, speckGroups: 1, speckSubs: 1, cloudScale: 1, cloudStrength: 0.5, warp: 0, warpDepth: 0.6, cloudX: 0, cloudY: 0, warpMask: [],
               bandStrength: 0, bandFreq: 6, bandAngle: 0, bandWave: 0.4,
@@ -5377,6 +5402,105 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (a > s) a = 2 * s - a;
     return R * r2 * Math.sin(s) / (R * Math.sin(a) + r2 * Math.sin(s - a));
   }
+  // WHICH WAY THE PEN IS LEANING, along the stroke. leanProfile answers how FAR from the rest grip;
+  // this answers which way, as a unit vector, interpolated through cos/sin so it cannot spin the
+  // wrong way round the back at the wrap. Azimuth is sample[5], which the magnet already reads.
+  function penAxis(S) {
+    const cum = [0];
+    for (let i = 1; i < S.length; i++) cum.push(cum[i - 1] + Math.hypot(S[i][0] - S[i - 1][0], S[i][1] - S[i - 1][1]));
+    const total = cum[cum.length - 1] || 1e-9;
+    const cs = S.map(q => (q[5] == null ? 1 : Math.cos(q[5])));
+    const sn = S.map(q => (q[5] == null ? 0 : Math.sin(q[5])));
+    return (u, out) => {
+      const target = Math.min(Math.max(u, 0), 1) * total;
+      let i = 1; while (i < cum.length - 1 && cum[i] < target) i++;
+      const seg = (cum[i] - cum[i - 1]) || 1e-9, f = Math.min(1, Math.max(0, (target - cum[i - 1]) / seg));
+      const a = cs[i - 1] + (cs[i] - cs[i - 1]) * f, b = sn[i - 1] + (sn[i] - sn[i - 1]) * f;
+      const n = Math.hypot(a, b) || 1e-9;
+      out[0] = a / n; out[1] = b / n;
+    };
+  }
+  // THE PASS, AS THE ROLLER SEES IT. A resampled path with, at every point, how far along it we
+  // are and what the hand was doing there.
+  //
+  // THE TILT IS SIGNED AGAINST THE PATH NORMAL. Positive leans one end of the face down, negative
+  // the other, and a lean straight along the stroke resolves to zero - which is what makes the
+  // control mean the same thing on a curve as on a straight.
+  function rollerPath(m) {
+    const P = resample(m.samples, 0.004);
+    if (P.length < 2) return null;
+    const cum = [0];
+    for (let i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+    const total = cum[cum.length - 1];
+    if (!(total > 1e-6)) return null;
+    const M = m.p || {}, S = m.samples;
+    const pf = M.pressure ? pressFactor(S) : null;              // null when the hardware sent none
+    const lp = M.tilt ? leanProfile(S, m.rest) : null;
+    const ax = lp ? penAxis(S) : null, pen = [1, 0];
+    const pr = new Float32Array(P.length), tl = new Float32Array(P.length);
+    for (let i = 0; i < P.length; i++) {
+      const u = cum[i] / total;
+      pr[i] = pf ? pf(u) : 1;
+      if (!lp) { tl[i] = 0; continue; }
+      const a = Math.max(0, i - 1), b = Math.min(P.length - 1, i + 1);
+      const tx = P[b][0] - P[a][0], ty = P[b][1] - P[a][1], tn = Math.hypot(tx, ty) || 1e-9;
+      const nx = -ty / tn, ny = tx / tn;                        // the path's normal: across the pass
+      ax(u, pen);
+      tl[i] = lp(u) * (pen[0] * nx + pen[1] * ny);              // leaning ALONG the pass resolves to 0
+    }
+    return { P, cum, total, pr, tl };
+  }
+  // BAKED, like the stir, and for the same reason: nearest-point-on-path walks every segment, so
+  // per pixel that is ~170 segments times 600k. On this grid it is ~170 times 16k, bilinear in
+  // between. Held in FEET, because the roller's diameter and face are physical and the mark is not.
+  function rollerBake(m, H) {
+    const R = rollerPath(m); if (!R) return null;
+    const nx = 193, ny = Math.max(33, Math.round(192 * H) + 1);
+    const sg = new Float32Array(nx * ny), vg = new Float32Array(nx * ny);
+    const P = R.P, cum = R.cum;
+    for (let j = 0; j < ny; j++) {
+      const py = (j / (ny - 1)) * H;
+      for (let i = 0; i < nx; i++) {
+        const px = i / (nx - 1);
+        let bd = Infinity, bs = 0, bv = 0;
+        for (let k = 1; k < P.length; k++) {
+          const ax2 = P[k - 1][0], ay2 = P[k - 1][1];
+          const ex = P[k][0] - ax2, ey = P[k][1] - ay2;
+          const L2 = ex * ex + ey * ey; if (L2 < 1e-12) continue;
+          let tq = ((px - ax2) * ex + (py - ay2) * ey) / L2;
+          if (tq < 0) tq = 0; else if (tq > 1) tq = 1;
+          const qx = ax2 + ex * tq, qy = ay2 + ey * tq;
+          const dx = px - qx, dy = py - qy, d2 = dx * dx + dy * dy;
+          if (d2 >= bd) continue;
+          bd = d2; bs = cum[k - 1] + Math.sqrt(L2) * tq;
+          // SIGNED across, so the two ends of the face are told apart - which is the whole of tilt.
+          bv = (dx * ey - dy * ex) / Math.sqrt(L2);
+        }
+        sg[j * nx + i] = bs * SLAB_FT; vg[j * nx + i] = bv * SLAB_FT;
+      }
+    }
+    return { s: sg, v: vg, nx, ny, H, R, total: R.total * SLAB_FT };
+  }
+  // Where this point sits under the pass: out = [along in feet, across in feet].
+  function rollerAt(B, cu, cvv, out) {
+    const fx = cu * (B.nx - 1), fy = (cvv / B.H) * (B.ny - 1);
+    let i0 = fx | 0, j0 = fy | 0;
+    if (i0 > B.nx - 2) i0 = B.nx - 2; if (i0 < 0) i0 = 0;
+    if (j0 > B.ny - 2) j0 = B.ny - 2; if (j0 < 0) j0 = 0;
+    const tx = fx - i0, ty = fy - j0, k = j0 * B.nx + i0, k2 = k + B.nx;
+    out[0] = (B.s[k] * (1 - tx) + B.s[k + 1] * tx) * (1 - ty) + (B.s[k2] * (1 - tx) + B.s[k2 + 1] * tx) * ty;
+    out[1] = (B.v[k] * (1 - tx) + B.v[k + 1] * tx) * (1 - ty) + (B.v[k2] * (1 - tx) + B.v[k2 + 1] * tx) * ty;
+  }
+  // What the hand was doing at this distance along the pass.
+  function rollerHand(B, s, out) {
+    const R = B.R, n = R.P.length;
+    const u = B.total > 0 ? s / B.total : 0;
+    const f = Math.min(Math.max(u, 0), 1) * (n - 1);
+    let i = f | 0; if (i > n - 2) i = n - 2; if (i < 0) i = 0;
+    const g = f - i;
+    out[0] = R.pr[i] + (R.pr[i + 1] - R.pr[i]) * g;
+    out[1] = R.tl[i] + (R.tl[i + 1] - R.tl[i]) * g;
+  }
   // WHAT THE ROLLER PRESSED IN. C = pi*D, so the roller's circumference IS the repeat along the
   // roll - it is not a pitch anyone chooses - and a stamp's angle around the roller is its phase
   // inside that repeat. A stamp's position along the roller's face is where it lands across the
@@ -5387,17 +5511,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // honest, not a bug to pad around.
   //
   // Returns 0..1 coverage. A stamp presses IN, so the painter thins the sheet by it.
-  function rollStamp(x, y, op, u0ref) {
+  // WHICH STAMP IS AT (along, across). Both the straight roll and a drawn pass ask exactly this,
+  // so it is one function: two copies of the stamp layout would drift, and the drift would be
+  // invisible because both would keep producing stars.
+  function rollStampAt(s, v, op) {
     const sts = op.st; if (!sts || !sts.length) return 0;
     const C = Math.PI * (+op.D || 6) / 12;                     // D in inches -> circumference in feet
-    const dr = (+op.d || 0) * Math.PI / 180, cd = Math.cos(dr), sd = Math.sin(dr);
-    const u0 = x * cd + y * sd, v = -x * sd + y * cd;          // along the roll, and across it
-    // ONE, START DOWN. Phase 0 is where the roller first touched the sheet, not the object's
-    // origin. On a piece shorter than C that choice decides which arc of the roller ever touches
-    // it, and therefore which band comes out bare - so leaving it at the origin was deciding most
-    // of the composition by accident. Passed in rather than stored on the op: it depends on where
-    // the pane was cut, and a number cached into a saved slab would be wrong the moment it moved.
-    let u = (u0 - (u0ref || 0)) % C; if (u < 0) u += C;
+    let u = s % C; if (u < 0) u += C;
     for (let i = 0; i < sts.length; i++) {
       const st = sts[i], R = (+st.r || 1) / 24;                // star WIDTH in inches -> radius in feet
       let du = u - ((((+st.a || 0) / 360) % 1 + 1) % 1) * C;
@@ -5411,6 +5531,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (d2 <= rr * rr) return 1;
     }
     return 0;
+  }
+  // The straight roll derives (along, across) from a fixed direction. ONE, START DOWN: phase 0 is
+  // where the roller first touched the sheet, not the object's origin - on a piece shorter than C
+  // that choice decides which arc ever touches it, and therefore which band comes out bare. Passed
+  // in rather than stored on the op, because it depends on where the pane was cut and a number
+  // cached into a saved slab would be wrong the moment it moved.
+  function rollStamp(x, y, op, u0ref) {
+    if (!op.st || !op.st.length) return 0;
+    const dr = (+op.d || 0) * Math.PI / 180, cd = Math.cos(dr), sd = Math.sin(dr);
+    return rollStampAt(x * cd + y * sd - (u0ref || 0), -x * sd + y * cd, op);
   }
   // ===== THE MOULD, AND THE LIST OF WHAT WAS DONE TO IT ========================================
   // YOU CANNOT FORM WHAT IS NOT THERE. Colour is poured into a mould, left to set part-way, and
@@ -5471,6 +5601,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           const a1 = a0 / s, c1 = c0 * s;
           x = a1 * cd - c1 * sd; y = a1 * sd + c1 * cd;
         } else { x /= s; y *= s; }
+      } else if (k === 'press' && F.ROLL) {
+        // A DRAWN PASS. The roller's own coordinates: how far ALONG it, how far ACROSS. Outside
+        // the face it simply did not touch, which is why a pass is a mark and not a mode.
+        const B = F.ROLL[op.ri | 0];
+        if (B) {
+          const cu = (x - F.PX) * 12 / SLAB_FT + 0.5;
+          const cvv = (y - F.PY) * 12 / SLAB_FT + 0.5 * F.H;
+          rollerAt(B, cu, cvv, F.PV);
+          const sAt = F.PV[0], vAt = F.PV[1], half = Math.max(0.05, +op.face || 5) * 0.5;
+          if (vAt > -half && vAt < half) {
+            rollerHand(B, sAt, F.PH);
+            // TILT TIPS ONE END DOWN, linear across the face. Clamped at zero because a lifted end
+            // does not press at all - which is the right answer for a rigid cylinder leaned far
+            // enough that only one end still touches.
+            let bite = (+op.bite || 1) * F.PH[0] * (1 + F.PH[1] * (vAt / half));
+            if (bite > 0) {
+              const h = rollStampAt(sAt, vAt, op);
+              if (h > 0) { const q = h * (bite > 1 ? 1 : bite); if (q > press) press = q; }
+            }
+          }
+        }
       } else if (k === 'stir' && F.S) {
         const cu = (x - F.PX) * 12 / SLAB_FT + 0.5;
         const cvv = ((y - F.PY) * 12 / SLAB_FT + 0.5 * F.H);
@@ -5670,6 +5821,30 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // direction, so stamp one lands where the pass began. Exact for a roll that is the last thing
     // done to the sheet; a roll with further ops after it is measured in the pane's frame rather
     // than its own, which is a far smaller error than pinning the phase to the origin was.
+    // EACH DRAWN PASS, BAKED, and an op for it in the list. A pass is a mark like any other, so
+    // it takes its settings from when it was drawn rather than from the panel now - and its place
+    // in the order is the user's, which is why it goes in the list instead of being applied last.
+    F.ROLL = []; F.PV = [0, 0]; F.PH = [1, 0];
+    for (const m of marks) {
+      if (m.kind !== 'roller') continue;
+      const B = rollerBake(m, H); if (!B) continue;
+      const P = m.p || {}, n = Math.max(0, Math.round(P.rollStampN || 0));
+      const ri = F.ROLL.push(B) - 1;
+      // Staggered along the face so no two share a track, and evenly round so the step is 360/n -
+      // which is his 24 at 15 degrees without anyone having to say 15.
+      const face = Math.max(0.05, P.rollFace || 5);
+      const st = Array.from({ length: n }, (_, i) => ({
+        a: i * 360 / n, x: -face / 2 + (i + 0.5) * (face / n),
+        rot: P.rollStampRot || 0, r: Math.max(0.05, P.rollStampSize || 1) }));
+      if (!OPS.some(o => o && o.k === 'press' && o.mid === m.id)) {
+        OPS.push({ k: 'press', mid: m.id, ri, D: Math.max(0.25, P.rollD || 6), face,
+                   bite: Math.max(0, P.rollBite == null ? 1 : P.rollBite), st });
+      } else {
+        const o = OPS.find(q => q && q.k === 'press' && q.mid === m.id);
+        o.ri = ri; o.D = Math.max(0.25, P.rollD || 6); o.face = face;
+        o.bite = Math.max(0, P.rollBite == null ? 1 : P.rollBite); o.st = st;
+      }
+    }
     F.RU0 = [];
     {
       const hx = SLAB_FT / 24, hy = SLAB_FT * H / 24;
@@ -6141,6 +6316,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     tune: 'toolhint.tune',
     cloud: 'toolhint.cloud',
     moon: 'toolhint.moon',
+    roller: 'toolhint.roller',
     mask: 'toolhint.mask',
     light: 'toolhint.light',
     move: 'toolhint.move',
@@ -6321,6 +6497,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } else if (g.type === 'draw' && tool === 'magnet') {
       commit({ id, kind: 'magnet', seed, samples: g.samples, tgt: sculptTarget() });
       if (!geo.specks.length) hint(TR('hint.the-magnet-turns-specks-switch-to'));
+    } else if (g.type === 'draw' && tool === 'roller') {
+      // rest comes along because tilt is measured FROM the grip, and the grip at the moment the
+      // pass began is the only one that was true for it.
+      if (pathLen(g.samples) < 0.02) { nextId--; hint(TR('hint.roll-the-roller-across')); }
+      else commit({ id, kind: 'roller', seed, samples: g.samples, rest: g.rest });
     } else if (g.type === 'draw' && tool === 'moon') {
       if (pathLen(g.samples) < 0.02) { nextId--; hint(TR('hint.drag-the-moon-across-the-slab')); }
       else commit({ id, kind: 'moon', seed, samples: g.samples });
@@ -7701,7 +7882,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const id of Object.keys(NEXT)) { const el = document.getElementById(id); if (el) { el.value = NEXT[id]; document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; } }
     for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
-    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
+    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'roller', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
     showGround(); syncWood(); syncGlass(); syncLayerUI(); syncGranite(); syncFog(); hint();
   }
   // Revoking a blob URL while the browser is still writing the file CANCELS the download, and the old
@@ -8592,7 +8773,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     tool = b.dataset.tool; press('[data-tool]', b); hint();
     const show = tool === 'move' ? 'vein' : tool;
-    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
+    for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'roller', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
   });
   for (const b of document.querySelectorAll('[data-sign]')) b.addEventListener('click', () => { NEXT.sign = +b.dataset.sign; press('[data-sign]', b); });
   for (const b of document.querySelectorAll('[data-mag]')) b.addEventListener('click', () => { NEXT.mag = +b.dataset.mag; press('[data-mag]', b); });
@@ -8649,8 +8830,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         sl.addEventListener('input', () => { op.a = +sl.value; ov.textContent = (+sl.value).toFixed(2); redraw(true); });
         row.append(sl, ov);
       } else {
-        // A stir has no amount of its own: the moon's ball size and pull are its amount.
-        const sp = document.createElement('span'); sp.textContent = TR('ui.op-stir-note');
+        // Neither a stir nor a press has an amount of its own: both are drawn, so their settings
+        // live on the mark that was drawn and not on a slider in the list.
+        const sp = document.createElement('span');
+        sp.textContent = TR(op.k === 'press' ? 'ui.op-press-note' : 'ui.op-stir-note');
         sp.style.gridColumn = 'span 2'; sp.style.fontSize = '11px'; sp.style.color = 'var(--dim)';
         row.append(sp);
       }

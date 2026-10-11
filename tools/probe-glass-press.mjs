@@ -36,7 +36,7 @@ function lift(name) {
   throw new Error('unbalanced: ' + name);
 }
 const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'mix', 'resample', 'warpMaskAt',
-                'moonDisp', 'glassWarp', 'glassUnwarp', 'starR', 'rollStamp', 'glassUnform', 'glassLay',
+                'moonDisp', 'glassWarp', 'glassUnwarp', 'starR', 'rollStampAt', 'rollStamp', 'glassUnform', 'glassLay',
                 'glassCellSDF', 'glassCellSpread', 'glassDepth'];
 const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
 const G = { warp: 0, cloudScale: 1, cloudX: 0, cloudY: 0 };
