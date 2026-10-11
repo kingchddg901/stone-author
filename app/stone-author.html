@@ -475,6 +475,7 @@
       <div class="sl"><label for="glass-seeds"><span data-i18n="sl.glass-seeds">Seeds</span> <output id="glass-seedsV"></output></label><input id="glass-seeds" type="range" min="0" max="1" step="0.01"></div>
       <div class="sl"><label for="glass-seedStretch"><span data-i18n="sl.glass-seedStretch">Seed stretch</span> <output id="glass-seedStretchV"></output></label><input id="glass-seedStretch" type="range" min="1" max="20" step="0.5"></div>
       <div class="sl"><label for="glass-incl"><span data-i18n="sl.glass-incl">Inclusions</span> <output id="glass-inclV"></output></label><input id="glass-incl" type="range" min="0" max="0.5" step="0.005"></div>
+      <div class="sl"><label for="glass-opacity"><span data-i18n="sl.glass-opacity">Opacity</span> <output id="glass-opacityV"></output></label><input id="glass-opacity" type="range" min="0" max="1" step="0.01"></div>
       <div class="sl"><label for="glass-relief"><span data-i18n="sl.glass-relief">Relief</span> <output id="glass-reliefV"></output></label><input id="glass-relief" type="range" min="0" max="3" step="0.02"></div>
     </div>
     </div></details>
@@ -955,6 +956,9 @@ window.SA_I18N = (() => {
   "ui.lay-around": "around the rod",
   "ui.twist-none": "straight",
   "ui.lap-butted": "butted",
+  "sl.glass-opacity": "Opacity",
+  "ui.opq-clear": "see-through",
+  "ui.opq-opal": "opal",
   "mat.glass": "Glass",
   "sec.glass": "Glass",
   "lbl.forming": "Formed by",
@@ -1543,7 +1547,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.5';
+  const BUILD = '2026.10.11.6';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4323,6 +4327,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                                                   // Lay, twist and lap belong to the LAY-UP, not to any
                                                   // forming: they are set on the rod, before it moves.
                                                   // what lets them fold past each other and not mix.
+    opacity: 0,                                   // 0 a tint you see the form through, 1 solid opal
     relief: 0.8,                                  // how hard the slope reads as light and dark
   };
   const GLASS0 = JSON.parse(JSON.stringify(GLASS));
@@ -5226,16 +5231,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       else if (f > 1 - F.LP) { out[1] = (i + 1) % F.CN; out[2] = (f - 1 + F.LP) / F.LP; }
     }
   }
-  // THE STIR, BAKED. disp() walks the whole resampled pass - around 170 points - so asking it per
-  // pixel is 170 x 600k. On this grid it is 170 x ~16k and bilinear in between, which is the same
-  // field at a cost that is not absurd. In SLAB coordinates, because that is where the stick was
-  // actually dragged; the painter converts when it subtracts.
+  // EVERY WARP, BAKED INTO ONE FIELD. The glass work IS warps, so glass does not get a warp of its
+  // own: it reads the two the app already composes for stone - the gentle whole-slab current and
+  // each moon pass - summed in the order they are summed there. Stone warps its geometry through
+  // them; glass, which has none, samples its field back through them.
   //
-  // Returns null when nothing stirred, which is the signal to skip the whole path.
-  function glassStir(H, moons) {
-    const fns = moons.map(moonDisp).filter(Boolean);
-    if (!fns.length) return null;
-    const nx = 161, ny = Math.max(33, Math.round(160 * H) + 1);
+  // Baked because moonDisp walks the whole resampled pass. Per pixel that is ~170 points times
+  // 600k; on this grid it is ~170 times 16k, bilinear in between. The grid doubles when the
+  // current is on, because the current has a spatial frequency of its own to resolve and the
+  // moons' cost is clipped by their radius either way.
+  //
+  // SLAB coordinates, because that is the space both warps were authored in; the painter converts.
+  // Returns null when nothing warped at all, which is the signal to skip the whole path.
+  function glassWarp(H, moons) {
+    const fns = moons.map(moonDisp).filter(Boolean), gw = G.warp > 0;
+    if (!fns.length && !gw) return null;
+    const amp = G.warp * 0.12, scale = G.cloudScale * 3.5, s0 = mix(strHue(fam), 7);
+    const cx = G.cloudX, cy = G.cloudY;
+    const nx = gw ? 321 : 161, ny = Math.max(33, Math.round((nx - 1) * H) + 1);
     const u = new Float32Array(nx * ny), v = new Float32Array(nx * ny);
     for (let j = 0; j < ny; j++) {
       const vy = (j / (ny - 1)) * H;
@@ -5243,6 +5256,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         const vx = i / (nx - 1), mk = warpMaskAt(vx, vy);
         if (!mk) continue;
         let ax = 0, ay = 0;
+        if (gw) {                                        // the same fbm ocean the stone drifts in
+          ax += amp * (fbm2((vx - cx) * scale, (vy - cy) * scale, s0) - 0.5);
+          ay += amp * (fbm2((vx - cx) * scale, (vy - cy) * scale, s0 + 100) - 0.5);
+        }
         for (const d of fns) { const r = d(vx, vy); ax += r[0]; ay += r[1]; }
         u[j * nx + i] = ax * mk; v[j * nx + i] = ay * mk;
       }
@@ -5252,7 +5269,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // WHERE THE GLASS NOW HERE CAME FROM. The baked field says where a point WENT, and a field has no
   // points to follow, so the question is read backwards - which is the minus sign, and it is the
   // one thing about this that is easy to get the wrong way round.
-  function glassUnstir(S, cu, cvv, out) {
+  function glassUnwarp(S, cu, cvv, out) {
     const fx = cu * (S.nx - 1), fy = (cvv / S.H) * (S.ny - 1);
     let i0 = fx | 0, j0 = fy | 0;
     if (i0 > S.nx - 2) i0 = S.nx - 2; if (i0 < 0) i0 = 0;
@@ -5279,6 +5296,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       TW: Math.max(0, GLASS.cordTwist), LP: Math.max(0, Math.min(0.49, GLASS.cordLap)),
     };
     const REL = Math.max(0, GLASS.relief), TINT = Math.max(0, GLASS.tint);
+    const OPQ = Math.max(0, Math.min(1, GLASS.opacity)), OREF = 8;   // mm: the opal's single path
     // Beer-Lambert per channel per millimetre. Green is absorbed least, which is the whole reason a
     // thick sheet looks green down its edge: it is path length, not a pigment.
     const kr = 0.075 * TINT, kg = 0.022 * TINT, kb = 0.055 * TINT;
@@ -5300,8 +5318,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // flutes are pressed after the stick came out, and stirring them would be forming something
     // that had not been formed yet.
     const moons = marks.filter(m => m.kind === 'moon');
-    if (moons.length) _wmask = gatherMasks();                    // the protected islands, as the warp reads them
-    const STIR = moons.length ? glassStir(H, moons) : null;
+    _wmask = gatherMasks();                                      // the protected islands, as the warp reads them
+    const STIR = glassWarp(H, moons);
     const back = [0, 0];
     const eps = 0.004;                                           // gradient step, in feet
     const fv = [0, 0], melt = [0, 0], gth = [0, 0], lay = [0, -1, 0];
@@ -5324,7 +5342,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // field says where a point went, and what is wanted is where this one came from.
           let sx = ox, sy = oy;
           if (STIR) {
-            glassUnstir(STIR, cu, cvv, back);                    // already negated: where it came FROM
+            glassUnwarp(STIR, cu, cvv, back);                    // already negated: where it came FROM
             sx += back[0] * SLAB_FT / 12;                        // slab units into the object's feet
             sy += back[1] * SLAB_FT / 12;
           }
@@ -5337,6 +5355,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           if (melt[0] > 0) T -= F.TH * 0.5 * melt[0];               // a bubble is a void
           if (melt[1] > 0) T += F.TH * 0.6 * melt[1];               // a stone is not
           if (T < 0.05) T = 0.05;
+          // OPACITY, as a lerp on the PATH LENGTH rather than on the colour. At 0 the thickness
+          // decides the depth of the tint and you read the form through it; at 1 every point gets
+          // the same path, so the thickness stops showing and what is left is solid colour with
+          // the relief still on it - which is what opal glass looks like. Doing it here rather
+          // than by mixing in a second colour is why the hue cannot drift as it turns.
+          if (OPQ > 0) T += (OREF - T) * OPQ;
           // THE SLOPE IS WHAT YOU SEE. Against an even light a tilted face throws light aside, so
           // slope reads as a light or dark band depending which way it leans. Nothing is refracted
           // through the sheet because there is no scene behind a slab yet; this is the honest cue
@@ -6557,7 +6581,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   cordLay: v => +v === 0 ? TR('ui.lay-along') : (+v === 90 ? TR('ui.lay-around')
                           : `${Math.round(v)}\u00b0`),
                   cordTwist: v => +v === 0 ? TR('ui.twist-none') : (+v).toFixed(2),
-                  cordLap: v => +v === 0 ? TR('ui.lap-butted') : (+v).toFixed(2) };
+                  cordLap: v => +v === 0 ? TR('ui.lap-butted') : (+v).toFixed(2),
+                  opacity: v => +v === 0 ? TR('ui.opq-clear') : (+v >= 1 ? TR('ui.opq-opal') : (+v).toFixed(2)) };
   function showGlass(k) {
     const out = document.getElementById('glass-' + k + 'V');
     if (out) out.textContent = GLFMT[k] ? GLFMT[k](GLASS[k]) : String(GLASS[k]);

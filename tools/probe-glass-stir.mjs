@@ -35,12 +35,15 @@ function lift(name) {
   }
   throw new Error('unbalanced: ' + name);
 }
-const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'glassGather', 'glassLay',
-                'resample', 'warpMaskAt', 'moonDisp', 'glassStir', 'glassUnstir'];
-const api = new Function(
-  'let _wmask = [];\n' +                                   // no mask discs: warpMaskAt then returns 1
-  NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')();
-const { glassGather, glassLay, moonDisp, glassStir, glassUnstir, warpMaskAt } = api;
+const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'mix', 'glassGather', 'glassLay',
+                'resample', 'warpMaskAt', 'moonDisp', 'glassWarp', 'glassUnwarp'];
+// _wmask empty => warpMaskAt returns 1, which is the real no-discs case. G/fam/strHue are app
+// state rather than geometry, so the current's SHAPE here is the app's and its SEED is not.
+const G = { warp: 0, cloudScale: 1, cloudX: 0, cloudY: 0 };
+const api = new Function('G',
+  'let _wmask = []; let fam = "probe"; const strHue = () => 0.5;\n' +
+  NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(G);
+const { glassGather, glassLay, moonDisp, glassWarp, glassUnwarp, warpMaskAt } = api;
 
 const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
 const H = 0.62, PANEX = 0, PANEY = 0;
@@ -48,8 +51,8 @@ const H = 0.62, PANEX = 0, PANEY = 0;
 // A stick dragged left to right across the middle, as a mark the app would have committed.
 const DRAG = { kind: 'moon', p: { moonReach: 1.6, moonStrength: 2.2 },
                samples: Array.from({ length: 60 }, (_, i) => [0.12 + (i / 59) * 0.76, H * 0.5]) };
-const S = glassStir(H, [DRAG]);
-if (!S) throw new Error('glassStir returned null for a 60-sample drag');
+const S = glassWarp(H, [DRAG]);
+if (!S) throw new Error('glassWarp returned null for a 60-sample drag');
 
 // ---- 1. the bake against the function it stands in for ----------------------------------------
 const direct = moonDisp(DRAG);
@@ -57,14 +60,14 @@ let maxField = 0, maxErr = 0;
 for (let j = 0; j <= 240; j++) for (let i = 0; i <= 240; i++) {
   const cu = i / 240, cvv = (j / 240) * H;
   const [ax, ay] = direct(cu, cvv);
-  const out = [0, 0]; glassUnstir(S, cu, cvv, out);
+  const out = [0, 0]; glassUnwarp(S, cu, cvv, out);
   maxField = Math.max(maxField, Math.hypot(ax, ay));
   maxErr = Math.max(maxErr, Math.hypot(out[0] + ax, out[1] + ay));   // out is already negated
 }
 
 // ---- 2. the sign, and 3. reach ------------------------------------------------------------------
-const on = [0, 0]; glassUnstir(S, 0.5, H * 0.5, on);                 // under the stick
-const off = [0, 0]; glassUnstir(S, 0.5, H * 0.5 + 0.40, off);        // well outside the ball
+const on = [0, 0]; glassUnwarp(S, 0.5, H * 0.5, on);                 // under the stick
+const off = [0, 0]; glassUnwarp(S, 0.5, H * 0.5 + 0.40, off);        // well outside the ball
 // A rightward drag carries the melt right, so the glass now at x came from the LEFT: back[0] < 0.
 const signOK = on[0] < 0;
 
@@ -87,7 +90,7 @@ for (const [label, form, layAng] of CASES) {
         const cu = x / TW, cvv = (y / TH) * H;
         let sx = PANEX + (cu - 0.5) * SLAB_FT / 12;
         let sy = PANEY + (cvv / H - 0.5) * SLAB_FT * H / 12;
-        if (stirred) { glassUnstir(S, cu, cvv, back); sx += back[0] * SLAB_FT / 12; sy += back[1] * SLAB_FT / 12; }
+        if (stirred) { glassUnwarp(S, cu, cvv, back); sx += back[0] * SLAB_FT / 12; sy += back[1] * SLAB_FT / 12; }
         glassGather(sx, sy, F, gth);
         glassLay(gth[0], gth[1], F, lay);
         // the first band change along the centre row: a position that can be compared
@@ -122,6 +125,17 @@ fs.writeFileSync(out, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 1
   chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]));
 
 const pct = maxField > 0 ? (maxErr / maxField * 100) : NaN;
+// ---- 4. the whole-slab current joins the same field --------------------------------------------
+const moonOnly = (() => { let m = 0; for (let j = 0; j <= 60; j++) for (let i = 0; i <= 60; i++) {
+  const o = [0, 0]; glassUnwarp(S, i / 60, (j / 60) * H, o); m = Math.max(m, Math.hypot(...o)); } return m; })();
+G.warp = 0.8;                                                  // same object the lifted code closed over
+const S2 = glassWarp(H, [DRAG]);
+const bothMax = (() => { let m = 0; for (let j = 0; j <= 60; j++) for (let i = 0; i <= 60; i++) {
+  const o = [0, 0]; glassUnwarp(S2, i / 60, (j / 60) * H, o); m = Math.max(m, Math.hypot(...o)); } return m; })();
+// Far from the stick the moons contribute nothing, so anything there is the current alone.
+const farOnly = (() => { const o = [0, 0]; glassUnwarp(S2, 0.5, H * 0.5 + 0.40, o); return Math.hypot(...o); })();
+const S3 = glassWarp(H, []);                                   // current with no moon at all
+G.warp = 0;
 console.log('wrote', out, W + 'x' + HT);
 console.log('mask at an unmasked point   ', warpMaskAt(0.5, H * 0.5), '(1 = no discs down, as declared)');
 console.log('peak displacement           ', maxField.toFixed(5), 'slab units =',
@@ -133,5 +147,11 @@ console.log('under the stick, back[]     ', on.map(v => v.toFixed(4)).join(', ')
 console.log('0.40 outside the ball       ', off.map(v => v.toFixed(4)).join(', '),
             Math.hypot(...off) === 0 ? '(no reach, as a finite ball must)' : '<-- LEAKS BEYOND ITS RADIUS');
 for (const s of shifts) console.log(`  ${s.label.padEnd(26)} ${s.stirred ? 'stirred  ' : 'unstirred'} first band edge at x=${s.firstEdgeMid}`);
+console.log('current ON, peak warp       ', bothMax.toFixed(5),
+            bothMax > moonOnly ? `(> ${moonOnly.toFixed(5)} with moons alone: the current is IN the field)`
+                               : '<-- THE CURRENT IS NOT REACHING THE FIELD');
+console.log('current ON, outside the ball', farOnly.toFixed(5),
+            farOnly > 0 ? '(the current reaches where no moon does)' : '<-- current absent out there');
+console.log('current alone, no moons     ', S3 ? 'a field is returned (G.warp alone is enough)' : '<-- NULL: warp-only never renders');
 const moved = shifts[0].firstEdgeMid !== shifts[1].firstEdgeMid;
 console.log(moved ? 'the stir MOVED the lay-up.' : 'THE STIR CHANGED NOTHING - the probe is blind or the wiring is dead.');
