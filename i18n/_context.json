@@ -2222,6 +2222,7 @@
   ],
   "where": "tooltip in the Selected bar (acts on the layers you have selected), under Layers"
  },
+ "tip.these-layers-reflect-their-own": {"terms": [], "where": "tooltip on the per-layer Metal slider. A dielectric reflects the light's colour; a metal reflects its own. Set per layer so one vein can be gold while the stone around it stays stone"},
  "tip.clear-colour-back-to-the-bucket": {
   "terms": [
    "bucket"
@@ -2505,6 +2506,7 @@
   ],
   "where": "button or label in the Selected bar (acts on the layers you have selected), under Layers"
  },
+ "ui.metal": {"terms": [], "where": "label on the per-layer Metal slider in the Selected bar, beside Pass and Scatter"},
  "ui.selected": {
   "where": "button or label in a generated panel, under Layers"
  },

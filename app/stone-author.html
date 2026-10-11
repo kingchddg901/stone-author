@@ -1328,6 +1328,7 @@ window.SA_I18N = (() => {
   "tile.pat.triangle": "Triangle",
   "tip.back-light-how-much-light-passes": "Back light: how much light passes where these layers cover (0 opaque → 1 clear)",
   "tip.back-light-how-much-these-layers": "Back light: how much these layers scatter the light passing through",
+  "tip.these-layers-reflect-their-own": "Metal: these layers reflect their own colour, not the light's \u2014 a gold vein through grey stone",
   "tip.clear-colour-back-to-the-bucket": "Clear colour — back to the bucket",
   "tip.colour-the-selected-layers": "Colour the selected layers",
   "tip.delete-the-folder-its-layers-keep": "Delete the folder (its layers keep their tokens)",
@@ -1398,6 +1399,7 @@ window.SA_I18N = (() => {
   "ui.no-colour": "no colour",
   "ui.pass": "pass ",
   "ui.scatter": "scatter ",
+  "ui.metal": "Metal",
   "ui.wood-species-note": "A species is a row of numbers, not a mode. Pressing one writes every control below and the three wood colours, and you carry on dragging from there. These are eyeballed starting points informed by wood anatomy, not measurements — the place measured ring widths would land is exactly here.",
   "ui.wood-cut-note": "On the Log view you can simply drag the cut: a stroke across the section is the plank, and it sets all four of these at once. Nothing here stores a board. There is one log, and Cut is where the saw plane stands relative to its axis: near zero is quartersawn and straight, wider is rift, wider still is plainsawn and the rings open into cathedral arches. Board position slides along that plane, which is why one board changes character across its own width.",
   "ui.wood-drift-note": "Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.",
@@ -1654,6 +1656,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const TR = SA_I18N.T;                                    // every user-facing string resolves through this
   const cv = document.getElementById('field'), ctx = cv.getContext('2d');
   const ssC = document.createElement('canvas');            // subsurface scratch: the feature high-pass, warmed, added back as internal glow
+  const mmC = document.createElement('canvas');            // metal mask: the metal layers' own geometry, so a tint lands on the vein and not on the stone around it
+  const spC = document.createElement('canvas');            // specular scratch: one pass of sheen-or-glint, tinted and masked, before it is screened on
   const lensC = document.createElement('canvas');          // lens scratch: a downscaled snapshot the top-coat refracts per-pixel, then upscales back
   const backC = document.createElement('canvas');          // back-light scratch: the body-lit backlight (the glow)
   const emitC = document.createElement('canvas');          // back-light emission scratch: self-luminous inclusions, added over the transillumination
@@ -1665,7 +1669,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.25';
+  const BUILD = '2026.10.11.26';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3879,6 +3883,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // tcv = the finished-so-far canvas (read from), tx = its context (drawn to), bs = blur scale (dpr live / W·ref offline).
   function applyCoat(tcv, tx, bs, f, vp) {                  // vp = {ox,oy,fw,fh}: this tile's top-left in full-image px + full dims, so global-position effects place correctly per tile
     const w = tcv.width, h = tcv.height;
+    // THE TRANSFORM THE CONTENT WAS PAINTED WITH, taken off the context before any block touches it.
+    // The per-layer metal mask has to land on exactly the pixels its layer painted, and that mapping
+    // is different on every path - the preview is panned and zoomed by the view, an export tile is
+    // offset by its own origin. Reading it here is right on all of them and costs no call site a
+    // parameter. Absent on an engine without getTransform, where the tint stays global rather than
+    // landing in the wrong place.
+    const CTM = tx.getTransform ? tx.getTransform() : null;
     if (!f.ident && f.uvMode && !f.backlit) {              // EMISSION BLOOM: fluorescence glows on the black ground
       tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'lighter';
       // With BLOOM_DRAW the halo was already drawn by each element, so there is nothing left to derive
@@ -3906,24 +3917,96 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const sp = G.specular, ang = G.lightAngle * Math.PI / 180;
       const fw = vp ? vp.fw : w, fh = vp ? vp.fh : h, ox = vp ? vp.ox : 0, oy = vp ? vp.oy : 0;   // the hotspot is placed in FULL-image space, then offset into this tile
       const cx = fw * 0.5 + Math.cos(ang) * fw * 0.4 - ox, cy = fh * 0.5 - Math.sin(ang) * fh * 0.4 - oy;
-      const rad = Math.hypot(fw, fh) * 0.45, a = Math.min(1, 0.85 * sp), [lr, lg, lb] = specRGB();
-      const grd = tx.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
-      grd.addColorStop(0, `rgba(${lr},${lg},${lb},${a})`); grd.addColorStop(0.35, `rgba(${lr},${lg},${lb},${a * 0.35})`); grd.addColorStop(1, `rgba(${lr},${lg},${lb},0)`);
-      tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'screen'; tx.fillStyle = grd; tx.fillRect(0, 0, w, h); tx.globalCompositeOperation = 'source-over'; tx.restore();
-      if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
-      const sc = ssC.getContext('2d');
-      sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none'; sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, w, h);
-      sc.drawImage(tcv, 0, 0);
-      sc.globalCompositeOperation = 'difference'; sc.filter = `blur(${2 * bs}px)`; sc.drawImage(tcv, 0, 0);
-      sc.filter = 'none'; sc.globalCompositeOperation = 'multiply';
-      const msk = sc.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
-      msk.addColorStop(0, 'rgba(255,255,255,1)'); msk.addColorStop(0.5, 'rgba(255,255,255,0.45)'); msk.addColorStop(1, 'rgba(0,0,0,1)');
-      sc.fillStyle = msk; sc.fillRect(0, 0, w, h);
-      sc.fillStyle = `rgb(${lr},${lg},${lb})`; sc.fillRect(0, 0, w, h);
-      sc.globalCompositeOperation = 'source-over';
-      tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'screen'; tx.globalAlpha = Math.min(1, 0.9 * sp);
-      tx.filter = `blur(${0.6 * bs}px)`; tx.drawImage(ssC, 0, 0);
-      tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
+      const rad = Math.hypot(fw, fh) * 0.45, a = Math.min(1, 0.85 * sp);
+      // WHERE THE METAL IS, if anywhere. A tint on the whole coat gilds the grout as readily as the
+      // vein, so a gold vein through grey marble needs the coat to know which layer each pixel came
+      // from - and the only thing that knows that is the geometry, re-drawn under the transform the
+      // content was painted with. Feature layers only: drawLayerArtifacts draws veins, webs, specks
+      // and drusy, not the ground, which is a fill and has no geometry to re-draw.
+      const metalLays = CTM ? layers.filter(L => L.on !== false && (L.metal || 0) > 0) : [];
+      let MM = null;
+      if (metalLays.length) {
+        if (mmC.width !== w || mmC.height !== h) { mmC.width = w; mmC.height = h; }
+        const mx = mmC.getContext('2d');
+        mx.setTransform(1, 0, 0, 1, 0, 0); mx.globalAlpha = 1; mx.filter = 'none';
+        mx.globalCompositeOperation = 'source-over'; mx.clearRect(0, 0, w, h);
+        mx.setTransform(CTM.a, CTM.b, CTM.c, CTM.d, CTM.e, CTM.f);
+        mx.lineCap = 'round'; mx.lineJoin = 'round';
+        const prevG = g2d; g2d = mx;
+        for (const L of metalLays) drawLayerArtifacts(L, `rgba(255,255,255,${Math.max(0, Math.min(1, L.metal))})`);
+        g2d = prevG;
+        MM = mmC;
+      }
+      // ONE PASS PER COLOUR, each kept to its own side of the mask. With no metal layer there is one
+      // pass and no mask, and it composites exactly what it always did.
+      // UNMASKED IS THE ORIGINAL PATH, BYTE FOR BYTE. Routing it through the scratch buffer as well
+      // would be tidier and is wrong: the gradient would be quantised to 8-bit premultiplied twice,
+      // which measured as a max difference of 6 against the shipped build on a slab with no metal
+      // layer at all. Every existing slab takes this branch, so it keeps the fill it always had.
+      const pass = (col, mask) => {                      // mask: null | 'in' (metal only) | 'out' (everything else)
+        const [lr, lg, lb] = col;
+        if (!mask) {
+          const grd0 = tx.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
+          grd0.addColorStop(0, `rgba(${lr},${lg},${lb},${a})`); grd0.addColorStop(0.35, `rgba(${lr},${lg},${lb},${a * 0.35})`); grd0.addColorStop(1, `rgba(${lr},${lg},${lb},0)`);
+          tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'screen'; tx.fillStyle = grd0; tx.fillRect(0, 0, w, h); tx.globalCompositeOperation = 'source-over'; tx.restore();
+          return;
+        }
+        if (spC.width !== w || spC.height !== h) { spC.width = w; spC.height = h; }
+        const px = spC.getContext('2d');
+        px.setTransform(1, 0, 0, 1, 0, 0); px.globalAlpha = 1; px.filter = 'none';
+        px.globalCompositeOperation = 'source-over'; px.clearRect(0, 0, w, h);
+        const grd = px.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
+        grd.addColorStop(0, `rgba(${lr},${lg},${lb},${a})`); grd.addColorStop(0.35, `rgba(${lr},${lg},${lb},${a * 0.35})`); grd.addColorStop(1, `rgba(${lr},${lg},${lb},0)`);
+        px.fillStyle = grd; px.fillRect(0, 0, w, h);
+        if (mask) { px.globalCompositeOperation = mask === 'in' ? 'destination-in' : 'destination-out'; px.drawImage(MM, 0, 0); px.globalCompositeOperation = 'source-over'; }
+        tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'screen';
+        tx.drawImage(spC, 0, 0);
+        tx.globalCompositeOperation = 'source-over'; tx.restore();
+      };
+      // BUILT AFTER THE SHEEN IS ON, because it reads tcv and the sheen is part of what it reads.
+      // Hoisting it above the sheen - which looks like pure tidying, since it only touches its own
+      // scratch - changed the glint on a slab with no metal in it at all: max 5 against the shipped
+      // build, where two renders of the same build differ by 0.
+      const buildGlint = () => {
+        if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
+        const sc = ssC.getContext('2d');
+        sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none'; sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, w, h);
+        sc.drawImage(tcv, 0, 0);
+        sc.globalCompositeOperation = 'difference'; sc.filter = `blur(${2 * bs}px)`; sc.drawImage(tcv, 0, 0);
+        sc.filter = 'none'; sc.globalCompositeOperation = 'multiply';
+        const msk = sc.createRadialGradient(cx, cy, rad * 0.03, cx, cy, rad);
+        msk.addColorStop(0, 'rgba(255,255,255,1)'); msk.addColorStop(0.5, 'rgba(255,255,255,0.45)'); msk.addColorStop(1, 'rgba(0,0,0,1)');
+        sc.fillStyle = msk; sc.fillRect(0, 0, w, h);
+        sc.globalCompositeOperation = 'source-over';
+      };
+      // The glint is the same difference-of-blur whatever colour it ends up; it is built ONCE and
+      // then tinted per pass, because the blur is the expensive part and the colour is a multiply.
+      const glint = (col, mask) => {
+        const [lr, lg, lb] = col;
+        if (!mask) {                                     // again the original: tint ssC in place and screen it on
+          const sx = ssC.getContext('2d');
+          sx.globalCompositeOperation = 'multiply'; sx.fillStyle = `rgb(${lr},${lg},${lb})`; sx.fillRect(0, 0, w, h);
+          sx.globalCompositeOperation = 'source-over';
+          tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'screen'; tx.globalAlpha = Math.min(1, 0.9 * sp);
+          tx.filter = `blur(${0.6 * bs}px)`; tx.drawImage(ssC, 0, 0);
+          tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
+          return;
+        }
+        if (spC.width !== w || spC.height !== h) { spC.width = w; spC.height = h; }
+        const px = spC.getContext('2d');
+        px.setTransform(1, 0, 0, 1, 0, 0); px.globalAlpha = 1; px.filter = 'none';
+        px.globalCompositeOperation = 'source-over'; px.clearRect(0, 0, w, h);
+        px.drawImage(ssC, 0, 0);
+        px.globalCompositeOperation = 'multiply'; px.fillStyle = `rgb(${lr},${lg},${lb})`; px.fillRect(0, 0, w, h);
+        if (mask) { px.globalCompositeOperation = mask === 'in' ? 'destination-in' : 'destination-out'; px.drawImage(MM, 0, 0); }
+        px.globalCompositeOperation = 'source-over';
+        tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'screen'; tx.globalAlpha = Math.min(1, 0.9 * sp);
+        tx.filter = `blur(${0.6 * bs}px)`; tx.drawImage(spC, 0, 0);
+        tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
+      };
+      const base = specRGB(), metal = specRGB(1);
+      if (!MM) { pass(base, null); buildGlint(); glint(base, null); }
+      else { pass(base, 'out'); pass(metal, 'in'); buildGlint(); glint(base, 'out'); glint(metal, 'in'); }
     }
     if (!f.ident && !f.tiled && G.lens > 0) applyLens(tcv, tx);   // tiled path runs the lens once on the assembled image instead (it downscales to ≤640, so it's global + cheap)
   }
@@ -6463,8 +6546,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // The tile-edge chamfer deliberately keeps reading lightRGB(): that is geometry catching the
   // light, not a surface reflecting it, and tinting it would gild the grout.
-  function specRGB() {
-    const k = Math.max(0, Math.min(1, G.specMetal || 0)), L = lightRGB();
+  function specRGB(force) {
+    const k = Math.max(0, Math.min(1, force != null ? force : (G.specMetal || 0))), L = lightRGB();
     if (!k) return L;
     const n = parseInt(String(COL.specTint || '#ffc64a').slice(1), 16);
     const M = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -7307,7 +7390,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       + '<button type="button" data-act="whold" title="' + TR('tip.selected-layers-hold-still') + '">' + TR('ui.hold') + '</button>'
       + '<button type="button" data-act="hide" title="' + TR('tip.hide-the-renderer-ignores-it-and') + '">' + TR('ui.hide') + '</button>'
       + '<label class="lbl" title="' + TR('tip.back-light-how-much-light-passes') + '">' + TR('ui.pass') + '<input type="range" data-act="sltrans" min="0" max="1" step="0.02" style="width:64px;vertical-align:middle"></label>'
-      + '<label class="lbl" title="' + TR('tip.back-light-how-much-these-layers') + '">' + TR('ui.scatter') + '<input type="range" data-act="slscat" min="0" max="1" step="0.02" style="width:64px;vertical-align:middle"></label>';
+      + '<label class="lbl" title="' + TR('tip.back-light-how-much-these-layers') + '">' + TR('ui.scatter') + '<input type="range" data-act="slscat" min="0" max="1" step="0.02" style="width:64px;vertical-align:middle"></label>'
+      + '<label class="lbl" title="' + TR('tip.these-layers-reflect-their-own') + '">' + TR('ui.metal') + '<input type="range" data-act="slmetal" min="0" max="1" step="0.02" style="width:64px;vertical-align:middle"></label>';
     const applySel = (fn, rebuild) => { if (!selected.size) { hint(TR('hint.select-something-first-the-box-on')); return; } for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) fn(L); } redraw(rebuild); };   // warp = layers only
     // colour bakes onto each selected key's flat token (OVR[key], key already 'lay:<layer>' or 'id:<vein>');
     // render reads them, the kit resolves them for the editor, ed.values re-syncs so an open editor won't clobber.
@@ -7323,9 +7407,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (i >= 0) arr.splice(i, 1); if (!arr.length) delete OVR_uv[k];
     }));
     { const selL = [...selected].filter(k => k.startsWith('lay:')).map(k => layAt(k.slice(4))).filter(Boolean);   // reflect the first selected layer's back-light values
-      if (selL.length) { sa.querySelector('[data-act=sltrans]').value = selL[0].transmit ?? 0.3; sa.querySelector('[data-act=slscat]').value = selL[0].scatter ?? 0; } }
+      if (selL.length) { sa.querySelector('[data-act=sltrans]').value = selL[0].transmit ?? 0.3; sa.querySelector('[data-act=slscat]').value = selL[0].scatter ?? 0;
+        sa.querySelector('[data-act=slmetal]').value = selL[0].metal ?? 0; } }
     sa.querySelector('[data-act=sltrans]').addEventListener('input', e => { const v = +e.target.value; for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) L.transmit = v; } saveLocal(); redraw(false); });
     sa.querySelector('[data-act=slscat]').addEventListener('input', e => { const v = +e.target.value; for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) L.scatter = v; } saveLocal(); redraw(false); });
+    sa.querySelector('[data-act=slmetal]').addEventListener('input', e => { const v = +e.target.value; for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) L.metal = v; } saveLocal(); redraw(false); });
     sa.querySelector('[data-act=wfollow]').addEventListener('click', () => { applySel(L => L.warp = 1, true); syncLayerUI(); });
     sa.querySelector('[data-act=whold]').addEventListener('click', () => { applySel(L => L.warp = 0, true); syncLayerUI(); });
     const markOfKey = k => { const id = k.slice(3); if (id[0] === 'W' || id[0] === 'S') return +id.slice(1); const L = geo.byId.get(id); return L ? L.mark : null; };   // any artifact key → its mark
@@ -7612,7 +7698,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function serialize() {
     return { v: 1, name: slabName, fam, material: currentMaterial(), wood: JSON.parse(JSON.stringify(WOOD)), glass: JSON.parse(JSON.stringify(GLASS)), tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
-             layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed, haze: L.haze, transmit: L.transmit, scatter: L.scatter })), soloLay, activeLayer: { ...activeLayer },
+             layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed, haze: L.haze, transmit: L.transmit, scatter: L.scatter, metal: L.metal })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden], folders: folders.map(F => ({ name: F.name, v: F.v, c: F.c, members: [...F.members] })),
              sections: sections.map(s => JSON.parse(JSON.stringify(s))),
              marks: marks.map(m => JSON.parse(JSON.stringify(m))) };
@@ -7675,6 +7761,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     clearUserLayers();                                                                                   // drop the previous slab's user layers, reset the active layer to the bucket defaults
     layAt('micro').density = 1; layAt('micro').size = 1; layAt('micro').seed = 7070;                     // reset the default granite field
     { const f = layAt('fog'); if (f) { f.haze = 0; f.size = 1; f.density = 1; f.seed = 770511; } }        // reset the default haze plane
+    for (const L of layers) L.metal = 0;                     // a slab that says nothing about metal has none: cleared BEFORE the loop so it cannot be inherited from the slab before it
     if (Array.isArray(o.layers)) for (const s of o.layers) {
       let L = layAt(s.key);
       if (!L && typeof s.key === 'string' && s.key.includes('#')) {                                     // re-create a user layer
@@ -7688,6 +7775,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
       if (L) { L.on = s.on !== false; L.op = typeof s.op === 'number' ? s.op : 1; L.warp = typeof s.warp === 'number' ? s.warp : 1;
         if (typeof s.transmit === 'number') L.transmit = s.transmit; if (typeof s.scatter === 'number') L.scatter = s.scatter;   // back-light optical declaration travels with the slab (old saves keep the defaults)
+        if (typeof s.metal === 'number') L.metal = s.metal;      // and the specular one. Saved here AND read here: writing only the first half left the slider working and every load silently flat
+
         if (L.field === 'specks') { if (typeof s.density === 'number') L.density = s.density; if (typeof s.size === 'number') L.size = s.size; if (typeof s.seed === 'number') L.seed = s.seed; }
         if (L.field === 'fog') { if (typeof s.haze === 'number') L.haze = s.haze; if (typeof s.size === 'number') L.size = s.size; if (typeof s.density === 'number') L.density = s.density; if (typeof s.seed === 'number') L.seed = s.seed; } }
     }
