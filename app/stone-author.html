@@ -1638,7 +1638,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.15';
+  const BUILD = '2026.10.11.16';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4469,7 +4469,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ream: 0.4, reamScale: 9,                      // the thickness waviness the forming left behind
     seeds: 0.2, seedStretch: 4, incl: 0.05,       // what was in the melt: bubbles, which are voids
                                                   // and thin it, and stones, which thicken it
-    paneX: 0.3, paneY: 0, formR: 1.6,             // WHERE IN THE FORMED OBJECT this pane was cut from
+    // WHERE IN THE FORMED OBJECT this pane was cut from. Zero, because the pane is 8 inches across
+    // and three of the four moulds build themselves around the origin - so an offset default opened
+    // the app looking half off its own work, and every reading taken from it was of the edge.
+    // It still earns its keep on a spun disc, where it is the difference between the bullion and
+    // the rim; it is just not somewhere to START.
+    paneX: 0, paneY: 0, formR: 1.6,
     flutePitch: 7, fluteDepth: 0.5,               // the rolled texture
     cords: 0, cordScale: 5, cordN: 3,             // THE SECOND FIELD: canes of colour drawn into the
     cordWander: 0.35,                             // melt. A LABEL per point, never a blend - which is
