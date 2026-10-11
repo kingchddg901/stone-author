@@ -469,10 +469,12 @@
       <button type="button" data-mould="strips" data-i18n="mould.strips">Strips</button>
       <button type="button" data-mould="radial" data-i18n="mould.radial">Radials</button>
       <button type="button" data-mould="cells" data-i18n="mould.cells">Cells</button>
+      <button type="button" data-mould="blobs" data-i18n="mould.blobs">Blobs</button>
     </div>
     <div class="sliders" data-mat-only="glass" id="s-cells">
       <div class="sl"><label for="glass-mw"><span data-i18n="sl.glass-mw">Cell width W</span> <output id="glass-mwV"></output></label><input id="glass-mw" type="range" min="0.05" max="2" step="0.01"></div>
       <div class="sl"><label for="glass-ml"><span data-i18n="sl.glass-ml">Cell length L</span> <output id="glass-mlV"></output></label><input id="glass-ml" type="range" min="0.05" max="4" step="0.01"></div>
+      <div class="sl"><label for="glass-blobJit"><span data-i18n="sl.glass-blobJit">Blob scatter</span> <output id="glass-blobJitV"></output></label><input id="glass-blobJit" type="range" min="0" max="1.4" step="0.01"></div>
       <div class="sl"><label for="glass-oblong"><span data-i18n="sl.glass-oblong">Ribbon roundness</span> <output id="glass-oblongV"></output></label><input id="glass-oblong" type="range" min="0" max="1" step="0.01"></div>
       <div class="sl"><label for="glass-start"><span data-i18n="sl.glass-start">Press from</span> <output id="glass-startV"></output></label><input id="glass-start" type="range" min="1" max="4" step="0.05"></div>
       <div id="cells-list" class="ops"></div>
@@ -1009,6 +1011,9 @@ window.SA_I18N = (() => {
   "a11y.op-down": "Move later",
   "a11y.op-remove": "Remove",
   "mould.cells": "Cells",
+  "mould.blobs": "Blobs",
+  "sl.glass-blobJit": "Blob scatter",
+  "ui.jit-grid": "a dead grid",
   "sl.glass-mw": "Cell width W",
   "sl.glass-ml": "Cell length L",
   "sl.glass-oblong": "Ribbon roundness",
@@ -1611,7 +1616,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.9';
+  const BUILD = '2026.10.11.10';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4393,7 +4398,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // colour was poured in. A cell shorter than its neighbours leaves bare glass past its end,
     // which is a real pour and not a gap to be filled in.
     cells: [{ w: 1, l: 1, c: 0 }, { w: 1, l: 1, c: 1 }, { w: 1, l: 1, c: 2 }],
-    mould: 'strips',                             // strips | radial | cells - the compartments the colour was
+    blobJit: 0.7,                                // how far a cookie wanders off its place on the tray.
+                                                 // 0 is a grid and looks like one.
+    mould: 'strips',                             // strips | radial | cells | blobs - what the colour was
                                                  // poured into, BEFORE anything was done to it.
     // WHAT WAS DONE TO IT, oldest first. The order is the whole point: a stir then a blow is
     // not a blow then a stir. `form` below is kept only so a slab saved before this list can
@@ -5272,6 +5279,50 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // between. That single fact removes every straight edge the field used to have, because
   // equidistant between two RECTANGLES is a perpendicular bisector no matter how round the fronts
   // are - which is why rounding the fronts never touched the facets.
+  // COOKIES ON A COOKIE SHEET. Blobs of glass, each thicker than the sheet wants to be, spreading
+  // until they run out and interweaving where their fronts meet.
+  //
+  // A DISC IS THE EASY CASE OF THE BUDGET: area pi*(r+d)^2 = start * pi*r^2, so d = r*(sqrt(start)-1)
+  // exactly. No quadratic, no search.
+  //
+  // On a jittered GRID, not scattered freely. The grid is what stops two landing on top of each
+  // other and the jitter is what stops it looking like a grid - and it is what makes this
+  // affordable, because a point can only be reached by blobs a ring or two away, so the per-pixel
+  // cost is a fixed 9 or 25 however many blobs the sheet holds.
+  function glassBlob(gc, ga, F, out) {
+    const s = F.MW, sq = F.MSQ - 1;
+    const gx = Math.floor(gc / s), gy = Math.floor(ga / s);
+    let p1 = Infinity, d1 = 0, c1 = -1, b1 = 0, p2 = Infinity, d2 = 0, c2 = -1, b2 = 0;
+    // One ring normally; two once a blob can more than double its radius and reach past a neighbour.
+    const R = F.MSQ > 2 ? 2 : 1;
+    for (let j = -R; j <= R; j++) for (let i = -R; i <= R; i++) {
+      const cx = gx + i, cy = gy + j;
+      const jx = (cx + 0.5 + (woodHash(cx, cy) - 0.5) * F.MJ) * s;
+      const jy = (cy + 0.5 + (woodHash(cy, cx + 31) - 0.5) * F.MJ) * s;
+      const rr = s * 0.5 * (0.62 + 0.3 * woodHash(cx + 5, cy + 11));
+      const dx = gc - jx, dy = ga - jy;
+      const d = Math.sqrt(dx * dx + dy * dy) - rr, sp = rr * sq;
+      const p = d <= 0 ? d : (sp > 0 ? d / sp : Infinity);
+      const col = Math.floor(woodHash(cx + 101, cy + 211) * F.CN) % F.CN;
+      if (p < p1) { p2 = p1; d2 = d1; c2 = c1; b2 = b1; p1 = p; d1 = d; c1 = col; b1 = rr; }
+      else if (p < p2) { p2 = p; d2 = d; c2 = col; b2 = rr; }
+    }
+    out[0] = -1; out[1] = -1; out[2] = 0; out[3] = 0;
+    if (c1 < 0 || p1 > 1) return;                              // every blob near here ran out first
+    out[0] = c1; out[3] = glassBlobDepth(d1, b1, F);
+    // Interweaving is a real overlap: two cookies that ran into each other both lie in the light
+    // path, so the absorptions add and the join goes darker.
+    if (c2 >= 0 && d2 <= 0) { out[1] = c2; out[2] = glassBlobDepth(d2, b2, F); }
+  }
+  // Same ramp as a ribbon's, with the disc's radius standing in for the corner radius - which for a
+  // disc is the same thing.
+  function glassBlobDepth(d, rr, F) {
+    const lim = rr * (F.MSQ - 1), rim = rr * 0.16;
+    if (d <= -rim) return 1;
+    const far = d <= 0 ? 0 : (lim > 0 ? d / lim : 1);
+    const edge = d <= 0 ? (rim > 0 ? -d / rim : 1) : 1;
+    return edge * (1 - (1 - 1 / F.MST) * far);
+  }
   // HOW MUCH GLASS ENDED UP OVER THIS SPOT, as a fraction of a ribbon at rest. Full through the
   // middle, feathering over the last of the rim because rolled dough has no cliff edge, and down
   // to 1/start out at the limit of what it could afford to spread. One ramp: a rim and a spread
@@ -5336,12 +5387,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // honest, not a bug to pad around.
   //
   // Returns 0..1 coverage. A stamp presses IN, so the painter thins the sheet by it.
-  function rollStamp(x, y, op) {
+  function rollStamp(x, y, op, u0ref) {
     const sts = op.st; if (!sts || !sts.length) return 0;
     const C = Math.PI * (+op.D || 6) / 12;                     // D in inches -> circumference in feet
     const dr = (+op.d || 0) * Math.PI / 180, cd = Math.cos(dr), sd = Math.sin(dr);
     const u0 = x * cd + y * sd, v = -x * sd + y * cd;          // along the roll, and across it
-    let u = u0 % C; if (u < 0) u += C;
+    // ONE, START DOWN. Phase 0 is where the roller first touched the sheet, not the object's
+    // origin. On a piece shorter than C that choice decides which arc of the roller ever touches
+    // it, and therefore which band comes out bare - so leaving it at the origin was deciding most
+    // of the composition by accident. Passed in rather than stored on the op: it depends on where
+    // the pane was cut, and a number cached into a saved slab would be wrong the moment it moved.
+    let u = (u0 - (u0ref || 0)) % C; if (u < 0) u += C;
     for (let i = 0; i < sts.length; i++) {
       const st = sts[i], R = (+st.r || 1) / 24;                // star WIDTH in inches -> radius in feet
       let du = u - ((((+st.a || 0) / 360) % 1 + 1) % 1) * C;
@@ -5403,7 +5459,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       } else if (k === 'roll') {
         // The stamps are read BEFORE the roll is undone, because this is the frame the roll
         // produced and that is where they were pressed.
-        if (op.st && op.st.length) { const h = rollStamp(x, y, op); if (h > press) press = h; }
+        if (op.st && op.st.length) {
+          const h = rollStamp(x, y, op, F.RU0 ? F.RU0[i] : 0);
+          if (h > press) press = h;
+        }
         const s = +op.a > 0.05 ? +op.a : 0.05;
         const dr = (+op.d || 0) * Math.PI / 180;
         if (dr) {                                              // roll along an axis of its own
@@ -5439,6 +5498,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // is what a crown roundel actually had poured into it. A wedge mould is NOT a spin - a spin
     // shears what is already there, and these compartments were radial before anything was done.
     if (F.MR) { const r = Math.sqrt(gc * gc + ga * ga); gc = woodAtan2(ga, gc) * (0.5 + r); ga = r; }
+    if (F.MB) { glassBlob(gc, ga, F, out); return; }
     // AUTHORED RIBBONS. Each has its own width, length and colour, and each is an OBLONG - so a
     // short one leaves a void past its end and the field has to be able to answer "nothing here",
     // which is -1.
@@ -5545,7 +5605,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       MC: GLASS.mould === 'cells' && Array.isArray(GLASS.cells) && GLASS.cells.length ? GLASS.cells : null,
       MW: Math.max(0.01, GLASS.mw),
       MOB: Math.max(0, Math.min(1, GLASS.oblong)),
+      MB: GLASS.mould === 'blobs', MJ: Math.max(0, Math.min(1.4, GLASS.blobJit)),
       MST: Math.max(1, GLASS.start),                           // starting thickness, in targets
+      MSQ: Math.sqrt(Math.max(1, GLASS.start)),                // a disc's reach is linear in this
       form: lastW === 'spin' ? 'spun' : lastW === 'roll' ? 'rolled' : lastW === 'blow' ? 'blown' : 'poured',
       TH: Math.max(0.2, GLASS.thick), RM: Math.max(0, GLASS.ream),
       RS: Math.max(0.2, GLASS.reamScale), FR: Math.max(0.05, GLASS.formR),
@@ -5604,6 +5666,26 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const moons = marks.filter(m => m.kind === 'moon');
     _wmask = gatherMasks();                                      // the protected islands, as the warp reads them
     F.S = glassWarp(H, moons); F.H = H;                          // the stir is an OP now, not a pre-pass
+    // WHERE EACH ROLLER TOUCHED DOWN: the leading edge of this pane along that roll's own
+    // direction, so stamp one lands where the pass began. Exact for a roll that is the last thing
+    // done to the sheet; a roll with further ops after it is measured in the pane's frame rather
+    // than its own, which is a far smaller error than pinning the phase to the origin was.
+    F.RU0 = [];
+    {
+      const hx = SLAB_FT / 24, hy = SLAB_FT * H / 24;
+      const corner = [[-hx, -hy], [hx, -hy], [-hx, hy], [hx, hy]];
+      for (let i = 0; i < OPS.length; i++) {
+        const op = OPS[i];
+        if (!op || op.k !== 'roll' || !op.st || !op.st.length) { F.RU0.push(0); continue; }
+        const dr = (+op.d || 0) * Math.PI / 180, cd = Math.cos(dr), sd = Math.sin(dr);
+        let m = Infinity;
+        for (const c of corner) {
+          const u = (GLASS.paneX + c[0]) * cd + (GLASS.paneY + c[1]) * sd;
+          if (u < m) m = u;
+        }
+        F.RU0.push(m);
+      }
+    }
     if (F.S && !OPS.some(o => o && o.k === 'stir')) OPS.push({ k: 'stir' });   // a drawn moon implies one
     const eps = 0.004;                                           // gradient step, in feet
     const fv = [0, 0], melt = [0, 0], gth = [0, 0, 0], lay = [0, -1, 0, 1];
@@ -6874,6 +6956,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   mw: v => `${(+v).toFixed(2)}\u2032`, ml: v => `${(+v).toFixed(2)}\u2032`,
                   // Named for what it MEANS, not its number: 0 is glass that set hard before the
                   // barriers came off, and that is the end anyone would describe in words.
+                  blobJit: v => +v === 0 ? TR('ui.jit-grid') : (+v).toFixed(2),
                   oblong: v => +v === 0 ? TR('ui.ob-square')
                           : (+v >= 1 ? TR('ui.ob-stadium') : `${Math.round(v * 100)}%`),
                   // Shown as what it IS - how much thicker than the sheet wants to be - because
@@ -8636,7 +8719,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // nothing where it sits is worse than a control that is not there.
   function syncMould() {
     const el = document.getElementById('s-cells');
-    if (el) el.hidden = GLASS.mould !== 'cells';
+    // The compartment editor is for the cells mould; the rest of that panel - the unit cell,
+    // the roundness, the press - is shared with blobs, which are the same budget on a disc.
+    if (el) el.hidden = GLASS.mould !== 'cells' && GLASS.mould !== 'blobs';
+    const cl = document.getElementById('cells-list'), ad = document.querySelector('[data-addcell]');
+    if (cl) cl.hidden = GLASS.mould !== 'cells';
+    if (ad && ad.parentElement) ad.parentElement.hidden = GLASS.mould !== 'cells';
   }
   // The forming buttons are PRESETS now. They replace the list rather than setting a mode, which
   // is what makes a preset a starting point you can then edit instead of a thing you are inside.
