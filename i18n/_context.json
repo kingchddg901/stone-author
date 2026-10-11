@@ -1655,6 +1655,13 @@
  "sl.wood-taper": {"terms": ["wood"], "where": "slider: how hard the leader's yearly height increment tracks that year's ring width. 0 means it was always at full height, so the trunk is a cylinder"},
  "sl.wood-zBase": {"terms": ["wood"], "where": "slider: how far up the trunk this board was cut, in feet above the stump"},
  "ui.wood-taper-note": {"terms": ["wood"], "where": "explains that a trunk narrows because higher wood has FEWER rings, not thinner ones"},
+ "sl.wood-fireAt": {"terms": ["wood"], "where": "slider: the ring the tree burned in. 0 means it never burned"},
+ "sl.wood-fireSeverity": {"terms": ["wood"], "where": "slider: how much of the cambium the fire killed, 0 to 1"},
+ "sl.wood-fireWidth": {"terms": ["wood"], "where": "slider: the angular width of the killed sector, in degrees"},
+ "sl.wood-fireAngle": {"terms": ["wood"], "where": "slider: which way the wound faces, in degrees"},
+ "sl.wood-fireHeal": {"terms": ["wood"], "where": "slider: how many rings the surviving wood took to close over the wound"},
+ "sl.wood-fireZ": {"terms": ["wood"], "where": "slider: how far up the butt the scar reaches, in feet"},
+ "ui.wood-fire-note": {"terms": ["wood"], "where": "explains that a fire kills cambium on one side only, leaving a buried lens with a charred face"},
  "sl.wood-stage": {"terms": ["wood"], "where": "slider: how many different boards of the one log the floor is cut from. 1 repeats a single board; higher walks down the cant"},
  "sl.wood-rings": {
   "terms": [

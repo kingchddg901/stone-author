@@ -457,9 +457,16 @@
       <div class="sl"><label for="wood-wid"><span data-i18n="sl.wood-wid">Plank width</span> <output id="wood-widV"></output></label><input id="wood-wid" type="range" min="0.05" max="4" step="0.01"></div>
       <div class="sl"><label for="wood-len"><span data-i18n="sl.wood-len">Plank length</span> <output id="wood-lenV"></output></label><input id="wood-len" type="range" min="0.2" max="8" step="0.05"></div>
       <div class="sl"><label for="wood-cutAngle"><span data-i18n="sl.wood-cutAngle">Cut angle</span> <output id="wood-cutAngleV"></output></label><input id="wood-cutAngle" type="range" min="0" max="179" step="1"></div>
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-taper-note">A tree grows upward as well as outward, so a ring laid down when the leader was at thirty feet does not exist at a hundred and fifty — the wood up there is only the rings added after the apex passed it. That is what makes a trunk narrow toward the top: not thinner rings, but FEWER of them. Taper is how hard the leader's climb tracks the year it was growing in. Height is put on a year at a time, and the increment comes from that same year's ring — so the drought that pinched a ring also stalled the leader, from one climate signal rather than two inventions. At zero the leader was always at full height and you get the perfect cylinder; near zero it climbs steadily; at one it climbs in proportion to the ring, fast while the tree is young and slowing after; higher still and a poor year stops it almost dead, so the butt gathers far more rings than the top. Height up trunk is where this board was cut, and because a board spans a range of heights it really does cross wood of different ages.</span></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-fire-note">A drought is a bad year everywhere at once — the whole ring narrows and the tree carries on. A fire is not that. It kills the cambium on ONE SIDE, and that sector simply stops while the rest of the tree keeps growing, rolls in from both edges of the wound and years later closes over it. What is left buried is a lens of frozen surface with a charred face, which is why fire history can be read off a stump. Fire year is when it burned, zero for never; Severity is how much of the cambium went; Reach is how far up the butt the scar climbs, so a board from higher up the same trunk has no fire in it; and Heal is how many rings the surviving wood took to close over — the longer that is, the deeper the scar is buried and the wider the lens you cut through.</span></div>
+      <div class="sl"><label for="wood-fireAt"><span data-i18n="sl.wood-fireAt">Fire year</span> <output id="wood-fireAtV"></output></label><input id="wood-fireAt" type="range" min="0" max="400" step="1"></div>
+      <div class="sl"><label for="wood-fireSeverity"><span data-i18n="sl.wood-fireSeverity">Fire severity</span> <output id="wood-fireSeverityV"></output></label><input id="wood-fireSeverity" type="range" min="0" max="1" step="0.01"></div>
+      <div class="sl"><label for="wood-fireWidth"><span data-i18n="sl.wood-fireWidth">Fire width</span> <output id="wood-fireWidthV"></output></label><input id="wood-fireWidth" type="range" min="5" max="160" step="1"></div>
+      <div class="sl"><label for="wood-fireAngle"><span data-i18n="sl.wood-fireAngle">Fire face</span> <output id="wood-fireAngleV"></output></label><input id="wood-fireAngle" type="range" min="-180" max="180" step="1"></div>
+      <div class="sl"><label for="wood-fireHeal"><span data-i18n="sl.wood-fireHeal">Heal</span> <output id="wood-fireHealV"></output></label><input id="wood-fireHeal" type="range" min="1" max="300" step="1"></div>
+      <div class="sl"><label for="wood-fireZ"><span data-i18n="sl.wood-fireZ">Fire reach</span> <output id="wood-fireZV"></output></label><input id="wood-fireZ" type="range" min="0.5" max="60" step="0.5"></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-taper-note">A tree grows upward as well as outward, so a ring laid down when the leader was at thirty feet does not exist at a hundred and fifty — the wood up there is only the rings added after the apex passed it. That is what makes a trunk narrow toward the top: not thinner rings, but FEWER of them. Taper is how hard the leader's climb tracks the year it was growing in. Height is put on a year at a time, and the increment comes from that same year's ring — so the drought that pinched a ring also stalled the leader, from one climate signal rather than two inventions. Zero is the perfect cylinder — the leader was always at full height, so every ring runs the whole stem. Raise it and the climb slows: a half gives the straight cone, and towards one the leader creeps up a few feet a year while the radius is laid down early, so the butt gathers far more rings than the top and the stem comes to a point. Height up trunk is where this board was cut, and because a board spans a range of heights it really does cross wood of different ages.</span></div>
       <div class="sl"><label for="wood-trunkH"><span data-i18n="sl.wood-trunkH">Trunk height</span> <output id="wood-trunkHV"></output></label><input id="wood-trunkH" type="range" min="6" max="200" step="1"></div>
-      <div class="sl"><label for="wood-taper"><span data-i18n="sl.wood-taper">Taper</span> <output id="wood-taperV"></output></label><input id="wood-taper" type="range" min="0" max="2.5" step="0.05"></div>
+      <div class="sl"><label for="wood-taper"><span data-i18n="sl.wood-taper">Taper</span> <output id="wood-taperV"></output></label><input id="wood-taper" type="range" min="0" max="1" step="0.01"></div>
       <div class="sl"><label for="wood-zBase"><span data-i18n="sl.wood-zBase">Height up trunk</span> <output id="wood-zBaseV"></output></label><input id="wood-zBase" type="range" min="0" max="180" step="0.5"></div>
       <div class="sl"><label for="wood-treeDia"><span data-i18n="sl.wood-treeDia">Tree size</span> <output id="wood-treeDiaV"></output></label><input id="wood-treeDia" type="range" min="0.2" max="20" step="0.02"></div>
       <div class="sl"><label for="wood-rings"><span data-i18n="sl.wood-rings">Rings</span> <output id="wood-ringsV"></output></label><input id="wood-rings" type="range" min="5" max="400" step="5"></div>
@@ -959,6 +966,12 @@ window.SA_I18N = (() => {
   "sl.wood-cutAngle": "Cut angle",
   "sl.wood-treeDia": "Tree size",
   "sl.wood-stage": "Boards",
+  "sl.wood-fireAt": "Fire year",
+  "sl.wood-fireSeverity": "Fire severity",
+  "sl.wood-fireWidth": "Fire width",
+  "sl.wood-fireAngle": "Fire face",
+  "sl.wood-fireHeal": "Heal",
+  "sl.wood-fireZ": "Fire reach",
   "sl.wood-trunkH": "Trunk height",
   "sl.wood-taper": "Taper",
   "sl.wood-zBase": "Height up trunk",
@@ -1138,7 +1151,8 @@ window.SA_I18N = (() => {
   "ui.wood-dev-note": "Rings are circles until this is turned up. Eccentricity is how far they bulge off round, and it ACCUMULATES: a bulge grown in year 60 is still in the surface at year 220, because every later ring was laid on top of it. From and Over say which years it came on. Direction aims it, Breadth sets how much of the trunk it covers. This is the thing a branch, a lean or a buried wound all need.",
   "ui.wood-eye-note": "A bird's eye is not a mark on the surface. It is a small dimple in the cambium that the tree keeps re-making in the same spot year on year, so it runs outward as a needle pointing at the pith. Cut across those needles on a flatsawn face and you see the eyes; cut along them and you see almost nothing, which is why bird's eye hides on quartersawn. Eyes is how strongly they show, Spacing how far apart they sit and Size how wide each one is — both in INCHES, a real bird's eye being about a fifth of an inch across; Spacing is measured one foot out from the pith, so eyes crowd together towards the centre and spread apart towards the bark — a bigger tree carries more of them, not wider-spaced ones. Depth is how far the rings dip into it, counted in RING WIDTHS — at 2.4 two or three ring boundaries curve into each eye, which is what draws those little contour circles. The dimple is a cone rather than a soft well, so those circles come out evenly spaced.",
   "ui.wood-fibre-note": "Ribbon, curl and quilt are not ring effects — they are fibre direction, and they are optical rather than geometric. Wood reflects far more light along the fibre than across it, so where fibres dive into the cut face it reads dark and where they lie along it, light. Figure is how strongly that shows at all. Spiral is a steady helical wind about the trunk; Interlock is the same angle alternating its sign every few years, which is what mahogany is; Curl is a transverse undulation, which is fiddleback. Turn the light angle and the ribbon reverses — that is the tell that it is modelled rather than painted, and end grain shows none of it because every fibre meets that surface square on.",
-  "ui.wood-taper-note": "A tree grows upward as well as outward, so a ring laid down when the leader was at thirty feet does not exist at a hundred and fifty — the wood up there is only the rings added after the apex passed it. That is what makes a trunk narrow toward the top: not thinner rings, but FEWER of them. Taper is how hard the leader's climb tracks the year it was growing in. Height is put on a year at a time, and the increment comes from that same year's ring — so the drought that pinched a ring also stalled the leader, from one climate signal rather than two inventions. At zero the leader was always at full height and you get the perfect cylinder; near zero it climbs steadily; at one it climbs in proportion to the ring, fast while the tree is young and slowing after; higher still and a poor year stops it almost dead, so the butt gathers far more rings than the top. Height up trunk is where this board was cut, and because a board spans a range of heights it really does cross wood of different ages.",
+  "ui.wood-fire-note": "A drought is a bad year everywhere at once — the whole ring narrows and the tree carries on. A fire is not that. It kills the cambium on ONE SIDE, and that sector simply stops while the rest of the tree keeps growing, rolls in from both edges of the wound and years later closes over it. What is left buried is a lens of frozen surface with a charred face, which is why fire history can be read off a stump. Fire year is when it burned, zero for never; Severity is how much of the cambium went; Reach is how far up the butt the scar climbs, so a board from higher up the same trunk has no fire in it; and Heal is how many rings the surviving wood took to close over — the longer that is, the deeper the scar is buried and the wider the lens you cut through.",
+  "ui.wood-taper-note": "A tree grows upward as well as outward, so a ring laid down when the leader was at thirty feet does not exist at a hundred and fifty — the wood up there is only the rings added after the apex passed it. That is what makes a trunk narrow toward the top: not thinner rings, but FEWER of them. Taper is how hard the leader's climb tracks the year it was growing in. Height is put on a year at a time, and the increment comes from that same year's ring — so the drought that pinched a ring also stalled the leader, from one climate signal rather than two inventions. Zero is the perfect cylinder — the leader was always at full height, so every ring runs the whole stem. Raise it and the climb slows: a half gives the straight cone, and towards one the leader creeps up a few feet a year while the radius is laid down early, so the butt gathers far more rings than the top and the stem comes to a point. Height up trunk is where this board was cut, and because a board spans a range of heights it really does cross wood of different ages.",
   "ui.wood-growth-note": "These are the numbers a species actually differs by. Juvenile is how wide the first rings are, Settles how fast that fades, and Mature the width it lands on. Scatter is year-to-year variation; Bad years is how often a pinched run comes and how deep. Latewood is what fraction of each ring is the dark band and Edge how abruptly it starts — a fir has a narrow, violently sharp band and a maple a soft, almost invisible one.",
   "ui.wood-heart-note": "Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.",
   "ui.wood-pith-note": "The pith is a curve, not a line, and that is what stops straight grain rendering as ruled lines. Lean moves it along the saw plane, so the stripes breathe wider and tighter; Wander moves it across the board, so they bend up and down. Each has a slow term and a ripple on top of it.",
@@ -1395,7 +1409,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.38';
+  const BUILD = '2026.10.10.43';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4053,7 +4067,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const WOOD = {
     seed: 770513, trunk: 1,                       // trunk is the SCALE, not the radius - the radius is what
                                                   // the rings add up to, so more years means a bigger log
-    trunkH: 60, zBase: 0, taper: 0,               // THE TAPER, as GROWTH: total trunk height, how far up this
+    fireAt: 0, fireAngle: 0, fireWidth: 55,       // FIRE YEARS: the ring it burned in (0 = never), which way
+    fireHeal: 40, fireSeverity: 0.7, fireZ: 12,   // the wound faces, how wide the kill, how many rings to
+                                                  // close it, how bad, and how far up the butt it reaches.
+    trunkH: 60, zBase: 0, taper: 0.3,             // THE TAPER, as GROWTH: total trunk height, how far up this
                                                   // board sits, and how fast the leader climbed. The rings
                                                   // a height never saw are ABSENT there, not thinner.
     plankLen: 36, plankVary: 0.35,                // THE PLANK RUN: nominal board length in inches, how much
@@ -4243,8 +4260,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // the scale is a fixed unit, not a function of the species, or picking a slower-growing tree would
     // silently rescale the whole log instead of giving it narrower rings - which is the thing it should
     // actually do, and the thing the causality fix was for.
+    // THE FIRE'S DEFICIT, RING BY RING. How much radius the dead sector missed by the time ring k was
+    // laid: nothing before the fire, then the full ring width each year because dead cambium adds
+    // nothing, then FROZEN once the surviving wood has rolled over the wound. Monotone and saturating,
+    // so the buried scar keeps its depth forever and no layer can fold through another.
+    const kf = Math.max(0, Math.min(n - 1, Math.round(WOOD.fireAt) || 0));
+    const FIRE = kf > 0;
+    const kh = Math.min(n - 1, kf + Math.max(1, Math.round(WOOD.fireHeal)));
+    const fring = new Float64Array(n);
+    if (FIRE) for (let i = 0; i < n; i++) fring[i] = i < kf ? 0 : edge[Math.min(i, kh)] - edge[kf];
     const unit = WOOD.trunk / unitAcc, R = acc * unit;                        // R: what this log actually came to
-    for (let i = 0; i < n; i++) { edge[i] *= unit; for (let q = 0; q < DEV.length; q++) wring[q][i] *= unit; }
+    for (let i = 0; i < n; i++) { edge[i] *= unit; fring[i] *= unit;
+      for (let q = 0; q < DEV.length; q++) wring[q][i] *= unit; }
     // COLOUR, PER RING, AS A CORRELATED WALK - the thing a per-ring random value cannot do. Ring N and
     // N+1 are nearly the same; N+200 can be a different wood. Two channels, value and warmth, because
     // those are the two that move in a real log.
@@ -4278,6 +4305,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           rwl = new Float32Array(K);                         // and how wide that ring is, so a depth can be
                                                              // quoted in RINGS rather than in raw units
     const wl = DEV.map(() => new Float32Array(K)), wv = new Float32Array(K), fsp = new Float32Array(K);
+    const fwl = new Float32Array(K), fchar = new Float32Array(K);
     let k = 0;
     for (let i = 0; i < K; i++) {
       const rad = LMAX * i / (K - 1);
@@ -4298,6 +4326,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const ageR = (n - 1) - k;
       th[i] = Math.max(0, Math.min(1, (ageR - WOOD.sapRings) / Math.max(WOOD.sapFade, 0.001)));
       for (let q = 0; q < DEV.length; q++) wl[q][i] = wring[q][k];
+      fwl[i] = fring[k];
+      fchar[i] = FIRE && k >= kf && k <= kh ? 1 : 0;      // the wound FACE: the rings laid while it was open
       wv[i] = wring2[k];
       // The spiral angle, ring by ring. Interlocked grain is this alternating its SIGN - stored as a
       // tangent because the dive term wants the tangent, and small angles make it nearly the angle.
@@ -4363,8 +4393,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // edge[a-1] is the radius they account for, and adding it maps a local radius onto the stump's
     // own ring series - which is what every lookup downstream is indexed by.
     const zoff = new Float32Array(Z);
-    const Ht = Math.max(WOOD.trunkH, 0.5), tpow = Math.max(0, WOOD.taper);
-    if (tpow > 0) {
+    const Ht = Math.max(WOOD.trunkH, 0.5);
+    // THE SLIDER READS AS TAPER, so higher has to mean more of it. The exponent runs the other
+    // way - a high p is dominated by the wide juvenile rings, the leader tops out at once and the
+    // stem is columnar - so it is inverted here rather than asking anyone to hold that backwards.
+    const tpv = Math.max(0, Math.min(1, WOOD.taper));
+    const tpow = tpv > 0 ? Math.max(1e-3, 1 / tpv - 1) : 0;
+    if (tpv > 0) {
       // THE LEADER CLIMBS A YEAR AT A TIME, ON THE SAME YEARS THE RINGS DID. A smooth power law was
       // the wrong shape: height is an ANNUAL INCREMENT, and a bad year is short or nothing at all
       // while a good one puts on extra. Driving the increment off that year's own ring width gets
@@ -4389,13 +4424,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         zoff[i] = a > 0 ? edge[Math.min(a, n) - 1] : 0;
       }
     }
+    // A SURFACE FIRE SCARS THE BUTT. The scar fades out with height, so this is where the taper work
+    // and this one meet: a board taken high up the same trunk simply has no fire in it.
+    const fzw = new Float32Array(Z);
+    for (let i = 0; i < Z; i++) {
+      const h = Math.max(0, WOOD.zBase + WOOD.len * i / (Z - 1));
+      const u = 1 - h / Math.max(WOOD.fireZ, 0.01);
+      fzw[i] = u <= 0 ? 0 : (u >= 1 ? 1 : u * u * (3 - 2 * u));
+    }
     const pax = new Float32Array(Z), pay = new Float32Array(Z);
     for (let i = 0; i < Z; i++) {
       const z = WOOD.len * i / (Z - 1);
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl, zoff });
+    return (woodField.c = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl, zoff, fwl, fchar, fzw, FIRE });
   }
   // A rational atan2, good to under half a degree and costing about ten multiplies. The eye grid needs
   // the ANGLE, and the painter only ever has its cosine and sine; this is the one place in the wood
@@ -4461,6 +4504,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const WV = F.WV, WVA = F.wv, WK = F.WK, NW = F.NW;       // the tree's wave family and its anchored envelope
     const WAVY = WOOD.waveAmp > 0;                           // zero skips the recurrence, not just the result
     const FSP = F.fsp, FCZ = F.fcz, UREL = F.urel, RWL = F.rwl, ZOFF = F.zoff, GLOSS = WOOD.gloss;
+    // THE FIRE'S DIRECTION AND SECTOR, as cosines so no angle is ever taken. The shoulders are soft
+    // because a wound does not end at a hard edge - the cambium nearest the kill survives damaged.
+    const FIRE = F.FIRE, FWL = F.fwl, FCHAR = F.fchar, FZW = F.fzw;
+    const fang = WOOD.fireAngle * Math.PI / 180, ffx = Math.cos(fang), ffy = Math.sin(fang);
+    const fhw = Math.max(2, WOOD.fireWidth) * Math.PI / 180;
+    const fcIn = Math.cos(Math.min(fhw * 0.75, 3.1)), fcOut = Math.cos(Math.min(fhw * 1.25, 3.14));
+    const FSEV = Math.max(0, Math.min(1, WOOD.fireSeverity));
     const EYES = WOOD.eyes;
     // Spacing is a DISTANCE AT ONE FOOT OF RADIUS, and the reference has to be a CONSTANT.
     //
@@ -4505,8 +4555,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // A feature's strength is its amplitude times its angular lobe times its z window. The last is
       // how a branch is present at one place and gone at the next. The sum runs over the list, so
       // this never learns how many features there are.
-      let li, eyeHold = 0;
-      if (NF || WAVY || EYES) {
+      let li, eyeHold = 0, fireW = 0, fireCav = 0;
+      if (NF || WAVY || EYES || FIRE) {
         const inv = 1 / (rad || 1e-9);
         // THE WAVE FAMILY, with cos and sin of theta taken straight from the offset - no atan2. The
         // harmonics come from the Chebyshev recurrence, which is where the "integer wavenumber"
@@ -4553,15 +4603,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // eye its fine concentric structure. That one varies BETWEEN layers, so it is the one held
         // under a ring width.
         const gi0 = (rad * KS) | 0, ur = UREL[gi0], rw = RWL[gi0];
+        // THE FIRE, pulling the surface IN over its sector. dv is subtracted from the radius, so a
+        // NEGATIVE contribution is the one direction everything else here is forbidden to move.
+        if (FIRE) {
+          const iv = 1 / (rad0 || 1e-9), ca = (ddx * iv) * ffx + (ddy * iv) * ffy;
+          if (ca > fcOut) {
+            const sgs = ca >= fcIn ? 1 : (ca - fcOut) / (fcIn - fcOut || 1e-9);
+            fireW = sgs * sgs * (3 - 2 * sgs) * FZW[zi] * FSEV;
+          }
+        }
         const eBase = eyeG * EYES * WOOD.eyeDepth;
         const eRip = eBase * 0.3 < 0.7 ? eBase * 0.3 : 0.7;
         const eyeD = (eBase + eRip * (ur * ur - 0.5)) * rw;
-        let gi = (rad * KS) | 0, dv = wsum * WVA[gi] - eyeD;
+        let gi = (rad * KS) | 0, dv = wsum * WVA[gi] - eyeD - fireW * FWL[gi];
         for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
         let rr = rad - dv;
-        gi = (rr > 0 ? rr * KS : 0) | 0; dv = wsum * WVA[gi] - eyeD;
+        gi = (rr > 0 ? rr * KS : 0) | 0; dv = wsum * WVA[gi] - eyeD - fireW * FWL[gi];
         for (let q = 0; q < NF; q++) dv += sq[q] * FE[q].wl[gi];
         rr = rad - dv;
+        // THE CAVITY. Between the frozen surface and the wood that later grew over it there is no
+        // wood at all - that is the hollow of the catface. The corrected read runs past the bark
+        // there and the lookup clamps, which was painting the void as flat pale sapwood. It is a
+        // void, so it reads as the burnt hollow it is.
+        if (fireW > 0 && rr > F.R) fireCav = fireW;
         li = (rr > 0 ? rr * KS : 0) | 0;
       } else li = (rad * KS) | 0;
       let w = F.lut[li]
@@ -4602,6 +4666,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         let m = 1 + GLOSS * LIT * (FSP[li] * dNt + FCZ[zi] * dNr) - GLOSS * eh3 * EYES * 0.38;
         if (!(m > 0)) m = 0;
         cr *= m; cg *= m; cb *= m;
+      }
+      // THE CHAR. The wound face is the only surface in this model that was EXPOSED - dead, weathered,
+      // resin-soaked, usually literally charred - so it darkens rather than merely bending the grain
+      // around itself. Only the rings laid while the wound was open qualify, which makes it the thin
+      // lens a catface actually shows on a board rather than a stain over the whole sector.
+      const chw = fireCav > 0 ? fireCav : (fireW > 0 ? fireW * FCHAR[li] : 0);
+      if (chw > 0) {
+        const m2 = 1 - (fireCav > 0 ? 0.88 : 0.72) * chw;
+        cr *= m2; cg *= m2 * 0.94; cb *= m2 * 0.88;     // toward soot, which is warmer than neutral black
       }
       // THE KNOT FACE. Everything above drew wood around the branch; this is the branch itself, where
       // the plane went through it. Its rings are concentric about the BRANCH axis, so they run
@@ -5800,6 +5873,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   interlockRings: v => `${Math.round(v)}`, curl: v => `${(+v).toFixed(1)}\u00b0`,
                   curlRate: v => (+v).toFixed(1), eyes: v => (+v).toFixed(2),
                   stage: v => `${Math.round(v)}`,
+                  fireAt: v => +v === 0 ? 'never' : `ring ${Math.round(v)}`,
+                  fireSeverity: v => (+v).toFixed(2), fireWidth: v => `${Math.round(v)}\u00b0`,
+                  fireAngle: v => `${Math.round(v)}\u00b0`, fireHeal: v => `${Math.round(v)}`,
+                  fireZ: v => `${(+v).toFixed(1)}\u2032`,
                   trunkH: v => `${Math.round(v)}\u2032`, zBase: v => `${(+v).toFixed(1)}\u2032`,
                   taper: v => +v === 0 ? 'cylinder' : (+v).toFixed(2), plankLen: v => `${Math.round(v)}\u2033`,
                   plankVary: v => (+v).toFixed(2), plankStagger: v => (+v).toFixed(2),
