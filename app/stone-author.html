@@ -58,6 +58,16 @@
            outline: 1px solid var(--line); background: #1a1b20; touch-action: none; cursor: crosshair; }
   .row { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
   .grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  /* The op list. Rows rather than chips: the order IS the content, so it reads down the page
+     the way the list reads, and the amount sits beside the name it belongs to. */
+  .ops { display: grid; gap: 4px; margin: 2px 0 6px; }
+  .ops:empty::after { content: attr(data-empty); color: var(--dim); font-size: 11px; font-style: italic; }
+  .op { display: grid; grid-template-columns: 4.4em 1fr 3em auto; gap: 6px; align-items: center; }
+  .op > b { font-weight: 500; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .op > output { font-variant-numeric: tabular-nums; font-size: 11px; text-align: end; color: var(--dim); }
+  .op input[type=range] { width: 100%; min-width: 0; }
+  .op .mv { display: flex; gap: 2px; }
+  .op .mv button { padding: 1px 5px; line-height: 1.1; }
   .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-inline-end: 2px; }
   button { font: inherit; font-size: 14px; background: var(--btn); color: var(--text);
            border: 1px solid var(--line); border-radius: 5px; padding: 6px 11px; cursor: pointer; }
@@ -454,8 +464,21 @@
       <button type="button" data-form="poured" data-i18n="glass.poured">Poured</button>
       <button type="button" data-form="flat" data-i18n="glass.flat">Flattened</button>
     </div>
+    <div class="bar" data-mat-only="glass" role="group" aria-labelledby="l-mould">
+      <span class="lbl" id="l-mould" data-i18n="lbl.mould">Poured into</span>
+      <button type="button" data-mould="strips" data-i18n="mould.strips">Strips</button>
+      <button type="button" data-mould="radial" data-i18n="mould.radial">Radials</button>
+    </div>
     <div class="sliders">
-      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.glass-note">Rolled, spun, blown and flattened are not looks, they are FORMING PROCESSES — and three of them leave a shape that a pane is then cut out of. A crown disc is spun flat from a bubble, so it is thick at the middle and thin at the rim: a pane taken near the centre carries the bullion where the pontil was, and one taken at the edge is fine tight arcs. Pane X and Pane Y are where in that disc, or along that cylinder, this sheet was cut from, which is the same idea as choosing where in a log a board comes from. What the field actually holds is THICKNESS: path length makes the tint, and because green survives and red and blue do not, a thick sheet goes green — the same reason you see it down the edge of a pane. The slope of that thickness is what you see as light and dark bands through patterned glass. There is no scene behind the sheet yet, so nothing is refracted through it; the slope is the honest cue until there is.</span></div>
+      <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.glass-note">Glass is a colour field and a list of warps. Colour is poured into a mould — strips, or radial wedges — left to set part-way, and only then worked. Nothing mixes, because each colour went into its own compartment and was already stiff: they fold past each other and stay themselves, and where two lap the light crosses both, so the seam goes darker rather than blending. THE ORDER OF THE LIST IS THE POINT. A stir then a blow stretches what the stick dragged; a blow then a stir drags an already-blown sheet. Those are different sheets, and the forming buttons are starting points you can then reorder, not modes you are inside. Spin drags the outside round more than the centre, blow spreads everything from the centre, roll stretches one way and squeezes the other, and stir is the Moon tool dragged across the slab. An empty list is a plain pour, which is a real sheet. What the field really holds is THICKNESS: the optical path makes the tint, and because green survives where red and blue do not, a thick sheet goes green — the same reason you see it down the edge. Opacity decides how much of that thickness shows through at all. Pane across and Pane down choose where in the formed object this pane was cut, the same idea as choosing where in a log to take a board. There is no scene behind the slab yet, so nothing is refracted through it; the slope is the honest cue until there is one.</span></div>
+      <div class="lbl" data-i18n="lbl.ops">Then, in order</div>
+      <div id="ops-list" class="ops"></div>
+      <div class="bar">
+        <button type="button" data-addop="spin" data-i18n="op.add-spin">+ Spin</button>
+        <button type="button" data-addop="blow" data-i18n="op.add-blow">+ Blow</button>
+        <button type="button" data-addop="roll" data-i18n="op.add-roll">+ Roll</button>
+        <button type="button" data-addop="stir" data-i18n="op.add-stir">+ Stir</button>
+      </div>
       <div class="sl"><label for="glass-cords"><span data-i18n="sl.glass-cords">Canes</span> <output id="glass-cordsV"></output></label><input id="glass-cords" type="range" min="0" max="1" step="0.01"></div>
       <div class="sl"><label for="glass-cordN"><span data-i18n="sl.glass-cordN">Cane colours</span> <output id="glass-cordNV"></output></label><input id="glass-cordN" type="range" min="2" max="4" step="1"></div>
       <div class="sl"><label for="glass-cordScale"><span data-i18n="sl.glass-cordScale">Cane count</span> <output id="glass-cordScaleV"></output></label><input id="glass-cordScale" type="range" min="0.3" max="30" step="0.1"></div>
@@ -959,6 +982,23 @@ window.SA_I18N = (() => {
   "sl.glass-opacity": "Opacity",
   "ui.opq-clear": "see-through",
   "ui.opq-opal": "opal",
+  "lbl.mould": "Poured into",
+  "mould.strips": "Strips",
+  "mould.radial": "Radials",
+  "lbl.ops": "Then, in order",
+  "op.spin": "Spin",
+  "op.blow": "Blow",
+  "op.roll": "Roll",
+  "op.stir": "Stir",
+  "op.add-spin": "+ Spin",
+  "op.add-blow": "+ Blow",
+  "op.add-roll": "+ Roll",
+  "op.add-stir": "+ Stir",
+  "ui.ops-empty": "nothing done to it — a plain pour",
+  "ui.op-stir-note": "the moon's ball size and pull",
+  "a11y.op-up": "Move earlier",
+  "a11y.op-down": "Move later",
+  "a11y.op-remove": "Remove",
   "mat.glass": "Glass",
   "sec.glass": "Glass",
   "lbl.forming": "Formed by",
@@ -968,7 +1008,7 @@ window.SA_I18N = (() => {
   "glass.blown": "Blown",
   "glass.poured": "Poured",
   "glass.flat": "Flattened",
-  "ui.glass-note": "Rolled, spun, blown and flattened are not looks, they are FORMING PROCESSES — and three of them leave a shape that a pane is then cut out of. A crown disc is spun flat from a bubble, so it is thick at the middle and thin at the rim: a pane taken near the centre carries the bullion where the pontil was, and one taken at the edge is fine tight arcs. Pane X and Pane Y are where in that disc, or along that cylinder, this sheet was cut from, which is the same idea as choosing where in a log a board comes from. What the field actually holds is THICKNESS: path length makes the tint, and because green survives and red and blue do not, a thick sheet goes green — the same reason you see it down the edge of a pane. The slope of that thickness is what you see as light and dark bands through patterned glass. There is no scene behind the sheet yet, so nothing is refracted through it; the slope is the honest cue until there is.",
+  "ui.glass-note": "Glass is a colour field and a list of warps. Colour is poured into a mould — strips, or radial wedges — left to set part-way, and only then worked. Nothing mixes, because each colour went into its own compartment and was already stiff: they fold past each other and stay themselves, and where two lap the light crosses both, so the seam goes darker rather than blending. THE ORDER OF THE LIST IS THE POINT. A stir then a blow stretches what the stick dragged; a blow then a stir drags an already-blown sheet. Those are different sheets, and the forming buttons are starting points you can then reorder, not modes you are inside. Spin drags the outside round more than the centre, blow spreads everything from the centre, roll stretches one way and squeezes the other, and stir is the Moon tool dragged across the slab. An empty list is a plain pour, which is a real sheet. What the field really holds is THICKNESS: the optical path makes the tint, and because green survives where red and blue do not, a thick sheet goes green — the same reason you see it down the edge. Opacity decides how much of that thickness shows through at all. Pane across and Pane down choose where in the formed object this pane was cut, the same idea as choosing where in a log to take a board. There is no scene behind the slab yet, so nothing is refracted through it; the slope is the honest cue until there is one.",
   "sl.glass-thick": "Thickness",
   "sl.glass-tint": "Iron tint",
   "sl.glass-paneX": "Pane across",
@@ -1547,7 +1587,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.6';
+  const BUILD = '2026.10.11.7';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4313,6 +4353,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // a key added to either re-dates every master on disk, while a material's own object is signed
   // only when that material is live.
   const GLASS = {
+    mould: 'strips',                             // strips | radial - the compartments the colour was
+                                                 // poured into, BEFORE anything was done to it.
+    // WHAT WAS DONE TO IT, oldest first. The order is the whole point: a stir then a blow is
+    // not a blow then a stir. `form` below is kept only so a slab saved before this list can
+    // be migrated; nothing reads it after that.
+    ops: [{ k: 'spin', a: 1.2 }, { k: 'blow', a: 1.6 }],
     form: 'spun',                                // rolled | spun | blown | poured | flat -
                                                   // a PROCESS, not a look
     thick: 3.2, tint: 0.5,                        // nominal millimetres, and how much iron is in it
@@ -5174,35 +5220,60 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       else if (h > 1 - F.INC) { if (q > out[1]) out[1] = q; }             // an inclusion
     }
   }
-  // ===== THE LAY-UP, AND WHY IT HAS TO COME FIRST ==============================================
-  // YOU CANNOT FORM WHAT IS NOT THERE. The ribbons are laid onto the gather while it is still a
-  // small hot cylinder; only then is it drawn, spun, rolled, or simply poured out. So the colour
-  // field is authored in GATHER coordinates and each forming process is an inverse MAP back into
-  // them - it is not a direction the bands are derived from. The first build had that backwards,
-  // and reading the band direction off the flow quietly assumed every lay-up ran along the draw.
+  // ===== THE MOULD, AND THE LIST OF WHAT WAS DONE TO IT ========================================
+  // YOU CANNOT FORM WHAT IS NOT THERE. Colour is poured into a mould, left to set part-way, and
+  // only then is the thing worked - so the colour field is authored in the MOULD's coordinates and
+  // everything that follows is a list of warps the renderer walks BACKWARDS to get there.
   //
-  // Gather coordinates are (around the rod, along the rod):
-  //   blown   drawn up the axis, split and opened flat: across the sheet is AROUND, up it is ALONG
-  //   spun    opened at the lip and spun out, so the axis becomes the RADIUS and around becomes the
-  //           ANGLE. This is the whole pinwheel: parallel ribbons up a rod, under a map that turns
-  //           the rod's axis into a radius, ARE radial wedges. Nothing special-cases it.
-  //   rolled  extended along the roll, so the roll direction is ALONG and across it is AROUND
-  //   poured  never drawn, so the map is the identity and the lay-up survives exactly as laid
+  // The forming used to be one inverse map chosen by a radio button, which could only ever express
+  // a single operation. It is a list now, because the order is the whole point: a stir then a blow
+  // stretches what the stick dragged, and a blow then a stir drags an already-blown sheet. Those
+  // are different sheets, and no single map reaches both.
   //
-  // THE DRAW RATIO IS NOT A NEW CONTROL. It is seedStretch - the same stretch already measured on
-  // the bubbles. One stretch, two consequences: seeds drawn into ellipses and ribbons spread apart.
-  function glassGather(sx, sy, F, out) {
-    if (F.form === 'spun') {
-      const r = Math.sqrt(sx * sx + sy * sy);
-      out[0] = woodAtan2(sy, sx) * (0.5 + r);          // around -> the angle, opening out with r
-      out[1] = r;                                      // along  -> the radius
-    } else if (F.form === 'poured') {
-      out[0] = sx; out[1] = sy;                        // nothing was drawn; as laid, so as found
-    } else if (F.form === 'blown') {
-      out[0] = sx; out[1] = sy / F.SST;                // drawn up the cylinder
-    } else {
-      out[0] = sy; out[1] = sx / F.SST;                // rolled and flattened: drawn along the roll
+  // A MOULD IS NOT A WARP. Wedges are compartments that were radial before anything happened; a
+  // spin SHEARS what is already there. A radial mould spun is a pinwheel, a strip mould spun is
+  // swirled stripes, and collapsing the two would lose one of them.
+  // THE PRESETS. The old forming buttons are not modes any more; they fill the list. Which is
+  // what makes "spin, then roll, then spin again" reachable at all - it was never a mode.
+  const GLASS_PRESETS = {
+    poured: [],                                                  // almost nothing was done to it
+    rolled: [{ k: 'roll', a: 2.5 }],
+    spun:   [{ k: 'spin', a: 1.2 }, { k: 'blow', a: 1.6 }],
+    blown:  [{ k: 'blow', a: 1.8 }, { k: 'roll', a: 2.2 }],
+    flat:   [{ k: 'blow', a: 1.6 }, { k: 'roll', a: 1.4 }],
+  };
+  // UNDO EVERY OP, LAST FIRST. Each one hands the next the frame it was applied in, so the walk is
+  // composition and not a sum - which is the difference between blowing a stirred sheet and
+  // stirring a blown one. Arrives in the mould's own coordinates, where the colour was poured.
+  //
+  //   spin   the outside drags round more than the centre: theta += a * r. Shears a straight
+  //          ribbon into a spiral, and a radial mould into a pinwheel.
+  //   blow   everything spreads from the centre: r *= a. Thins and enlarges whatever is there.
+  //   roll   stretched along the roll and squeezed across it: x *= a, y /= a. Area is kept, which
+  //          is why a roll makes a pattern longer without making it fainter.
+  //   stir   the baked warp field - every moon pass and the whole-slab current. It is authored in
+  //          SLAB coordinates, so it converts in and back out at its own place in the chain; a
+  //          stir reached from far outside the slab clamps to the edge of that field.
+  function glassUnform(x0, y0, F, out) {
+    let x = x0, y = y0;
+    const ops = F.OPS;
+    for (let i = ops.length - 1; i >= 0; i--) {
+      const op = ops[i], k = op.k;
+      if (k === 'spin') {
+        const r = Math.sqrt(x * x + y * y);
+        if (r > 1e-9) { const th = woodAtan2(y, x) - (+op.a || 0) * r; x = r * Math.cos(th); y = r * Math.sin(th); }
+      } else if (k === 'blow') {
+        const s = +op.a > 0.05 ? +op.a : 0.05; x /= s; y /= s;
+      } else if (k === 'roll') {
+        const s = +op.a > 0.05 ? +op.a : 0.05; x /= s; y *= s;
+      } else if (k === 'stir' && F.S) {
+        const cu = (x - F.PX) * 12 / SLAB_FT + 0.5;
+        const cvv = ((y - F.PY) * 12 / SLAB_FT + 0.5 * F.H);
+        glassUnwarp(F.S, cu, cvv, out);
+        x += out[0] * SLAB_FT / 12; y += out[1] * SLAB_FT / 12;
+      }
     }
+    out[0] = x; out[1] = y;
   }
   // WHICH RIBBON IS HERE, read in gather coordinates and nowhere else. An integer, never a mixture:
   // sampling a LABEL through a deformation cannot average, so two ribbons fold past each other and
@@ -5218,6 +5289,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // and the seam goes darker. That is the observed thing, and it is the one way two colours meet
   // here without either becoming a third.
   function glassLay(gc, ga, F, out) {
+    // THE MOULD'S SHAPE. Strips are parallel compartments; radial is wedges about the centre, which
+    // is what a crown roundel actually had poured into it. A wedge mould is NOT a spin - a spin
+    // shears what is already there, and these compartments were radial before anything was done.
+    if (F.MR) { const r = Math.sqrt(gc * gc + ga * ga); gc = woodAtan2(ga, gc) * (0.5 + r); ga = r; }
     const c = gc + F.TW * ga;                                  // the twist, as a shear
     let p = c * F.LC - ga * F.LS;                              // across the ribbons
     // The wander is hand-laying, so it is laid too - which means the draw stretches it along with
@@ -5283,8 +5358,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // diagnostic rather than painting a flat colour into them and calling it data.
     if (ident || uvMode) return;
     const B = woodRect(); if (!B) return;                       // the rect helper is material-agnostic
+    // THE LIST IS THE SOURCE OF TRUTH. `form` survives only as a name for the ream's direction and
+    // for which thickness marks the last warp left - derived here, never stored, so it cannot
+    // disagree with the ops.
+    const OPS = Array.isArray(GLASS.ops) ? GLASS.ops : [];
+    let lastW = null;
+    for (const o of OPS) if (o && (o.k === 'spin' || o.k === 'roll' || o.k === 'blow')) lastW = o.k;
     const F = {
-      form: GLASS.form,
+      OPS, MR: GLASS.mould === 'radial', PX: GLASS.paneX, PY: GLASS.paneY,
+      form: lastW === 'spin' ? 'spun' : lastW === 'roll' ? 'rolled' : lastW === 'blow' ? 'blown' : 'poured',
       TH: Math.max(0.2, GLASS.thick), RM: Math.max(0, GLASS.ream),
       RS: Math.max(0.2, GLASS.reamScale), FR: Math.max(0.05, GLASS.formR),
       FP: Math.max(0.5, GLASS.flutePitch), FD: Math.max(0, GLASS.fluteDepth),
@@ -5319,8 +5401,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // that had not been formed yet.
     const moons = marks.filter(m => m.kind === 'moon');
     _wmask = gatherMasks();                                      // the protected islands, as the warp reads them
-    const STIR = glassWarp(H, moons);
-    const back = [0, 0];
+    F.S = glassWarp(H, moons); F.H = H;                          // the stir is an OP now, not a pre-pass
+    if (F.S && !OPS.some(o => o && o.k === 'stir')) OPS.push({ k: 'stir' });   // a drawn moon implies one
     const eps = 0.004;                                           // gradient step, in feet
     const fv = [0, 0], melt = [0, 0], gth = [0, 0], lay = [0, -1, 0];
     const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));
@@ -5338,15 +5420,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // character of the sheet and not merely the crop.
           const ox = GLASS.paneX + (cu - 0.5) * SLAB_FT / 12;
           const oy = GLASS.paneY + (cvv / H - 0.5) * SLAB_FT * H / 12;
-          // WHERE THIS GLASS WAS BEFORE THE STICK WENT THROUGH. Subtracted, not added: the baked
-          // field says where a point went, and what is wanted is where this one came from.
-          let sx = ox, sy = oy;
-          if (STIR) {
-            glassUnwarp(STIR, cu, cvv, back);                    // already negated: where it came FROM
-            sx += back[0] * SLAB_FT / 12;                        // slab units into the object's feet
-            sy += back[1] * SLAB_FT / 12;
-          }
-          // The forming reads the UNSTIRRED position, because it happened after the stick came out.
+          // BACK THROUGH EVERY OP, LAST FIRST, into the mould the colour was poured into. Composed
+          // rather than summed, which is the whole reason the order of the list is visible.
+          glassUnform(ox, oy, F, gth);
+          const sx = gth[0], sy = gth[1];
+          // The thickness marks read the FORMED position: they were pressed by the last thing that
+          // touched the sheet, not carried up from the mould.
           glassFlow(ox, oy, F, fv);
           let T = glassFormT(ox, oy, F, fv);
           const gu = (glassFormT(ox + eps, oy, F, fv) - T) / eps;   // slope, in mm per foot
@@ -5377,8 +5456,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // anywhere, so two canes can fold past each other all day and stay two canes.
           let ar = kr, ag = kg, ab = kb;
           if (CORD > 0) {
-            glassGather(sx, sy, F, gth);                       // where on the rod did this come from
-            glassLay(gth[0], gth[1], F, lay);                  // and which ribbon was laid there
+            glassLay(sx, sy, F, lay);                          // which compartment was poured here
             const c = canes[lay[0]], s = CORD * 0.6;
             ar += s * c[0]; ag += s * c[1]; ab += s * c[2];
             if (lay[1] >= 0) {                                 // a lap: the neighbour is on top too
@@ -6589,6 +6667,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   function syncGlass() {
     for (const k of Object.keys(GLASS)) { const el = document.getElementById('glass-' + k); if (el) { el.value = GLASS[k]; showGlass(k); } }
+    press('[data-mould]', document.querySelector('[data-mould="' + (GLASS.mould || 'strips') + '"]'));
+    drawOps();
     const fb = document.querySelector('[data-form="' + GLASS.form + '"]'); if (fb) press('[data-form]', fb);
   }
   function syncWood() {                                  // after a load, the rail has to agree with the slab
@@ -6759,6 +6839,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const reset = (dst, def, src) => { for (const k in dst) delete dst[k]; Object.assign(dst, JSON.parse(JSON.stringify(def))); if (src) Object.assign(dst, JSON.parse(JSON.stringify(src))); };
     reset(G, G0, o.G); reset(T, T0, o.T); reset(NEXT, NEXT0, o.NEXT);   // HARD reset to defaults, THEN apply the slab — a load never inherits the previous slab's non-saved keys
     reset(GLASS, GLASS0, o.glass);                                    // and glass, by the same rule
+    // A SLAB SAVED BEFORE THE LIST EXISTED carries `form` and no ops. Its forming was one mode,
+    // so its list is that mode's preset - which is what the preset was derived from, and means an
+    // old slab opens looking like itself rather than like a plain pour.
+    if (o.glass && !Array.isArray(o.glass.ops)) {
+      GLASS.ops = JSON.parse(JSON.stringify(GLASS_PRESETS[o.glass.form] || GLASS_PRESETS.spun));
+      GLASS.mould = o.glass.form === 'spun' ? 'radial' : 'strips';
+    }
     reset(WOOD, WOOD0, o.wood);                                       // same rule for the wood settings; woodField re-keys itself off them
     cloudSig = bandSig = brecSig = ''; last = null;                     // invalidate the render caches so nothing survives a load
     clearUserLayers();                                                                                   // drop the previous slab's user layers, reset the active layer to the bucket defaults
@@ -8240,10 +8327,60 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     el.value = GLASS[k]; showGlass(k);
     el.addEventListener('input', () => { GLASS[k] = +el.value; showGlass(k); redraw(true); });
   }
-  for (const b of document.querySelectorAll('[data-form]')) b.addEventListener('click', () => {
-    GLASS.form = b.dataset.form; press('[data-form]', b); redraw(true);
+  // THE LIST, DRAWN FROM THE LIST. Rebuilt whole on every change rather than patched: it is at
+  // most a handful of rows, and a reorder that patches in place is where an index and a DOM node
+  // get to disagree.
+  const OP_RANGE = { spin: [0, 3, 0.02, 1.2], blow: [0.2, 4, 0.02, 1.6], roll: [0.2, 5, 0.02, 2.5] };
+  function drawOps() {
+    const host = document.getElementById('ops-list'); if (!host) return;
+    const ops = Array.isArray(GLASS.ops) ? GLASS.ops : (GLASS.ops = []);
+    host.setAttribute('data-empty', TR('ui.ops-empty'));
+    host.textContent = '';
+    ops.forEach((op, i) => {
+      const row = document.createElement('div'); row.className = 'op';
+      const nm = document.createElement('b'); nm.textContent = TR('op.' + op.k); row.append(nm);
+      const R = OP_RANGE[op.k];
+      if (R) {
+        const sl = document.createElement('input'); sl.type = 'range';
+        sl.min = R[0]; sl.max = R[1]; sl.step = R[2]; sl.value = op.a == null ? R[3] : op.a;
+        sl.setAttribute('aria-label', TR('op.' + op.k));
+        const ov = document.createElement('output'); ov.textContent = (+sl.value).toFixed(2);
+        sl.addEventListener('input', () => { op.a = +sl.value; ov.textContent = (+sl.value).toFixed(2); redraw(true); });
+        row.append(sl, ov);
+      } else {
+        // A stir has no amount of its own: the moon's ball size and pull are its amount.
+        const sp = document.createElement('span'); sp.textContent = TR('ui.op-stir-note');
+        sp.style.gridColumn = 'span 2'; sp.style.fontSize = '11px'; sp.style.color = 'var(--dim)';
+        row.append(sp);
+      }
+      const mv = document.createElement('div'); mv.className = 'mv';
+      const btn = (txt, aria, fn, on) => { const b = document.createElement('button');
+        b.type = 'button'; b.textContent = txt; b.setAttribute('aria-label', aria);
+        b.disabled = !on; b.addEventListener('click', () => { fn(); drawOps(); redraw(true); }); return b; };
+      mv.append(
+        btn('\u2191', TR('a11y.op-up'), () => { const o = ops.splice(i, 1)[0]; ops.splice(i - 1, 0, o); }, i > 0),
+        btn('\u2193', TR('a11y.op-down'), () => { const o = ops.splice(i, 1)[0]; ops.splice(i + 1, 0, o); }, i < ops.length - 1),
+        btn('\u00d7', TR('a11y.op-remove'), () => { ops.splice(i, 1); }, true));
+      row.append(mv);
+      host.append(row);
+    });
+  }
+  for (const b of document.querySelectorAll('[data-addop]')) b.addEventListener('click', () => {
+    const k = b.dataset.addop, R = OP_RANGE[k];
+    (GLASS.ops = Array.isArray(GLASS.ops) ? GLASS.ops : []).push(R ? { k, a: R[3] } : { k });
+    drawOps(); redraw(true);
   });
-  press('[data-form]', document.querySelector('[data-form="' + GLASS.form + '"]'));
+  for (const b of document.querySelectorAll('[data-mould]')) b.addEventListener('click', () => {
+    GLASS.mould = b.dataset.mould; press('[data-mould]', b); redraw(true);
+  });
+  // The forming buttons are PRESETS now. They replace the list rather than setting a mode, which
+  // is what makes a preset a starting point you can then edit instead of a thing you are inside.
+  for (const b of document.querySelectorAll('[data-form]')) b.addEventListener('click', () => {
+    GLASS.ops = JSON.parse(JSON.stringify(GLASS_PRESETS[b.dataset.form] || []));
+    press('[data-form]', b); drawOps(); redraw(true);
+  });
+  press('[data-mould]', document.querySelector('[data-mould="' + (GLASS.mould || 'strips') + '"]'));
+  drawOps();
   for (const k of Object.keys(WOOD)) {
     const el = document.getElementById('wood-' + k); if (!el) continue;
     el.value = WOOD[k]; showWood(k);

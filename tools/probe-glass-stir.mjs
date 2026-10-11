@@ -35,17 +35,19 @@ function lift(name) {
   }
   throw new Error('unbalanced: ' + name);
 }
-const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'mix', 'glassGather', 'glassLay',
-                'resample', 'warpMaskAt', 'moonDisp', 'glassWarp', 'glassUnwarp'];
+const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'mix', 'glassLay',
+                'resample', 'warpMaskAt', 'moonDisp', 'glassWarp', 'glassUnwarp', 'glassUnform'];
 // _wmask empty => warpMaskAt returns 1, which is the real no-discs case. G/fam/strHue are app
 // state rather than geometry, so the current's SHAPE here is the app's and its SEED is not.
 const G = { warp: 0, cloudScale: 1, cloudX: 0, cloudY: 0 };
-const api = new Function('G',
-  'let _wmask = []; let fam = "probe"; const strHue = () => 0.5;\n' +
-  NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(G);
-const { glassGather, glassLay, moonDisp, glassWarp, glassUnwarp, warpMaskAt } = api;
-
+// Read out of the source rather than typed: a constant copied into a probe is a second place for
+// it to be wrong, and the probe would keep agreeing with itself.
 const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
+const api = new Function('G', 'SLAB_FT',
+  'let _wmask = []; let fam = "probe"; const strHue = () => 0.5;\n' +
+  NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(G, SLAB_FT);
+const { glassUnform, glassLay, moonDisp, glassWarp, glassUnwarp, warpMaskAt } = api;
+
 const H = 0.62, PANEX = 0, PANEY = 0;
 
 // A stick dragged left to right across the middle, as a mark the app would have committed.
@@ -74,24 +76,25 @@ const signOK = on[0] < 0;
 // ---- render: the same lay-up, unstirred and stirred ---------------------------------------------
 const TW = 600, TH = 190, PAD = 24;
 const INK = [[159, 216, 200], [47, 111, 143], [200, 146, 63], [142, 75, 110]];
-const CASES = [['blown, laid along the rod', 'blown', 0], ['spun, laid along the rod', 'spun', 0]];
+// Strips and a radial mould, each with and without a stir in the list. The stir is an OP here,
+// which is the path the painter actually takes.
+const CASES = [['strips', false], ['radial mould', true]];
 const W = TW, HT = (TH + PAD) * CASES.length * 2;
 const px = Buffer.alloc(W * HT * 3, 17);
 const gth = [0, 0], lay = [0, -1, 0], back = [0, 0];
 let row = 0, shifts = [];
 
-for (const [label, form, layAng] of CASES) {
+for (const [label, radial] of CASES) {
   for (const stirred of [false, true]) {
-    const F = { form, SST: 4, CS: 3, CN: 3, CW: 0.25, RS: 6,
-                LC: Math.cos(layAng * Math.PI / 180), LS: Math.sin(layAng * Math.PI / 180), TW: 0, LP: 0 };
+    const F = { OPS: stirred ? [{ k: 'stir' }] : [], MR: radial, PX: PANEX, PY: PANEY, H, S,
+                SST: 4, CS: 3, CN: 3, CW: 0.25, RS: 6, LC: 1, LS: 0, TW: 0, LP: 0 };
     let firstEdgeMid = null, prev = -1;
     for (let y = 0; y < TH; y++) {
       for (let x = 0; x < TW; x++) {
         const cu = x / TW, cvv = (y / TH) * H;
-        let sx = PANEX + (cu - 0.5) * SLAB_FT / 12;
-        let sy = PANEY + (cvv / H - 0.5) * SLAB_FT * H / 12;
-        if (stirred) { glassUnwarp(S, cu, cvv, back); sx += back[0] * SLAB_FT / 12; sy += back[1] * SLAB_FT / 12; }
-        glassGather(sx, sy, F, gth);
+        const ox = PANEX + (cu - 0.5) * SLAB_FT / 12;
+        const oy = PANEY + (cvv / H - 0.5) * SLAB_FT * H / 12;
+        glassUnform(ox, oy, F, gth);                 // the stir reached through the list, as the painter does
         glassLay(gth[0], gth[1], F, lay);
         // the first band change along the centre row: a position that can be compared
         if (y === (TH >> 1)) { if (prev >= 0 && lay[0] !== prev && firstEdgeMid === null) firstEdgeMid = x; prev = lay[0]; }

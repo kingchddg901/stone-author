@@ -1,18 +1,27 @@
 /**
- * Render the LAY-UP field on its own, straight out of the app's real functions.
+ * The mould and the list: does the ORDER of the operations actually change the glass?
  *
- * The browser pane resisted driving this app. The pane stops servicing requestAnimationFrame when
- * the desktop window is not in front, and the redraw's `queued` guard then latches on a frame that
- * will never run - so the canvas holds whatever was painted at load and every "render" reads the
- * same stale frame. Twelve identical cells, which looks exactly like a finding and is not one.
- * ABLATE any canvas probe: paint something yourself and assert it gets overwritten.
- * (Shimming rAF after load cannot clear the latch. Serving a copy with the shim prepended BEFORE
- * the app's own script can - that route was not needed once the functions came out to Node.)
+ * That is the whole claim of the ops list, and it is the one a sum would silently fail. If the
+ * renderer added the warps instead of composing them, every pair would commute and every reorder
+ * would be a no-op - which looks like a perfectly good render and is worth nothing.
  *
- * It extracts glassGather and glassLay BY SOURCE from app/stone-author.html and calls them. It does
- * not reimplement them, because a probe driving a copy proves something about the copy. The one
- * thing it does leave out is the painter's Beer-Lambert pass, deliberately: the question here is
- * which ribbon is where, and the tint, relief and thickness only make that harder to read.
+ * So the probe swaps pairs and counts the pixels whose LABEL changed. Two cautions it respects:
+ *   - some pairs genuinely commute. blow is a uniform scale and roll is a diagonal one, and
+ *     diagonal matrices commute, so blow/roll SHOULD come out identical. Reporting that as a
+ *     failure would be the probe inventing a defect.
+ *   - a difference of zero on a NON-commuting pair is a red, not a curiosity.
+ *
+ * It calls the app's own glassUnform and glassLay, lifted from source, and leaves out only the
+ * painter's Beer-Lambert pass: the question is which compartment is where, and the tint and the
+ * relief only make that harder to read.
+ *
+ * It runs in Node because the app resisted being driven from a browser pane. The pane stops
+ * servicing requestAnimationFrame when the desktop window is not in front, and the redraw's
+ * `queued` guard then latches on a frame that will never run - so the canvas holds whatever was
+ * painted at load and every "render" reads the same stale frame. That surfaced as twelve identical
+ * cells, which looks exactly like a finding and is not one. ABLATE any canvas probe: paint
+ * something yourself and assert it gets overwritten. (Shimming rAF after load cannot clear the
+ * latch; serving a copy with the shim prepended BEFORE the app's own script can.)
  *
  *   node tools/probe-glass-lay.mjs [out.png]
  */
@@ -24,83 +33,87 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = fs.readFileSync(path.join(HERE, '..', 'app', 'stone-author.html'), 'utf8');
 
-// ---- lift the real functions out of the app ---------------------------------------------------
 function lift(name) {
   const at = SRC.indexOf('function ' + name + '(');
   if (at < 0) throw new Error('not found: ' + name);
-  let i = SRC.indexOf('{', at), depth = 0;
-  for (let j = i; j < SRC.length; j++) {
-    const ch = SRC[j];
-    if (ch === '{') depth++;
-    else if (ch === '}') { depth--; if (depth === 0) return SRC.slice(at, j + 1); }
+  let depth = 0;
+  for (let j = SRC.indexOf('{', at); j < SRC.length; j++) {
+    if (SRC[j] === '{') depth++;
+    else if (SRC[j] === '}') { depth--; if (depth === 0) return SRC.slice(at, j + 1); }
   }
   throw new Error('unbalanced: ' + name);
 }
-const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'glassGather', 'glassLay'];
-const mod = new Function(NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')();
-const { glassGather, glassLay } = mod;
+const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'resample', 'warpMaskAt',
+                'mix', 'moonDisp', 'glassWarp', 'glassUnwarp', 'glassUnform', 'glassLay'];
+const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
+// G/fam/strHue are app state rather than geometry: the current's SHAPE here is the app's, its seed
+// is not. _wmask empty means warpMaskAt returns 1, which is the real no-discs case.
+const G = { warp: 0, cloudScale: 1, cloudX: 0, cloudY: 0 };
+const api = new Function('G', 'SLAB_FT',
+  'let _wmask = []; let fam = "probe"; const strHue = () => 0.5;\n' +
+  NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(G, SLAB_FT);
+const { glassUnform, glassLay, glassWarp } = api;
 
-// ---- the app's own GLASS defaults, so the probe cannot drift from them -------------------------
-const dstart = SRC.indexOf('const GLASS = {');
-const DEF = Object.fromEntries([...SRC.slice(dstart, SRC.indexOf('};', dstart))
-  .matchAll(/(\w+)\s*:\s*(-?[\d.]+|'[a-z]+')/g)].map(m => [m[1], m[2].replace(/'/g, '')]));
+const H = 0.62;
+const DRAG = { kind: 'moon', p: { moonReach: 1.6, moonStrength: 2.4 },
+               samples: Array.from({ length: 60 }, (_, i) => [0.12 + (i / 59) * 0.76, H * 0.5]) };
+const S = glassWarp(H, [DRAG]);
 
-// ---- the matrix -------------------------------------------------------------------------------
-const TW_ = 300, TH_ = 200, PAD = 22;
-const COLS = ['blown', 'spun', 'rolled', 'poured'];
-const ROWS = [
-  ['along the rod',   { lay: 0,  twist: 0,   lap: 0 }],
-  ['around the rod',  { lay: 90, twist: 0,   lap: 0 }],
-  ['along, twisted',  { lay: 0,  twist: 1.2, lap: 0 }],
-  ['at 45 degrees',   { lay: 45, twist: 0,   lap: 0 }],
-  ['along, lapped',   { lay: 0,  twist: 0,   lap: 0.15 }],
-];
-// Four flat, maximally distinguishable labels. Flat on purpose: a label field has no interior, so
-// anything that shades inside a band would be the probe talking, not the field.
+const base = { MR: false, PX: 0, PY: 0, H, S, CS: 3, CN: 3, CW: 0.25, RS: 6, LC: 1, LS: 0, TW: 0, LP: 0 };
+const TW_ = 300, TH_ = 190, PAD = 22;
 const INK = [[159, 216, 200], [47, 111, 143], [200, 146, 63], [142, 75, 110]];
 
-const W = TW_ * COLS.length, H = (TH_ + PAD) * ROWS.length;
-const px = Buffer.alloc(W * H * 3, 17);
-
-const gth = [0, 0], lay = [0, -1, 0];
-let laps = 0, cells = [];
-
-for (let r = 0; r < ROWS.length; r++) {
-  const cfg = ROWS[r][1];
-  for (let c = 0; c < COLS.length; c++) {
-    const F = {
-      form: COLS[c],
-      SST: 4, CS: 3, CN: 3, CW: 0.25, RS: +DEF.reamScale || 6,
-      LC: Math.cos(cfg.lay * Math.PI / 180), LS: Math.sin(cfg.lay * Math.PI / 180),
-      TW: cfg.twist, LP: cfg.lap,
-    };
-    const seen = new Set();
-    for (let y = 0; y < TH_; y++) {
-      for (let x = 0; x < TW_; x++) {
-        const ox = (x / TW_ - 0.5) * 2.0, oy = (y / TH_ - 0.5) * 1.3;
-        glassGather(ox, oy, F, gth);
-        glassLay(gth[0], gth[1], F, lay);
-        seen.add(lay[0]);
-        let [R, G, B] = INK[lay[0] % INK.length];
-        if (lay[1] >= 0) {                                   // the lap: the neighbour stacks on top
-          laps++;
-          const d = INK[lay[1] % INK.length], w = lay[2] * 0.75;
-          // Two filters in series DARKEN; they do not average. Multiply, never lerp.
-          R *= (1 - w * (1 - d[0] / 255)); G *= (1 - w * (1 - d[1] / 255)); B *= (1 - w * (1 - d[2] / 255));
-        }
-        const o = ((r * (TH_ + PAD) + PAD + y) * W + c * TW_ + x) * 3;
-        px[o] = R; px[o + 1] = G; px[o + 2] = B;
-      }
-    }
-    cells.push({ form: COLS[c], lay: ROWS[r][0], bands: seen.size });
+const out = [0, 0], lay = [0, -1, 0];
+function field(ops, radial) {
+  const F = { ...base, OPS: ops, MR: radial };
+  const a = new Uint8Array(TW_ * TH_);
+  for (let y = 0; y < TH_; y++) for (let x = 0; x < TW_; x++) {
+    const cu = x / TW_, cvv = (y / TH_) * H;
+    const ox = (cu - 0.5) * SLAB_FT / 12, oy = (cvv / H - 0.5) * SLAB_FT * H / 12;
+    glassUnform(ox, oy, F, out);
+    glassLay(out[0], out[1], F, lay);
+    a[y * TW_ + x] = lay[0];
   }
+  return a;
+}
+const differ = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n / a.length; };
+
+const SPIN = { k: 'spin', a: 1.2 }, BLOW = { k: 'blow', a: 1.8 },
+      ROLL = { k: 'roll', a: 2.5 }, STIR = { k: 'stir' };
+const PAIRS = [
+  ['spin / blow', [SPIN, BLOW], [BLOW, SPIN], true],
+  ['spin / roll', [SPIN, ROLL], [ROLL, SPIN], true],
+  ['stir / blow', [STIR, BLOW], [BLOW, STIR], true],
+  ['blow / roll', [BLOW, ROLL], [ROLL, BLOW], false],   // both diagonal scales: these DO commute
+];
+
+const ROWS = [
+  ['a plain pour', []],
+  ['spin', [SPIN]],
+  ['stir, then blow', [STIR, BLOW]],
+  ['blow, then stir', [BLOW, STIR]],
+  ['spin, roll, spin', [SPIN, ROLL, { k: 'spin', a: 0.8 }]],
+];
+const W = TW_ * 2, HT = (TH_ + PAD) * ROWS.length;
+const px = Buffer.alloc(W * HT * 3, 17);
+for (let r = 0; r < ROWS.length; r++) {
+  [false, true].forEach((radial, c) => {
+    const a = field(ROWS[r][1], radial);
+    for (let y = 0; y < TH_; y++) for (let x = 0; x < TW_; x++) {
+      const ink = INK[a[y * TW_ + x] % INK.length];
+      const o = ((r * (TH_ + PAD) + PAD + y) * W + c * TW_ + x) * 3;
+      px[o] = ink[0]; px[o + 1] = ink[1]; px[o + 2] = ink[2];
+    }
+  });
 }
 
-// ---- PNG ---------------------------------------------------------------------------------------
-const raw = Buffer.alloc((W * 3 + 1) * H);
-for (let y = 0; y < H; y++) {
-  raw[y * (W * 3 + 1)] = 0;
-  px.copy(raw, y * (W * 3 + 1) + 1, y * W * 3, (y + 1) * W * 3);
+const raw = Buffer.alloc((W * 3 + 1) * HT);
+for (let y = 0; y < HT; y++) { raw[y * (W * 3 + 1)] = 0; px.copy(raw, y * (W * 3 + 1) + 1, y * W * 3, (y + 1) * W * 3); }
+let TBL = null;
+function crc32(buf) {
+  if (!TBL) { TBL = new Int32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; TBL[n] = c; } }
+  let c = -1; for (let i = 0; i < buf.length; i++) c = TBL[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return c ^ -1;
 }
 const chunk = (type, data) => {
   const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
@@ -108,20 +121,25 @@ const chunk = (type, data) => {
   const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body) >>> 0);
   return Buffer.concat([len, body, crc]);
 };
-let TBL = null;
-function crc32(buf) {
-  if (!TBL) { TBL = new Int32Array(256);
-    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; TBL[n] = c; } }
-  let c = -1; for (let i = 0; i < buf.length; i++) c = TBL[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-  return c ^ -1;
-}
-const ihdr = Buffer.alloc(13);
-ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 2;
-const out = process.argv[2] || path.join(HERE, '..', 'glass-lay.png');
-fs.writeFileSync(out, Buffer.concat([
-  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-  chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEDC'.replace('DC', 'ND'), Buffer.alloc(0))]));
+const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(HT, 4); ihdr[8] = 8; ihdr[9] = 2;
+const outPath = process.argv[2] || path.join(HERE, '..', 'glass-lay.png');
+fs.writeFileSync(outPath, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]));
 
-console.log('wrote', out, W + 'x' + H);
-console.log('lap pixels:', laps, laps > 0 ? '(the lap is reachable)' : '(NO LAP EVER FIRED - the probe is blind)');
-for (const c of cells) console.log(`  ${c.form.padEnd(7)} ${c.lay.padEnd(16)} bands=${c.bands}`);
+console.log('wrote', outPath, W + 'x' + HT, '(left column strips, right column radial)');
+console.log('warp field for the stir:', S ? 'built' : 'NULL - the stir op would be a no-op');
+let bad = 0;
+console.log('\nDOES THE ORDER MATTER? pixels whose compartment changed when the pair is swapped:');
+for (const [name, A, B, mustDiffer] of PAIRS) {
+  const d = differ(field(A, false), field(B, false));
+  const ok = mustDiffer ? d > 0.01 : d === 0;
+  if (!ok) bad++;
+  console.log(`  ${name.padEnd(12)} ${(d * 100).toFixed(1).padStart(5)}%  ` +
+    (mustDiffer ? (ok ? 'order matters, as composition requires' : '<-- IDENTICAL: the ops are SUMMED, not composed')
+                : (ok ? 'commutes, correctly - both are diagonal scales' : '<-- these should commute and do not')));
+}
+const dm = differ(field([], false), field([], true));
+console.log(`\nmould strips vs radial, no ops: ${(dm * 100).toFixed(1)}% ` +
+  (dm > 0.01 ? 'differ - the mould is its own thing, not a warp' : '<-- THE MOULD SHAPE DOES NOTHING'));
+if (dm <= 0.01) bad++;
+process.exit(bad ? 1 : 0);
