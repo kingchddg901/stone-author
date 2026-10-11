@@ -487,6 +487,9 @@
       <div class="sl"><label for="wood-lateSharp"><span data-i18n="sl.wood-lateSharp">Latewood edge</span> <output id="wood-lateSharpV"></output></label><input id="wood-lateSharp" type="range" min="0.05" max="4" step="0.05"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-fibre-note">Ribbon, curl and quilt are not ring effects — they are fibre direction, and they are optical rather than geometric. Wood reflects far more light along the fibre than across it, so where fibres dive into the cut face it reads dark and where they lie along it, light. Figure is how strongly that shows at all. Spiral is a steady helical wind about the trunk; Interlock is the same angle alternating its sign every few years, which is what mahogany is; Curl is a transverse undulation, which is fiddleback. Turn the light angle and the ribbon reverses — that is the tell that it is modelled rather than painted, and end grain shows none of it because every fibre meets that surface square on.</span></div>
       <div class="sl"><label for="wood-gloss"><span data-i18n="sl.wood-gloss">Figure</span> <output id="wood-glossV"></output></label><input id="wood-gloss" type="range" min="0" max="1.5" step="0.01"></div>
+      <div class="sl"><label for="wood-mineral"><span data-i18n="sl.wood-mineral">Mineral stain</span> <output id="wood-mineralV"></output></label><input id="wood-mineral" type="range" min="0" max="1" step="0.01"></div>
+      <div class="sl"><label for="wood-mineralSize"><span data-i18n="sl.wood-mineralSize">Streak width</span> <output id="wood-mineralSizeV"></output></label><input id="wood-mineralSize" type="range" min="0" max="1" step="0.01"></div>
+      <div class="sl"><label for="wood-mineralSpacing"><span data-i18n="sl.wood-mineralSpacing">Streak spacing</span> <output id="wood-mineralSpacingV"></output></label><input id="wood-mineralSpacing" type="range" min="0.3" max="12" step="0.1"></div>
       <div class="sl"><label for="wood-fibreSpiral"><span data-i18n="sl.wood-fibreSpiral">Spiral</span> <output id="wood-fibreSpiralV"></output></label><input id="wood-fibreSpiral" type="range" min="-20" max="20" step="0.5"></div>
       <div class="sl"><label for="wood-interlock"><span data-i18n="sl.wood-interlock">Interlock</span> <output id="wood-interlockV"></output></label><input id="wood-interlock" type="range" min="0" max="30" step="0.5"></div>
       <div class="sl"><label for="wood-interlockRings"><span data-i18n="sl.wood-interlockRings">Interlock period</span> <output id="wood-interlockRingsV"></output></label><input id="wood-interlockRings" type="range" min="2" max="120" step="1"></div>
@@ -1011,6 +1014,10 @@ window.SA_I18N = (() => {
   "sl.wood-lateFrac": "Latewood",
   "sl.wood-lateSharp": "Latewood edge",
   "sl.wood-gloss": "Figure",
+  "sl.wood-mineral": "Mineral stain",
+  "sl.wood-mineralSize": "Stain spread",
+  "sl.wood-mineralSpacing": "Streak spacing",
+  "lay.wood-mineral": "Wood mineral stain",
   "sl.wood-fibreSpiral": "Spiral",
   "sl.wood-interlock": "Interlock",
   "sl.wood-interlockRings": "Interlock period",
@@ -1423,7 +1430,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.10.55';
+  const BUILD = '2026.10.10.59';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1477,6 +1484,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { key: 'woodLate', labelKey: 'lay.wood-latewood', label: TR('lay.wood-latewood'), def: '#603e22' },
     { key: 'woodHeart', labelKey: 'lay.wood-heartwood', label: TR('lay.wood-heartwood'), def: '#5a3418' },
     { key: 'woodKnot', labelKey: 'lay.wood-knot', label: TR('lay.wood-knot'), def: '#4a2f18' },
+    { key: 'woodMineral', labelKey: 'lay.wood-mineral', label: TR('lay.wood-mineral'), def: '#5d6152' },
   ];
   // COL = RESOLVED values the renderer paints from. OVR = the overrides the editor edits and we
   // persist. perItem = id -> layer bucket, for per-id (per-item) colour tokens that inherit their
@@ -4106,6 +4114,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     dev2Prune: 0,                                 // HOW THE BRANCH ENDED. 0 it died on the tree and was
                                                   // buried in its own bark - a loose knot. 1 it was taken
                                                   // off clean and the live collar healed over sound wood.
+    mineral: 0, mineralSize: 0.42,                // MINERAL STAIN: strength, the thickness of a streak and
+    mineralSpacing: 0.6,                            // how far apart, both in inches. Colour only - the wood
+                                                  // is sound, it has just drunk something.
     dEarly: 1, dMid: 1, dLate: 1,                 // BAD YEARS BY LIFE STAGE, as multipliers on the rate.
                                                   // WHEN a drought falls decides WHERE it shows: an early
                                                   // one marks the butt, a late one marks every height.
@@ -4581,6 +4592,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // depth all the way out at 0.71r and steepest at the rim, which is a blob with one smeared edge.
     return best < 1 ? 1 - Math.sqrt(best) : 0;
   }
+  // HOW STAINED THIS POINT IS. Cellular in (theta, radius) - the eye grid with its axes swapped -
+  // so a point in the cross-section becomes a column running up the trunk, which is how a vessel
+  // runs. Most cells are empty because a stain is sparse, and each streak that exists gets its own
+  // run up the stem that fades in and out, since a hard end reads as a drawn line.
+  // HOW STAINED THIS POINT IS. A smooth field over the CROSS-SECTION, thresholded: everything above
+  // the threshold is stained and nothing else is, so coverage is one declared number rather than the
+  // product of three chances that can collapse to zero - which is exactly what the first version did.
+  //
+  // The streaks run UP because the field's z frequency is a fiftieth of its cross-section frequency.
+  // Nearly constant along z means a patch in the section extrudes into a slowly drifting column,
+  // which is how a vessel runs, and it crosses the rings instead of following them.
+  function woodStain(th, rad, zp, inv, thr) {
+    const arc = th * rad;
+    const v = fbm2(arc * inv, rad * inv + zp * inv * 0.02, 4211);
+    // Saturating well before v = 1, because fbm2 never gets near it - normalising against 1
+    // capped the strongest stain at about a third of the token colour however hard it was driven.
+    const s = (v - thr) / 0.18;
+    return v > thr ? (s > 1 ? 1 : s) : 0;
+  }
   function woodHash(a, b) {                   // keyed to quantised SLAB position, so tiles agree
     let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
     h = Math.imul(h ^ (h >>> 13), 1274126177) | 0;
@@ -4596,6 +4626,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const [BR, BG, BB] = hexRGB(COL.woodEarly || '#c49660'), [DR, DG, DB] = hexRGB(COL.woodLate || '#603e22');
     const [HR, HG, HB] = hexRGB(COL.woodHeart || '#5a3418');
     const [KR, KG, KB] = hexRGB(COL.woodKnot || '#4a2f18');
+    const [NR, NG, NB] = hexRGB(COL.woodMineral || '#5d6152');
+    const MINL = WOOD.mineral;
+    // Streak spacing sets the field's scale; streak width sets how much of it clears the threshold.
+    // A wider streak is a LOWER bar, which is why one number can set coverage and the other its size.
+    const MINV = 1 / Math.max(WOOD.mineralSpacing * WOOD_IN, 0.004);
+    // Spread is the share of the section that stains, so the threshold is placed in fbm2's own
+    // range rather than on an inch measure the field does not have. Calling it a WIDTH was wrong:
+    // the field's scale sets how wide a streak is, and this sets how many there are.
+    const MTHR = 0.92 - Math.max(0, Math.min(1, WOOD.mineralSize)) * 0.52;
     const FE = F.FE, NF = FE.length, NA = F.NA;              // no active feature skips the inversion entirely
     const WV = F.WV, WVA = F.wv, WK = F.WK, NW = F.NW;       // the tree's wave family and its anchored envelope
     const WAVY = WOOD.waveAmp > 0;                           // zero skips the recurrence, not just the result
@@ -4737,6 +4776,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (h) {                                                 // the ring keeps its own light and dark through the conversion
         const s = 0.55 + 0.45 * w;
         cr += (HR * s - cr) * h; cg += (HG * s - cg) * h; cb += (HB * s - cb) * h;
+      }
+      // THE MINERAL STAIN, before the fibre term so the figure still rides over it: a stained patch
+      // has grain like any other. A LERP rather than a multiply, because stain replaces colour
+      // instead of darkening it - which is why mineral in pale maple goes grey-green and not simply
+      // dark, and why it reads as something the tree drank rather than as a shadow.
+      if (MINL) {
+        const ms = woodStain(woodAtan2(ddy, ddx), rad0, zp, MINV, MTHR) * MINL;
+        if (ms > 0) { cr += (NR - cr) * ms; cg += (NG - cg) * ms; cb += (NB - cb) * ms; }
       }
       // THE FIBRE FIELD, as light rather than as shape. f = zhat + tan(spiral)*thetahat + tan(curl)*rhat,
       // and what shows is how far it dives into the cut face: f . N. The tangential and radial unit
@@ -5979,6 +6026,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   vary: v => (+v).toFixed(2), dRate: v => `${Math.round(v * 100)}%`,
                   dDepth: v => (+v).toFixed(2), lateFrac: v => `${Math.round(v * 100)}%`,
                   lateSharp: v => (+v).toFixed(2), gloss: v => (+v).toFixed(2),
+                  mineral: v => +v === 0 ? 'clean' : (+v).toFixed(2),
+                  mineralSize: v => (+v).toFixed(2), mineralSpacing: v => `${(+v).toFixed(1)}\u2033`,
                   fibreSpiral: v => `${(+v).toFixed(1)}\u00b0`, interlock: v => `${(+v).toFixed(1)}\u00b0`,
                   interlockRings: v => `${Math.round(v)}`, curl: v => `${(+v).toFixed(1)}\u00b0`,
                   curlRate: v => (+v).toFixed(1), eyes: v => (+v).toFixed(2),

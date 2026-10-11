@@ -1920,6 +1920,10 @@
   ],
   "where": "slider: how abruptly the latewood begins - sharp in a fir, soft in a maple"
  },
+ "sl.wood-mineral": {"terms": ["wood"], "where": "slider: how strongly mineral stain shows. Colour only - the wood is sound, just discoloured"},
+ "sl.wood-mineralSize": {"terms": ["wood"], "where": "slider: what share of the cross-section stains. The field scale sets how wide a streak is; this sets how many"},
+ "sl.wood-mineralSpacing": {"terms": ["wood"], "where": "slider: how far apart the streaks sit in the cross-section, in inches"},
+ "lay.wood-mineral": {"terms": ["wood"], "where": "colour token: the mineral stain colour, grey-green by default"},
  "sl.wood-gloss": {
   "terms": [
    "wood"
