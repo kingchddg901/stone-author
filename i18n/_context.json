@@ -1747,6 +1747,7 @@
  "a11y.section-name": {"terms": [], "where": "accessible name for the text field that renames a section in the list"},
  "a11y.tile-source": {"terms": [], "where": "accessible name for the select that binds the clicked tile to a section"},
  "tool.keep-cut": {"terms": ["wood"], "where": "button: save the board currently shown, so the floor is laid from it and any others kept"},
+ "tool.keep-tile": {"terms": [], "where": "button in the Sections group. Arms the Snag tool: tap a laid tile and that one piece becomes a section, at the coordinates it was cut from. The same thing the Snag tool in the rail does, put where the sections are"},
  "tool.clear-cuts": {"terms": ["wood"], "where": "button: discard every kept cut and go back to cutting one log"},
  "hint.cut-kept": {"placeholders": {"n": "how many cuts are now kept, e.g. 3"}, "terms": ["wood"], "where": "status shown after keeping a cut"},
  "hint.cuts-cleared": {"terms": ["wood"], "where": "status after discarding every kept cut"},

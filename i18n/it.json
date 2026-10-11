@@ -475,6 +475,7 @@
  "a11y.section-name": "Nome della sezione",
  "a11y.tile-source": "Da quale sezione viene tagliata questa piastrella",
  "tool.keep-cut": "Salva questo taglio",
+ "tool.keep-tile": "Salva una piastrella",
  "tool.clear-cuts": "Azzera",
  "hint.cut-kept": "Salvato — {n} taglio/i. Ora il pavimento si ricava da questi; cambia qualsiasi cosa, anche la specie, e salvane un altro.",
  "hint.cuts-cleared": "Azzerato. Il pavimento torna a scendere lungo un solo tronco.",

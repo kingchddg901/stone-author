@@ -405,6 +405,7 @@
   </div>
   <div class="grp" role="group" aria-label="Sections" data-i18n-attr="aria-label=a11y.sections"><span class="lbl" data-i18n="lbl.sections">Sections</span>
     <button id="sec-add" type="button" data-i18n="tool.keep-cut">Keep this cut</button>
+    <button id="sec-snag" type="button" data-i18n="tool.keep-tile">Keep a tile</button>
     <button id="sec-clear" type="button" data-i18n="tool.clear-cuts">Clear</button>
     <output id="sec-count"></output>
   </div>
@@ -1235,6 +1236,7 @@ window.SA_I18N = (() => {
   "a11y.section-name": "Section name",
   "a11y.tile-source": "Which section this tile is cut from",
   "tool.keep-cut": "Keep this cut",
+  "tool.keep-tile": "Keep a tile",
   "tool.clear-cuts": "Clear",
   "hint.cut-kept": "Kept \u2014 {n} cut(s). The floor is laid from these now; change anything, even the species, and keep another.",
   "hint.cuts-cleared": "Cleared. The floor goes back to walking down one log.",
@@ -1681,7 +1683,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.27';
+  const BUILD = '2026.10.11.28';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9539,6 +9541,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     host.appendChild(sel);
   }
   {
+    const snag = document.getElementById('sec-snag');
+    if (snag) snag.addEventListener('click', () => {
+      if (sectionList().length >= 8) { hint(TR('hint.cuts-full')); return; }
+      const lt2 = document.getElementById('laytiles');
+      if (!layTiles && lt2) lt2.click();                 // there has to be a tile to point at
+      const tb = document.querySelector('[data-tool="snag"]');
+      if (tb) tb.click();                                // arm the tool rather than copy what it does
+      hint(TR('hint.snag-tap-a-tile'));
+    });
     const add = document.getElementById('sec-add'), clr = document.getElementById('sec-clear');
     if (add) add.addEventListener('click', () => {
       if (sectionList().length >= 8) { hint(TR('hint.cuts-full')); return; }
