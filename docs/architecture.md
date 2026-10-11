@@ -386,11 +386,22 @@ than being imposed on top of it:
   colour slump over its neighbour. The light then crosses both, so the absorptions add — two
   filters in series. An average would be the one thing the whole model exists to avoid.
 
-The mould layout is a **partition of the plane into labelled cells**. Parallel strips, with a lay
-angle and a twist, are the family that ships; radial wedges and free blobs are further members of
-the same partition and need no new machinery downstream. **How far it had set** is the control
-that is still missing — it is what decides whether the stick smears a compartment or merely
-shifts a lobe that holds its shape.
+The mould layout is a **partition of the plane into labelled cells**: parallel strips with a lay
+angle and a twist, radial wedges, or compartments authored one by one with their own width,
+length and colour. Free blobs are a further member of the same partition and need no new
+machinery downstream.
+
+**How far it had set** before the barriers came off is a control, not an aside. At zero they come
+off glass that is already hard: voids stay crisp and nothing invades anything. Above zero the
+nearest poured glass creeps into any space nothing was poured into — which is how a short
+compartment ends up with its neighbours leaning in over its empty end, and the creeping edge is
+thin because what fades is the amount of glass, never the colour.
+
+A roller carries **stamps**, and **C = πD** means the circumference *is* the repeat — not a pitch
+anyone chooses. A piece shorter than C never sees a full revolution, so an arc of the roller never
+touches it at all; with stamps staggered along the face that arrives as a band across the sheet
+with no marks on it. The flutes are a different roller surface: circumferential grooves, whose
+pitch runs across the sheet and is genuinely free of C.
 
 ## Status & roadmap
 

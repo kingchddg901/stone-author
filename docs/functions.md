@@ -16,29 +16,29 @@ is the frozen `NEXT` settings it was drawn with. `out`/`geo` is the built geomet
 
 A knob edits instead of re-rolls because every role draws from its own stable stream.
 
-- `mulberry32(a)` — the PRNG; returns a `()=>[0,1)` generator. *(2102)*
-- `mix(...v)` — hash integers/seeds into one 32-bit seed (FNV-style). *(2111)*
-- `sub(...key)` — a seeded stream **pair** `[rand, gauss]` for one role (`mix`es the key). *(2116)*
-- `gaussOf(r)` — wrap a uniform stream into a normal-distribution generator. *(2110)*
+- `mulberry32(a)` — the PRNG; returns a `()=>[0,1)` generator. *(2124)*
+- `mix(...v)` — hash integers/seeds into one 32-bit seed (FNV-style). *(2133)*
+- `sub(...key)` — a seeded stream **pair** `[rand, gauss]` for one role (`mix`es the key). *(2138)*
+- `gaussOf(r)` — wrap a uniform stream into a normal-distribution generator. *(2132)*
 - `poisson(lam, r)` — a Poisson count by exact quantile of one uniform — **monotone** in `lam`
-  (a higher rate never yields fewer). *(2117)*
-- `strHue(s)` — hash a string to a hue `0..359` (identity-view colours). *(2128)*
+  (a higher rate never yields fewer). *(2139)*
+- `strHue(s)` — hash a string to a hue `0..359` (identity-view colours). *(2150)*
 
 ## Paths & line geometry
 
-- `smooth1d(n, scale, g)` — a smoothed 1-D noise track of length `n`. *(2131)*
-- `resample(P, step)` — even-arc-length resample of a polyline. *(2142)*
-- `smoothPath(P, h)` — smooth a polyline. *(2161)*
-- `handRoute(P)` — turn raw pointer samples into a clean route (resample → smooth → resample). *(2222)*
+- `smooth1d(n, scale, g)` — a smoothed 1-D noise track of length `n`. *(2153)*
+- `resample(P, step)` — even-arc-length resample of a polyline. *(2164)*
+- `smoothPath(P, h)` — smooth a polyline. *(2183)*
+- `handRoute(P)` — turn raw pointer samples into a clean route (resample → smooth → resample). *(2244)*
 - `roughen(knots, levels, sched, g)` — fractal midpoint displacement; `sched(L)` sets per-scale
-  amplitude (the vein vs crack schedules). *(2237)*
+  amplitude (the vein vs crack schedules). *(2259)*
 - `lineGeom(id, pts, gauge, F, M, seed, salt, extra)` — build a line: per-segment width, breaks,
-  arc length, taper; applies `extra.press` / `extra.wmod` (boudinage) / `extra.lean`. *(2253)*
-- `at(L, t)` — point at fraction `t` along line `L`. *(2281)*
-- `tangent(L, t)` — heading at `t`, measured over a chord (not one rough segment). *(2289)*
-- `add(out, L)` — push a line into `out` and index it by id. *(2293)*
-- `sinuate(kn, seed, M)` — add a tapered low-frequency wave to a route (the *sinuous* variant). *(2297)*
-- `curvature(pts, chord, smooth)` — signed curvature along a path (fold strain, deflection). *(2636)*
+  arc length, taper; applies `extra.press` / `extra.wmod` (boudinage) / `extra.lean`. *(2275)*
+- `at(L, t)` — point at fraction `t` along line `L`. *(2303)*
+- `tangent(L, t)` — heading at `t`, measured over a chord (not one rough segment). *(2311)*
+- `add(out, L)` — push a line into `out` and index it by id. *(2315)*
+- `sinuate(kn, seed, M)` — add a tapered low-frequency wave to a route (the *sinuous* variant). *(2319)*
+- `curvature(pts, chord, smooth)` — signed curvature along a path (fold strain, deflection). *(2658)*
 
 ## Pen input
 
@@ -51,20 +51,20 @@ Baseline is one pointer + time; pressure/tilt are opt-in enhancements read from 
 
 ## Tools — a mark becomes geometry
 
-Dispatched by `applyMark(m, out)` on `m.kind`. *(5872)*
+Dispatched by `applyMark(m, out)` on `m.kind`. *(6010)*
 
 - `buildVein(m, F, out)` — the vein: route → roughen → `lineGeom`, family branches, and the
-  per-line variant (sinuous / dendritic / echelon / boudinage / halo). *(2312)*
-- `buildBranch(m, F, out)` — a minor grown by tap or drag off a parent vein; honours the variant. *(2364)*
-- `buildStyl(m, out)` — a stylolite: the route becomes an interlocking toothy seam. *(2434)*
-- `buildWeb(m, F, out)` — a crack along the line plus a Delaunay web of cells that thins out. *(2452)*
-- `buildPour(m, out)` — the pour brush: specks thrown along the line (slow pools, fast thins, bends fling). *(2846)*
+  per-line variant (sinuous / dendritic / echelon / boudinage / halo). *(2334)*
+- `buildBranch(m, F, out)` — a minor grown by tap or drag off a parent vein; honours the variant. *(2386)*
+- `buildStyl(m, out)` — a stylolite: the route becomes an interlocking toothy seam. *(2456)*
+- `buildWeb(m, F, out)` — a crack along the line plus a Delaunay web of cells that thins out. *(2474)*
+- `buildPour(m, out)` — the pour brush: specks thrown along the line (slow pools, fast thins, bends fling). *(2868)*
 - `applyGravity(m, out)` — pull/push specks toward a point or line. Also the **fog sculptor**: when the
   mark targets fog (`m.tgt === 'fog'`) it retargets to `out.fog` — **push clears a window** in the haze,
   **pull gathers a resin pool** (its pull/push *is* the fog's polarity), leaving veins/specks untouched
-  (zero smear). *(2736)*
+  (zero smear). *(2758)*
 - `applyMagnet(m, out)` — comb specks like iron filings along the pen's lean; retargets to `out.fog` when
-  `m.tgt === 'fog'`, but it only rotates orientation, so round haze blobs show nothing (yet). *(2774)*
+  `m.tgt === 'fog'`, but it only rotates orientation, so round haze blobs show nothing (yet). *(2796)*
 - **Selection** (`selected` = a set of token keys: `lay:<layer>` from a row checkbox, `id:<artifact>` from a
   Tune/Select tap — a **vein** (`nearestLine` → `id:L…`), a **web spread** (`nearestWeb` → `id:W<mark>`,
   any crack picks the whole spread) or a **stylolite seam** (`nearestStyl` → `id:S<mark>`); `segD` is the
@@ -91,22 +91,22 @@ Dispatched by `applyMark(m, out)` on `m.kind`. *(5872)*
 
 ## Granite specks — a never-touch particle field
 
-- `speck(r, g, x, y, t, o)` — construct one speck (position, size, elongation, jitter). *(2502)*
+- `speck(r, g, x, y, t, o)` — construct one speck (position, size, elongation, jitter). *(2524)*
 - `cellGrid(items, cell)` / `forNear(g, cell, x, y, rc, fn)` — spatial hash grid and neighbour
   iteration. *(981/989)*
 - `relax(sp, iters, hot)` / `settle(specks)` — relaxation so specks bunch but never overlap
   (active-set over a flat typed grid). *(1001/1055)*
 - `pathIndex(pts, cell)` / `moveRadial(q, near, dNew, fx, fy)` — index a path for proximity; move a
   speck radially (gravity). *(1064/1092)*
-- `deflect(kn, specks, mul)` — bend a vein route a few degrees around dense rock. *(2650)*
+- `deflect(kn, specks, mul)` — bend a vein route a few degrees around dense rock. *(2672)*
 - `intrude(L, specks, M, route)` — push specks aside along a vein (crowded inside a turn, thinned
-  outside). *(2683)*
+  outside). *(2705)*
 - `groundFor(density, size, seed)` — one granite speck field for a `(density, size, seed)` key: minted
   once (fit-capped, then relaxed) and **cached per key**, returning fresh copies so a rebuild moves
-  nothing a sibling already settled. *(2820)*
+  nothing a sibling already settled. *(2842)*
 - `buildGround()` — the whole granite ground: the **union of every micro-bucket `field:'specks'`
   layer's** `groundFor(...)`, each speck tagged `s.layer` so it renders / warps / sculpts / colours per
-  field. One field by default; many once you add **+ Granite layer**. *(2837)*
+  field. One field by default; many once you add **+ Granite layer**. *(2859)*
 
 ## Slab primitives — seeded fields on the base
 
@@ -116,7 +116,7 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
 - `buildBands()` / `ensureBands()` — directional tonal bands as a grey delta (soft-light). *(499/517)*
 - `buildBreccia()` / `ensureBreccia()` — a jittered-Voronoi clast mosaic with a contrast matrix
   (opaque base setter). *(524/547)*
-- `buildDrusy()` — crystal-pocket sparkle points, deterministic by index (density appends). *(2084)*
+- `buildDrusy()` — crystal-pocket sparkle points, deterministic by index (density appends). *(2106)*
 - `buildFog()` — a flat, even greyscale **haze / resin core**: a jittered grid of heavily-overlapping soft
   particles (reads as a uniform sheet, not clumps), a low fixed grey, never tinted. **Field-per-layer, like
   granite:** it unions every fog **plane** (`L.field==='fog'`), each with its own `haze` / `size` / `density`
@@ -133,7 +133,7 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   preferred), stored on the mark as `m.tgt`; `sculptParticles` picks `out.fog`/`out.specks` by kind and
   filters to `p.layer === m.tgt`. A bare `'fog'`/`'micro'` (legacy mark or the default layer) moves that
   default plane; a `#` key moves only its own plane. Works for granite layers too. *(≈1427)*
-- `hexRGB(h)` — parse `#rgb`/`#rrggbb` to `[r,g,b]`. *(1973)*
+- `hexRGB(h)` — parse `#rgb`/`#rrggbb` to `[r,g,b]`. *(1995)*
 
 ## Glass — a lay-up, then a forming process
 
@@ -143,39 +143,59 @@ is not there.** So the colour field is authored in gather coordinates and each p
 inverse *map* back into them, never a direction the bands are derived from.
 
 - `glassFlow(ox, oy, F, out)` — unit vector the melt was drawn along: the axis for blown, radial
-  for spun, the roll for rolled, and `(0,0)` for poured, which was never drawn at all. *(5155)*
+  for spun, the roll for rolled, and `(0,0)` for poured, which was never drawn at all. *(5185)*
 - `glassFormT(ox, oy, F, fv)` — **thickness in millimetres**, which is the field glass actually
   carries: ream along the draw, the crown's thinning and pontil boss, the roller's flutes. Evaluated
-  three times per pixel for the gradient, so the inclusions are deliberately kept out of it. *(5166)*
+  three times per pixel for the gradient, so the inclusions are deliberately kept out of it. *(5196)*
 - `glassMelt(ox, oy, F, fv, out)` — what was *in* the melt. Bubbles are voids and thin the sheet;
-  inclusions thicken it. Both are drawn out along the flow, so both are ellipses aligned to it. *(5197)*
+  inclusions thicken it. Both are drawn out along the flow, so both are ellipses aligned to it. *(5227)*
+- `starR(th, R)` — a five-pointed star as a radius per angle. Exact rather than fitted: between
+  an outer vertex and the next inner one the edge is a straight **chord**, and a chord through polar
+  points `(r1,0)` and `(r2,s)` has radius `r1*r2*sin(s) / (r1*sin(a) + r2*sin(s-a))`. It checks out at
+  both ends by construction, which is why it needs no fudge factor. *(5257)*
+- `rollStamp(x, y, op)` — what the roller pressed in. **C = πD**, so the circumference *is* the
+  repeat along the roll — not a pitch anyone picks — and a stamp's angle around the roller is its
+  phase inside that repeat, its position along the face where it lands across the sheet. If the piece
+  is shorter than C the roller never completes a revolution, so a contiguous arc never touches it; with
+  staggered stamps that arrives as a **band across the sheet with no marks**, which is the geometry
+  being honest and not a gap to fill. Distinct from the flutes in `glassFormT`: those are
+  circumferential grooves, so their pitch runs across the sheet and is genuinely free of C. *(5273)*
 - `glassUnform(x0, y0, F, out)` — **undo every operation, last first**, arriving in the mould's own
   coordinates. Composition, not a sum: each op hands the next the frame it was applied in, which is
   the difference between blowing a stirred sheet and stirring a blown one. `spin` shears angle by
   radius, `blow` spreads from the centre, `roll` stretches one way and squeezes the other (area
   kept, so a roll lengthens a pattern without fading it), `stir` is the baked warp field. An empty
-  list is a plain pour. *(5257)*
+  list is a plain pour. *(5327)*
 
 - `glassLay(gc, ga, F, out)` — which compartment is here, as an **integer label, never a mixture**:
-  Carries the mould's SHAPE — strips or radial wedges. A wedge mould is not a spin: a spin shears
-  what is already there, and these compartments were radial before anything was done to them.
+  Carries the mould's SHAPE — strips, radial wedges, or **authored compartments** each with its
+  own width, length and colour. A compartment shorter than its neighbours leaves a void, so the
+  field has to be able to answer **-1, nothing was poured here**.
+
+  THE SLUMP is what “partially set” means in practice: the barriers come off before the glass is
+  hard, so the nearest poured rectangle creeps into any void — measured as a distance to every
+  cell rather than a look left/look right, which gets the sideways invasion and a cell creeping
+  past its own end from one piece of arithmetic with no axis favoured. What creeps is a LABEL, so
+  two neighbours reaching the same void from opposite sides meet at a seam; what fades is the
+  AMOUNT of glass, because a creeping edge is thin and thickness already sets the depth of a tint.
+  A wedge mould is not a spin. A wedge mould is not a spin: a spin shears
   Sampling a label through a deformation cannot average, so two colours fold past each other and stay
   two colours with nothing enforcing it. Also the lay angle, the twist (a shear of the
   circumference by axial position) and the lap. **The lap is a stack, not a blend** — where two
-  ribbons overlap the light crosses both, so the absorptions add and the seam goes *darker*. *(5291)*
+  ribbons overlap the light crosses both, so the absorptions add and the seam goes *darker*. *(5371)*
 - `paintGlassContent(ident, angleView)` — the painter: Beer-Lambert per channel over the thickness,
-  which is why a thick sheet goes green down its edge. Says nothing in either diagnostic. *(5356)*
+  which is why a thick sheet goes green down its edge. Says nothing in either diagnostic. *(5476)*
 
 - `moonDisp(m)` — how far one moon pushed what was at a point. **One question, two askers**:
   stone warps its geometry through it, glass samples its field back through it, and lifting it out of
   `applyMoon` is what stops the two drifting — a stir that disagreed with the warp would be a
-  second moon. *(2960)*
+  second moon. *(2982)*
 - `glassWarp(H, moons)` — EVERY warp - the whole-slab current and each moon pass - baked to one grid in **slab** coordinates, because `disp()`
   walks the whole pass: ~170 points times 600k pixels becomes ~170 times 16k. Measured at 0.45%% of
-  peak against the function it stands in for. `null` when nothing stirred. *(5321)*
+  peak against the function it stands in for. `null` when nothing stirred. *(5441)*
 - `glassUnwarp(S, cu, cvv, out)` — **where the glass now here came from.** The baked field says
   where a point went and a field has no points to follow, so it is read backwards — the minus sign
-  lives here, and it is the one thing about this that is easy to get the wrong way round. *(5347)*
+  lives here, and it is the one thing about this that is easy to get the wrong way round. *(5467)*
 
 The stir is probed by `tools/probe-glass-stir.mjs`, which checks the things reading cannot:
 the sign, the slab-to-feet conversion, and the bake against the function it replaces.
@@ -191,10 +211,10 @@ with the shim prepended *before* the app's script can.
 Wood's functions are **not yet listed here**; that gap predates the glass path.
 ## Build pipeline
 
-- `applyMark(m, out)` — dispatch one mark to its builder. *(2903)*
+- `applyMark(m, out)` — dispatch one mark to its builder. *(2925)*
 - `build()` — incremental (append the last mark to a cloned `geo`) when possible, else `fullBuild`; then
-  `warpGeo`. The incremental path is skipped while warp is on so nothing is warped twice. *(3035)*
-- `fullBuild()` — rebuild all geometry from `marks` in order (older rock first). *(3051)*
+  `warpGeo`. The incremental path is skipped while warp is on so nothing is warped twice. *(3057)*
+- `fullBuild()` — rebuild all geometry from `marks` in order (older rock first). *(3073)*
 - `warpGeo()` — cloud-driven domain **warp**: displace every built point (veins/specks/styl/drusy)
   by `G.warp` along the cloud's fBm field, offset by `G.cloudX`/`cloudY` (the field is **moveable**,
   same offset as the cloud mottle) and **scaled per layer** by each layer's `warp` weight. `fbm2()` /
@@ -208,7 +228,7 @@ Wood's functions are **not yet listed here**; that gap predates the glass path.
   gate whether a whole layer warps at all.) `warpGeo` runs **two warps** before the shared anchor pass: the
   gentle global field (above, when `G.warp > 0`) and every **moon** mark (below) — each point's displacement
   scaled by `warpMaskAt` (protected islands, below); `build()`'s incremental
-  path is also skipped whenever a moon exists, so a moon always rebuilds. *(2982)*
+  path is also skipped whenever a moon exists, so a moon always rebuilds. *(3004)*
 - `applyMoon(m, W)` — one **moon**: a dragged local warp brush ("ball" of radius `M.moonReach`, force
   `M.moonStrength`). A **forward-warp** — each point's displacement is the ball's motion summed along the
   pass, weighted by a soft falloff (`1 − d²/R²`, 1 at the centre → 0 at the rim), computed from the
@@ -219,7 +239,7 @@ Wood's functions are **not yet listed here**; that gap predates the glass path.
   A hand can't retrace a pass point-for-point regardless (sample rate alone shifts it) — the near-miss is
   the intended feel; the **Undo button** (drops the mark) is the real undo. Warps only layers whose
   `warp` weight is on; the anchor pass after still keeps a dragged branch from snapping off. Passes are
-  marks, so they stack. *(2972)*
+  marks, so they stack. *(2994)*
 - `gatherMasks()` — the **island** set, unioned from two sources: `G.warpMask` (programmatic / legacy discs)
   and every **Mask mark** the tool places (`{kind:'mask', at, r, p:{maskFeather, maskWin, maskSpec,
   maskInvert}}`). Returns `{x, y, r, feather, invert, show}` discs. `invert` picks the disc's **sense**
@@ -241,7 +261,7 @@ Wood's functions are **not yet listed here**; that gap predates the glass path.
 
   Because it is one product, the two compose with no special case: a protect disc inside a chaos disc is a
   calm eye in the storm. The shared **anchor** pass is deliberately **not** masked, so a line whose root lies
-  outside a mask still re-pins its first ~4%; the mask shapes the *field* warp, not the root bond. *(2944)*
+  outside a mask still re-pins its first ~4%; the mask shapes the *field* warp, not the root bond. *(2966)*
 - `renderSlabTo(w, h, tf, coatScale, spec)` — paint the **current** geometry once more into a fresh canvas at a
   given transform and **light spectrum** `spec` (`uvMode` derived as `spec !== 0`), coat and all. The machinery a
   reality window needs to show one region under a different light without re-authoring. Saves/restores `g2d`,
@@ -263,28 +283,28 @@ Wood's functions are **not yet listed here**; that gap predates the glass path.
 
 Each pattern is a fundamental cell of polygons plus two lattice vectors, in inches for tile size `u`.
 
-- `PATTERNS` — the pattern table (`u => {polys, ax, ay, overlap?}`), 15 patterns. *(3754)*
+- `PATTERNS` — the pattern table (`u => {polys, ax, ay, overlap?}`), 15 patterns. *(3776)*
 - `circlePoly(cx, cy, r, n)` / `versaillesModule(u)` / `cairoCell(u)` — the many-point and
   composite cells (penny/fish-scale, French, Cairo pentagons). *(1480/1483/1505)*
-- `insetPoly(P, d)` — inset a polygon (grout, tumbled edges). *(3151)*
-- `tileInstances()` — every tile polygon across the slab for the current pattern. *(3200)*
-- `renderStoneOffscreen()` — bake the authored slab once to a reused offscreen. *(3238)*
-- `chipEdge(poly, mk)` — replace one edge with a jagged inward bite (Chip tool). *(3291)*
-- `drawTiles(F)` — lay the tiled floor: clip each tile, wrap the slab image, grout, edges, chips. *(3307)*
+- `insetPoly(P, d)` — inset a polygon (grout, tumbled edges). *(3173)*
+- `tileInstances()` — every tile polygon across the slab for the current pattern. *(3222)*
+- `renderStoneOffscreen()` — bake the authored slab once to a reused offscreen. *(3260)*
+- `chipEdge(poly, mk)` — replace one edge with a jagged inward bite (Chip tool). *(3313)*
+- `drawTiles(F)` — lay the tiled floor: clip each tile, wrap the slab image, grout, edges, chips. *(3329)*
 - `edgeFinish(poly, px)` — a lit chamfer (bevel / pillow / tumbled), each edge shaded by its outward
-  normal · the shared light `G.lightAngle` (highlight facing the light, shadow away). *(3354)*
+  normal · the shared light `G.lightAngle` (highlight facing the light, shadow away). *(3376)*
 - `setLight(f)` / `drawLightGuide()` — aim the shared light from the slab centre toward `f` (the Light
   tool's `lightdrag`), and draw the little sun marker at the slab edge in the light's direction.
 - `lightRGB()` — the light's colour from `G.lightTemp` (warm amber ← neutral warm-white → cool blue). The
   specular sheen, the vein glint, and the tile-edge highlights all tint to it; neutral (0) = the old look.
-- `whichTile(fx, fy)` — hit-test a point to a tile and its nearest edge. *(3371)*
-- `inFr(v)` — inches → frame units. *(3071)*
+- `whichTile(fx, fy)` — hit-test a point to a tile and its nearest edge. *(3393)*
+- `inFr(v)` — inches → frame units. *(3093)*
 
 ## Rendering
 
-- `size()` — size the canvas to the element and device pixel ratio. *(3382)*
+- `size()` — size the canvas to the element and device pixel ratio. *(3404)*
 - `draw()` — one frame: ground/base fill, then `paintStoneContent` (or `drawTiles`), the coat passes in order
-  (emission bloom in uv · **subsurface** · **specular** · **lens**), guides, live stroke, status. *(4005)*
+  (emission bloom in uv · **subsurface** · **specular** · **lens**), guides, live stroke, status. *(4027)*
 - **Subsurface** (`G.subsurface`, coat tier v1) — a post-pass in stone view: build the feature **high-pass**
   in the `ssC` scratch canvas (`stone` composited with `difference` against a blur of itself, so flat areas
   are ~black and only veins/specks/edges survive), `multiply` it warm, then add it back over the stone with
@@ -348,25 +368,25 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   the adjacent layer; blocked from crossing into the pinned ground (`isGroundLayer` = base body + the 3
   setters). Rebuilds + saves. The row's ▲▼ call it. Stack order serializes in `layers[]` order and is
   restored on load; `DEFAULT_LAYER_ORDER` + `clearUserLayers` reset it. *(≈602)*
-- `runs(L, colour, fixedWidth, alpha, shoulder)` — stroke a line in chunks (shoulder or core pass). *(5768)*
+- `runs(L, colour, fixedWidth, alpha, shoulder)` — stroke a line in chunks (shoulder or core pass). *(5906)*
 - `fxOn(key, colour, ident)` / `fxOff(s)` — set a layer's blend mode + colour glow around its paint,
   then restore. *(1669/1676)*
-- `paintLive()` — the in-progress stroke. *(4063)*
+- `paintLive()` — the in-progress stroke. *(4085)*
 - `drawScaleBar()` / `drawGuides()` — the scale bar and the gravity/magnet guide overlay. *(1778/1790)*
 - `drawWarpGuide()` — the **warp field made visible**: samples the same `fbm2` displacement `warpGeo`
   uses, on a coarse grid, and draws each node's base displacement as a teal arrow (direction exact,
   length/opacity the field magnitude normalised to the grid max). Shown with the **Cloud** tool while
   `G.warp > 0`; rides `cloudX`/`cloudY`, and is a guide — never baked into an export.
-- `idColour(id, t)` — identity-view colour for an id. *(3387)*
-- `redraw(rebuild)` — schedule a frame on rAF (rebuild geometry if asked), then autosave. *(5788)*
+- `idColour(id, t)` — identity-view colour for an id. *(3409)*
+- `redraw(rebuild)` — schedule a frame on rAF (rebuild geometry if asked), then autosave. *(5926)*
 - `stat()` / `clampView()` / `zoomAt(ex, ey, f)` / `hint(msg)` — status line, view clamp, zoom, hint. *(1866/1871/1877/1898)*
 
 ## Layers
 
 - `layers` / `layAt(k)` — the layer list and lookup. Fixed passes use `key === bucket`; user layers use a
-  `bucket#n` key. Each has `{key, label, bucket, on, op, warp}`. *(5796)*
-- `layVis(k)` — visibility, honouring solo (solo keeps `base` under the soloed layer). *(1965)*
-- `layOp(k)` — a layer's opacity. *(1966)*
+  `bucket#n` key. Each has `{key, label, bucket, on, op, warp}`. *(5934)*
+- `layVis(k)` — visibility, honouring solo (solo keeps `base` under the soloed layer). *(1987)*
+- `layOp(k)` — a layer's opacity. *(1988)*
 - `activeLayer` — the active layer per bucket (`{major, minor, web, micro}`); a mark files into
   `activeLayer[its bucket]` at commit. `addLayer(bucket)` appends a layer (grouped after its bucket's
   last) and makes it active — a new **micro** layer gets `field:'specks'` and its own density/size/seed;
@@ -391,7 +411,7 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   their overrides leaked into the "fresh" slab. *(≈590)*
 - `syncGranite()` — reflect the **active granite layer's** density/size into the ground sliders. The
   Specks/Speck-size sliders and **Reseed** all act on `activeLayer.micro` only, so each field is tuned
-  independently. *(1961)*
+  independently. *(1983)*
 - `stampLayers(out)` — after every build, tag each line (`L.layer`) and web edge (`e.layer`) with its
   mark's layer, falling back to the bucket for legacy marks or a deleted layer. Render (`lk`) and both
   warps read this, so eye/opacity/warp are per-layer while export still buckets by kind. *(≈1590)*
@@ -412,10 +432,10 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 - `OVR` / `COL` / `perItem` — the overrides the editor edits and we persist / the *resolved* values
   the renderer paints from / `id → layer bucket` for per-item (per-id) tokens. `COLOUR_TOKENS` /
   `FX_LAYERS` / `BLENDS` — the colour token list, the layers that carry blend/glow, the blend options.
-- `seedColours(f)` — seed the colour **overrides** (`OVR`) from family `f`'s palette (never effects). *(1737)*
+- `seedColours(f)` — seed the colour **overrides** (`OVR`) from family `f`'s palette (never effects). *(1759)*
 - `recolour()` — resolve `OVR` → `COL` through the kit (fills defaults + `inherit`); the renderer reads `COL`.
 - `setupColour()` — create the kit, register the Colour / Effects / Per-item groups, bind the adapter
-  to `OVR`, resolve, mount the editor. *(6095)*
+  to `OVR`, resolve, mount the editor. *(6233)*
 - `registerPerItem()` — (re)register the Per-item token group from `perItem`; each id **inherits** its layer.
 - `groupTokens(prefix, ng, nv, label, inheritBase)` — build a nested primary/secondary token set:
   group `‹prefix›g` inherits `inheritBase`; variant `‹prefix›g.v` inherits the group. Capped 5×4.
@@ -424,21 +444,21 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   a drusy pocket is the group, its crystals the variants).
 - `tuneId(id, bucket)` — the Tune tool's action: give a vein a per-item colour token that follows its
   layer until changed (reset returns it).
-- `mountEditor()` — (re)create the `<theme-kit-editor>` so its inputs reflect `OVR`. *(6199)*
+- `mountEditor()` — (re)create the `<theme-kit-editor>` so its inputs reflect `OVR`. *(6337)*
 
 ## Interaction
 
-- `nearestLine(fx, fy)` — the nearest vein (for Branch tap/drag). *(5894)*
-- `commit(m)` — push a mark (freezing `NEXT`/`fam` onto it) and rebuild. *(5992)*
-- `end(e)` — pointer-up: build the right mark for the active tool. *(5997)*
-- `commitHover()` — commit a hover trace (pen/mouse working above the slab). *(6059)*
+- `nearestLine(fx, fy)` — the nearest vein (for Branch tap/drag). *(6032)*
+- `commit(m)` — push a mark (freezing `NEXT`/`fam` onto it) and rebuild. *(6130)*
+- `end(e)` — pointer-up: build the right mark for the active tool. *(6135)*
+- `commitHover()` — commit a hover trace (pen/mouse working above the slab). *(6197)*
 
 ## The source — save, load, restore
 
 - `serialize()` — the stone source: `{v:1, fam, tool, view, layTiles, guidesOn, G, T, NEXT, nextId,
   layers[{key,label,bucket,on,op,warp,field,density,size,seed,haze,transmit,scatter}], soloLay,
   activeLayer, OVR, OVR_uv, perItem, hidden[], folders[], marks[]}`. It persists **`OVR`, not `COL`** —
-  `COL` is derived (`recolour()`), so only the overrides travel; the resolved values rebuild on load. *(6806)*
+  `COL` is derived (`recolour()`), so only the overrides travel; the resolved values rebuild on load. *(6948)*
 - `deserialize(o)` — restore a source (guards `v === 1`), then rebuild. It is written so that **a load is a
   pure function of the slab**, not of whatever was loaded before: it **hard-resets `G`/`T`/`NEXT` to their
   captured pristine defaults `G0`/`T0`/`NEXT0` *before* applying the saved values** (a key absent from the
@@ -448,44 +468,44 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
   reset `activeLayer`), reset the default granite + fog planes, re-create + reorder saved layers, run the
   migrations, clear + reload `OVR`/`OVR_uv`/`perItem`/`hidden`/`folders`, reseed + `recolour`, re-mount the
   editor, and redraw. Always opens in daylight (`lightSpectrum = 0`, uv/spot off). The harness renders each
-  hero twice from a fresh `deserialize` precisely to exercise this determinism. *(6813)*
+  hero twice from a fresh `deserialize` precisely to exercise this determinism. *(6955)*
 - `writeLocal()` / `saveLocal()` / `tryLoadLocal()` — autosave (debounced + flush on hide), and
   restore on load. *(2132/2133/2138)*
-- `syncUI()` — push all state into the controls after a load. *(7391)*
-- `showGround()` — show/hide the family-specific ground panel. *(6728)*
+- `syncUI()` — push all state into the controls after a load. *(7533)*
+- `showGround()` — show/hide the family-specific ground panel. *(6870)*
 - `download(name, text)` — a Blob download for Save (falls back when the `downloads` capability is
-  absent). *(7414)*
+  absent). *(7556)*
 
 ## Export — one zip: masks, render, the rich set, `.ora`, SVG, source
 
 `exportAll(W)` renders everything at `W` pixels wide (the slab keeps its 8×5 ratio) and packs it into a
 single store-only zip. It prefers the `downloads` capability and falls back to `download()`.
 
-- `crc32(u8)` — CRC-32 over a byte array (the zip checksum). *(7432)*
+- `crc32(u8)` — CRC-32 over a byte array (the zip checksum). *(7574)*
 - `zipStore(files)` — a store-only (uncompressed) zip `Blob` from `[{name, data}]`. PNGs are already
   compressed and `.ora` requires stored entries, so nothing is deflated. Writes local headers, a
-  central directory, and the EOCD by hand. *(7739)*
-- `toU8(canvas)` — a canvas as PNG bytes (`toBlob` → `Uint8Array`). *(7932)*
+  central directory, and the EOCD by hand. *(7881)*
+- `toU8(canvas)` — a canvas as PNG bytes (`toBlob` → `Uint8Array`). *(8074)*
 - `expCanvas(W)` / `polyPath(cx, pts)` — an off-screen slab-ratio canvas; a polyline subpath. *(2314/2315)*
-- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(7942)*
+- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(8084)*
 - `expBaseMask(W)` — the base composite (ground + breccia + clouds + bands) flattened to luminance:
-  the greyscale value map for the `base` bucket. *(7945)*
+  the greyscale value map for the `base` bucket. *(8087)*
 - `expCoverage(kind, W)` — white-on-black coverage for a consumer bucket (`major` / `minor` / `micro`
-  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(7956)*
+  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(8098)*
 - `expBucket(bucketKey, W)` — one bucket in colour, transparent elsewhere, by gating layers to that
-  bucket — the layer PNGs inside the `.ora`. *(7966)*
+  bucket — the layer PNGs inside the `.ora`. *(8108)*
 - `expIdT(W)` — the rich pair: a vein-**id** map (each line an rgb-encoded index) and an
-  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(7974)*
+  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(8116)*
 - `pathsJSON()` — the vectors as data: slab size in feet, then each line's `id / major / parent / at`,
-  its points, and its per-sample widths. *(7983)*
-- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(7984)*
+  its points, and its per-sample widths. *(8125)*
+- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(8126)*
 - `buildOraFrom(merged, buckets, order, W)` — an OpenRaster `.ora` assembled from already-encoded
   PNG bytes: a nested zip with `mimetype` stored first, a `stack.xml` (top child = top layer), the
   bucket layers under `data/`, and a `mergedimage` + thumbnail. Opens in Krita / GIMP / Photoshop.
-  Takes the encoded bytes rather than rendering them, so the encode happens once. *(8029)*
+  Takes the encoded bytes rather than rendering them, so the encode happens once. *(8171)*
 - `exportAll(W)` — assemble `render.png`, `masks/{base,major,minor,micro,web}.png`,
   `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, and
-  `slab.ora` into one zip and hand it to the viewer. *(8168)*
+  `slab.ora` into one zip and hand it to the viewer. *(8310)*
 
 ## Large renders — what a canvas can hold, and what to do past it
 
@@ -496,32 +516,32 @@ it reports the size asked for and leaves the far end unwritten. See
 [`capabilities.md`](capabilities.md) for the measured ladder and what it costs.
 
 - `canvasFits(w, h, n)` — can this machine hold `n` canvases of `w × h`? Writes the **far corner** and
-  reads it back, because a silently clamped canvas passes every other test. *(6981)*
+  reads it back, because a silently clamped canvas passes every other test. *(7123)*
 - `exportCeiling()` — the direct export's ceiling: probes 2048→16384 for `EXP_PEAK` (2) canvases, cached
-  per device signature. This is the ceiling of the *non-streamed* path only. *(7003)*
+  per device signature. This is the ceiling of the *non-streamed* path only. *(7145)*
 - `sideCap()` — the widest single canvas this **build** can allocate, by bisecting `1 × N`, cached. Not a
   constant: CI measures Gecko and WebKit clamping to 32767 while a desktop Firefox writes a true 65535, so
-  the cap belongs to the build rather than the engine. *(7025)*
+  the cap belongs to the build rather than the engine. *(7167)*
 - `applyExportCeiling()` — disables the plain sizes past `exportCeiling()`, leaves the tier sizes to
-  `applyTiers()`, and re-runs it so the ceiling line matches the armed tiers. *(7059)*
+  `applyTiers()`, and re-runs it so the ceiling line matches the armed tiers. *(7201)*
 - `stripPlan(W, opts)` — band geometry: band height from a 900 MB budget (reduced by
   `navigator.deviceMemory`, which is Chromium-only), bleed capped at 256, then **probed** with
-  `canvasFits` and halved until a band actually holds a written pixel. *(3830)*
+  `canvasFits` and halved until a band actually holds a written pixel. *(3852)*
 - `renderStrip(W, y0, h, bleed, wins)` — one band with bleed above and below, painted at the full-slab
-  transform with a tile offset so global gradients and the specular hotspot land in image space. *(3858)*
+  transform with a tile offset so global gradients and the specular hotspot land in image space. *(3880)*
 - `pngChunk(type, data)` / `pngTextChunk(keyword, text)` — a self-framed PNG chunk; the `tEXt` chunk that
   carries provenance. *(4469 / 4476)*
 - `renderStreamedPNG(W, meta, onStrip, opts)` — the strip engine: band → filter byte 0 → a
   `CompressionStream('deflate')`, whose output is exactly the zlib stream IDAT wants. Refuses past
   `sideCap()`, and **refuses if the scanline byte count does not match the plan**, because a band written
-  twice or skipped is invisible to every decoder. Returns `{blob, plan, msRender, bytes}`. *(7462)*
+  twice or skipped is invisible to every decoder. Returns `{blob, plan, msRender, bytes}`. *(7604)*
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
-  family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(7710)*
+  family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(7852)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(8597)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(8786)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(8619)*
+  actually on offer, not a probe's answer to a different question. *(8808)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(8683)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(9620)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(8872)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(9809)*
