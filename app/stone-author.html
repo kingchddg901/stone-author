@@ -1729,7 +1729,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.60';
+  const BUILD = '2026.10.12.61';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3376,8 +3376,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const nom = plankLenIn();                                 // come from the cut, never from T.sizeIn
     const vary = Math.max(0, Math.min(1, WOOD.plankVary));
     const stag = Math.max(0, Math.min(1, WOOD.plankStagger));
-    const slabS = 1;                                          // the plank is cut where it lies; see tileInstances
-    const g = inFr(jointIn()) / 2;
+    // THE SAME RELATIONSHIP AS THE LATTICE, said once more because this generator builds its own
+    // geometry. The board is cut at its natural pitch on the slab; the blade takes kerf/2 off each
+    // edge of the piece; the floor lays what is left at (width - kerf + joint). Twelve boards off a
+    // slab therefore cover eleven kerfs less floor than the slab they came from, which is the whole
+    // point - the run used to lose nothing to the saw.
+    const fS = Math.max(0.05, (wIn - T.kerfIn + jointIn()) / wIn);
+    const blade = inFr(T.kerfIn) / 2;
     const cx = 0.5, cy = H / 2, out = [];
     const halfW = IN * 0.75, halfH = IN * H * 0.75;           // inches from centre, generous; off-frame is culled
     const rows = Math.ceil(halfH / wIn) + 1;
@@ -3396,12 +3401,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         if (x1 > -halfW) {
           const ctr = [(x + x1) / 2, (y0 + y1) / 2];
           const base = [[x, y0], [x1, y0], [x1, y1], [x, y1]];
+          const sc = [cx + inFr(ctr[0]), cy + inFr(ctr[1])];        // where it was cut
+          const fc = [cx + inFr(ctr[0]) * fS, cy + inFr(ctr[1]) * fS];   // where it is laid
           // grout by INSET, not by spreading centres: planks are not on a single pitch, so a spread
           // would make the end gaps grow with distance from the middle.
-          let poly = insetPoly(base.map(q => [cx + inFr(q[0]), cy + inFr(q[1])]), g);
+          let poly = insetPoly(base.map(q => [fc[0] + (inFr(q[0]) - inFr(ctr[0])), fc[1] + (inFr(q[1]) - inFr(ctr[1]))]), blade);
           let on = false;
           for (const q of poly) if (q[0] > -0.05 && q[0] < 1.05 && q[1] > -0.05 && q[1] < H + 0.05) { on = true; break; }
-          if (on) out.push({ poly, shift: [inFr(ctr[0]) * (1 - slabS), inFr(ctr[1]) * (1 - slabS)],
+          if (on) out.push({ poly, shift: [fc[0] - sc[0], fc[1] - sc[1]],
                              key: 'plank:' + m + ':' + pi, n: pi, m, pi, ctr });
         }
         x = x1; pi++;
@@ -3432,7 +3439,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         const base = pat.polys[pi].map(q => [q[0] + n * ax[0] + m * ay[0], q[1] + n * ax[1] + m * ay[1]]);
         const ctr = polyCentroid(base);                 // inches from the slab origin
         const fc = [inFr(ctr[0]) * floorS, inFr(ctr[1]) * floorS];    // floor centre (spread by grout)
-        const poly = base.map(q => [cx + fc[0] + (inFr(q[0]) - inFr(ctr[0])), cy + fc[1] + (inFr(q[1]) - inFr(ctr[1]))]);
+        // THE BLADE COMES OFF THE PIECE. The pitch already carries it; without taking it off the piece
+        // as well, two tiles are closer together than they are small and they overlap - which is what
+        // any kerf wider than the grout was doing.
+        const poly = insetPoly(base.map(q => [cx + fc[0] + (inFr(q[0]) - inFr(ctr[0])), cy + fc[1] + (inFr(q[1]) - inFr(ctr[1]))]),
+                               inFr(T.kerfIn) / 2);
         // cull tiles fully off-frame
         let on = false; for (const q of poly) if (q[0] > -0.05 && q[0] < 1.05 && q[1] > -0.05 && q[1] < H + 0.05) { on = true; break; }
         if (!on) continue;

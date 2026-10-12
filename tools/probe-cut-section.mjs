@@ -81,6 +81,8 @@ function build(ablate) {
                            : liftConst(/const cutScale = [^\n]*/),
     ablate === 'cover-max' ? lift('coverSrc').replace('Math.min(sw / dw, sh / dh)', 'Math.max(sw / dw, sh / dh)')
                            : lift('coverSrc'),
+    // The blade comes off the piece now, so the lattice insets every tile by kerf/2 and needs this.
+    lift('insetPoly'),
     // jointIn lives BEHIND the material fork, because how wide a joint is depends on the material -
     // a floor of boards has none. It cannot be lifted and it should not be: the cut geometry under
     // test is material-agnostic, so the probe answers for a material that has grout and the claims
