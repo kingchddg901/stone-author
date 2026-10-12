@@ -873,7 +873,7 @@ window.SA_I18N = (() => {
   "exp.done-render": "Saved the render · {px}px · {t}",
   "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
-  "exp.err.floor-size": "The floor renders on the direct PNG path only, up to {px}px. TIFF and anything larger stream tiles through a core that paints the slab the floor was cut from, not the floor. Choose PNG at {px}px or less, or turn Lay tiles off to export the slab.",
+  "exp.err.floor-size": "Above {px}px a PNG export streams full-width bands and draws the SLAB the floor was cut from, not the floor. Choose TIFF, which paints tile by tile and can draw a floor at any size, or a PNG at {px}px or less.",
   "exp.err.tile": "This device cannot hold a tile big enough for {px}px.",
   "exp.err.dim": "At {px}px every tile this device can hold came back dim — one was rendered and carried {pct}% of the light it should. This is not a memory limit: the blur stops working above a canvas this size. The render was refused rather than saved wrong. A smaller width needs a smaller canvas and should come out right.",
   "exp.err.floor": "At {px}px this device can only manage {tile}px tiles, which are too small to carry the light — a black-light render would come out dim. Choose a smaller width.",
@@ -1729,7 +1729,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.61';
+  const BUILD = '2026.10.12.63';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3887,7 +3887,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // The tile painter, pointed at a target rather than at the live canvas. `px` is one device
   // pixel in frame units, and `cover` is the rectangle the grout fills under everything.
-  function drawTilesTo(F, tc, px) {
+  // `direct`, when given, PAINTS each piece from the field instead of blitting it out of the
+  // pre-rendered slab. That is what lets the tiled path have a floor: there is no pre-render big
+  // enough at 262144, and never needs to be. Everything else here - the joints, the edge finish, the
+  // chips, the slab clip - is vector and already works at any transform.
+  function drawTilesTo(F, tc, px, direct) {
     if (!stoneReady) renderStoneOffscreen();
     const pat = PATTERNS[T.pattern](T.sizeIn);
     const inst = tileInstances(), chips = chipMap(), SET = picking() ? [] : sectionList();
@@ -3926,6 +3930,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // WHICH SOURCE THIS PIECE CAME OFF. Shuffled still draws one per piece. In order, a pattern
       // with a rosette gets the slot rule; everything else walks the lattice as it always did.
       let band = 0;
+      const shiftNoBand = [shift[0], shift[1]];            // the band is a cant offset, not a shift
       if (STAGE > 1) {
         // `from`, not `t`: the board is the PIECE's, whichever order chose it, and under guide the two
         // are the same instance. Shuffled used to draw a board at random per slot, which is a
@@ -3961,7 +3966,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       } else {
         // ONE draw. shift already carries the band, so the stack lands with this tile's board under
         // it; past the slab nothing is painted and the clip above makes that honest.
-        tc.drawImage(stoneC, -shift[0], -shift[1], 1, HS);
+        if (direct) direct(tc, shiftNoBand, band);
+        else tc.drawImage(stoneC, -shift[0], -shift[1], 1, HS);
       }
       tc.restore();
       if (pat.overlap) {                                // scales overlap - outline each in order so the scallop of the one below stays visible
@@ -4597,6 +4603,33 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // hardcoded to 0 — so a grid needs the x-offset too. Everything else is the same work the tile worker
   // already does: same ground fill, same transform, same tile descriptor into applyCoat. Verified equal to
   // renderStrip at bleed 0, and neighbouring tiles join with a mean difference of 0.
+  // ONE OUTPUT TILE OF A FLOOR. Same shape as renderOneTile below, with the floor painted into it
+  // instead of the slab: the frame transform is identical, the piece polygons are already in frame
+  // units, and each piece is painted through its own clip with the slab slid under it by its shift.
+  // The band is a position down the cant, not an offset into a stack, so it is set the way
+  // renderStoneOffscreen sets it rather than folded into the translate.
+  function renderFloorTile(W, tx0, ty0, tw, th, bleed) {
+    const finalW = W, bs = W / COAT_REF, prevG = g2d; glowPx = BLOOM_DRAW ? 16 * bs : 0;
+    const ex0 = tx0 - bleed, ey0 = ty0 - bleed, ew = tw + 2 * bleed, eh = th + 2 * bleed;
+    const c = document.createElement('canvas'); c.width = ew; c.height = eh;
+    if (c.width !== ew || c.height !== eh) throw new Error('tile canvas clamped to ' + c.width + 'x' + c.height);
+    const cx = c.getContext('2d');
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;   // transparent surround: past the slab is nothing
+    cx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round';
+    const STAGE = stageN();
+    drawTilesTo(null, cx, 1 / finalW, (tc, shiftNoBand, band) => {
+      tc.save();
+      woodBandY = STAGE > 1 ? cantBand(band) : 0;          // which board down the cant this piece came off
+      tc.translate(-shiftNoBand[0], -shiftNoBand[1]);      // slide the slab under the piece
+      g2d = tc; paintContent(false, false); g2d = prevG;
+      woodBandY = 0;
+      tc.restore();
+    });
+    applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true },
+              { ox: ex0, oy: ey0, fw: finalW, fh: Math.round(W * H) });
+    g2d = prevG;
+    return c;
+  }
   function renderOneTile(W, tx0, ty0, tw, th, bleed) {
     const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, prevG = g2d; glowPx = BLOOM_DRAW ? 16 * bs : 0;
     const ex0 = tx0 - bleed, ey0 = ty0 - bleed, ew = tw + 2 * bleed, eh = th + 2 * bleed;
@@ -10414,7 +10447,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // THE FLOOR ONLY RENDERS ON THE DIRECT PATH. Above it the export streams tiles through a core
     // that paints the slab, so the floor would come back as the material it was cut from - correct
     // size, correct name, wrong picture. Refuse and name the size that works.
-    if (layTiles && (fmt === 'tiff' || W > STRIP_FROM)) {
+    // TIFF paints each output tile and can draw a floor into one. The STREAMED PNG path cannot: it
+    // renders full-width bands through a core that paints the slab, so a floor would come back as
+    // the material it was cut from.
+    if (layTiles && fmt !== 'tiff' && W > STRIP_FROM) {
       expStat(TR('exp.err.floor-size', { px: STRIP_FROM }), -1);
       return;
     }
@@ -11328,7 +11364,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const tileMs = [], tileBytes = [];
       // The pool paints ahead where the core reproduces this picture exactly; null everywhere else,
       // and the loop below is then the loop it always was.
-      pool = await tilePool(W, p);
+      // THE POOL PAINTS SLABS. Its core is the slab painter serialised, so a floor would come back as
+    // the material it was cut from - silently, which is the failure mode that costs hours. Off for
+    // floors until the core knows about pieces.
+    pool = layTiles ? null : await tilePool(W, p);
       // HOW MUCH LIGHT THE MASTER ACTUALLY CARRIES. A lost bloom leaves a file that is whole, correctly
       // sized, fully drawn, correctly signed and half as bright — the only symptom is the brightness
       // itself, and until now reading it meant decoding 10.7 GB after the fact. The pixels are already in
@@ -11356,7 +11395,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // in no state to be asked again, and the point of the retry is to get the tile, not to
           // find out whose fault it was. First attempt uses the pool when there is one.
           c = (pool && attempt === 1) ? await pool.tile(n)
-                                      : renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
+                                      : (layTiles ? renderFloorTile : renderOneTile)(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
           if (tilePainted(c)) break;
           c.width = 1; c.height = 1;                       // hand the failed allocation back first
           if (attempt >= 2) { forgetTile(W); throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders })); }

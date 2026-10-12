@@ -409,7 +409,7 @@
   },
   "where": "failure message in the hint line when an export cannot encode an image at the chosen width"
  },
- "exp.err.floor-size": {"placeholders": {"px": "the largest width the direct PNG path reaches, which is the only path that renders a floor"}, "where": "shown when a floor export is asked for in TIFF, or at a width only the streamed path reaches. Those paths render the SLAB, so the floor would come back as the material it was cut from at the right size and under the right name. TIFF cannot do it at ANY size, so the advice has to name the FORMAT and not only the size"},
+ "exp.err.floor-size": {"placeholders": {"px": "the largest width the direct PNG path reaches; above it PNG streams bands"}, "where": "shown when a floor export is asked for as a PNG above the direct path. TIFF paints each output tile and CAN draw a floor at any size; the streamed PNG path renders full-width bands through a slab painter and cannot, so the advice is to change the format"},
  "exp.err.tile": {
   "placeholders": {
    "px": "the export width in pixels that was asked for"
