@@ -70,7 +70,12 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
 - **Colour** — the token-theme-kit colour layer (see below). Per-layer colour, decoupled from
   family, plus **per-id** overrides (the Tune tool) that inherit their layer until changed.
 - **Save the source** — a slab is a small JSON of marks + family + settings + colour; masks and
-  previews **bake** from it at any resolution. Autosaves locally; Save/Load a `stone.json`.
+  previews **bake** from it at any resolution. Autosaves locally; Save/Load a `stone.json`, and
+  **Save/Load one material** — stone, wood and glass held and edited side by side, each savable on its
+  own, rather than three slabs overwriting each other in one slot. The per-material split is by
+  OWNERSHIP, not by a list of names: a colour token belongs to whichever material claims it and stone
+  takes the remainder, because listing stone's tokens explicitly lost all nine per-layer colours the
+  first time a material was loaded over it.
 
 The other apps are focused single-file tools: **`stylus-probe.html`** (what a pen actually sends),
 **`pollock-pour.html`** (the pour brush alone), **`breathing-constellation.html`** (a colour toy).

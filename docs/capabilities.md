@@ -227,7 +227,16 @@ metadata:
   covers a quarter of the slab area, so its interior is more magnified and flatter and deflate wins. That
   is why 262144 landed at 4.26 GB rather than the 5.4 GB a flat bytes-per-pixel would predict — and it is
   *not* evidence the field has run out of detail, which at 1:1 it plainly has not. Wider flat interiors
-  and continued fine structure at the boundaries are both true at once.
+  and continued fine structure at the boundaries are both true at once. Measured on that master with
+  `tools/detail-above.mjs` — which box-filters real tiles down by the ratio between two sizes, brings
+  them back, and splits the variance, so the block average holds everything below the cutoff and the
+  residual everything above — **13.3% of the 262144's contrast is finer than 131072 can hold**, with
+  15.2% of channel values moving by more than 8 levels. A box filter is the kindest downscale there
+  is, so that is a floor on what the smaller size cannot carry, not an estimate.
+
+  (The first version of that tool reported ~96% and was worthless: it compared neighbour roughness,
+  and a 16× nearest upsample makes 15 of every 16 neighbours identical **by construction**, so it
+  answered before looking at a single pixel of content.)
 - **The light figure is identical at all three.** `mean 143.8`, `lit>40 100%`, sampled 1-in-100 as
   written, at 2.68, 10.7 and 42.95 billion pixels. A disagreement there is the first thing a dropped or
   misplaced tile would show, and across sixteen times the pixels there is none.
