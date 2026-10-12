@@ -32,7 +32,7 @@ export paths disagreed with each other as well.
 `COAT_REF = 1000` is now the only reference: `bs = W/COAT_REF` in `renderFull`, the tiled plan and the strip
 path; the reality windows and the back-light glow take the same ratio; and the live view uses
 `cv.width/COAT_REF`, which is that same ratio expressed against the reference, so the preview still matches
-what the export produces. A 1024px render is therefore a proportionally exact preview of a 65535px one —
+what the export produces. A 1024px render is therefore a proportionally exact preview of a 262144px one —
 which is what makes a quick check worth anything.
 
 `tools/check-render-purity.mjs` keeps it that way: it reads the coat-scale argument of every `applyCoat`,
@@ -49,7 +49,40 @@ no coat scales at all, so it cannot go quietly blind.
 
 1. **`renderFull` — the offline render primitive. ✓ DONE.** The complete pipeline (base → content → coat, incl. back light + lens) to a fresh W-wide canvas, whole slab, no pan/zoom. The coat passes were factored into a shared `applyCoat(targetCanvas, targetCtx, blurScale, flags)` used by *both* live `draw()` and `renderFull`, so there is one implementation and no drift; blur/scatter radii scale with the output resolution (`bs = W/COAT_REF`, see *the window was in the render* below). `expCompleted` now returns `renderFull(W)`, so **exports finally bake the coat / back light / lens** (the masks stay geometry-only). Verified pixel-for-pixel against live `draw()`. This is also what one tile renders — the foundation for everything below.
 2. **Tiling + bleed. ✓ DONE.** `renderTiled(W, tilePx=1024, bleedPx)` splits the output into tiles; each renders its slab sub-region **expanded by a bleed margin** (`coatReach(bs, uv)` — the reach of whatever actually blurs in *this* render, plus `BLEED_MARGIN`) so cross-tile blur/subsurface/specular are seamless. Since the drawn halo became the default on 2026-09-30 the emission bloom contributes **nothing** to that margin: a drawn halo reads no neighbouring pixels, so the whole picture is submitted to every tile and the canvas clips the *output* rather than the input. The figure that used to dominate here — 1,577 px at 65535 — is now 4. `?bloom=blur` restores the old path and with it the old margin, then the bleed is cropped and the tile blitted into the assembly canvas. Two coordinate subtleties handled: the specular hotspot is placed in **full-image space** (`applyCoat` takes a `vp` viewport), and the **lens runs once on the assembled image** (it downscales to ≤640, so it's global + cheap — and its displacement can exceed a tile's bleed). Back light isn't tiled yet (its fold is a whole-slab 512 pass) → falls back to `renderFull`. `expCompleted` now uses it, so exports stay memory-bounded. **Verified against `renderFull`: mean pixel diff 0.99/255, no visible seams.** Intermediate **resolution belongs to the operation**, not the export — the lens proves it (≤640 gather regardless of final size). *Next within this rung:* tile the back-light fold at full res; stream tiles to an encoder for exports beyond the ~16k canvas cap.
-3. **CPU-worker pool. ✓ BUILT — but measured a no-op, so not the default.** `renderCoreSrc()` serializes the render core (`paintStoneContent` + coat + helpers, via `fn.toString()`) into an inline Blob worker; `renderTiledParallel(W)` runs an `OffscreenCanvas` worker pool, each worker rendering whole tiles and transferring `ImageBitmap`s back (cloud/band/breccia modulators built once and posted; `ensure*` stubbed). **Verified pixel-perfect vs `renderTiled` (maxDiff 0).** But the **speedup is ≤1.07×** (12 cores): the render is GPU-bound (canvas-2D + `ctx.filter` are already accelerated — a full 4096 is ~127ms), so worker setup + bitmap transfer swamps the CPU work. Left as available infrastructure, **not** wired into `expCompleted`. The real deliverables: (a) a **proven DOM-free, serializable render core** — the extraction the GPU backend and parallel probing both need; (b) it pays off only for a genuinely CPU-heavy per-pixel stage or print sizes past the ~16k canvas cap (tiling + streaming, mandatory regardless of speed). *Measure first — this is the workers' version of the GPU rule below.*
+3. **CPU-worker pool. ✓ LIVE on the tiled path. The no-op finding was true of the case it measured, and only that case.** `renderCoreSrc()` serializes the render core (`paintStoneContent` + coat + helpers, via `fn.toString()`) into an inline Blob worker; `renderTiledParallel(W)` runs an `OffscreenCanvas` worker pool, each worker rendering whole tiles and transferring `ImageBitmap`s back (cloud/band/breccia modulators built once and posted; `ensure*` stubbed). **Verified pixel-perfect vs `renderTiled` (maxDiff 0)** — still the property everything else here rests on.
+
+   The 2026-09 figure of **≤1.07× on 12 cores** was measured on the *direct* path at 4096, where a whole
+   tile is ~127 ms and worker setup plus bitmap transfer swamps it. That reading was correct and its
+   generalisation was not. On the **tiled TIFF** path the arithmetic inverts: a tile is seconds rather than
+   milliseconds, setup is paid once for the whole job, and the measured speedup is **4.25× across 8
+   workers** (2.2× against the sequential tiled path end to end), byte-identical either way. Wired into the
+   TIFF export in `d28167c` and gated by `corePaintsThis()` — daylight, no reality window, no back light,
+   `Worker` and `OffscreenCanvas` present — which are exactly the conditions under which the serialised
+   core reproduces the main-thread render with zero differing bytes.
+
+   **The planner picks the tile for the pool, not for one pass.** `tiffPlan` scored candidates on
+   `est = passes × ms`, which is the *sequential* wall clock: it rewards the big tile for amortising
+   per-pass overhead, and that is the same tile the pool can run fewest of at once. It now scores
+   `est / N`, and the headroom test weighs `N × tile` instead of one tile. Both ask `poolWidthFor`, the
+   single function `tilePool` itself uses, so the planner cannot optimise for a width that never arrives.
+   Measured bite: at 65536 on a 2 GB device the budget holds five 8192 tiles and eight 4096 ones, so 8192
+   wins on `est` (16,800 ms against 19,200) and loses the wall clock. `tools/probe-pool-width.mjs`.
+
+   **The pool measures whether it is too wide, because nothing it can ask will tell it.** Every memory
+   figure a browser offers describes the machine, not what is free on it: `navigator.deviceMemory` is total
+   RAM (it reported 16 on a desktop whose budget then read 12,885 MB while ~2,300 MB was actually free),
+   `performance.memory` is the JS heap and canvas backing stores are not in it, and
+   `measureUserAgentSpecificMemory` needs a cross-origin isolation a single file on Pages cannot set. An
+   allocation probe agrees with the fiction, because **paging does not fail — it just takes longer**:
+   eight 8192 tiles allocated without a throw and then swapped for three hours. So the pool paints the
+   first tile alone, keeps that time as a baseline, and sheds a worker — terminated, not parked, since the
+   memory it holds is the point — when the median of the last N exceeds 3× it. Floors at two, monotone
+   downward. `tools/probe-pool-shed.mjs`.
+
+   **The master says what ran.** `workers`, plus `poolPlanned` and `poolShed` when the pool narrowed
+   itself. That field previously could not appear on any master: it was read after the success path had
+   already closed the pool and nulled it, while its comment told the reader that absence meant
+   single-threaded — which made a render at 94% of twelve cores read as having painted on one.
 4. **Pluggable encoders (output layer). ✓ PNG encode parallelised.** The render produces **pixel buffers** (and, for layered output, per-layer buffers); encoding is a separate, pluggable stage. **Measured:** the export's cost is PNG compression, *not* the render — `toBlob` is ~1s per full-res file vs ~55ms to render it (~20×). So `encodePNGs(canvases)` renders every file on the main thread (fast) then encodes them **one-per-worker** via `OffscreenCanvas.convertToBlob` — the workers' real payoff, the *inverse* of the tile-render case (there each unit was cheap; here each is a ~1s encode). `exportAll` now batches all ~14 PNGs (main + `.ora`) through it. Verified byte-correct (zip + nested .ora `testzip` clean, PNG signatures valid). **Old export ≈ 15s of UI-freezing encode → 0.2–1.3s off-thread** (66× at 2048, 12× at 4096). Formats:
    - **Flat raster:** PNG (have), JPEG, WebP; float/EXR-style later for HDR.
    - **Layered:** ORA / OpenRaster (have — 5 bucket layers), **PSD**, and **PSB** (Photoshop large-document; handles >30k-px canvases where PSD caps out, so it pairs with the tiled huge-export path). Both PSD/PSB from their open specifications.

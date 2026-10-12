@@ -12,10 +12,25 @@ different cause:
 | the tablet's screen went to sleep overnight | a completed grid, at an unknown tile |
 | two devices uploaded a file under the same name | a finished 90-minute master, after the render |
 | the tablet took an Android 13 upgrade mid-render | a UV master around tile 140 |
+| **2026-10-12:** `tiffLayout` threw on the first byte of the directory | **a 262144 master, 95 minutes, with all 2560 tiles already written** |
 
 The second was a tooling bug and is fixed. The first has a partial answer in the screen wake lock. The
 third has no answer at all, and neither does the next cause we have not met yet — a browser crash, an
 out-of-memory kill, a closed tab, a power cut.
+
+**The fourth is a different class, and it is the one that makes the case.** Nothing was lost. The page
+did not close, the device did not sleep, the OS did not update, memory was never short. The render *ran
+to completion* — 2560 of 2560 tiles painted, compressed and written — and then `tiffLayout` computed a
+negative alignment gap and threw before the first byte of the directory was written. `pad8` used
+`(n + 7) & ~7`, and `&` coerces to **signed** int32, so it wrapped at 2^31 rather than at the 2^32 it
+looks like it has. Tile data ending at 4,264,729,215 bytes produced `gap = -4294967295`, and
+`new Uint8Array(gap)` ended ninety-five minutes of work.
+
+The bug is fixed (`Math.ceil(n / 8) * 8`, exact to 2^53) and gated by `tools/probe-tiff-offsets.mjs`,
+which reproduces the field failure to the error string. That is not the point here. The point is that
+**every tile was correct and on disk, and not one of them survived** — so this document's premise no
+longer rests on devices we cannot control. It rests on the writer, which is ours, and on any future
+exception anywhere in `finish()`.
 
 The renders these devices are being asked to do run for 90 to 120 minutes. **A job that takes ninety
 minutes cannot depend on a ninety-minute window in which nothing goes wrong**, and that is the whole
@@ -39,7 +54,14 @@ file and are only committed to the real file when `close()` is called. A process
 160 leaves **nothing** — not a partial file, not 150 usable tiles. The tail was never written either, so
 there is no index even for what did land.
 
-This is the single reason a lost render costs the whole render rather than one tile.
+This is the single reason a lost render costs the whole render rather than one tile — and it is worth
+being exact about how little it takes. `finish()` calls `tiffLayout`, writes the tail, patches the header
+at position 0, then calls `close()`. **Everything is discarded by a throw anywhere in the first of those
+four steps**, which is pure arithmetic over numbers already in hand. A defect in a line that touches no
+pixels costs every pixel.
+
+Confirmed by search after the 2026-10-12 loss: no `.crswap` file survived anywhere in the Chrome profile,
+and the largest file in it was unrelated. The swap is not recoverable by hand.
 
 ## The trap in the obvious fix
 
@@ -97,6 +119,12 @@ While measuring UV renders, the per-tile cost decomposed as roughly **10 ms of p
 `CompressionStream` does its work off the main thread — untested, and cheap to test — then overlapping
 compression of tile N with painting of tile N+1 would cost almost nothing and recover most of that time.
 
+The 262144 master gives this a sharper number from the other side. Its 2560 render tiles had a **median
+of 1,113 ms** and a mean of 2,225: 2560 × the median is 47.5 minutes inside a 94.9-minute render, so
+**half the wall clock was stalls**, with 747 tiles over twice the median and time-vs-bytes correlation of
+0.01 — tiff-meta's own signature for *the machine, not the slab*. The pool is not the cause; it ran its
+full eight workers and never shed. Whatever that time is, it is not painting and it is not the picture.
+
 This is worth knowing because it touches the same loop. It should not be bundled into the resumability
 work: one changes durability, the other changes scheduling, and mixing them would make a regression in
 either hard to attribute. Measure the overlap question separately first.
@@ -127,4 +155,5 @@ Each stage is useful alone, which matters because the value arrives before the w
   through the artifact runtime), so it needs verifying rather than assuming.
 - **The A7 is the target and the hardest case.** It is the device that loses renders and the one with the
   least memory. Whatever is built must be measured there, not only on the desktop, because the desktop
-  finishes a 65535 in under three minutes and never encounters the problem.
+  was thought never to encounter the problem. It encountered it on 2026-10-12 and lost
+  ninety-five minutes at 262144, so "the slow devices need this" is now "the writer needs this".

@@ -161,7 +161,7 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat`
 
 - **`exportAll(W)`** → one store-zip: `render.png` (`expCompleted`), `masks/{base,major,minor,micro,web}.png`, `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, `slab.ora` (capped `min(W,2048)`).
 - **✓ Gap fixed:** `expCompleted` now delegates to `renderTiled(W)` (which is verified pixel-equal to `renderFull` but tiled so a huge export stays memory-bounded; back light falls back to `renderFull`), so `render.png` (and the `.ora` merged image) bake the full pipeline — coat tier, back light, lens. The coverage masks stay geometry-only by design.
-- **Peak memory is two canvases, not fourteen.** `exportAll` builds in groups of `EXP_PEAK` (2) and frees each canvas before making the next. It used to render all fourteen first and hold them alive: 1.2 GiB at 8192 and **5.0 GiB at 16384**, which no machine has. The batch existed to hand the whole set to the CPU worker pool that this repo's history records as *"measured a no-op"* — so it cost 8× the peak and bought nothing. `canvasFits(w, h, n)` probes `EXP_PEAK` canvases, so the offered ceiling matches what the export actually needs; the cache key carries a version because ceilings measured under the old probe were wrong by 8×.
+- **Peak memory is two canvases, not fourteen.** `exportAll` builds in groups of `EXP_PEAK` (2) and frees each canvas before making the next. It used to render all fourteen first and hold them alive: 1.2 GiB at 8192 and **5.0 GiB at 16384**, which no machine has. The batch existed to hand the whole set to the CPU worker pool that this repo's history then recorded as *"measured a no-op"* — so it cost 8× the peak and bought nothing. (That no-op reading held for the *direct* path only; on the tiled TIFF path the same pool measures 4.25× across 8 workers and is now the default — see [final-render](final-render.md) rung 3.) `canvasFits(w, h, n)` probes `EXP_PEAK` canvases, so the offered ceiling matches what the export actually needs; the cache key carries a version because ceilings measured under the old probe were wrong by 8×.
 - **The ceiling on screen is the ceiling that applies.** `exportCeiling()` probes 2048→16384 for `EXP_PEAK`
   canvases, which is the ceiling of the *direct* export — and the line beside the width menu stated it as
   *"this device tops out at 16384px"* whatever the streamed tiers were doing. On a machine that had just
@@ -179,7 +179,7 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat`
 - **An export reports itself for as long as it runs.** A status line under the Render buttons counts the images, then packing, then saving, with a bar; the Export button is held disabled and restored in a `finally`. Before this the only signal was a `hint()`, which removes itself after 2.6 s — invisible at 1024, where the whole export finishes first, and useless at 16384, where minutes of blocked main thread looked like a hung page. Each step yields with `setTimeout` (**not** `requestAnimationFrame`, which stops firing when the window is backgrounded) so the line paints before the next render blocks. Gated by `harness/export-progress.mjs`, which requires the message to keep *changing* — a single message that never moves is the defect it exists to catch.
 - **Export scope: `Everything` or `Just the render`.** The kit is 8 full-size images plus 6 at `min(W,2048)`, and `expIdT` builds two of the big ones in a **single pass** — it walks the lines once, drawing the id map and the t map together — so *two* full-size canvases alive at once is a floor for the kit, whatever `EXP_PEAK` is. At 16384 that is 1.28 GiB before a byte of PNG, plus every encoded PNG staying alive in `bytes[]` until the archive is built. `Just the render` holds exactly one canvas, encodes it, frees it, and writes the PNG straight out with no archive: roughly 0.9 GB against 1.8 GB at 16384. It is also simply the common case — most of the time you want the picture.
 - **An export reports itself tile by tile, and records its own timings.** `renderTiled` is split into a plan (the assembly canvas plus one closure per tile) and two drivers: the synchronous one runs the closures back to back exactly as before; `renderTiledStepped` runs the *same* closures in the *same* order with a yield between them, so a render-only export reports `Rendering tile 7 of 160`. At 16384 that is 16 × 10 tiles over about two minutes — the difference between a job you can watch and one that looks wedged. Stages that cannot count themselves (PNG encoding is a single call) show a moving stripe, and a wall-clock timer runs throughout: elapsed time plus stage name distinguishes *alive* from *wedged* even with no percentage available. The finished line stays on screen with its time, as the record of the last export.
-- **The output carries its own provenance.** A render-only PNG gets a `tEXt` chunk spliced in after IHDR holding scope, dimensions, tile count, byte count, per-stage milliseconds (`render` / `encode` / `total`), mark and line counts, family, spectrum, `devicePixelRatio`, core count and the user-agent. The full kit gets the same as `export.json` inside the archive. This is what makes a later performance change checkable rather than a feeling. **It records the user-agent string**, because on a phone the device *is* the measurement — strip the chunk before sharing a render if that matters. **Baseline, S23 Ultra, whole kit at 16384×10240**, from the export's own `export.json`: `render 70,102 ms`, `encode 57,346 ms`, `toPack 128,585 ms`, 14 images, 234,284,278 bytes of PNG, 241 MB archive, 2:21 on the app's own clock. That is **1.358 G pixels produced** — ≈52 ns/px to render, ≈42 ns/px to encode, ≈9.6 M px/sec end to end. **Encode is 45% of the work**, and it runs on one core, because anything over `ENC_BIG` is routed away from the worker pool; at 8192 three copies of an image is 480 MiB and the pool would be affordable, which is the measured case for raising that threshold rather than for reviving `renderTiledParallel` (that parallelises the 55% half and is recorded here as a no-op).
+- **The output carries its own provenance.** A render-only PNG gets a `tEXt` chunk spliced in after IHDR holding scope, dimensions, tile count, byte count, per-stage milliseconds (`render` / `encode` / `total`), mark and line counts, family, spectrum, `devicePixelRatio`, core count and the user-agent. The full kit gets the same as `export.json` inside the archive. This is what makes a later performance change checkable rather than a feeling. **It records the user-agent string**, because on a phone the device *is* the measurement — strip the chunk before sharing a render if that matters. **Baseline, S23 Ultra, whole kit at 16384×10240**, from the export's own `export.json`: `render 70,102 ms`, `encode 57,346 ms`, `toPack 128,585 ms`, 14 images, 234,284,278 bytes of PNG, 241 MB archive, 2:21 on the app's own clock. That is **1.358 G pixels produced** — ≈52 ns/px to render, ≈42 ns/px to encode, ≈9.6 M px/sec end to end. **Encode is 45% of the work**, and it runs on one core, because anything over `ENC_BIG` is routed away from the worker pool; at 8192 three copies of an image is 480 MiB and the pool would be affordable, which is the measured case for raising that threshold. `renderTiledParallel` parallelises the other 55% and was recorded here as a no-op on the evidence of the direct path at 4096; the tiled TIFF path overturned that, where a tile costs seconds rather than milliseconds.
 
 An earlier draft of this paragraph said there was **no instrumented figure for render-only at 16384**, and
 quoted ≈1.4 M px/sec from a stopwatch that included the download notification appearing — arithmetic on a
@@ -204,6 +204,39 @@ the strip path, which repaints the slab once per band — the direct export runs
 streamed one settles at ~4–5 and stays there, so streaming costs roughly **3× per pixel**, flat. (32768 at
 3.6 is low against both its neighbours and reads as machine state, not as a property of that width.) This
 is the measurement behind the friction in front of the large tiers: *"this is not fast"* is not a hedge.
+
+**The tiled TIFF path is a different ladder and does not have that shape.** The table above is the
+streamed PNG band path, which repaints the slab once per band. The TIFF path renders independent 4096
+tiles, streams each to disk as it finishes, and never allocates a canvas the width of the picture — so
+the dropdown rather than the renderer was its ceiling, and the ticks now reach 131072 and 262144. Same
+desktop, same slab (glass, 13 marks, daylight), scope **Just the render**, from each master's own
+metadata:
+
+| width | tiles @4096 | per tile | wall | file | bytes/px | pool |
+|---|---|---|---|---|---|---|
+| 65,535 | 160 | 12.56 s | 33.5 min | 427 MB | 0.159 | none — written before the pool was wired in |
+| 131,072 | 640 | 2.28 s | 24.3 min | 1,353 MB | 0.126 | 8 workers |
+| 262,144 | 2,560 | 2.23 s | **94.9 min** | 4,265 MB | 0.099 | 8 workers |
+
+- **Per-tile cost is flat** — 2.28 s against 2.23 s across a 4× change in output size. The tile is the
+  same 4096 either way and the total scales with the tile count, so there is no cliff waiting at any
+  width; the only limits are wall clock and disk.
+- **The pool is worth about 5.5× here.** 12.56 s/tile to 2.28 s/tile on the same tile size and slab, so
+  the 131072 finished *faster than the 65535* while carrying four times the pixels.
+- **Compression improves with resolution, 0.79× per doubling, twice.** At each doubling a 4096 tile
+  covers a quarter of the slab area, so its interior is more magnified and flatter and deflate wins. That
+  is why 262144 landed at 4.26 GB rather than the 5.4 GB a flat bytes-per-pixel would predict — and it is
+  *not* evidence the field has run out of detail, which at 1:1 it plainly has not. Wider flat interiors
+  and continued fine structure at the boundaries are both true at once.
+- **The light figure is identical at all three.** `mean 143.8`, `lit>40 100%`, sampled 1-in-100 as
+  written, at 2.68, 10.7 and 42.95 billion pixels. A disagreement there is the first thing a dropped or
+  misplaced tile would show, and across sixteen times the pixels there is none.
+
+**What it costs to look at one afterwards is the real ceiling, and it is not the file.** Measured in
+GIMP, which pages tiles off disk rather than holding the picture: 27 GB of working space for the 65535,
+110.8 GB for the 131072, 443.2 GB for the 262144 — a stable **2.5–2.6× raw RGBA**, or about **80× the
+file on disk**. All three opened, slowly, including the one whose working figure exceeds the machine's
+free space, because that figure is a budget the editor declares and not disk it commits.
 
 **Pipelining the encode is a dead end, and the measurement is here so nobody re-proposes it.** The loop
 awaits the writer before rendering the next band, which serialises two things that need not be serial:
