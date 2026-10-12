@@ -10166,9 +10166,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // rule already sees to that: they are wider than any canvas this engine will hand over, so the
   // options stay disabled unless the format is TIFF, which streams tiles and never allocates one.
   // Its own dialog, because the step is not the same kind of step as the two below it - 4x and 16x
-  // the pixels of a 65535, and files nobody opens. 262144 is the last one: measured, 131072 took 24
-  // minutes and 1.3 GB on a 16 GB desktop, so the tier above this is a storage question, not a time
-  // one. There is no size at which the field runs out of detail, so the ceiling has to be a choice.
+  // the pixels of a 65535, and files nobody opens. 262144 IS THE LAST ONE, decided rather than
+  // discovered: measured, it took 95 minutes and wrote 4.26 GB on a 16 GB desktop, and per-tile cost
+  // is flat so nothing in here would stop at any size. What stops is looking at the result - 443 GB
+  // of working space against 366 GB free, and about 1.8 TB for the tier above. The field never runs
+  // out of detail (13.3% of a 262144's contrast is finer than 131072 can hold), so the ceiling could
+  // only ever be a choice, and this is it.
   document.getElementById('tier-once').addEventListener('change', async () => {
     const box = document.getElementById('tier-once');
     if (box.checked && !(await bigDialog(TR('big.warn-once'), TR('btn.understood')))) { box.checked = false; tierOnce = false; applyTiers(); return; }

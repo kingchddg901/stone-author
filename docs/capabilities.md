@@ -241,6 +241,27 @@ metadata:
   written, at 2.68, 10.7 and 42.95 billion pixels. A disagreement there is the first thing a dropped or
   misplaced tile would show, and across sixteen times the pixels there is none.
 
+**What these sizes mean, since the slab has a real size.** It is 8 × 5 ft — 40 square feet — so a
+render width is a resolution, not an abstraction:
+
+| width | across 8 ft | one pixel |
+|---|---|---|
+| 65,535 | 683 DPI | 37.2 µm |
+| 131,072 | 1,365 DPI | 18.6 µm |
+| 262,144 | **2,731 DPI** | **9.3 µm** |
+
+The eye resolves somewhere near 300 DPI at reading distance and offset print runs 150–300 LPI, so
+262144 is about **9× past anything that can be taken delivery of** — and `detail-above` still finds
+13.3% of its contrast below what 1,365 DPI can hold. The field has structure finer than 18.6 µm. For
+scale: the hand-painted signature in the centre of that master is 16 × 5 px, which is 0.149 × 0.047 mm
+— about two human hairs wide and half a hair tall.
+
+**262144 is the ceiling, and it is a decision rather than a limit.** Nothing in the renderer stops at
+any size: the tiles stream, per-tile cost is flat, and the field never runs out of detail. What stops
+is the ability to look at the result — 443 GB of working space against 366 GB free on the machine that
+makes them, and roughly 1.8 TB for the tier above. Recorded here because a ceiling with no stated
+reason gets re-litigated, and this one was measured.
+
 **What it costs to look at one afterwards is the real ceiling, and it is not the file.** Measured in
 GIMP, which pages tiles off disk rather than holding the picture: 27 GB of working space for the 65535,
 110.8 GB for the 131072, 443.2 GB for the 262144 — a stable **2.5–2.6× raw RGBA**, or about **80× the
