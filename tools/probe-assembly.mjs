@@ -54,12 +54,16 @@ const claim = (name, ok, extra = '') => { if (!ok) fails++; console.log(`  ${ok 
 
 console.log('\nguide is the absent case, by construction');
 claim('the plan is only built for stack', /T\.assembly === 'stack'\) \? assemblyPlan\(inst\) : null/.test(SRC));
-claim('and only applied when it exists', /else if \(plan\) \{ const d = plan\.get\(t\.key\);/.test(SRC));
+claim('and only applied when it exists', /if \(plan\) \{ const a = plan\.get\(t\.key\); if \(a\) \{ from = a\.piece;/.test(SRC));
+// The board has to come from the PIECE. Taking it from the slot meant a slot was handed a piece from
+// one place out of a board chosen somewhere else - two answers to "where did this come from" applied
+// to the same square inch, invisible at one board and glaring at eight.
+claim('and the board follows the piece, not the slot', /sectionOf\(from, STAGE\)/.test(SRC));
 
 console.log('\na floor the size of the board: stack IS guide');
 {
   const plan = make()(grid(8, 5));
-  const deltas = [...plan.values()];
+  const deltas = [...plan.values()].map(v => v.d);
   claim(`every delta is zero (${deltas.length} slots)`,
         deltas.length === 40 && deltas.every(([x, y]) => Math.abs(x) < 1e-12 && Math.abs(y) < 1e-12));
 }
@@ -68,7 +72,7 @@ console.log('\na floor larger than the board: pieces repeat, in order');
 {
   const slots = grid(8, 5, 1, 2);                          // 16 x 10 slots over an 8 x 5 board
   const plan = make()(slots);
-  const moved = [...plan.values()].filter(([x, y]) => Math.abs(x) > 1e-12 || Math.abs(y) > 1e-12);
+  const moved = [...plan.values()].filter(v => Math.abs(v.d[0]) > 1e-12 || Math.abs(v.d[1]) > 1e-12);
   claim(`most slots are fed from elsewhere`, moved.length > 0 && moved.length < plan.size,
         `  — ${moved.length} of ${plan.size} moved`);
   claim('every slot is assigned', plan.size === slots.length);
@@ -91,12 +95,22 @@ console.log('\ncompatibility: a shape is only ever handed its own kind');
   const byKey = new Map(slots.map(s => [s.key, s]));
   // the piece a slot was given is the one whose centre is slotCentre + delta*IN
   let wrong = 0;
-  for (const [k, d] of plan) {
-    const s = byKey.get(k), px = s.ctr[0] + d[0] * IN, py = s.ctr[1] + d[1] * IN;
-    const got = slots.find(t => Math.abs(t.ctr[0] - px) < 1e-6 && Math.abs(t.ctr[1] - py) < 1e-6);
-    if (got && got.pi !== s.pi) wrong++;
+  for (const [k, a] of plan) {
+    const s = byKey.get(k);
+    if (a.piece.pi !== s.pi) wrong++;                     // the plan names the piece outright now
   }
   claim('no slot received the other shape', wrong === 0, wrong ? `  — ${wrong} did` : '');
+}
+
+console.log('\nthe plan names the PIECE, so its board travels with it');
+{
+  const slots = grid(8, 5, 1, 2);
+  const plan = make()(slots);
+  const onBoard = new Set(slots.filter(t => Math.abs(t.ctr[0]) <= IN / 2 && Math.abs(t.ctr[1]) <= IN * H / 2).map(t => t.key));
+  const vals = [...plan.values()];
+  claim('every entry carries a piece', vals.length > 0 && vals.every(v => v.piece && v.piece.key));
+  claim('and every piece is one cut from the board', vals.every(v => onBoard.has(v.piece.key)));
+  claim('the offset is a pair', vals.every(v => Array.isArray(v.d) && v.d.length === 2));
 }
 
 console.log('\na shape with nothing of its kind on the board is left alone');
@@ -116,10 +130,8 @@ console.log('\nablation: shapes pooled together');
     const plan = make(flat)(slots);
     const byKey = new Map(slots.map(s => [s.key, s]));
     let wrong = 0;
-    for (const [k, d] of plan) {
-      const s = byKey.get(k), px = s.ctr[0] + d[0] * IN, py = s.ctr[1] + d[1] * IN;
-      const got = slots.find(t => Math.abs(t.ctr[0] - px) < 1e-6 && Math.abs(t.ctr[1] - py) < 1e-6);
-      if (got && got.pi !== s.pi) wrong++;
+    for (const [k, a] of plan) {
+      if (a.piece.pi !== byKey.get(k).pi) wrong++;
     }
     claim('shapes now get handed the wrong kind', wrong > 0, `  — ${wrong} slots`);
   }

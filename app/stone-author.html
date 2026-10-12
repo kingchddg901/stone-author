@@ -3816,8 +3816,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // STACK: take the next one off the pile, wrapping when the board runs out - which is what
         // running short of material actually looks like, and is worth seeing rather than hiding.
         const p = g.pieces[i % n], sl = g.slots[i];
+        // The piece, not just the offset: which BOARD it was cut from is a property of the piece and
+        // has to travel with it. Keeping only the offset left the board to be chosen from the slot's
+        // own coordinates, so a slot got a piece from one place out of a board picked somewhere else.
         // back to frame units: shift is a frame-space offset, ctr is inches
-        plan.set(sl.key, [inFr(p.ctr[0] - sl.ctr[0]), inFr(p.ctr[1] - sl.ctr[1])]);
+        plan.set(sl.key, { d: [inFr(p.ctr[0] - sl.ctr[0]), inFr(p.ctr[1] - sl.ctr[1])], piece: p });
       }
     }
     return plan;
@@ -3842,7 +3845,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // THE ASSEMBLY. Guide is the absent case on purpose: the piece a slot is handed is the one cut
       // at that slot, the delta is zero, and the floor is the board. Nothing to add and nothing to
       // drift. Only a mode that moves a piece has anything to say here.
-      else if (plan) { const d = plan.get(t.key); if (d) shift = [shift[0] + d[0], shift[1] + d[1]]; }
+      let from = t;                                        // which instance the content is cut from
+      if (plan) { const a = plan.get(t.key); if (a) { from = a.piece; shift = [shift[0] + a.d[0], shift[1] + a.d[1]]; } }
       // WHICH BOARD THIS PIECE CAME OFF. One board width is H in slab units, so adding k*H to the
       // shift moves the sample a whole board down the cant. In order, k follows the lattice ROW, so
       // the floor walks down the log the way a flitch is stacked and neighbouring rows are
@@ -3852,7 +3856,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       let band = 0;
       if (STAGE > 1) {
         const [rs] = sub(mix(t.n, t.m, t.pi, 4242), 1);
-        band = T.shuffle ? Math.min(STAGE - 1, (rs() * STAGE) | 0) : sectionOf(t, STAGE);
+        // `from`, not `t`: the board is the piece's, and under guide the two are the same instance.
+        band = T.shuffle ? Math.min(STAGE - 1, (rs() * STAGE) | 0) : sectionOf(from, STAGE);
         shift = [shift[0], shift[1] + band * H];
       }
       // THE ASSIGNMENT, SHOWN. An assignment is invisible under stone, and the only way to see a
