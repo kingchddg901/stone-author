@@ -1734,6 +1734,7 @@
   ],
   "where": "slider: where along the saw plane the board is taken from"
  },
+ "sl.wood-glaze": {"terms": ["wood"], "where": "slider in the Wood panel. WOOD-LOOK PORCELAIN: a ceramic tile printed with a wood graphic and finished with a clear glaze - a real and common product, not a trick. Above zero the floor is a TILE, so grout comes back where bare boards have none, and the glaze reads as one sheen across the whole face. At zero it is bare wood"},
  "sl.wood-wid": {"terms": ["wood"], "where": "slider in the Wood panel: the width of the BOARD cut from the log, in FEET. The plank run inherits it, so it is also how wide a plank is. NOT the same control as sl.wood-plankLen"},
  "sl.wood-len": {"terms": ["wood"], "where": "slider in the Wood panel: the length of the BOARD cut from the log, in FEET. NOT the same control as sl.wood-plankLen, which is how long the run cuts each plank, in inches. Both were called 'Plank length' once and must not be given the same name again"},
  "lbl.board-inches": {"terms": ["wood"], "where": "label on two number boxes beside the Plank width and Plank length sliders. The sliders step 0.12 and 0.6 of an inch, which cannot land on a real board figure, and a board is quoted in inches anyway; these take the dimensions directly"},
