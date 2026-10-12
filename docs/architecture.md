@@ -60,7 +60,9 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
 - **Tiles** — cut the slab into a repeating floor: 15 patterns (square, rectangle, subway,
   hexagon, Cairo, diagonal, herringbone, basketweave, triangle, rhombus, octagon, penny, fish
   scale, arabesque lantern, French/Versailles), with grout, kerf, edge finish, per-tile chipping.
-  Real sizes on an 8×5 ft slab.
+  Real sizes on an 8×5 ft slab. A tile can also be **kept as a section** — its shape together with
+  the place on the slab it was cut from — and a floor laid out of sections drawn from any material;
+  see [sections](sections.md).
 - **Pen** — pressure (width / flow) and tilt (edge softness), opt-in, measured from your rest
   grip. Baseline input is one pointer + time; stylus extras are enhancement, never required.
 - **Layers** — each render layer has eye / solo / opacity, and (structural layers) blend mode +

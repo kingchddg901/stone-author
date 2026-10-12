@@ -55,9 +55,21 @@ Per render layer:
 | opacity | `globalAlpha` | Layers panel |
 | blend mode | `globalCompositeOperation` (multiply … luminosity) | Effects group |
 | glow | canvas shadow, tinted by the layer's own colour | Effects group |
+| metal | leans the specular sheen and glint from the light's colour toward `specTint` | Coat group |
 
 Effects are wired for the structural layers (`major, minor, web, micro, styl, drusy`) via
 `fxOn`/`fxOff` around each paint, and skipped in the identity/angle views.
+
+**Metal is the dielectric/conductor distinction, made a dial.** A dielectric reflects the *light's*
+colour; a metal reflects *its own*. `specMetal` interpolates the specular between the two, so a gold
+vein reads as gold rather than as yellow — the difference being that the highlight itself changes
+hue, not just the pigment under it. Measured at the extremes, metal 0→1 takes blue down 20 levels
+with red untouched, which is the shape of a warm conductor.
+
+Per layer, because a slab is rarely all one material: `L.metal` drives a mask built from that layer's
+own geometry, so the tint lands on the vein and not on the stone around it. Measured, a per-layer
+metal changes **0.95%** of the picture's pixels against **53.3%** for the global dial — which is the
+whole point of having both.
 
 ## The canvas colour menu
 

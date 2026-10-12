@@ -112,6 +112,8 @@ regenerates the gallery PNGs); `.github/workflows/gallery.yml` runs it in CI. Se
   coat/spectrum/back-light/lens, layers, export), from a four-way code read.
 - **`final-render.md`** — the offline render pipeline (`renderFull`/`renderTiled`, workers, encoders)
   and roadmap, plus the CPU/GPU split.
+- **`sections.md`** — a tile kept as a cut (its shape plus where on the slab it came from), the
+  slot/seed distinction, the rhombus groupings and the cut lock.
 - **`colour-layer.md`** — the colour engine: character vs colour, the vendored token-theme-kit as
   editor + resolver, the adjustment set, the per-id / speck-group colour, the canvas colour menu.
 - **`gallery.md`** — the gallery showcase, the render recipe, and the determinism harness/CI.

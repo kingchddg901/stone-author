@@ -163,7 +163,16 @@ read at all — the same trap the light section of that file was written for.
 | `drift` | 0.4 | 0–1.5 | how far colour wanders from pith to bark |
 | `driftRings` | 90 | 3–200 | how many rings it takes to wander that far |
 
-Not exposed, deliberately (shape of the log, not art direction): `seed`, `trunk`, `len`, `wid`.
+| `len` | — | 1–2400 in | board length, **typed in inches** |
+| `wid` | — | 0.25–600 in | board width, **typed in inches** |
+
+Not exposed, deliberately (shape of the log, not art direction): `seed` and `trunk`.
+
+`len` and `wid` used to be in that list. They came out because the field is sized in trunk radii and a
+board is not: asking an author to express a plank as a fraction of a log is asking them to do the
+conversion the tool should do. They are typed in inches and converted at the seam, which also makes the
+degenerate cases visible — a board wider than the trunk it is cut from is now an obviously wrong number
+rather than a plausible one.
 
 ### Colour
 
