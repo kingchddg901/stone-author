@@ -391,6 +391,7 @@
   </div>
   <div class="grp" role="group" aria-label="Tile options" data-i18n-attr="aria-label=a11y.tile-options"><span class="lbl" data-i18n="lbl.layout">Layout</span>
     <button id="t-inorder" type="button" data-lay="order" aria-pressed="true" data-i18n="tool.inorder">In order</button>
+    <button id="t-stack" type="button" data-lay="stack" aria-pressed="false" data-i18n="tool.stack">Off the stack</button>
     <button id="t-shuffle" type="button" data-lay="shuffle" aria-pressed="false" data-i18n="tool.shuffle">Shuffled</button>
     <span class="lbl" style="margin-inline-start:8px" data-i18n="lbl.units">Units</span>
     <button id="u-in" type="button" data-unit="in" aria-pressed="true" data-i18n="unit.in">inches</button>
@@ -1418,6 +1419,7 @@ window.SA_I18N = (() => {
   "tool.pour": "Pour",
   "hint.rosette-wants": "This pattern sets {n} tiles around each centre and none may repeat — you have {have} sections, so it is laying a plain cut instead. Keep a few more.",
   "hint.grouping-smaller-fits": "This grouping sets {n} tiles per motif and none may repeat \u2014 you have {have}. \u2014 Group by {alt} wants only {altn}.",
+  "tool.stack": "Off the stack",
   "tool.shuffle": "Shuffled",
   "tool.slottest": "Slot colours",
   "tool.styl": "Stylolite",
@@ -1722,7 +1724,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.45';
+  const BUILD = '2026.10.12.46';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1913,6 +1915,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
               chipIn: 0.6, shuffle: false, units: 'in', joints: true, slotTest: false, chevAngle: 45,
+              assembly: 'guide',   // guide | stack. `shuffle` is kept beside it: slabs carry it, and it still means shuffled.
               grouping: null, slotMap: {}, seedMap: {} };   // null = the pattern's first grouping, so an old slab lands where it always did
   let layTiles = false;
   // Pristine defaults, captured before any edit. deserialize() resets to these before applying a slab, so a
@@ -3788,6 +3791,37 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return res;
   }
   const GROUT = '#20222a';
+  // WHICH PIECE FILLS WHICH SLOT. Every instance whose centre lands on the board IS a piece; the rest
+  // are slots the board has to be stretched over. Both lists are ordered the same way - down the rows,
+  // then along - which is the order a machine cuts in and the order a floor is laid in.
+  //
+  // Keyed by `pi` because a module's polygons are not interchangeable: a chevron's two planks are
+  // mirror images, and handing one slot the other's piece would be handing an installer a plank that
+  // does not fit. That compatibility was already in the data and cost nothing to honour.
+  function assemblyPlan(inst) {
+    const byPi = new Map();
+    for (const t of inst) {
+      let g = byPi.get(t.pi); if (!g) byPi.set(t.pi, g = { slots: [], pieces: [] });
+      g.slots.push(t);
+      // On the board, in INCHES FROM ITS CENTRE, which is what ctr is: the slab is IN wide and
+      // IN*H tall, so a piece is cut from it when its centre lies inside that rectangle.
+      if (t.ctr && Math.abs(t.ctr[0]) <= IN / 2 && Math.abs(t.ctr[1]) <= IN * H / 2) g.pieces.push(t);
+    }
+    const order = (a, b) => (a.ctr[1] - b.ctr[1]) || (a.ctr[0] - b.ctr[0]);
+    const plan = new Map();
+    for (const [, g] of byPi) {
+      g.slots.sort(order); g.pieces.sort(order);
+      const n = g.pieces.length; if (!n) continue;          // nothing of this shape is on the board
+      for (let i = 0; i < g.slots.length; i++) {
+        // STACK: take the next one off the pile, wrapping when the board runs out - which is what
+        // running short of material actually looks like, and is worth seeing rather than hiding.
+        const p = g.pieces[i % n], sl = g.slots[i];
+        // back to frame units: shift is a frame-space offset, ctr is inches
+        plan.set(sl.key, [inFr(p.ctr[0] - sl.ctr[0]), inFr(p.ctr[1] - sl.ctr[1])]);
+      }
+    }
+    return plan;
+  }
   function drawTiles(F) {
     if (!stoneReady) renderStoneOffscreen();
     const px = 1 / (Wc * V.z);
@@ -3797,12 +3831,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const STAGE = stageN(), HS = H * STAGE;                // HS: the source's own height in slab units
     if (pat.overlap) inst.sort((a, b) => b.ctr[1] - a.ctr[1]);       // lower scales first, upper cover their tops
     const rng = mulberry32(1234567);
+    // Built once, not per piece: it has to sort every instance to know what order they come in.
+    const plan = (!T.shuffle && T.assembly === 'stack') ? assemblyPlan(inst) : null;
     for (const t of inst) {
       let poly = insetPoly(t.poly, inFr(T.groutIn) * 0);   // grout already in the spread; keep full poly
       if (T.edge === 'tumbled') poly = insetPoly(poly, inFr(0.04 * T.sizeIn));
       const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
       let shift = t.shift;
       if (T.shuffle) { const [r] = sub(mix(t.n, t.m, t.pi, 99), 1); shift = [t.shift[0] + (r() - 0.5) * 0.7, t.shift[1] + (r() - 0.5) * 0.7 * H]; }
+      // THE ASSEMBLY. Guide is the absent case on purpose: the piece a slot is handed is the one cut
+      // at that slot, the delta is zero, and the floor is the board. Nothing to add and nothing to
+      // drift. Only a mode that moves a piece has anything to say here.
+      else if (plan) { const d = plan.get(t.key); if (d) shift = [shift[0] + d[0], shift[1] + d[1]]; }
       // WHICH BOARD THIS PIECE CAME OFF. One board width is H in slab units, so adding k*H to the
       // shift moves the sample a whole board down the cant. In order, k follows the lattice ROW, so
       // the floor walks down the log the way a flitch is stacked and neighbouring rows are
@@ -8578,7 +8618,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function syncUI() {
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
     pv('data-mat', currentMaterial()); pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
-    pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : 'order'); pv('data-unit', T.units);
+    pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : T.assembly === 'stack' ? 'stack' : 'order'); pv('data-unit', T.units);
     if (typeof syncGroups === 'function') syncGroups();   // which groupings this pattern HAS, not just which is pressed
     if (typeof syncTileLocks === 'function') syncTileLocks();   // a loaded slab may arrive holding cuts
     pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType); pv('data-mwin', NEXT.maskWin); pv('data-minv', NEXT.maskInvert);
@@ -10029,7 +10069,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     T.grouping = b.dataset.group; syncGroups(); sayIfShort(); showSetCount(); redraw(true);
   });
   for (const b of document.querySelectorAll('[data-edge]')) b.addEventListener('click', () => { T.edge = b.dataset.edge; press('[data-edge]', b); redraw(false); });
-  for (const b of document.querySelectorAll('[data-lay]')) b.addEventListener('click', () => { T.shuffle = b.dataset.lay === 'shuffle'; press('[data-lay]', b); redraw(false); });
+  for (const b of document.querySelectorAll('[data-lay]')) b.addEventListener('click', () => {
+    T.shuffle = b.dataset.lay === 'shuffle';
+    T.assembly = b.dataset.lay === 'stack' ? 'stack' : 'guide';
+    press('[data-lay]', b); redraw(false);
+  });
   for (const b of document.querySelectorAll('[data-unit]')) b.addEventListener('click', () => { T.units = b.dataset.unit; press('[data-unit]', b); for (const id of Object.keys(TFMT)) { const el = document.getElementById(id === 'chipsize' ? 'chipsize' : id); if (el) document.getElementById(id + 'V').textContent = TFMT[id](+el.value); } });
   const jb = document.getElementById('t-joints');
   jb.addEventListener('click', () => { T.joints = !T.joints; jb.setAttribute('aria-pressed', T.joints); redraw(false); });

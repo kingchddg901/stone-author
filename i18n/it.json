@@ -659,6 +659,7 @@
  "tool.slottest": "Colori delle posizioni",
  "hint.rosette-wants": "Questo motivo dispone {n} piastrelle attorno a ogni centro e nessuna può ripetersi — hai {have} sezioni, quindi sta usando un taglio semplice. Conservane qualcuna in più.",
  "hint.grouping-smaller-fits": "Questo raggruppamento usa {n} piastrelle per motivo e nessuna può ripetersi — ne hai {have}. — Raggruppa per {alt}: ne bastano {altn}.",
+ "tool.stack": "Dalla pila",
  "tool.shuffle": "Mescolate",
  "tool.styl": "Stilolite",
  "tool.tune": "Regola",
