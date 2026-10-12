@@ -703,7 +703,7 @@
   <details class="sec" id="rendersec"><summary data-i18n="sec.render">Render</summary><div class="body">
     <div class="grp" role="group" aria-label="Render" data-i18n-attr="aria-label=a11y.render">
       <button id="export" type="button" data-i18n="btn.export">Export</button>
-      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option></select>
+      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option><option value="131072" data-tier="once">131072</option></select>
       <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select><select id="expfmt" aria-label="Export format" title="Export format" data-i18n-attr="aria-label=a11y.export-format;title=a11y.export-format"><option value="png" data-i18n="opt.fmt-png">PNG</option><option value="tiff" data-i18n="opt.fmt-tiff">TIFF</option></select>
       <span class="stat" id="expcap"></span>
     </div>
@@ -711,6 +711,7 @@
     <div class="tiers" id="tiers" hidden>
       <label class="tgl"><input type="checkbox" id="tier-large"><span data-i18n="big.large">Large render</span></label>
       <label class="tgl" id="tier-extreme-row" hidden><input type="checkbox" id="tier-extreme"><span data-i18n="big.extreme">Extreme</span></label>
+      <label class="tgl" id="tier-once-row" hidden><input type="checkbox" id="tier-once"><span data-i18n="big.once">131072, once</span></label>
       <span class="stat" id="tier-note"></span>
     </div>
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.tile-probe-note">Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width - it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered. On a device short of memory it is often worth taking one size BELOW what the planner settles on: a large tile can lose light at the joins in a way a single calibration tile cannot show, and on the slowest hardware here the smaller tile was also the faster one. A suggestion, not a rule — it costs a capable machine speed for nothing.</span></div>
@@ -795,6 +796,7 @@ window.SA_I18N = (() => {
   "app.title": "Stone author",
   "big.confirm": "Start {w} × {h} render?\n\n{gpx} gigapixels. This may run for several minutes and produce a file approaching or exceeding 1 GB. Other software may need tens of gigabytes to open it.",
   "big.extreme": "Extreme",
+  "big.once": "131072, once",
   "big.large": "Large render",
   "big.mem-rec": "Recommended: {gb} GB of memory — the machine this tier is known to finish on. Below that it is untested, not unsupported.",
   "big.mem-reported": "This browser reports {gb} GB — a rounded figure, and some browsers cap it.",
@@ -803,6 +805,7 @@ window.SA_I18N = (() => {
   "big.note": "Above {px}px the export streams the picture in bands. It cannot resume — do not close the tab.",
   "big.note-tiled": "Above {px}px the export renders one tile at a time and writes each to disk as it goes. It cannot resume — do not close the tab.",
   "big.warn": "This is not fast, and it will eat storage.\n\nWhile it runs it will take up to a quarter of this device's memory — deliberately. A smaller share forces smaller tiles, and at these sizes that is what makes a picture come out dim.\n\nIt has not been known to crash a machine, across every device it has been tried on. What you are risking is the render itself: it cannot resume, so closing the tab or navigating away loses the lot. Close anything you are not using.",
+  "big.warn-once": "131072 is four times the pixels of a 65535.\n\nOn a machine that renders 65535 in half an hour, expect something over two hours and a file of a couple of gigabytes. It is TIFF only: no canvas on any engine is that wide, so only the tiled path can produce it, and nothing on this machine will open the result.\n\nIt is not the detail limit either. Measured on a real master, the octave above 131072 still holds about a fifth of the picture's contrast, so there is no size at which this stops paying. 65535 is already 683 DPI across eight feet, which is past what print or any screen can take delivery of.\n\nThis tick does not persist. Decide it again next time.",
   "btn.cal-cancel": "Cancel",
   "btn.cal-clear": "Forget",
   "btn.cal-start": "Start",
@@ -1708,7 +1711,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.38';
+  const BUILD = '2026.10.11.39';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1795,7 +1798,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let glowKnob = null;                                   // null = auto; a number = the knob was moved
   let tilePick = 0;                                      // 0 = let the planner race; a size = the user chose
   let shortlist = null;                                  // sizes the planner would consider, from the last probe
-  let tierLarge = false, tierExtreme = false, fmtChosen = false;
+  // tierOnce is deliberately not persisted, and neither is tierExtreme: a tick that survives a
+  // reload is a setting, and this is a decision to take again each time.
+  let tierLarge = false, tierExtreme = false, tierOnce = false, fmtChosen = false;
   let uvMode = false, lightSpectrum = 0, spotOn = false; const OVR_uv = {}, UV_DARK = '#0a0a0e', SPX_TOL = 0.12;
   // CROSSFADE: two chosen stops and a blend between them, with everything in between IGNORED. Sweeping
   // the spectrum walks the number line, so stops at -1, 0 and +1 mean 0 always interrupts a -1 -> +1
@@ -10061,10 +10066,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // Without it neither path can work, so the tier is withheld rather than offered and broken.
     const what = document.getElementById('expwhat'), mob = typeof CompressionStream !== 'function';
     wrap.hidden = mob;                                     // not warned about here — simply not offered
-    if (mob) { tierLarge = tierExtreme = false; }
+    if (mob) { tierLarge = tierExtreme = tierOnce = false; }
     document.getElementById('tier-large').checked = tierLarge;
     document.getElementById('tier-extreme-row').hidden = !tierLarge;
     document.getElementById('tier-extreme').checked = tierExtreme;
+    document.getElementById('tier-once-row').hidden = !tierExtreme;
+    document.getElementById('tier-once').checked = tierOnce;
     // Decide the FORMAT before gating anything, because the two answer to different limits and the gate
     // has to know which one it is applying.
     const ff = document.getElementById('expfmt');
@@ -10080,7 +10087,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const o of sel.options) {
       const t = o.dataset.tier;
       if (!t) continue;                                    // plain canvas sizes: gatePlain owns those
-      const armed = t === 'large' ? tierLarge : tierExtreme;
+      const armed = t === 'large' ? tierLarge : t === 'extreme' ? tierExtreme : tierOnce;
       const tooWide = !tiff && +o.value > side;            // wider than a canvas this build can hold
       o.hidden = !armed;
       o.disabled = !armed || tooWide;
@@ -10132,12 +10139,23 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const box = document.getElementById('tier-large');
     if (box.checked && !(await bigDialog(TR('big.warn'), TR('btn.understood')))) { box.checked = false; return; }
     tierLarge = box.checked;
-    if (!tierLarge) tierExtreme = false;
+    if (!tierLarge) tierExtreme = tierOnce = false;
     try { localStorage.setItem(TIER_KEY, JSON.stringify({ large: tierLarge })); } catch (_) {}
     applyTiers();
   });
   document.getElementById('tier-extreme').addEventListener('change', () => {
     tierExtreme = document.getElementById('tier-extreme').checked;   // deliberately NOT persisted
+    if (!tierExtreme) tierOnce = false;
+    applyTiers();
+  });
+  // THE THIRD TICK. 131072 is TIFF only and the tooWide rule already sees to that: it is wider than
+  // any canvas this engine will hand over, so the option stays disabled unless the format is TIFF,
+  // which streams tiles and never allocates one. Its own dialog, because the step is not the same
+  // kind of step as the two below it - four times the pixels of a 65535, and a file nobody opens.
+  document.getElementById('tier-once').addEventListener('change', async () => {
+    const box = document.getElementById('tier-once');
+    if (box.checked && !(await bigDialog(TR('big.warn-once'), TR('btn.understood')))) { box.checked = false; tierOnce = false; applyTiers(); return; }
+    tierOnce = box.checked;                                // never persisted: decide it again next time
     applyTiers();
   });
   document.getElementById('expres').addEventListener('change', applyTiers);
