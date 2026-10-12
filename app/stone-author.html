@@ -872,6 +872,7 @@ window.SA_I18N = (() => {
   "exp.done-render": "Saved the render · {px}px · {t}",
   "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
+  "exp.err.floor-size": "The floor renders up to {px}px. Above that the export streams tiles and draws the slab the floor was cut from, not the floor itself. Choose a smaller size, or turn Lay tiles off to export the slab.",
   "exp.err.tile": "This device cannot hold a tile big enough for {px}px.",
   "exp.err.dim": "At {px}px every tile this device can hold came back dim — one was rendered and carried {pct}% of the light it should. This is not a memory limit: the blur stops working above a canvas this size. The render was refused rather than saved wrong. A smaller width needs a smaller canvas and should come out right.",
   "exp.err.floor": "At {px}px this device can only manage {tile}px tiles, which are too small to carry the light — a black-light render would come out dim. Choose a smaller width.",
@@ -1726,7 +1727,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.51';
+  const BUILD = '2026.10.12.52';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3720,7 +3721,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const pick = cls > 1 ? (((((t2.m >> 1) * 3 + (t2.n >> 1) * 5) % cls) + cls) % cls) : 0;
     return slot + pick * k;
   }
-  function renderStoneOffscreen() {
+  function renderStoneOffscreen(wide) {
     // THE SOURCE IS A CANT WHEN WOOD IS STAGED. The painter maps v through yy = y0 + (cvv/H)*wid, so
     // a canvas STAGE times taller simply answers for board positions y0 .. y0 + wid*STAGE - the same
     // query, more of it, and not one line of the painter changes.
@@ -3729,7 +3730,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // part of the floor, so it never needed full slab resolution to begin with. At stage 8 that is
     // 700 x 3500 rather than 1600 x 8000.
     const st = stageN();
-    const cw = st > 1 ? Math.max(700, Math.round(SW / Math.sqrt(st))) : SW;
+    // SW is the PREVIEW's resolution. An export asks for its own, because sampling a 1600px slab
+    // into a 16384px floor is a tenfold magnification of a texture, not a render of one.
+    const base = wide || SW;
+    const cw = st > 1 ? Math.max(700, Math.round(base / Math.sqrt(st))) : base;
     const ch = Math.round(cw * H * st);
     stoneC.width = cw; stoneC.height = ch;
     const c = stoneC.getContext('2d');
@@ -3843,10 +3847,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     return plan;
   }
-  function drawTiles(F) {
+  // The tile painter, pointed at a target rather than at the live canvas. `px` is one device
+  // pixel in frame units, and `cover` is the rectangle the grout fills under everything.
+  function drawTilesTo(F, tc, px, cover) {
     if (!stoneReady) renderStoneOffscreen();
-    const px = 1 / (Wc * V.z);
-    ctx.fillStyle = GROUT; ctx.fillRect(V.cx - 0.6 / V.z, V.cy - 0.6 / V.z, 1.2 / V.z, 1.2 / V.z);
+    tc.fillStyle = GROUT; tc.fillRect(cover[0], cover[1], cover[2], cover[3]);
     const pat = PATTERNS[T.pattern](T.sizeIn);
     const inst = tileInstances(), chips = chipMap(), SET = picking() ? [] : sectionList();
     const STAGE = stageN(), HS = H * STAGE;                // HS: the source's own height in slab units
@@ -3881,15 +3886,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // THE ASSIGNMENT, SHOWN. An assignment is invisible under stone, and the only way to see a
       // rosette repeat is to strip the material off and leave the identity.
       if (T.slotTest) {
-        ctx.save();
-        ctx.beginPath(); poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath();
-        ctx.fillStyle = SLOT_INK[band % SLOT_INK.length]; ctx.fill();
-        ctx.restore();
+        tc.save();
+        tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath();
+        tc.fillStyle = SLOT_INK[band % SLOT_INK.length]; tc.fill();
+        tc.restore();
         continue;
       }
-      ctx.save();
-      ctx.beginPath(); poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath(); ctx.clip();
-      ctx.imageSmoothingEnabled = true;
+      tc.save();
+      tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath(); tc.clip();
+      tc.imageSmoothingEnabled = true;
       // WRAP the slab: a tile's sampled patch drifts (kerf, shuffle) and can fall past the slab edge -
       // draw the slab image repeated across the tile's box so it is always stone, never bare grout.
       let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
@@ -3902,26 +3907,32 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (cutRec) {
         const bandPx = stoneC.width * H, kz = cutScale(stoneC.width, bandPx, cutRec.box);
         const src = coverSrc(cutRec.box[2] * kz, cutRec.box[3] * kz, bx1 - bx0, by1 - by0);
-        ctx.drawImage(stoneC, src[0], band * bandPx + src[1], src[2], src[3], bx0, by0, bx1 - bx0, by1 - by0);
+        tc.drawImage(stoneC, src[0], band * bandPx + src[1], src[2], src[3], bx0, by0, bx1 - bx0, by1 - by0);
       } else {
         const i0 = Math.floor(bx0 + shift[0]), i1 = Math.floor(bx1 + shift[0]);
         const j0 = Math.floor((by0 + shift[1]) / HS), j1 = Math.floor((by1 + shift[1]) / HS);
-        for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) ctx.drawImage(stoneC, i - shift[0], j * HS - shift[1], 1, HS);
+        for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) tc.drawImage(stoneC, i - shift[0], j * HS - shift[1], 1, HS);
       }
-      ctx.restore();
+      tc.restore();
       if (pat.overlap) {                                // scales overlap - outline each in order so the scallop of the one below stays visible
-        ctx.strokeStyle = GROUT; ctx.lineWidth = Math.max(px, inFr(T.groutIn) * 0.7);
-        ctx.beginPath(); poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath(); ctx.stroke();
+        tc.strokeStyle = GROUT; tc.lineWidth = Math.max(px, inFr(T.groutIn) * 0.7);
+        tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath(); tc.stroke();
       }
-      edgeFinish(poly, px);
+      edgeFinish(poly, px, tc);
     }
-    if (T.joints && !pat.overlap) { ctx.strokeStyle = GROUT; ctx.lineWidth = Math.max(px, inFr(T.groutIn));
+    if (T.joints && !pat.overlap) { tc.strokeStyle = GROUT; tc.lineWidth = Math.max(px, inFr(T.groutIn));
       for (const t of inst) { let poly = t.poly; const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
-        ctx.beginPath(); poly.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath(); ctx.stroke(); } }
+        tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath(); tc.stroke(); } }
     drawScaleBar();
   }
+  // The live preview is one caller of it, with the view's own transform and a full-view cover.
+  function drawTiles(F) {
+    if (!stoneReady) renderStoneOffscreen();
+    drawTilesTo(F, ctx, 1 / (Wc * V.z),
+                [V.cx - 0.6 / V.z, V.cy - 0.6 / V.z, 1.2 / V.z, 1.2 / V.z]);
+  }
   // Edge finish: a lit chamfer. Edges facing the shared light (G.lightAngle) catch it; those facing away fall dark.
-  function edgeFinish(poly, px) {
+  function edgeFinish(poly, px, tc) {
     if (T.edge === 'square') return;
     const w = T.edge === 'bevel' ? inFr(0.09 * T.sizeIn) : inFr(0.13 * T.sizeIn);
     const inner = insetPoly(poly, w), passes = T.edge === 'pillow' || T.edge === 'tumbled' ? 5 : 2;
@@ -3933,8 +3944,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         const a = ring[i], b = ring[(i + 1) % ring.length], nx = (b[1] - a[1]), ny = -(b[0] - a[0]), L = Math.hypot(nx, ny) || 1;
         const lit = (nx / L * Lx + ny / L * Ly);        // edge outward-normal · light
         const shade = lit > 0 ? `rgba(${lr},${lg},${lb},${0.10 * lit * (1 - f)})` : `rgba(0,0,0,${0.16 * -lit * (1 - f)})`;
-        ctx.strokeStyle = shade; ctx.lineWidth = Math.max(px, w / passes * 1.4);
-        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+        tc.strokeStyle = shade; tc.lineWidth = Math.max(px, w / passes * 1.4);
+        tc.beginPath(); tc.moveTo(a[0], a[1]); tc.lineTo(b[0], b[1]); tc.stroke();
       }
     }
   }
@@ -9221,7 +9232,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   });
   const expCanvas = W => { const c = document.createElement('canvas'); c.width = W; c.height = Math.round(W * H); return c; };
   const polyPath = (cx, pts) => { cx.beginPath(); cx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) cx.lineTo(pts[i][0], pts[i][1]); };
+  // THE SLAB THE FLOOR IS CUT FROM, at most. Two canvases are alive while a floor renders - this one
+  // and the output - so the second is capped below the first: 8192 is 168 MB on top of the output's
+  // own. A floor wider than this is cut from an 8192 slab, which is a 2x magnification where the
+  // preview's fixed 1600 is a tenfold one.
+  const FLOOR_SRC_MAX = 8192;
+  // THE FLOOR, at export resolution. The same painter the preview uses, pointed at an export canvas
+  // with the frame mapped straight onto it: a floor is the slab rearranged, so there is nothing new
+  // to paint here, only a resolution to stop assuming.
+  function renderFloor(W) {
+    renderStoneOffscreen(Math.min(W, FLOOR_SRC_MAX));
+    const c = expCanvas(W), cx = c.getContext('2d');
+    cx.setTransform(W, 0, 0, W, 0, 0);                   // frame units (1 wide, H tall) onto the output
+    drawTilesTo(null, cx, 1 / W, [0, 0, 1, H]);
+    stoneReady = false;                                  // the preview's own offscreen was replaced
+    return c;
+  }
   function expCompleted(W) {                              // the finished slab — FULL pipeline, tiled so a huge export stays bounded in memory (matches renderFull, back light falls back to it)
+    // WHAT IS ON SCREEN IS WHAT IS EXPORTED. With Lay tiles on the picture is a floor, and exporting
+    // the slab it was cut from would be exporting the material rather than the work. Until now that is
+    // what happened: layTiles moved zero bytes through this path, measured.
+    if (layTiles) return renderFloor(W);
     return renderTiled(W);
   }
   function expBaseMask(W) {                               // base value map: the base composite as luminance
@@ -10307,6 +10338,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               + '\n\n' + memNote(),
             TR('btn.start-giant')))) return;
       tierExtreme = false; applyTiers();                   // disarm on LAUNCH, not on success
+    }
+    // THE FLOOR ONLY RENDERS ON THE DIRECT PATH. Above it the export streams tiles through a core
+    // that paints the slab, so the floor would come back as the material it was cut from - correct
+    // size, correct name, wrong picture. Refuse and name the size that works.
+    if (layTiles && (fmt === 'tiff' || W > STRIP_FROM)) {
+      expStat(TR('exp.err.floor-size', { px: STRIP_FROM }), -1);
+      return;
     }
     if (fmt === 'tiff') return exportTiff(W);              // a grid of tiles, no assembly canvas
     if (W <= STRIP_FROM) return exportAll(W, document.getElementById('expwhat').value === 'render');

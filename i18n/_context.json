@@ -409,6 +409,7 @@
   },
   "where": "failure message in the hint line when an export cannot encode an image at the chosen width"
  },
+ "exp.err.floor-size": {"placeholders": {"px": "the largest export width that renders the floor, rather than the width that was asked for"}, "where": "shown when an export is asked for a floor at a size only the streamed or TIFF path can reach. Those paths render the SLAB, so the floor would come back as the material it was cut from, at the right size and under the right name"},
  "exp.err.tile": {
   "placeholders": {
    "px": "the export width in pixels that was asked for"

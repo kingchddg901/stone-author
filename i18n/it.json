@@ -101,6 +101,7 @@
  "exp.done-render": "Render salvato · {px}px · {t}",
  "exp.encoding": "Codifica del PNG…",
  "exp.err.encode": "Questo dispositivo non è riuscito a codificare un'immagine da {px}px.",
+ "exp.err.floor-size": "Il pavimento viene reso fino a {px}px. Oltre, l’esportazione procede a tasselli e disegna la tavola da cui il pavimento è stato tagliato, non il pavimento. Scegli una misura più piccola, oppure disattiva Posa piastrelle per esportare la tavola.",
  "exp.err.tile": "Questo dispositivo non può contenere un tassello abbastanza grande per {px}px.",
  "exp.err.dim": "A {px}px ogni tassello che questo dispositivo può contenere è tornato spento — uno è stato disegnato e portava il {pct}% della luce prevista. Non è un limite di memoria: la sfocatura smette di funzionare oltre una tela di queste dimensioni. Il render è stato rifiutato invece di essere salvato sbagliato. Una larghezza inferiore richiede una tela più piccola e dovrebbe risultare corretta.",
  "exp.err.floor": "A {px}px questo dispositivo può gestire solo tasselli da {tile}px, troppo piccoli per portare la luce: un render a luce nera risulterebbe spento. Scegli una larghezza inferiore.",
