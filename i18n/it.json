@@ -503,7 +503,7 @@
  "hint.picking-shows-the-slab": "Mostra la lastra per poter scegliere — tocca le piastrelle da conservare. Le sezioni tornano quando esci da Preleva.",
  "hint.snag-took": "Prelevato — {n} sezione/i. Ogni piastrella posata da questa mostra ora lo stesso pezzo, con nove volte il dettaglio.",
  "hint.cuts-full": "Otto tagli salvati sono il massimo — ognuno è un tronco da costruire.",
- "sl.wood-plankLen": "Lunghezza tavola",
+ "sl.wood-plankLen": "Lunghezza della doga",
  "sl.wood-plankVary": "Variazione di lunghezza",
  "sl.wood-plankStagger": "Sfalsamento giunti",
  "tile.pat.chevron": "Spina ungherese",
