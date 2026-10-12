@@ -872,7 +872,7 @@ window.SA_I18N = (() => {
   "exp.done-render": "Saved the render · {px}px · {t}",
   "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
-  "exp.err.floor-size": "The floor renders up to {px}px. Above that the export streams tiles and draws the slab the floor was cut from, not the floor itself. Choose a smaller size, or turn Lay tiles off to export the slab.",
+  "exp.err.floor-size": "The floor renders on the direct PNG path only, up to {px}px. TIFF and anything larger stream tiles through a core that paints the slab the floor was cut from, not the floor. Choose PNG at {px}px or less, or turn Lay tiles off to export the slab.",
   "exp.err.tile": "This device cannot hold a tile big enough for {px}px.",
   "exp.err.dim": "At {px}px every tile this device can hold came back dim — one was rendered and carried {pct}% of the light it should. This is not a memory limit: the blur stops working above a canvas this size. The render was refused rather than saved wrong. A smaller width needs a smaller canvas and should come out right.",
   "exp.err.floor": "At {px}px this device can only manage {tile}px tiles, which are too small to carry the light — a black-light render would come out dim. Choose a smaller width.",
@@ -1727,7 +1727,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.52';
+  const BUILD = '2026.10.12.53';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
