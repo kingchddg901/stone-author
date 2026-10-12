@@ -1727,7 +1727,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.53';
+  const BUILD = '2026.10.12.54';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4583,6 +4583,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // Same plan, same order, a yield between tiles so the caller can say where it has got to.
   async function renderTiledStepped(W, onTile) {
+    // THE FLOOR IS THE PICTURE when tiles are laid, and this is what makes render.png. Wiring it
+    // into expCompleted alone put it in the .ora merged thumbnail and nowhere else: the kit and
+    // the render-only path both come through here, and both were still exporting the slab.
+    if (layTiles) { if (onTile) await onTile(0, 0); return renderFloor(W); }
     const backlit = !layTiles && G.backlight > 0;
     if (backlit) { if (onTile) await onTile(0, 0); return renderFull(W); }
     const p = tiledPlan(W);
