@@ -17,6 +17,9 @@ import { findMeta } from './lib/find-meta.mjs';   // one reader, shared with met
 import { inflateSync } from 'zlib';
 
 
+// The build that began recording `lay`. A master older than this cannot say whether a floor was
+// laid, and must not be read as saying there was none.
+const LAY_SINCE = '2026.10.12.65';
 const num = n => n.toLocaleString('en-GB');
 const secs = ms => (ms / 1000 < 90 ? (ms / 1000).toFixed(1) + ' s' : (ms / 60000).toFixed(1) + ' min');
 const median = a => { const s = [...a].sort((x, y) => x - y); const h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
@@ -128,6 +131,29 @@ for (const path of paths) {
   console.log(`  inputs   ${m.inputs || '(not recorded — master predates the render signature)'}` +
               `   state ${m.state || '(not recorded)'}${m.inputs ? ' (session, not the picture)' : ''}`);
   console.log(`  content  ${num(m.marks || 0)} marks, ${num(m.lines || 0)} veins${m.cracks != null ? `, ${num(m.cracks)} cracks, ${num(m.specks)} specks, ${num(m.drusy)} drusy, ${num(m.seams)} seams` : ' (counts not recorded)'}`);
+  // THE FLOOR, when one was laid. Absent means the pixels are the slab itself - which is what every
+  // master written before the key means too, so this line says nothing rather than guessing. The
+  // piece size is the generator's own: a plank or a chevron is cut from the board and ignores the
+  // tile dial, so pieceIn is printed in preference to sizeIn where it exists.
+  if (m.lay) {
+    const L = m.lay;
+    const size = L.pieceIn ? `${L.pieceIn[0]} x ${L.pieceIn[1]} in boards` : `${L.sizeIn} in`;
+    const joint = L.kerfIn === L.groutIn
+      ? `kerf = grout ${L.groutIn} in, so the floor reassembles the slab`
+      : `grout ${L.groutIn} in, kerf ${L.kerfIn} in`;
+    console.log(`  floor    ${L.pattern}${L.chevAngle != null ? ` at ${L.chevAngle} deg` : ''}, ${size}, set ${L.setting}`);
+    console.log(`           ${joint}${L.joints ? '' : ', joints not drawn'}, ${L.edge} edge${L.grouping ? `, grouping ${L.grouping}` : ''}`);
+  } else if (m.tiled || m.tile) {
+    // Numeric per component, not lexicographic: '2026.10.12.9' sorts ABOVE '2026.10.12.65' as text.
+    const cmpBuild = (a, b) => {
+      const p = String(a || '').split('.').map(Number), q = b.split('.').map(Number);
+      for (let i = 0; i < Math.max(p.length, q.length); i++) { const d = (p[i] || 0) - (q[i] || 0); if (d) return d; }
+      return 0;
+    };
+    console.log(cmpBuild(m.build, LAY_SINCE) >= 0
+      ? `  floor    none laid — these pixels are the slab, not pieces cut from it`
+      : `  floor    not recorded — build ${m.build || '?'} predates the floor key, so absence says nothing either way`);
+  }
   console.log(`  machine  ${m.cores || '?'} cores, ${m.mem ? m.mem + ' GB reported' : 'memory not recorded'}, dpr ${m.dpr}, toDisk ${m.toDisk ?? '(not recorded)'}`);
   // the planner's working. "budget" means deviceMemory arithmetic refused it; "canvas" means the browser
   // would not allocate the surface despite the memory being there — a device policy, not a shortage.

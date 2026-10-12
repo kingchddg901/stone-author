@@ -1729,7 +1729,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.64';
+  const BUILD = '2026.10.12.65';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3371,6 +3371,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // cut shorter than 3.75 ft, which is how a floor of four pieces happened.
   const plankLenIn = () => { const w = plankWidthIn();
     return Math.min(Math.max(WOOD.plankLen, w), Math.max(w, WOOD.len * 12)); };
+  // WHICH LAYOUTS ARE CUT FROM THE BOARD rather than sized by T.sizeIn. Asked by the master's own
+  // self-description, so the piece size it records is the one the generator actually used: a plank or
+  // a chevron ignores the tile dial, and writing sizeIn alone would state 12 in for a floor whose
+  // boards are 7.5 x 36. Kept here so a third plank layout updates one place and not three.
+  const cutFromBoard = pat => pat === 'plank' || pat === 'chevron';
   function plankInstances() {
     const wIn = plankWidthIn();                               // the plank IS the board: width and longest length
     const nom = plankLenIn();                                 // come from the cut, never from T.sizeIn
@@ -9130,6 +9135,26 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // would hide nothing while breaking every reader that groups masters by engine.
     engine: engineTag(),
     state: stateSig(), inputs: renderSig(), G: Object.assign({}, G),
+    // WAS A FLOOR LAID, AND HOW WAS IT CUT AND SET?
+    //
+    // Nothing in a master described the floor, so a TILED master could not say whether its pixels
+    // were a slab or pieces cut from one - and a seam audit of the tiled path could not be
+    // attributed to the floor at all. Two masters of the same slab came back with light means of
+    // 32.74 and 52.71 and neither file could settle which had laid a floor. Absent means no floor,
+    // which is what every master written before this key means.
+    //
+    // THE PIECE SIZE IS NOT ALWAYS T.sizeIn - see cutFromBoard - so both are written and pieceIn
+    // is the one to believe where it exists. The setting mode is three-valued although T holds it
+    // in two fields: `shuffle` sits BESIDE `assembly` because slabs carry it, so a shuffled stack
+    // and a shuffled guide are both just shuffled, and that is what the floor did.
+    lay: layTiles ? {
+      pattern: T.pattern,
+      setting: T.shuffle ? 'shuffle' : T.assembly === 'stack' ? 'stack' : 'guide',
+      sizeIn: T.sizeIn,
+      pieceIn: cutFromBoard(T.pattern) ? [+plankWidthIn().toFixed(3), +plankLenIn().toFixed(3)] : undefined,
+      edge: T.edge, groutIn: T.groutIn, kerfIn: T.kerfIn, joints: !!T.joints,
+      grouping: T.grouping, chevAngle: T.pattern === 'chevron' ? T.chevAngle : undefined,
+    } : undefined,
   }, o));
   function zipStore(files) {
     const te = new TextEncoder(), parts = [], cen = []; let off = 0;
