@@ -186,7 +186,7 @@
  "big.warn": {
   "where": "the warning shown, and confirmed, when Large render is switched on"
  },
- "big.warn-once": {"terms": [], "where": "the dialog shown when the one-off tick is set. Gives the MEASURED cost of both sizes it opens, that they are TIFF only, that nothing on the machine will open the files, and that the detail does not run out at any size - so the honest stopping point is what the output can show rather than what the field has left"},
+ "big.warn-once": {"terms": [], "where": "the dialog shown when the one-off tick is set. Gives the MEASURED cost of both sizes it opens, that they are TIFF only, what it costs to open one afterwards (slowly, by paging, not never), and that the detail does not run out at any size - so the honest stopping point is what the output can show rather than what the field has left"},
  "btn.cal-cancel": {
   "where": "button in the Calibrate the pen section, shown only while calibrating"
  },
