@@ -17,6 +17,20 @@
 //             as the median single-column jump at joins against the same statistic at control columns in
 //             the same file.
 //
+// WHAT A FLOOR MEASURES AGAINST THE SLAB IT WAS CUT FROM, 8,192 x 5,120 in 512 passes, the same
+// picture rendered twice on 2026-10-12 with Lay tiles off and on:
+//
+//   render              joins     controls   ratio
+//   slab (floor off)    0.0003    0.0007     0.5x     pass joins SMOOTHER than ordinary columns
+//   floor (hexagons)    0.0449    0.0065     6.9x
+//
+// Two things to read off it. The tiled path itself puts NOTHING at a pass join - 0.5x is a join that
+// cannot be found - so a floor's 6.9x belongs to the floor and not to the renderer's tiling. And a
+// floor is intrinsically rougher EVERYWHERE, controls 0.0065 against 0.0007, because it has hairline
+// joints all over the picture; the join excess sits on top of that and is 0.038 of 255, a seventh of
+// one level. It does not fire: RATIO_FAIL is cleared but MIN_ROUGH is not, which is exactly the case
+// MIN_ROUGH exists for - a control this smooth makes any ratio large.
+//
 // The S23 master of 2026-09-26 has the second and not the first: +0.080 signed (z +0.32, indistinguishable
 // from no seam) against a roughness ratio of 9.0x. A signed-only gate passes it. That is not hypothetical
 // — it is what this file did until the roughness test was added.
