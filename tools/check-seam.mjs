@@ -343,11 +343,26 @@ function audit(path, inject, quiet) {
     const roughJ = [], roughC = [];
     for (let wi = 0; wi < wins.length; wi++) {
       const win = wins[wi], atX = win.x - win.lo, W = win.hi - win.lo;
+      // THE CONTROLS NEED ROOM AND THERE IS NOT ALWAYS ANY. HALF is max(4 * BASE, store / 4), so a
+      // master stored in 512-px tiles has a window of exactly 256 either side, and a walk that starts
+      // at 256 needing off + 1 < 256 takes NO step at all. roughC then came back empty, its median
+      // NaN, the ratio Infinity, and the gate printed "no seam" and a floor of "about NaN" while the
+      // only test that can catch a sign-varying seam was not running. Its own self-test said so and
+      // was not read: on an 8,192 master stored in 512s an injected sign-varying 0.3 passed clean,
+      // while the join measurement moved 0.0449 -> 0.3000, so only the controls were missing.
+      //
+      // A single-column jump is contaminated only AT the join, so a nearer control is sound. The
+      // outward walk is left exactly as it was wherever it yields anything - every master this gate
+      // has already judged is judged identically - and the nearer offsets are reached only when it
+      // yields nothing at all.
+      const lim = Math.min(atX, W - atX), offs = [];
+      for (let off = 256; off + 1 < lim; off += 64) offs.push(off);
+      if (!offs.length) for (let off = 64; off + 1 < lim; off += 64) offs.push(off);
       for (let b = 0; b < nBands; b++) {
         const a = acc[wi][b]; if (!a.n) continue;
         const jump = i => Math.abs(a.sum[i] - a.sum[i - 1]) / a.n;
         roughJ.push(jump(atX));
-        for (let off = 256; off + 1 < Math.min(atX, W - atX); off += 64) {
+        for (const off of offs) {
           const l = atX - off, r = atX + off;
           if ((win.lo + l) % 2 === 0 && l >= 1) roughC.push(jump(l));
           if ((win.lo + r) % 2 === 0 && r < W) roughC.push(jump(r));
@@ -370,6 +385,15 @@ function audit(path, inject, quiet) {
     const jd = stepJ.map(j => j.d);
     const excess = mean(jd) - mean(stepC);
     const z = excess / (sd(jd) / Math.sqrt(jd.length));
+    // AN EMPTY CONTROL SET IS NOT A PASS. Before this, the median of nothing was NaN, every
+    // comparison against NaN was false, and the gate fell through to "no seam" - the one outcome it
+    // had no evidence for. A test that could not run says so and the file is not cleared.
+    if (!roughC.length) {
+      console.log(`${path}
+  INCONCLUSIVE  the roughness test had no control columns (window ${HALF} either side), so a`);
+      console.log(`                sign-varying seam could not be looked for. The step test is not a substitute.`);
+      return false;
+    }
     const rj = median(roughJ), rc = median(roughC), rt = roughT.length ? median(roughT) : null;
     const ratio = rc > 0 ? rj / rc : Infinity;
 
@@ -399,7 +423,11 @@ function audit(path, inject, quiet) {
       }
       if (roughBad) {
         console.error(`  SEAM     the pass joins jump ${ratio.toFixed(1)}x harder than any other column in this picture (${rj.toFixed(3)} against ${rc.toFixed(3)} of 255).`);
-        console.error(`           ${rt !== null && rt < rj / 2 ? `Stored-tile edges carrying no pass join sit at ${rt.toFixed(3)}, so this is the renderer and not the writer.` : 'Stored-tile edges are not clean either — suspect the writer as well as the renderer.'}`);
+        console.error(`           ${rt === null
+          ? 'Every stored-tile edge here IS a pass join, so there is no edge that separates the writer from the renderer - neither is ruled out.'
+          : rt < rj / 2
+            ? `Stored-tile edges carrying no pass join sit at ${rt.toFixed(3)}, so this is the renderer and not the writer.`
+            : 'Stored-tile edges are not clean either — suspect the writer as well as the renderer.'}`);
       }
       return false;
     }
