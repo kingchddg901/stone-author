@@ -56,7 +56,7 @@ if (/versailles/.test(PAT_SRC)) throw new Error('probe: the versailles entry is 
 function build(ablate) {
   const body = [
     'const H = 0.625, IN = 8 * 12, inFr = v => v / IN;',
-    "const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625 };",
+    "const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, chevAngle: 45 };",
     liftConst(/const polyCentroid = [^\n]*/),
     CAIRO, lift('circlePoly'), lift('cairoCell'), PAT_SRC,
     'const plankInstances = () => [];',
@@ -70,6 +70,10 @@ function build(ablate) {
                            : liftConst(/const cutScale = [^\n]*/),
     ablate === 'cover-max' ? lift('coverSrc').replace('Math.min(sw / dw, sh / dh)', 'Math.max(sw / dw, sh / dh)')
                            : lift('coverSrc'),
+    // The board-driven patterns ask the floor for its plank, which the app computes from WOOD. The
+    // probe is about CUT GEOMETRY, not about wood, so a fixed plank is enough - and leaving them out
+    // is how chevron went in and left this file throwing a ReferenceError instead of making a claim.
+    'const plankWidthIn = () => 7.5, plankLenIn = () => 36;',
     'return { H, T, PATTERNS, tileInstances, cutBoxFromInstance, cutScale, coverSrc };',
   ].join('\n');
   return new Function(body)();
@@ -200,6 +204,9 @@ claim('laid on its own shape, the whole cut is used', 'nudge-dest', E => {
   for (const p of PATS) {
     A.T.pattern = p; A.T.sizeIn = 14;
     const inst = A.tileInstances();
+    // A pattern that lays NO tile is a finding, not a stack trace. This file crashed on it rather than
+    // naming it, which is how a broken pattern would reach a user as a TypeError in the console.
+    if (!inst.length) { console.log(`  FAIL  ${p}: lays no tile at all`); fails++; continue; }
     const cut = A.cutBoxFromInstance(inst[(inst.length / 2) | 0]);
     const kz = A.cutScale(cw, bandPx, cut), sw = cut[2] * kz, sh = cut[3] * kz;
     const run = withShift => {

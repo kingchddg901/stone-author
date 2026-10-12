@@ -82,7 +82,10 @@ for (const [w, L, deg] of CASES) {
 }
 
 console.log('\nthe angle is clamped, so a slider cannot produce a degenerate plank');
-for (const deg of [-90, 0, 5, 90, 180]) {
+// undefined is in here because it is the case that actually happened: a T without chevAngle made
+// every vertex NaN, the cull rejected all of them, and the floor came back EMPTY with no error.
+// The numbers below were already tested and none of them could have caught it.
+for (const deg of [-90, 0, 5, 90, 180, undefined, null, NaN]) {
   const m = build(5, 48, deg);
   const det = Math.abs(m.ax[0] * m.ay[1] - m.ax[1] * m.ay[0]);
   claim(`${deg}° still yields a real cell`, det > 1 && isFinite(det));
