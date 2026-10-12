@@ -406,6 +406,8 @@
   <div class="grp" role="group" aria-label="Sections" data-i18n-attr="aria-label=a11y.sections"><span class="lbl" data-i18n="lbl.sections">Sections</span>
     <button id="sec-add" type="button" data-i18n="tool.keep-cut">Keep this cut</button>
     <button id="sec-snag" type="button" data-i18n="tool.keep-tile">Keep a tile</button>
+    <button id="sec-import" type="button" data-i18n="tool.add-saved">Add a saved slab</button>
+    <input id="sec-importfile" type="file" hidden><!-- no accept: it locks iOS out, same as Load -->
     <button id="sec-clear" type="button" data-i18n="tool.clear-cuts">Clear</button>
     <output id="sec-count"></output>
   </div>
@@ -1238,10 +1240,12 @@ window.SA_I18N = (() => {
   "a11y.tile-source": "Which section this tile is cut from",
   "tool.keep-cut": "Keep this cut",
   "tool.keep-tile": "Keep a tile",
+  "tool.add-saved": "Add a saved slab",
   "tool.clear-cuts": "Clear",
   "hint.cut-kept": "Kept \u2014 {n} cut(s). The floor is laid from these now; change anything, even the species, and keep another.",
   "hint.cuts-cleared": "Cleared. The floor goes back to walking down one log.",
   "hint.section-dropped": "Dropped \u2014 {n} left. Any tile that was set to it goes back to choosing for itself.",
+  "hint.section-added": "Added {name} ({mat}) \u2014 {n} section(s). Your own slab is untouched; Load would have replaced it.",
   "hint.snag-needs-tiles": "Turn Lay tiles on first \u2014 Snag takes a tile, so there have to be tiles to take.",
   "hint.snag-tap-a-tile": "Tap on a tile. Snag keeps the piece you point at, at the coordinates it was cut from.",
   "hint.snag-took": "Snagged \u2014 {n} section(s). Every tile laid from it now shows that same piece, at nine times the detail.",
@@ -1684,7 +1688,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.31';
+  const BUILD = '2026.10.11.32';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3437,6 +3441,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // that was pointed at. Snagging a tile that is ALREADY a cut has nothing new to take - the stone
   // in front of you IS that cut - so its box is carried across rather than re-measured, which would
   // otherwise measure a tile against an already-magnified band and nest one window inside another.
+  function sectionFromSlab(o, fallbackName) {
+    if (!o || o.v !== 1 || !Array.isArray(o.marks)) return null;   // the same test deserialize makes
+    const slab = JSON.parse(JSON.stringify(o));
+    delete slab.sections;                                // a slab that contains its own sections contains itself
+    return { id: 'imp' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36),
+             name: (typeof o.name === 'string' && o.name) || fallbackName || TR('sec.unnamed'),
+             mat: o.material || 'stone', slab };
+  }
   function snagTile(fx, fy) {
     if (!layTiles) { hint(TR('hint.snag-needs-tiles')); return; }
     if (sectionList().length >= 8) { hint(TR('hint.cuts-full')); return; }
@@ -9619,6 +9631,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     host.appendChild(sel);
   }
   {
+    const imp = document.getElementById('sec-import'), impf = document.getElementById('sec-importfile');
+    if (imp && impf) {
+      imp.addEventListener('click', () => impf.click());
+      impf.addEventListener('change', e => {
+        const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+        if (sectionList().length >= 8) { hint(TR('hint.cuts-full')); return; }
+        const r = new FileReader();
+        r.onload = () => {
+          let rec = null;
+          try { rec = sectionFromSlab(JSON.parse(r.result), f.name.replace(/\.[^.]+$/, '')); }
+          catch (_) { hint(TR('hint.could-not-read-that-file')); return; }
+          if (!rec) { hint(TR('hint.that-file-is-not-a-stone')); return; }
+          // THE LIVE SLAB IS NOT TOUCHED. That is the whole difference from Load, and the reason
+          // this exists: harvesting a material must not cost you the set you have built.
+          sections = [...sectionList(), rec];
+          showSetCount(); revealSections(); redraw(true);
+          hint(TR('hint.section-added', { name: rec.name, mat: rec.mat, n: sections.length }));
+        };
+        r.readAsText(f);
+      });
+    }
     const snag = document.getElementById('sec-snag');
     if (snag) snag.addEventListener('click', () => {
       if (sectionList().length >= 8) { hint(TR('hint.cuts-full')); return; }
