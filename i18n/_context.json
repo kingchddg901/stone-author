@@ -246,6 +246,8 @@
  "btn.load": {
   "where": "in the \"File\" group/panel, under the \"file\" section"
  },
+ "btn.load-material": {"terms": [], "where": "button beside Load. A slab file carries stone, wood and glass, so a plain Load replaces all three; this takes only the material currently being edited, which is what lets three slabs be held at once"},
+ "tip.load-material": {"terms": [], "where": "tooltip on Load one material"},
  "btn.pen-pressure": {
   "terms": [
    "pressure"
@@ -282,6 +284,8 @@
  "btn.save": {
   "where": "in the \"File\" group/panel, under the \"file\" section"
  },
+ "btn.save-material": {"terms": [], "where": "button beside Save. Writes the current material only, with the other two stripped out; still a valid slab that opens on its own"},
+ "tip.save-material": {"terms": [], "where": "tooltip on Save one material"},
  "btn.spot-toggle": {
   "where": "under the \"coat-and-light\" section"
  },
@@ -639,6 +643,8 @@
  "hint.loaded": {
   "where": "transient hint line under the tool palette"
  },
+ "hint.material-loaded": {"placeholders": {"mat": "stone, wood or glass", "name": "the slab's name or the file name"}, "terms": [], "where": "status after loading one material out of a file"},
+ "hint.saved-material": {"placeholders": {"mat": "stone, wood or glass", "name": "the written file name"}, "terms": [], "where": "status after saving one material to a file"},
  "hint.n-selected-editor": {
   "placeholders": {
    "n": "a count — supply your language's plural forms as {one,few,many,other} as needed"
