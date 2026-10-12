@@ -1727,7 +1727,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.55';
+  const BUILD = '2026.10.12.56';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3828,9 +3828,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const t of inst) {
       let g = byPi.get(t.pi); if (!g) byPi.set(t.pi, g = { slots: [], pieces: [] });
       g.slots.push(t);
-      // On the board, in INCHES FROM ITS CENTRE, which is what ctr is: the slab is IN wide and
-      // IN*H tall, so a piece is cut from it when its centre lies inside that rectangle.
-      if (t.ctr && Math.abs(t.ctr[0]) <= IN / 2 && Math.abs(t.ctr[1]) <= IN * H / 2) g.pieces.push(t);
+      // A LEGAL PIECE IS WHOLLY ON THE BOARD. Testing the CENTRE let a tile hanging half off the
+      // edge count as a full one, and handing that to an interior slot does not leave a gap - the
+      // sample runs past the slab and the wrap fills it from the far side, so the floor shows a
+      // plausible tile made of two unrelated parts of the board. An offcut passed off as stock.
+      // poly - shift is the piece in SLAB space, which is the same identity Snag keeps.
+      let whole = true;
+      for (const q of t.poly) {
+        const sx = q[0] - t.shift[0], sy = q[1] - t.shift[1];
+        if (sx < -1e-9 || sx > 1 + 1e-9 || sy < -1e-9 || sy > H + 1e-9) { whole = false; break; }
+      }
+      if (whole) g.pieces.push(t);
     }
     const order = (a, b) => (a.ctr[1] - b.ctr[1]) || (a.ctr[0] - b.ctr[0]);
     const plan = new Map();

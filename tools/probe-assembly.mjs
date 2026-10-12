@@ -43,8 +43,13 @@ const make = (body = BODY) => new Function('IN', 'H', 'inFr', body + '; return a
 function grid(cols, rows, nPi = 1, scale = 1) {
   const w = IN / cols, h = (IN * H) / rows, out = [];
   for (let r = 0; r < rows * scale; r++) for (let c = 0; c < cols * scale; c++) for (let p = 0; p < nPi; p++) {
-    out.push({ key: `${p}:${c}:${r}`, pi: p,
-               ctr: [-IN / 2 + (c + (p + 0.5) / nPi) * w, -(IN * H) / 2 + (r + 0.5) * h] });
+    const ctr = [-IN / 2 + (c + (p + 0.5) / nPi) * w, -(IN * H) / 2 + (r + 0.5) * h];
+    // A real instance carries its polygon in FRAME units and a shift; poly - shift is where it sits on
+    // the slab. Legality is decided on that, not on the centre, so the probe has to carry both.
+    const hx = w / nPi / 2 / IN, hy = h / 2 / IN;
+    const cx = 0.5 + ctr[0] / IN, cy = H / 2 + ctr[1] / IN;
+    out.push({ key: `${p}:${c}:${r}`, pi: p, ctr, shift: [0, 0],
+               poly: [[cx - hx, cy - hy], [cx + hx, cy - hy], [cx + hx, cy + hy], [cx - hx, cy + hy]] });
   }
   return out;
 }
@@ -113,9 +118,26 @@ console.log('\nthe plan names the PIECE, so its board travels with it');
   claim('the offset is a pair', vals.every(v => Array.isArray(v.d) && v.d.length === 2));
 }
 
+// AN OFFCUT IS NOT STOCK. A tile hanging over the slab edge is a part piece; handing it to an interior
+// slot does not leave a gap, because the sample runs past the slab and the wrap fills it from the far
+// side. The floor then shows a plausible tile made of two unrelated parts of the board.
+console.log('\na piece hanging over the edge is not offered');
+{
+  const slots = grid(8, 5);
+  const half = slots[0];
+  half.poly = half.poly.map(([x, y]) => [x - 0.04, y]);   // slide it off the left edge
+  half.shift = [0, 0];
+  const plan = make()(slots);
+  const offered = new Set([...plan.values()].map(v => v.piece.key));
+  claim('the overhanging piece is never handed to a slot', !offered.has(half.key));
+  claim('and the whole ones still are', offered.size === 39, `  — ${offered.size} of 39 whole pieces used`);
+}
+
 console.log('\na shape with nothing of its kind on the board is left alone');
 {
-  const slots = grid(8, 5).map(s => ({ ...s, pi: 1, ctr: [s.ctr[0] + IN * 3, s.ctr[1]] }));
+  // the POLYGON has to move too: legality is decided on poly - shift, not on the centre
+  const slots = grid(8, 5).map(s => ({ ...s, pi: 1, ctr: [s.ctr[0] + IN * 3, s.ctr[1]],
+                                       poly: s.poly.map(([x, y]) => [x + 3, y]) }));
   const plan = make()(slots);
   claim('no assignment invented', plan.size === 0);
 }
