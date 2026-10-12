@@ -1700,7 +1700,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.36';
+  const BUILD = '2026.10.11.37';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3457,20 +3457,34 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // a mark names its layer by key, so taking marks without layers strands them on layers that are
   // not there. Wood and glass are one object and their own tokens, and bring no layers.
   const MAT_PART = {
-    stone: { keys: ['marks', 'nextId', 'fam', 'layers', 'soloLay', 'activeLayer', 'perItem', 'hidden', 'folders'],
-             tokens: ['major', 'minor', 'web', 'micro', 'styl', 'drusy', 'halo'] },
-    wood:  { keys: ['wood'],  tokens: ['woodEarly', 'woodLate', 'woodHeart', 'woodKnot', 'woodMineral'] },
-    glass: { keys: ['glass'], tokens: ['glassA', 'glassB', 'glassC', 'glassD', 'glassE', 'glassF'] },
+    stone: { keys: ['marks', 'nextId', 'fam', 'layers', 'soloLay', 'activeLayer', 'perItem', 'hidden', 'folders'] },
+    wood:  { keys: ['wood'] },
+    glass: { keys: ['glass'] },
   };
+  // NAMED SETS FOR THE CLOSED ONES, everything else is stone's. Wood has five tokens and glass six,
+  // fixed in COLOUR_TOKENS; stone has seven named PLUS one per layer (`lay:major`, `lay:micro#7`)
+  // and a user can add layers, so stone's set cannot be written down. Listing it by name is what
+  // dropped every `lay:*` on a per-material load - neither copied nor cleared, so it kept whatever
+  // the slab before it had, and stone came back with no colours at all.
+  const SHARED_TOKENS = ['ground', 'specTint'];
+  const WOOD_TOKENS = ['woodEarly', 'woodLate', 'woodHeart', 'woodKnot', 'woodMineral'];
+  const GLASS_TOKENS = ['glassA', 'glassB', 'glassC', 'glassD', 'glassE', 'glassF'];
+  const tokenOwner = k => WOOD_TOKENS.indexOf(k) >= 0 ? 'wood'
+    : GLASS_TOKENS.indexOf(k) >= 0 ? 'glass'
+    : SHARED_TOKENS.indexOf(k) >= 0 ? 'shared' : 'stone';
   // The slab with the other two materials taken out of it. Still a slab: it loads, it renders, and
   // it drops into its own slot without touching its neighbours.
   function materialOnly(mat) {
     const rec = serialize();
     rec.material = mat;
     delete rec.sections;                                 // a material file is a material, not a floor
+    for (const pal of ['OVR', 'OVR_uv']) {
+      const keep = {};
+      for (const k in rec[pal]) { const own = tokenOwner(k); if (own === mat || own === 'shared') keep[k] = rec[pal][k]; }
+      rec[pal] = keep;
+    }
     for (const other of ['stone', 'wood', 'glass']) {
       if (other === mat) continue;
-      for (const t of MAT_PART[other].tokens) delete rec.OVR[t];
       if (other === 'wood') delete rec.wood;
       if (other === 'glass') delete rec.glass;
       if (other === 'stone') { rec.marks = []; rec.nextId = 1; }   // marks stay PRESENT so it is still a slab
@@ -3483,12 +3497,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!part) return false;
     const cur = serialize();                              // start from what is here, replace one slot
     for (const k of part.keys) if (o[k] !== undefined) cur[k] = JSON.parse(JSON.stringify(o[k]));
-    cur.OVR = { ...cur.OVR };
     // A TOKEN THE FILE DOES NOT SET IS CLEARED, not left behind: leaving the old value would blend
-    // the palette you are loading with the one you are replacing, which is the overwrite complaint
-    // in miniature.
-    for (const t of part.tokens) {
-      if (o.OVR && o.OVR[t] !== undefined) cur.OVR[t] = o.OVR[t]; else delete cur.OVR[t];
+    // the palette you are loading with the one you are replacing. Both palettes move - OVR_uv was
+    // not partitioned at all before, so a material's black-light answer never travelled with it.
+    for (const pal of ['OVR', 'OVR_uv']) {
+      const next = {};
+      for (const k in cur[pal]) if (tokenOwner(k) !== mat) next[k] = cur[pal][k];   // keep the others'
+      const src = o[pal] || {};
+      for (const k in src) if (tokenOwner(k) === mat) next[k] = JSON.parse(JSON.stringify(src[k]));
+      cur[pal] = next;
     }
     cur.material = mat;
     applySlabState(cur);
