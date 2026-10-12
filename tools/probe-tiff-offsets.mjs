@@ -1,25 +1,29 @@
-// DOES THE LAYOUT SURVIVE PAST 4 GB?
+// DOES THE LAYOUT SURVIVE PAST 2 GB?
 //
 // BigTIFF was chosen over classic TIFF precisely so this file has no 4 GB ceiling — the comment above
-// tiffLayout says so. The alignment helper then put the ceiling back:
+// tiffLayout says so. The alignment helper then put back a ceiling at HALF that:
 //
 //     pad8 = n => (n + 7) & ~7
 //
-// `&` coerces its operands to int32. For tile data ending past 2^32 the sum wraps, pad8 returns a value
-// about 4.29 billion BELOW where the data actually ends, and `gap = ifdAt - end` goes hugely negative.
-// The first use of it is `new Uint8Array(gap)`, so the render dies with
+// `&` coerces its operands to int32, which is SIGNED. The wrap therefore begins at 2^31, not 2^32:
+// ToInt32 maps [2^31, 2^32) onto the negatives, so the moment tile data passes 2,147,483,648 bytes
+// pad8 returns a position BELOW where the data ends and `gap = ifdAt - end` goes hugely negative. The
+// first use of it is `new Uint8Array(gap)`, so the render dies with
 //
 //     Invalid typed array length: -4294967295
 //
-// at the very last step. Measured: 262144 x 163840 failed that way after 95 minutes. It could not have
-// been found earlier — 65535 wrote 0.41 GB and 131072 wrote 1.35 GB, and this is the first output size
-// whose tile data crosses 2^32 at all.
+// at the very last step. Measured in the field: 262144 x 163840, tile data ending at 4,264,729,215
+// bytes — which is BELOW 2^32, so the byte count itself looks harmless — failed exactly that way after
+// 95 minutes with all 2560 tiles already written.
 //
-// THE INPUT THAT MAKES THIS RED is case B: offsets whose last tile ends past 4 GB. The ablation below
-// restores the bitwise form and requires B to throw again, so the case is testing pad8 and not the
-// surrounding structure.
+// The first version of this probe put the boundary at 2^32 and tested 1.35 GB against 4.83 GB, which
+// SKIPS the band the real failure landed in. Case B below is the actual boundary; case C is the file
+// that died. A rewrite safe past 2^32 but not past 2^31 would have passed the old probe.
 //
-//   node tools/probe-tiff-4gb.mjs
+// THE INPUT THAT MAKES THIS RED is any of B, C or D. The ablation restores the bitwise form and
+// requires A to keep passing while all three throw, so what is under test is the boundary itself.
+//
+//   node tools/probe-tiff-offsets.mjs
 import { readFileSync } from 'fs';
 
 const SRC = readFileSync(new URL('../app/stone-author.html', import.meta.url), 'utf8');
@@ -74,14 +78,17 @@ function check(label, W, H, end, layout) {
 
 const layout = build(LAYOUT);
 
-console.log('\nA  a 131072 master: 1.35 GB of tile data, comfortably inside 32 bits');
-check('A', 131072, 81920, 1348000003, layout);
+console.log('\nA  the 131072 master that shipped: 1.35 GB, under 2^31 — this always worked');
+check('A', 131072, 81920, 1348000003, layout);           // and it was 63% of the way to the edge
 
-console.log('\nB  a 262144 master: tile data past 4 GB — the size that actually failed');
-check('B', 262144, 163840, 4831838211, layout);          // ~4.5 GB, just as projected
+console.log('\nB  just past 2^31: THE REAL BOUNDARY, where the signed wrap begins');
+check('B', 262144, 163840, 2147483651, layout);          // 2^31 + 3
 
-console.log('\nC  far past it, because nothing here should care where 2^32 was');
-check('C', 524288, 327680, 19327352835, layout);         // ~18 GB
+console.log('\nC  4,264,729,215 — the exact end of the master that died in the field');
+check('C', 262144, 163840, 4264729215, layout);
+
+console.log('\nD  far past 2^32, because nothing here should care where either line was');
+check('D', 524288, 327680, 19327352835, layout);         // ~18 GB
 
 console.log('\nablation: pad8 back to the bitwise form');
 {
@@ -89,15 +96,24 @@ console.log('\nablation: pad8 back to the bitwise form');
   if (old === LAYOUT) { console.log('  FAIL  could not find pad8 to ablate - probe is stale'); fails++; }
   else {
     const bad = build(old);
-    const { offs, cnts } = grid(64, 40, 4831838211);
-    let threw = null;
-    try { bad(262144, 163840, 4096, 4096, offs, cnts, 'probe'); } catch (e) { threw = String(e.message); }
-    claim('case B throws again, so case B was testing pad8', /Invalid typed array length|negative|Invalid array/i.test(threw || ''), true);
-    console.log(`          it says: ${threw}`);
-    // and case A must still pass under the old code, or the ablation proves nothing about the ceiling
+    const throwsAt = end => {
+      const { offs, cnts } = grid(64, 40, end);
+      try { bad(262144, 163840, 4096, 4096, offs, cnts, 'probe'); return null; } catch (e) { return String(e.message); }
+    };
+    for (const [name, end] of [['B  2^31 + 3', 2147483651], ['C  the field failure', 4264729215], ['D  18 GB', 19327352835]]) {
+      const msg = throwsAt(end);
+      claim(`${name} throws under the old pad8`, /Invalid typed array length|negative|Invalid array/i.test(msg || ''), true);
+      console.log(`          ${msg}`);
+    }
+    // C must reproduce the field error EXACTLY, or this probe is testing a different defect than the
+    // one that cost 95 minutes.
+    claim('and C reproduces the reported error to the byte',
+          throwsAt(4264729215), 'Invalid typed array length: -4294967295');
+    // A must still pass under the old code, or the ablation says nothing about where the line is.
+    const a = grid(32, 20, 1348000003);
     let fine = true;
-    try { bad(131072, 81920, 4096, 4096, ...Object.values(grid(32, 20, 1348000003)).slice(0, 2), 'probe'); } catch (_) { fine = false; }
-    claim('while case A is unaffected by it - the defect is the 4 GB boundary, not the maths', fine, true);
+    try { bad(131072, 81920, 4096, 4096, a.offs, a.cnts, 'probe'); } catch (_) { fine = false; }
+    claim('while A is unaffected - the defect is the 2^31 boundary, not the arithmetic', fine, true);
   }
 }
 
