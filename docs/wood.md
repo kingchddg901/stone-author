@@ -1,4 +1,4 @@
-# Wood: the material fork in Stone Author
+# Wood: the material fork in Material Author
 
 Companion to [`glass.md`](glass.md).
 
@@ -9,7 +9,7 @@ The 83 KB `SESSION_HANDOFF.md` beside this file was **not touched** — it preda
 
 ## What this is
 
-Stone Author grew a second material. Wood is **path 2**; stone is path 1. If it works, the app becomes
+Material Author grew a second material. Wood is **path 2**; stone is path 1. It worked, and the app became
 **Material Author** and a material is a plugin: *a field, a 2D-face query, and — newly understood — its
 own control surface.*
 
@@ -343,7 +343,7 @@ what is already on `master`:
 
 | it says | actually |
 |---|---|
-| "No implementation language, rendering framework, or target engine has been selected" | **Selected and ruled on.** A fork inside Stone Author's single self-contained HTML file, canvas 2D. Path 1 stone, path 2 wood, path X others. No build step, no dynamic loading. |
+| "No implementation language, rendering framework, or target engine has been selected" | **Selected and ruled on.** A fork inside Material Author's single self-contained HTML file, canvas 2D. Path 1 stone, path 2 wood, path X others. No build step, no dynamic loading. |
 | "No implementation has been established" | Four commits on `master`. The field, the mill, the gate, the panel. |
 | "A practical first prototype would be a single-species trunk with variable annual ring spacing and an arbitrary cutting plane" | **That is what shipped.** It is `paintWoodContent` plus the eight sliders. |
 
@@ -368,7 +368,7 @@ Other people's photographs do not enter this repo, whatever the folder structure
 4. **Not every species has distinct annual rings.** Many tropical species do not. An engine that
    assumes rings will produce convincing variations of pine wearing other colours.
 
-Scope note: expanding from "wood is a material in Stone Author" to "a multi-species growth engine"
+Scope note: expanding from "wood is a material in Material Author" to "a multi-species growth engine"
 does **not** change the plugin shape. A species is a parameter set over the same growth-time field; the
 eight sliders are the first species profile's parameter surface, they just are not called that yet.
 What a second species genuinely needs is the missing anatomical layer — ring-porous earlywood vessel

@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Stone Author</title>
+<title>Material Author</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap">
@@ -200,7 +200,7 @@
 <div class="wrap">
   <div class="head">
     <div>
-      <h1 data-i18n="app.title">Stone author</h1><span class="build" id="build"></span>
+      <h1 data-i18n="app.title">Material author</h1><span class="build" id="build"></span>
       <p class="sub" data-i18n="app.sub">You draw where the lines go. The family decides what they are.</p>
     </div>
     <div class="grp" role="group" aria-label="Material" data-i18n-attr="aria-label=a11y.material"><span class="lbl" data-i18n="lbl.material">Material</span>
@@ -753,7 +753,7 @@
   </div><!-- /work -->
 </div>
 <script id="sa-i18n">
-// Stone Author i18n. English is the source of truth and ships inline; every user-facing string in the
+// Material Author i18n. English is the source of truth and ships inline; every user-facing string in the
 // studio resolves through T(). A pack may be registered inline (SA_I18N.register) or fetched lazily from
 // i18n/<lang>.json, so adding a language never means editing this block. Counts go through the pack as
 // {one:.., other:..} and are selected with Intl.PluralRules, because "mark" + (n>1?"s":"") is an English
@@ -793,7 +793,7 @@ window.SA_I18N = (() => {
   "a11y.zoom-out": "Zoom out",
   "app.sub-wood": "You author the log. Where the saw stands decides what the board looks like.",
   "app.sub": "You draw where the lines go. The family decides what they are.",
-  "app.title": "Stone author",
+  "app.title": "Material author",
   "big.confirm": "Start {w} × {h} render?\n\n{gpx} gigapixels. This may run for several minutes and produce a file approaching or exceeding 1 GB. Other software may need tens of gigabytes to open it.",
   "big.extreme": "Extreme",
   "big.once": "Once only",
@@ -1711,7 +1711,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.43';
+  const BUILD = '2026.10.12.44';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those

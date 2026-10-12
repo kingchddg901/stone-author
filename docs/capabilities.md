@@ -1,4 +1,4 @@
-# Stone Author — capability spec
+# Material Author — capability spec
 
 The complete, verified inventory of what an authored slab can use. Compiled from a four-way read of
 `app/stone-author.html`. Line numbers are approximate. This is the palette the full-spec / hero author draws

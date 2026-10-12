@@ -1,6 +1,6 @@
 # Final Render — architecture & roadmap
 
-Stone Author has two renderers by intent:
+Material Author has two renderers by intent:
 
 - **Interactive / reference renderer** — the live `draw()` on the main-thread canvas. Fast, screen-resolution, drives authoring. This is the *reference*: it defines what the slab looks like.
 - **Final Render** — an **offline, single-frame** job. It does not have to be realtime; it has to produce one correct, very pretty frame at whatever resolution and format the output needs. Seconds are acceptable.

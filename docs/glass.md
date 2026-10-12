@@ -1,4 +1,4 @@
-# Glass: material path 3 in Stone Author
+# Glass: material path 3 in Material Author
 
 **LOCKED at build 2026.10.11.16.** Complete and in use; the open items below are directions, not
 debts. Companion to [`wood.md`](wood.md); the reader-facing summary is in

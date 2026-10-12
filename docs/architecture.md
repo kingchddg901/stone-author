@@ -1,4 +1,4 @@
-# Stone Author — architecture
+# Material Author — architecture
 
 What this system is and how its parts fit — the documentation of the code. The origin story is
 deliberately *not* here; it lives in the [README](../README.md). Companion docs:

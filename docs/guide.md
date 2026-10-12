@@ -1,4 +1,4 @@
-# Using Stone Author
+# Using Material Author
 
 A single web page that lets you draw a slab of stone and render it at up to 65,535 px. Nothing installs,
 nothing uploads, and the file is written by your own browser.

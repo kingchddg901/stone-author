@@ -208,7 +208,7 @@
   let KEEP = 120000;
   let ev = [], paused = false, still = null;
   const hasRaw = 'onpointerrawupdate' in window;
-  // lean exactly as Stone Author reads it: degrees from upright, from tiltX / tiltY
+  // lean exactly as Material Author reads it: degrees from upright, from tiltX / tiltY
   const leanDeg = e => {
     const tx = (e.tiltX || 0) * Math.PI / 180, ty = (e.tiltY || 0) * Math.PI / 180;
     const alt = (tx || ty) ? Math.atan2(1, Math.hypot(Math.tan(tx), Math.tan(ty))) : (e.altitudeAngle != null ? e.altitudeAngle : Math.PI / 2);

@@ -1,6 +1,6 @@
 # The colour layer
 
-How Stone Author colours a slab. Written at the colour layer's first cut (artifact **v22**) and kept
+How Material Author colours a slab. Written at the colour layer's first cut (artifact **v22**) and kept
 current since (see Status, below).
 
 ## The split: character vs colour
@@ -43,7 +43,7 @@ It is used as **editor + resolver**, not for CSS:
   extraction test — *the kit dropped into a canvas host it was built to never assume, unchanged* —
   and it is exactly what a future **WebGPU** pass wants: feed the same values into shader uniforms.
 - **Persistence.** A tiny adapter binds the kit to `COL` (`load` returns it; `save` merges + redraws
-  + autosaves). Stone Author keeps owning save/load; the kit never persists on its own here.
+  + autosaves). Material Author keeps owning save/load; the kit never persists on its own here.
 
 ## Controls today
 

@@ -1,4 +1,4 @@
-# Stone Author
+# Material Author
 
 Tools for making stone: author it by hand, generate it, or rip it from a photograph — and
 lay it as tile. Extracted from the HA dashboard builder once the stone work outgrew it.
@@ -212,7 +212,7 @@ them; no other pairing does. Measurements and method in
 [`docs/renderer-determinism.md`](docs/renderer-determinism.md), the size ladder in
 [`docs/capabilities.md`](docs/capabilities.md).
 
-**Stone Author is stone-only today, and is becoming Material Author.** The early Wood family and Knot
+**Material Author was Stone Author, and was stone-only.** The early Wood family and Knot
 tool were removed once the stone system outgrew them; wood returns not as its own program but as a
 **second path** in this one. A material supplies a field plus a way to query a 2D face out of it —
 stone's query is the identity, because the marks *are* the face, while wood's is a plane through a 3D

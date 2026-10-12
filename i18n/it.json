@@ -31,7 +31,7 @@
  "a11y.zoom-out": "Riduci",
  "app.sub-wood": "Sei tu a creare il tronco. Dove si trova la sega decide l'aspetto della tavola.",
  "app.sub": "Tu disegni dove vanno le linee. La famiglia decide cosa sono.",
- "app.title": "Stone author",
+ "app.title": "Material author",
  "big.confirm": "Avviare il render {w} × {h}?\n\n{gpx} gigapixel. Può durare diversi minuti e produrre un file vicino o superiore a 1 GB. Altri programmi possono richiedere decine di gigabyte per aprirlo.",
  "big.extreme": "Estremo",
  "big.once": "Solo una volta",

@@ -45,7 +45,7 @@ the preset does not carry it.
 
 Daylight and psyker are one geometry under two lights: at rest it reads near-true; under the other
 spectrum the distortion it was always carrying is exposed. Committed PNGs live in `gallery/img/` at
-**1600 × 1000** (the slab keeps its 8×5 ratio). Each slab re-loads into Stone Author (Load → the
+**1600 × 1000** (the slab keeps its 8×5 ratio). Each slab re-loads into Material Author (Load → the
 `.json`) and re-renders at any size.
 
 ### The four master downsamples — in `img/`, but not harness output

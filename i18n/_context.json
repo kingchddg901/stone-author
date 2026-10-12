@@ -137,7 +137,7 @@
   "where": "in the studio header"
  },
  "app.title": {
-  "where": "in the studio header"
+  "where": "the application name, in the studio header. A PRODUCT NAME: do not translate it. It was Stone Author while stone was the only material path, and became Material Author once wood and glass were paths of their own"
  },
  "big.confirm": {
   "placeholders": {
