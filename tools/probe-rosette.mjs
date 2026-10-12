@@ -204,14 +204,58 @@ if (census('rhombus', RETIRED, pi => pi === 1) === 0) {
 // A slot can be PINNED to a named section, so sectionOf now reaches for pinnedSection and slotKey.
 // Both are lifted rather than stubbed: a stub returning "never pinned" would keep this file running
 // while making the whole pin path invisible to it, which is the shape of a test that cannot fail.
-const T = { pattern: null, grouping: null, slotMap: {} };
+const T = { pattern: null, grouping: null, slotMap: {}, seedMap: {} };
 let SECTIONS = [];
 const sectionOf = new Function('T', 'PATTERNS', 'sectionList',
   'const ev = v => ((v % 2) + 2) % 2;\n' + APP_GROUPS +
   '\nconst groupsFor = () => GROUPS[T.pattern] || null;' +
   '\nconst rosetteOf = () => { const g = groupsFor(); return g ? (g.find(x => x.key === T.grouping) || g[0]) : null; };\n' +
+  liftConst(/const seedKey = [^\n]*/) + '\n' + liftConst(/const seededSection = [\s\S]*?\n {2}\};/) + '\n' +
   liftConst(/const slotKey = [^\n]*/) + '\n' + liftConst(/const pinnedSection = [\s\S]*?\n {2}\};/) + '\n' +
   lift('sectionOf') + '\nreturn sectionOf;')(T, PATTERNS, () => SECTIONS);
+
+// ===== THE MOTIF AS A SEED ==========================================================================
+// Fill a cell of one period by hand and the floor repeats from it. A seed cell is FINER than a slot
+// and that is the point: under the hexagon grouping the slot IS the orientation, so all four cells
+// of a given pi take the same section and no rule can separate them. The test is therefore on two
+// cells the rule cannot tell apart - setting one of them to the section the rule would have picked
+// anyway would prove nothing.
+{
+  const name = 'rhombus';
+  T.pattern = name; T.grouping = 'hex';
+  const { polys } = PATTERNS[name](U);
+  SECTIONS = [{ id: 'A' }, { id: 'B' }, { id: 'C' }];
+  const N = 3;
+  const seen = () => {
+    const m = {};
+    for (let n = -4; n <= 4; n++) for (let m2 = -4; m2 <= 4; m2++) polys.forEach((_, pi) => {
+      const k = pi + ':' + (((m2 % 2) + 2) % 2) + ':' + (((n % 2) + 2) % 2);
+      (m[k] = m[k] || new Set()).add(sectionOf({ pi, m: m2, n }, N));
+    });
+    return m;
+  };
+  T.seedMap = {};
+  const before = seen();
+  T.seedMap = { 'rhombus:0:0:0': 'C', 'rhombus:0:1:0': 'B' };
+  const after = seen();
+  T.seedMap = {};
+  const one = m => Object.values(m).every(v => v.size === 1);
+  const val = (m, k) => [...m[k]][0];
+  const rows = [
+    ['every cell holds ONE section across the floor', one(after), one(before), Object.keys(after).length + ' cells'],
+    ['a seeded cell takes the section it was given', val(after, '0:0:0') === 2 && val(after, '0:1:0') === 1,
+     val(before, '0:0:0') === val(before, '0:1:0'), before['0:0:0'] ? val(before, '0:0:0') + ' -> ' + val(after, '0:0:0') : '?'],
+    ['an unseeded cell still answers to the rule', val(after, '0:0:1') === val(before, '0:0:1'), true,
+     'cell 0:0:1 stays ' + val(after, '0:0:1')],
+    ['a dead id falls back rather than stranding', (() => { T.seedMap = { 'rhombus:0:0:0': 'GONE' };
+      const r = seen(); T.seedMap = {}; return val(r, '0:0:0') === val(before, '0:0:0'); })(), true, 'back to the rule'],
+  ];
+  console.log('\n  THE MOTIF AS A SEED:');
+  for (const [title, ok, discriminating, detail] of rows) {
+    if (!ok || !discriminating) bad++;
+    console.log('    ' + (ok ? (discriminating ? 'ok  ' : 'DECO') : 'FAIL') + '  ' + title.padEnd(46) + detail);
+  }
+}
 
 // ===== A SLOT PINNED TO A NAMED SECTION =============================================================
 // The tile setter binds a position in the motif to one section. Four things have to hold, and each
