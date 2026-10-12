@@ -1705,6 +1705,7 @@
   ],
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
+ "sl.chev-angle": {"terms": [], "where": "slider in Floor planks: the angle the chevron's planks are mitred at, in degrees. 45 is the standard. It is the angle of the CUT across the end of the board, not the angle the floor is laid at"},
  "sl.tsize": {
   "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
  },
@@ -1777,6 +1778,7 @@
  "sl.wood-plankLen": {"terms": ["wood"], "where": "slider: nominal plank length in inches, capped at the board's own length"},
  "sl.wood-plankVary": {"terms": ["wood"], "where": "slider: how much plank lengths differ from the nominal, 0 = all identical"},
  "sl.wood-plankStagger": {"terms": ["wood"], "where": "slider: how far each row's end joints shift from the row below, 0 = joints stack into columns"},
+ "tile.pat.chevron": {"terms": [], "where": "a floor layout in the Tiles row, wood only, beside Plank run. CHEVRON: planks mitred at an angle so their ends butt against a mirrored plank and the courses run unbroken in a V. Distinct from herringbone, where the planks meet at a right angle and are NOT mitred - Italian distinguishes these as 'spina ungherese' (chevron) and 'spina di pesce' (herringbone), so do not translate them to the same phrase"},
  "tile.pat.plank": {"terms": ["wood"], "where": "button: the plank-run floor layout, rows of varying-length boards with staggered end joints"},
  "sl.wood-trunkH": {"terms": ["wood"], "where": "slider: the whole tree's height from stump to apex, in feet"},
  "sl.wood-dEarly": {"terms": ["wood"], "where": "slider: multiplier on the bad-year rate during the tree's first years. Early droughts mark the butt, because the tree was only that big"},

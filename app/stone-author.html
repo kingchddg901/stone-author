@@ -361,6 +361,7 @@
     <button id="p-rect" type="button" data-pat="rect" aria-pressed="false" data-i18n="tile.pat.rect">Rectangle</button>
     <button id="p-subway" type="button" data-pat="subway" aria-pressed="false" data-i18n="tile.pat.subway">Subway</button>
     <button id="p-plank" type="button" data-mat-only="wood" data-pat="plank" aria-pressed="false" data-i18n="tile.pat.plank">Plank run</button>
+    <button id="p-chevron" type="button" data-mat-only="wood" data-pat="chevron" aria-pressed="false" data-i18n="tile.pat.chevron">Chevron</button>
     <button id="p-hex" type="button" data-pat="hex" aria-pressed="false" data-i18n="tile.pat.hex">Hexagon</button>
     <button id="p-cairo" type="button" data-pat="cairo" aria-pressed="false" data-i18n="tile.pat.cairo">Cairo</button>
     <button id="p-diagonal" type="button" data-pat="diagonal" aria-pressed="false" data-i18n="tile.pat.diagonal">Diagonal</button>
@@ -423,6 +424,7 @@
   <div class="sliders">
     <div class="sl"><label for="wood-plankLen"><span data-i18n="sl.wood-plankLen">Plank length</span> <output id="wood-plankLenV"></output></label><input id="wood-plankLen" type="range" min="6" max="96" step="1"></div>
     <div class="sl"><label for="wood-plankVary"><span data-i18n="sl.wood-plankVary">Length variation</span> <output id="wood-plankVaryV"></output></label><input id="wood-plankVary" type="range" min="0" max="1" step="0.01"></div>
+    <div class="sl"><label for="chevangle"><span data-i18n="sl.chev-angle">Mitre angle</span> <output id="chevangleV"></output></label><input id="chevangle" type="range" min="15" max="75" step="1"></div>
     <div class="sl"><label for="wood-plankStagger"><span data-i18n="sl.wood-plankStagger">Joint stagger</span> <output id="wood-plankStaggerV"></output></label><input id="wood-plankStagger" type="range" min="0" max="1" step="0.01"></div>
   </div>
   <p class="note" data-i18n="note.floor-planks">These shape the plank-run pattern and nothing else — board length, how much the lengths differ, and how far each row’s joints shift from the row below. How many boards the floor is cut from is <b>Boards</b>, under Tiles &amp; floor, and that one applies to every pattern.</p>
@@ -1259,6 +1261,7 @@ window.SA_I18N = (() => {
   "sl.wood-plankLen": "Plank length",
   "sl.wood-plankVary": "Length variation",
   "sl.wood-plankStagger": "Joint stagger",
+  "tile.pat.chevron": "Chevron",
   "tile.pat.plank": "Plank run",
   "lbl.kept-cuts": "Kept cuts",
   "lbl.sections": "Sections",
@@ -1353,6 +1356,7 @@ window.SA_I18N = (() => {
   "sl.tedge": "Edge",
   "sl.tgrout": "Grout",
   "sl.tkerf": "Kerf",
+  "sl.chev-angle": "Mitre angle",
   "sl.tsize": "Tile size",
   "sl.varAmt": "Variant amount",
   "sl.warp": "Warp",
@@ -1908,7 +1912,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               lens: 0, lensPitch: 10, lensType: 'fresnel' };
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
   const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
-              chipIn: 0.6, shuffle: false, units: 'in', joints: true, slotTest: false,
+              chipIn: 0.6, shuffle: false, units: 'in', joints: true, slotTest: false, chevAngle: 45,
               grouping: null, slotMap: {}, seedMap: {} };   // null = the pattern's first grouping, so an old slab lands where it always did
   let layTiles = false;
   // Pristine defaults, captured before any edit. deserialize() resets to these before applying a slab, so a
@@ -1956,7 +1960,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const coatDefault = k => COAT_BY_KEY.get(k).session ? 0 : G0[k];
   const coatCurrent = k => COAT_BY_KEY.get(k).session ? lightSpectrum : G[k];
   const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
-  const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen };
+  // chevangle is DEGREES, not a length. Without an entry here show() throws on an undefined
+  // formatter, which happens BEFORE the input listener is attached - so the slider renders, reads
+  // its value, and silently does nothing. A missing row in this table is a dead control.
+  const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen,
+                 chevangle: v => Math.round(v) + '°' };
   let guidesOn = true;
   // SELECTION: the set of layers an effect is scoped to. Empty = global (the effect hits its default).
   // Select layers, then a tool/effect acts on them. First use: the force tools (gravity/magnet) sculpt the
@@ -3255,6 +3263,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // only has to answer the two questions drawTiles asks of every pattern: is it overlapping, and
     // what does the joints pass outline. See plankInstances for the real layout.
     plank:  u => ({ polys: [[[0, 0], [u, 0], [u, u / 2], [0, u / 2]]], ax: [u, 0], ay: [0, u / 2] }),
+    // CHEVRON. Planks mitred at `chevAngle` so the ends butt against their mirror and the courses
+    // run unbroken. Sized from the BOARD, not from u: that is what makes it a plank layout rather
+    // than a tile. The lattice needs no search - two planks of a*h fill a cell of 2a x h exactly -
+    // and unlike herringbone it holds at ANY length:width, which is why a long board gets this one.
+    chevron: () => { const w = plankWidthIn(), L = plankLenIn();
+      const th = Math.max(15, Math.min(75, T.chevAngle)) * Math.PI / 180;
+      const a = L * Math.cos(th), h = w / Math.cos(th), r = a * Math.tan(th);
+      const up = [[0, 0], [a, r], [a, r + h], [0, h]];              // rising
+      const dn = [[a, r], [2 * a, 0], [2 * a, h], [a, r + h]];      // its mirror, meeting it edge to edge
+      return { polys: [up, dn], ax: [2 * a, 0], ay: [0, h], unit: w }; },
     rect:   u => ({ polys: [[[0, 0], [u, 0], [u, u / 2], [0, u / 2]]], ax: [u, 0], ay: [0, u / 2] }),
     subway: u => ({ polys: [[[0, 0], [u, 0], [u, u / 2], [0, u / 2]]], ax: [u, 0], ay: [u / 2, u / 2] }),
     hex: u => { const r = u / 2, w = Math.sqrt(3) * r;   // pointy-top, u = point-to-point height
@@ -3336,10 +3354,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // samples its own piece of slab (spread less, by kerf) - so veins drift across the joints.
   // A PLANK RUN. Rows the width of the board you cut, filled left to right with boards of varying
   // length, each row started at its own offset so the butt joints never stack into a column.
+  // THE BOARD, in inches, for every layout that is cut from one rather than sized by T.sizeIn.
+  // Shared so the plank run and the chevron cannot drift: a chevron whose planks were a different
+  // width from the running bond's would be the same floor claiming two different boards.
+  const plankWidthIn = () => Math.max(0.5, WOOD.wid * 12);
+  const plankLenIn = () => { const w = plankWidthIn();
+    return Math.min(Math.max(WOOD.plankLen, w * 1.5), Math.max(w * 1.5, WOOD.len * 12)); };
   function plankInstances() {
-    const wIn = Math.max(0.5, WOOD.wid * 12);                 // the plank IS the board: width and longest length
-    const maxL = Math.max(wIn * 1.5, WOOD.len * 12);          // come from the cut, never from T.sizeIn
-    const nom = Math.min(Math.max(WOOD.plankLen, wIn * 1.5), maxL);
+    const wIn = plankWidthIn();                               // the plank IS the board: width and longest length
+    const nom = plankLenIn();                                 // come from the cut, never from T.sizeIn
     const vary = Math.max(0, Math.min(1, WOOD.plankVary));
     const stag = Math.max(0, Math.min(1, WOOD.plankStagger));
     const slabS = (wIn + T.kerfIn) / wIn;                     // kerf: the grain steps a little across a joint
@@ -3379,7 +3402,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (T.pattern === 'plank') return plankInstances();       // not a lattice; it generates itself
     const u = T.sizeIn, pat = PATTERNS[T.pattern](u);
     const noSpread = !!pat.overlap;                                   // scales overlap - never pushed apart
-    const floorS = noSpread ? 1 : (u + T.groutIn) / u, slabS = noSpread ? 1 : (u + T.kerfIn) / u;
+    // A pattern sized from the board rather than from u says so, and the joint spreads by ITS size.
+    // Scaling a 5in plank's grout by a 13in tile size opens a quarter-inch joint and calls it 1/16.
+    const un = pat.unit || u;
+    const floorS = noSpread ? 1 : (un + T.groutIn) / un, slabS = noSpread ? 1 : (un + T.kerfIn) / un;
     const cx = 0.5, cy = H / 2;
     const ax = pat.ax, ay = pat.ay, out = [];
     const reach = Math.ceil(IN / Math.min(Math.hypot(ax[0], ax[1]), Math.hypot(ay[0], ay[1]))) + 2;
@@ -8561,7 +8587,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     tog('laytiles', layTiles); tog('t-joints', T.joints); tog('t-slottest', !!T.slotTest); tog('m-hover', hoverMag); tog('warp-holdmajor', layAt('major').warp === 0);
     for (const id of Object.keys(G)) { const el = document.getElementById(id); if (el) { el.value = G[id]; document.getElementById(id + 'V').textContent = GFMT[id] ? GFMT[id](G[id]) : `${(+G[id]).toFixed(2)}×`; } }
     for (const id of Object.keys(NEXT)) { const el = document.getElementById(id); if (el) { el.value = NEXT[id]; document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; } }
-    for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
+    for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn'], ['chevangle', 'chevAngle']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
     for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'roller', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
     showGround(); syncWood(); syncGlass(); syncLayerUI(); syncGranite(); syncFog(); hint();
@@ -9651,7 +9677,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // A cut exists => the tile geometry it was cut against is settled. Checked on the sections rather
   // than on a flag, so it cannot drift out of step with what is actually held.
   const cutsHeld = () => sectionList().some(x => x && x.cut);
-  const LOCKED_BY_CUT = ['tsize', 'tkerf'];
+  const LOCKED_BY_CUT = ['tsize', 'tkerf', 'chevangle'];
   function syncTileLocks() {
     const lock = cutsHeld();
     for (const b of document.querySelectorAll('[data-pat]')) b.disabled = lock;
@@ -10013,7 +10039,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   { const sb = document.getElementById('t-slottest');
     if (sb) sb.addEventListener('click', () => { T.slotTest = !T.slotTest;
       sb.setAttribute('aria-pressed', T.slotTest); redraw(false); }); }
-  for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn']]) {
+  for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn'], ['chevangle', 'chevAngle']]) {
     const el = document.getElementById(id);
     const show = () => { document.getElementById(id + 'V').textContent = TFMT[id](+el.value); };
     el.value = T[key]; show();
