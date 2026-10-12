@@ -1727,7 +1727,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.57';
+  const BUILD = '2026.10.12.58';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3827,7 +3827,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Keyed by `pi` because a module's polygons are not interchangeable: a chevron's two planks are
   // mirror images, and handing one slot the other's piece would be handing an installer a plank that
   // does not fit. That compatibility was already in the data and cost nothing to honour.
-  function assemblyPlan(inst) {
+  function assemblyPlan(inst, shuffled) {
     const byPi = new Map();
     for (const t of inst) {
       let g = byPi.get(t.pi); if (!g) byPi.set(t.pi, g = { slots: [], pieces: [] });
@@ -3844,11 +3844,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
       if (whole) g.pieces.push(t);
     }
+    // ALONG THE GRAIN. Wood's grain runs down the board's length, which is x, so ordering by row and
+    // then along the row hands out pieces that continue one another. The stack was already doing this
+    // and nothing said so - flip the two terms and the floor would cross the grain every piece.
     const order = (a, b) => (a.ctr[1] - b.ctr[1]) || (a.ctr[0] - b.ctr[0]);
     const plan = new Map();
     for (const [, g] of byPi) {
       g.slots.sort(order); g.pieces.sort(order);
       const n = g.pieces.length; if (!n) continue;          // nothing of this shape is on the board
+      // SHUFFLED: any whole piece of the same shape and orientation, which is what `pi` already means.
+      // Seeded from the shape alone, so the floor is a pure function of the slab - the gallery gates
+      // on two renders of one slab being byte-identical, and an unseeded shuffle would break it.
+      if (shuffled) {
+        const r = mulberry32(0x5EED + g.pieces[0].pi * 7919);
+        for (let i = n - 1; i > 0; i--) { const j = (r() * (i + 1)) | 0; const t = g.pieces[i]; g.pieces[i] = g.pieces[j]; g.pieces[j] = t; }
+      }
       for (let i = 0; i < g.slots.length; i++) {
         // STACK: take the next one off the pile, wrapping when the board runs out - which is what
         // running short of material actually looks like, and is worth seeing rather than hiding.
@@ -3885,13 +3895,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (pat.overlap) inst.sort((a, b) => b.ctr[1] - a.ctr[1]);       // lower scales first, upper cover their tops
     const rng = mulberry32(1234567);
     // Built once, not per piece: it has to sort every instance to know what order they come in.
-    const plan = (!T.shuffle && T.assembly === 'stack') ? assemblyPlan(inst) : null;
+    const plan = (T.shuffle || T.assembly === 'stack') ? assemblyPlan(inst, T.shuffle) : null;
     for (const t of inst) {
       let poly = insetPoly(t.poly, inFr(T.groutIn) * 0);   // grout already in the spread; keep full poly
       if (T.edge === 'tumbled') poly = insetPoly(poly, inFr(0.04 * T.sizeIn));
       const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
       let shift = t.shift;
-      if (T.shuffle) { const [r] = sub(mix(t.n, t.m, t.pi, 99), 1); shift = [t.shift[0] + (r() - 0.5) * 0.7, t.shift[1] + (r() - 0.5) * 0.7 * H]; }
       // THE ASSEMBLY. Guide is the absent case on purpose: the piece a slot is handed is the one cut
       // at that slot, the delta is zero, and the floor is the board. Nothing to add and nothing to
       // drift. Only a mode that moves a piece has anything to say here.
@@ -3905,9 +3914,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // with a rosette gets the slot rule; everything else walks the lattice as it always did.
       let band = 0;
       if (STAGE > 1) {
-        const [rs] = sub(mix(t.n, t.m, t.pi, 4242), 1);
-        // `from`, not `t`: the board is the piece's, and under guide the two are the same instance.
-        band = T.shuffle ? Math.min(STAGE - 1, (rs() * STAGE) | 0) : sectionOf(from, STAGE);
+        // `from`, not `t`: the board is the PIECE's, whichever order chose it, and under guide the two
+        // are the same instance. Shuffled used to draw a board at random per slot, which is a
+        // different thing from being handed a piece that came off one - its RNG died with it.
+        band = sectionOf(from, STAGE);
         shift = [shift[0], shift[1] + band * H];
       }
       // THE ASSIGNMENT, SHOWN. An assignment is invisible under stone, and the only way to see a

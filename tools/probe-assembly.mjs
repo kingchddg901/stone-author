@@ -31,8 +31,11 @@ function liftFn(name) {
 }
 const BODY = liftFn('assemblyPlan');
 const IN = 96, H = 0.625;                                  // an 8 x 5 ft slab, as the app has it
-const make = (body = BODY) => new Function('IN', 'H', 'inFr', body + '; return assemblyPlan;')(
-  IN, H, v => v / IN);
+const make = (body = BODY) => new Function('IN', 'H', 'inFr', 'mulberry32', body + '; return assemblyPlan;')(
+  IN, H, v => v / IN,
+  // the app's own PRNG, so a shuffle here is the shuffle the floor gets
+  (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+                 t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; });
 
 // A grid of pieces in inches from the slab centre. cols x rows covers the board exactly when
 // cols*w == IN and rows*h == IN*H.
@@ -58,7 +61,10 @@ let fails = 0;
 const claim = (name, ok, extra = '') => { if (!ok) fails++; console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${name}${extra}`); };
 
 console.log('\nguide is the absent case, by construction');
-claim('the plan is only built for stack', /T\.assembly === 'stack'\) \? assemblyPlan\(inst\) : null/.test(SRC));
+// GUIDE is the one order with no plan at all. Shuffled joined stack in using it, so the claim is that
+// guide is excluded — not that stack is the only one included.
+claim('guide builds no plan', /\(T\.shuffle \|\| T\.assembly === 'stack'\) \? assemblyPlan\(inst, T\.shuffle\) : null/.test(SRC));
+claim('and the random jitter is gone with it', !/\(r\(\) - 0\.5\) \* 0\.7/.test(SRC));
 claim('and only applied when it exists', /if \(plan\) \{ const a = plan\.get\(t\.key\); if \(a\) \{ from = a\.piece;/.test(SRC));
 // The board has to come from the PIECE. Taking it from the slot meant a slot was handed a piece from
 // one place out of a board chosen somewhere else - two answers to "where did this come from" applied
@@ -131,6 +137,28 @@ console.log('\na piece hanging over the edge is not offered');
   const offered = new Set([...plan.values()].map(v => v.piece.key));
   claim('the overhanging piece is never handed to a slot', !offered.has(half.key));
   claim('and the whole ones still are', offered.size === 39, `  — ${offered.size} of 39 whole pieces used`);
+}
+
+// SHUFFLED was the one order that never used the mapping: it jittered the sample randomly, with no
+// shape, no orientation and no legality, and the wrap hid whatever fell off the board.
+console.log('\nshuffled: any whole piece of the same shape and orientation');
+{
+  const slots = lopsided();
+  const byKey = new Map(slots.map(s => [s.key, s]));
+  const plan = make()(slots, true);
+  const onBoard = new Set(slots.filter(t => t.poly.every(([x, y]) =>
+    x >= -1e-9 && x <= 1 + 1e-9 && y >= -1e-9 && y <= H + 1e-9)).map(t => t.key));
+  claim('every slot is served', plan.size === slots.length);
+  claim('from a piece wholly on the board', [...plan.values()].every(v => onBoard.has(v.piece.key)));
+  claim('of its own shape and orientation', [...plan].every(([k, v]) => v.piece.pi === byKey.get(k).pi));
+  // Determinism is not decoration here: the gallery gates on two renders of one slab matching byte
+  // for byte, and an unseeded shuffle would fail that without anything else looking wrong.
+  const again = make()(slots, true);
+  claim('and the same slab shuffles the same way twice',
+        [...plan].every(([k, v]) => again.get(k).piece.key === v.piece.key));
+  const stack = make()(slots, false);
+  claim('while differing from the stack, or it is not a shuffle',
+        [...plan].some(([k, v]) => stack.get(k).piece.key !== v.piece.key));
 }
 
 console.log('\na shape with nothing of its kind on the board is left alone');
