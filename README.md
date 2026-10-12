@@ -1,7 +1,8 @@
 # Material Author
 
-Tools for making stone: author it by hand, generate it, or rip it from a photograph — and
-lay it as tile. Extracted from the HA dashboard builder once the stone work outgrew it.
+Tools for making materials — **stone, wood and glass** — authored by hand, generated, or ripped
+from a photograph, and laid as tile. Extracted from the HA dashboard builder once the stone work
+outgrew it.
 
 The dashboard is one *consumer* of what this repo produces. This repo is the *producer*:
 the authoring app, the generator, the rip/harvest pipeline, and the mask format they share.
@@ -54,7 +55,12 @@ path that taking one small want seriously actually produced.
 ## What's here
 
 ### `app/` — the authoring tools (self-contained HTML, open in any browser)
-- **`stone-author.html`** — the main tool. Draw where the lines go; the family (Carrara,
+- **`stone-author.html`** — the main tool, and three material paths behind one fork: **stone**
+  (marks are the face), **wood** (a plane through a 3D growth-ring field, so one authored tree
+  yields every board) and **glass**. A tile can be kept as a **section** — its shape together with
+  the place on the slab it was cut from — and a floor laid from sections of any material
+  ([`docs/sections.md`](docs/sections.md)). For the stone path:
+  draw where the lines go; the family (Carrara,
   Calacatta, Nero Marquina, Granite) decides what they are. Tools: Vein, Branch, Web,
   Stylolite, Pour, Gravity, Magnet, Chip, Tune, Cloud, Moon, Mask (protected islands / reality
   windows), Light, Move. Pen pressure and tilt (opt-in). **Lay tiles**
@@ -171,8 +177,13 @@ The offline render bakes the whole pipeline (`renderFull` / tiled), and a **gall
 
 A render is not capped by what one canvas can hold. Past 16384 the export renders a **grid of tiles**
 straight into a tiled BigTIFF, so the whole picture never exists at once and a lost tile costs one tile
-rather than the render. Measured on one slab — `Hero_Psyker`, 666 marks, **65535 × 40959, 2.68
-gigapixels** — across every device to hand. Each master was audited tile by tile and carries a signature
+rather than the render. The ceiling has since moved twice: the largest master made is **262,144 ×
+163,840 — 42.95 gigapixels, 4.26 GB**, written in 95 minutes from a 111 KB slab, and at the slab's real
+size of 8 × 5 ft that is **2,731 DPI**, about nine times what the eye resolves. It stops there by
+decision rather than by limit — per-tile cost is flat across a 4× change in output size and the field
+never runs out of detail, but *opening* one costs 443 GB of working space. The ladder below was
+measured on one slab — `Hero_Psyker`, 666 marks, **65535 × 40959, 2.68 gigapixels** — across every
+device to hand. Each master was audited tile by tile and carries a signature
 over its own render inputs, so they are verifiably the same picture and not merely the same size. Each also
 records the machine that made it — hardware class in the clear, the identifying part sealed under the
 slab's own bytes, so whoever holds the slab can read it and whoever holds only the picture cannot. The
@@ -193,8 +204,8 @@ These times were measured on 2026-09-26 and the renderer has moved three times s
 sized to the blur's reach, reality windows became per-tile, and the image-space bloom was replaced by a
 halo drawn per element — which took the bleed from 1,577 px per side to 4. The planner therefore chooses
 different render passes than it did for these runs, and the figures will move when the set is
-re-rendered: [`docs/devices.md`](docs/devices.md) is current to build `2026.09.27.25` and this app is
-`2026.09.30.1`. The black-light masters behind them were also missing their island. Times, not light:
+re-rendered: [`docs/devices.md`](docs/devices.md) is current to build `2026.09.27.25`, and this app has
+moved a long way past it. The black-light masters behind them were also missing their island. Times, not light:
 each master was audited for dead tiles.
 
 **A phone beats the workstation**, and a **2019 budget tablet — 2 GB of RAM, four in-order Cortex-A53
@@ -213,14 +224,16 @@ them; no other pairing does. Measurements and method in
 [`docs/capabilities.md`](docs/capabilities.md).
 
 **Material Author was Stone Author, and was stone-only.** The early Wood family and Knot
-tool were removed once the stone system outgrew them; wood returns not as its own program but as a
-**second path** in this one. A material supplies a field plus a way to query a 2D face out of it —
+tool were removed once the stone system outgrew them; wood returned not as its own program but as a
+**second path** in this one, and glass is the **third**. A material supplies a field plus a way to query a 2D face out of it —
 stone's query is the identity, because the marks *are* the face, while wood's is a plane through a 3D
 growth-ring field, so one authored tree yields every board. Everything downstream of that face is
 already material-agnostic: layers, tokens, colour, the coat and light tier, warp, masks, tiling, the
 tiled render and the master export. `tools/check-material-fork.mjs` holds the line — the branch lives
-at one seam or it is not a fork. Metal is a later path. Next up is a **WebGPU render
-pipeline** and **layered PSD/PSB export** (one file-layer per authoring layer) — see the roadmap in
+at one seam or it is not a fork. Metal is a later path. The tiled export now paints its tiles on a
+**worker pool** that reproduces the single-threaded render byte for byte, and the planner picks the
+tile size for the width that pool can actually run. Next up is a **WebGPU render pipeline** and
+**layered PSD/PSB export** (one file-layer per authoring layer) — see the roadmap in
 [`docs/architecture.md`](docs/architecture.md) and [`docs/final-render.md`](docs/final-render.md).
 
 **Using it.** [`docs/guide.md`](docs/guide.md) is the user guide: the five-minute version, what each
