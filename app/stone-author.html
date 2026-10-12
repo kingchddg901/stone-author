@@ -412,6 +412,7 @@
     <output id="sec-count"></output>
   </div>
   <div id="sec-list" class="tk" style="grid-column:1/-1"></div>
+  <div id="tile-locked" class="lbl" style="grid-column:1/-1;opacity:0.8" hidden data-i18n="note.tile-locked">Pattern, size and kerf are fixed while a cut is held — a cut is a box measured against them. Clear the sections to change them.</div>
   <div id="sec-setter" class="tk" style="grid-column:1/-1" hidden></div>
   <div class="sliders" data-mat-only="wood">
     <div class="sl"><label for="wood-graft"><span data-i18n="sl.wood-graft">Graft branch from</span> <output id="wood-graftV"></output></label><input id="wood-graft" type="range" min="0" max="8" step="1"></div>
@@ -1081,6 +1082,7 @@ window.SA_I18N = (() => {
   "op.press": "Press",
   "opt.source-auto": "Choose for me",
   "note.sections-need-two": "One section, so every tile comes from it \u2014 keep a second and you can set which tile comes from which.",
+  "note.tile-locked": "Pattern, size and kerf are fixed while a cut is held \u2014 a cut is a box measured against them. Clear the sections to change them.",
   "ui.op-press-note": "the roller pass you drew",
   "sec.unnamed": "Section",
   "sec.kept-cut": "Kept cut",
@@ -1698,7 +1700,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.35';
+  const BUILD = '2026.10.11.36';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3514,7 +3516,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const rec = src ? JSON.parse(JSON.stringify(src)) : sectionFromHere();
     rec.id = 'cut' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
     rec.cut = src && src.cut ? src.cut
-      : { pattern: T.pattern, n: t.n, m: t.m, pi: t.pi, box: cutBoxFromInstance(t) };
+      : { pattern: T.pattern, sizeIn: T.sizeIn, kerfIn: T.kerfIn,   // the geometry it was measured against
+          n: t.n, m: t.m, pi: t.pi, box: cutBoxFromInstance(t) };
     rec.name = TR('sec.snagged', { pat: T.pattern });    // the pattern is a slug, so it is not translated
     sections = [...sectionList(), rec];
     showSetCount(); revealSections(); redraw(true); hint(TR('hint.snag-took', { n: sections.length }));
@@ -8491,6 +8494,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     pv('data-mat', currentMaterial()); pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
     pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : 'order'); pv('data-unit', T.units);
     if (typeof syncGroups === 'function') syncGroups();   // which groupings this pattern HAS, not just which is pressed
+    if (typeof syncTileLocks === 'function') syncTileLocks();   // a loaded slab may arrive holding cuts
     pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType); pv('data-mwin', NEXT.maskWin); pv('data-minv', NEXT.maskInvert);
     const tog = (id, on) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-pressed', !!on); };
     tog('pen-pressure', NEXT.pressure); tog('pen-tilt', NEXT.tilt); tog('guides', guidesOn);
@@ -9564,6 +9568,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // PARITY, so a single cell shows at most a third of the rosette's five; two by two is exactly the
   // period and every slot appears in it, for every pattern, with no per-pattern table to keep.
   let setterCell = null;                                 // {pi, m, n} within the seed block
+  // A cut exists => the tile geometry it was cut against is settled. Checked on the sections rather
+  // than on a flag, so it cannot drift out of step with what is actually held.
+  const cutsHeld = () => sectionList().some(x => x && x.cut);
+  const LOCKED_BY_CUT = ['tsize', 'tkerf'];
+  function syncTileLocks() {
+    const lock = cutsHeld();
+    for (const b of document.querySelectorAll('[data-pat]')) b.disabled = lock;
+    for (const id of LOCKED_BY_CUT) { const el = document.getElementById(id); if (el) el.disabled = lock; }
+    const note = document.getElementById('tile-locked');
+    if (note) note.hidden = !lock;
+  }
   // SHOW THE THING THAT WAS JUST MADE. Snag succeeded and then nothing on screen moved: the list
   // and the setter live in Tiles & floor, which is closed by default, 1300 px down a scrolling
   // column. Measured, not guessed - after a snag the list rendered correctly at top 1369 with
@@ -9585,7 +9600,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function showSetCount() {
     const el = document.getElementById('sec-count');
     if (el) el.textContent = sectionList().length ? String(sectionList().length) : '\u2014';
-    drawSectionList(); drawSetter();
+    syncTileLocks(); drawSectionList(); drawSetter();
   }
   function drawSectionList() {
     const host = document.getElementById('sec-list');
