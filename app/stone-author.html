@@ -381,7 +381,7 @@
   </div>
   <div class="sliders" id="s-tiles">
     <div class="sl"><label for="tsize"><span data-i18n="sl.tsize">Tile size</span> <output id="tsizeV"></output></label><input id="tsize" type="range" min="2" max="36" step="1"></div>
-    <div class="sl"><label for="tgrout"><span data-i18n="sl.tgrout">Grout</span> <output id="tgroutV"></output></label><input id="tgrout" type="range" min="0.03125" max="0.5" step="0.03125"></div>
+    <div class="sl" data-mat-only="stone glass"><label for="tgrout"><span data-i18n="sl.tgrout">Grout</span> <output id="tgroutV"></output></label><input id="tgrout" type="range" min="0.03125" max="0.5" step="0.03125"></div>
     <div class="sl"><label for="tkerf"><span data-i18n="sl.tkerf">Kerf</span> <output id="tkerfV"></output></label><input id="tkerf" type="range" min="0" max="0.375" step="0.03125"></div>
     <div class="sl"><label for="tedge" data-i18n="sl.tedge">Edge</label>
       <div class="grp"><button id="e-square" type="button" data-edge="square" aria-pressed="true" data-i18n="tile.edge.square">Square</button>
@@ -1727,7 +1727,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.58';
+  const BUILD = '2026.10.12.59';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3375,7 +3375,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const vary = Math.max(0, Math.min(1, WOOD.plankVary));
     const stag = Math.max(0, Math.min(1, WOOD.plankStagger));
     const slabS = 1;                                          // the plank is cut where it lies; see tileInstances
-    const g = inFr(T.groutIn) / 2;
+    const g = inFr(jointIn()) / 2;
     const cx = 0.5, cy = H / 2, out = [];
     const halfW = IN * 0.75, halfH = IN * H * 0.75;           // inches from centre, generous; off-frame is culled
     const rows = Math.ceil(halfH / wIn) + 1;
@@ -3413,7 +3413,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const floorPitch = (pat, u) => {
     if (pat.overlap) return 1;                           // scales overlap; they are never pushed apart
     const un = pat.unit || u;
-    return Math.max(0.05, (un - T.kerfIn + T.groutIn) / un);
+    return Math.max(0.05, (un - T.kerfIn + jointIn()) / un);
   };
   function tileInstances() {
     if (T.pattern === 'plank') return plankInstances();       // not a lattice; it generates itself
@@ -3952,12 +3952,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
       tc.restore();
       if (pat.overlap) {                                // scales overlap - outline each in order so the scallop of the one below stays visible
-        tc.strokeStyle = GROUT; tc.lineWidth = Math.max(px, inFr(T.groutIn) * 0.7);
+        tc.strokeStyle = GROUT; tc.lineWidth = Math.max(px, inFr(jointIn()) * 0.7);
         tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath(); tc.stroke();
       }
       edgeFinish(poly, px, tc);
     }
-    if (T.joints && !pat.overlap) { tc.strokeStyle = GROUT; tc.lineWidth = Math.max(px, inFr(T.groutIn));
+    // At a zero joint this falls to one device pixel, which is the hairline a board edge actually is.
+    if (T.joints && !pat.overlap) { tc.strokeStyle = GROUT; tc.lineWidth = Math.max(px, inFr(jointIn()));
       for (const t of inst) { let poly = t.poly; const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
         tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath(); tc.stroke(); } }
     tc.restore();                                        // the slab clip opened before the tiles
@@ -4970,6 +4971,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let MATERIAL = 'stone';                       // 'stone' | 'wood' | 'glass'
   function setMaterial(m) { MATERIAL = (m === 'wood' || m === 'glass') ? m : 'stone'; }
   function currentMaterial() { return MATERIAL; }   // saving a slab reads through here, never the token
+  // THE JOINT BETWEEN TWO PIECES, in inches. Grout is a tile idea: a floor of boards has no mortar in
+  // it, the pieces butt and the line you see is the saw. The tile engine must not test which material
+  // it is on - herringbone and Versailles came from wood, it serves both and knows neither - so the
+  // question lives here and the material answers it. T.groutIn is left alone, so an author who sets a
+  // grout for stone still has it when they switch back.
+  function jointIn() { return MATERIAL === 'wood' ? 0 : T.groutIn; }
   // THE SAME DECLARATION, FOR A SERIALISED COPY OF THE ENGINE. The worker render core is this file's
   // own functions put through toString(), so it needs the discriminator declared in its scope too -
   // and writing that line in the generator would name the token outside these markers, which the

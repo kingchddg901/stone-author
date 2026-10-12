@@ -81,6 +81,11 @@ function build(ablate) {
                            : liftConst(/const cutScale = [^\n]*/),
     ablate === 'cover-max' ? lift('coverSrc').replace('Math.min(sw / dw, sh / dh)', 'Math.max(sw / dw, sh / dh)')
                            : lift('coverSrc'),
+    // jointIn lives BEHIND the material fork, because how wide a joint is depends on the material -
+    // a floor of boards has none. It cannot be lifted and it should not be: the cut geometry under
+    // test is material-agnostic, so the probe answers for a material that has grout and the claims
+    // below must hold whatever that answer is. That is what the fork is for.
+    'const jointIn = () => T.groutIn;',
     // floorPitch decides how far apart the floor lays what the slab gave it, and tileInstances asks it.
     // LIFTED, not restated: the pitch is the whole relationship between kerf, grout and where a piece
     // lands, and a probe carrying its own copy would agree with itself while the floor moved.
