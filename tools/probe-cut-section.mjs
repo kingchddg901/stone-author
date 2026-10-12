@@ -37,6 +37,17 @@ function lift(n) {
   }
   throw new Error('probe cannot read the body of ' + n);
 }
+// A multi-line `const name = (...) => { ... };` — liftConst only reaches to the end of a line.
+const liftArrow = name => {
+  const at = SRC.indexOf('const ' + name + ' = ');
+  if (at < 0) throw new Error('probe cannot find ' + name + ' - has it been renamed?');
+  let d = 0;
+  for (let j = SRC.indexOf('{', at); j < SRC.length; j++) {
+    if (SRC[j] === '{') d++;
+    else if (SRC[j] === '}' && !--d) return SRC.slice(at, SRC.indexOf(';', j) + 1);
+  }
+  throw new Error('probe cannot read the body of ' + name);
+};
 const liftConst = re => {
   const m = SRC.match(re);
   if (!m) throw new Error('probe cannot find ' + re);
@@ -70,6 +81,10 @@ function build(ablate) {
                            : liftConst(/const cutScale = [^\n]*/),
     ablate === 'cover-max' ? lift('coverSrc').replace('Math.min(sw / dw, sh / dh)', 'Math.max(sw / dw, sh / dh)')
                            : lift('coverSrc'),
+    // floorPitch decides how far apart the floor lays what the slab gave it, and tileInstances asks it.
+    // LIFTED, not restated: the pitch is the whole relationship between kerf, grout and where a piece
+    // lands, and a probe carrying its own copy would agree with itself while the floor moved.
+    liftArrow('floorPitch'),
     // The board-driven patterns ask the floor for its plank, which the app computes from WOOD. The
     // probe is about CUT GEOMETRY, not about wood, so a fixed plank is enough - and leaving them out
     // is how chevron went in and left this file throwing a ReferenceError instead of making a claim.

@@ -1727,7 +1727,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.56';
+  const BUILD = '2026.10.12.57';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3407,17 +3407,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     return out;
   }
+  // THE FLOOR'S PITCH against the slab's: a tile, less the blade, plus the joint. The slab is
+  // ANCHORED - a piece is cut where it lies, so slabS is 1 - and this is what is left over. Asked by
+  // the instance builder and by the painter, which needs it to know where the slab reaches.
+  const floorPitch = (pat, u) => {
+    if (pat.overlap) return 1;                           // scales overlap; they are never pushed apart
+    const un = pat.unit || u;
+    return Math.max(0.05, (un - T.kerfIn + T.groutIn) / un);
+  };
   function tileInstances() {
     if (T.pattern === 'plank') return plankInstances();       // not a lattice; it generates itself
     const u = T.sizeIn, pat = PATTERNS[T.pattern](u);
     const noSpread = !!pat.overlap;                                   // scales overlap - never pushed apart
     // A pattern sized from the board rather than from u says so, and the joint spreads by ITS size.
     // Scaling a 5in plank's grout by a 13in tile size opens a quarter-inch joint and calls it 1/16.
-    const un = pat.unit || u;
-    // THE SLAB IS ANCHORED, not the floor. A tile is cut at its own position - slabS is 1 and every
-    // piece is a 1:1 crop - and the FLOOR pitch is what is left: the tile, less the blade, plus the
-    // joint. Spreading the samples instead asked for more slab than exists and wrapped to hide it.
-    const floorS = noSpread ? 1 : Math.max(0.05, (un - T.kerfIn + T.groutIn) / un), slabS = 1;
+    const floorS = floorPitch(pat, u), slabS = 1;
     const cx = 0.5, cy = H / 2;
     const ax = pat.ax, ay = pat.ay, out = [];
     const reach = Math.ceil(IN / Math.min(Math.hypot(ax[0], ax[1]), Math.hypot(ay[0], ay[1]))) + 2;
@@ -3869,14 +3873,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // tiles' own extent instead: background in the preview, TRANSPARENT in an export, which is what a
     // remainder is. Taken from the tiles rather than from floorS, so a hexagon or a fishscale edge is
     // covered exactly and not by a rectangle that guesses.
-    if (inst.length) {
-      let gx0 = Infinity, gy0 = Infinity, gx1 = -Infinity, gy1 = -Infinity;
-      for (const t of inst) for (const q of t.poly) {
-        if (q[0] < gx0) gx0 = q[0]; if (q[0] > gx1) gx1 = q[0];
-        if (q[1] < gy0) gy0 = q[1]; if (q[1] > gy1) gy1 = q[1];
-      }
-      tc.fillStyle = GROUT; tc.fillRect(gx0, gy0, gx1 - gx0, gy1 - gy0);
-    }
+    // WHERE THE SLAB REACHES, and no further. The floor is the slab at floorPitch, so this rectangle
+    // is the whole of the material. Grout fills it and every tile is clipped to it: past the edge
+    // there is nothing to draw, which is what a remainder is. Nothing wraps to pretend otherwise.
+    const fS = floorPitch(pat, T.sizeIn);
+    const SX = 0.5 - fS / 2, SY = H / 2 - fS * H / 2, SW2 = fS, SH2 = fS * H;
+    tc.save();
+    tc.beginPath(); tc.rect(SX, SY, SW2, SH2); tc.clip();
+    tc.fillStyle = GROUT; tc.fillRect(SX, SY, SW2, SH2);
     const STAGE = stageN(), HS = H * STAGE;                // HS: the source's own height in slab units
     if (pat.overlap) inst.sort((a, b) => b.ctr[1] - a.ctr[1]);       // lower scales first, upper cover their tops
     const rng = mulberry32(1234567);
@@ -3918,10 +3922,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       tc.save();
       tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath(); tc.clip();
       tc.imageSmoothingEnabled = true;
-      // WRAP the slab: an assembly order can hand a slot a piece from anywhere, so a sampled patch can
-      // still fall past the slab edge - draw the slab repeated so a tile is always stone, never bare
-      // grout. KERF no longer causes this: the slab is anchored and a piece is cut where it lies, so
-      // only Off the stack and Shuffled can reach past the edge now.
+      // The tile's box, for the cut-section case below. Nothing wraps any more: a piece is legal or it
+      // is not offered, and where there is no material there is no picture.
       let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
       for (const q of poly) { if (q[0] < bx0) bx0 = q[0]; if (q[0] > bx1) bx1 = q[0]; if (q[1] < by0) by0 = q[1]; if (q[1] > by1) by1 = q[1]; }
       // A CUT SECTION'S BAND IS THE TILE ITSELF, so there is nothing to wrap and no shift to apply:
@@ -3934,9 +3936,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         const src = coverSrc(cutRec.box[2] * kz, cutRec.box[3] * kz, bx1 - bx0, by1 - by0);
         tc.drawImage(stoneC, src[0], band * bandPx + src[1], src[2], src[3], bx0, by0, bx1 - bx0, by1 - by0);
       } else {
-        const i0 = Math.floor(bx0 + shift[0]), i1 = Math.floor(bx1 + shift[0]);
-        const j0 = Math.floor((by0 + shift[1]) / HS), j1 = Math.floor((by1 + shift[1]) / HS);
-        for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) tc.drawImage(stoneC, i - shift[0], j * HS - shift[1], 1, HS);
+        // ONE draw. shift already carries the band, so the stack lands with this tile's board under
+        // it; past the slab nothing is painted and the clip above makes that honest.
+        tc.drawImage(stoneC, -shift[0], -shift[1], 1, HS);
       }
       tc.restore();
       if (pat.overlap) {                                // scales overlap - outline each in order so the scallop of the one below stays visible
@@ -3948,9 +3950,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (T.joints && !pat.overlap) { tc.strokeStyle = GROUT; tc.lineWidth = Math.max(px, inFr(T.groutIn));
       for (const t of inst) { let poly = t.poly; const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
         tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath(); tc.stroke(); } }
+    tc.restore();                                        // the slab clip opened before the tiles
     drawScaleBar();
   }
-  // The live preview is one caller of it, with the view's own transform and a full-view cover.
+  // The live preview is one caller of it, with the view's own transform.
   function drawTiles(F) {
     if (!stoneReady) renderStoneOffscreen();
     drawTilesTo(F, ctx, 1 / (Wc * V.z));
