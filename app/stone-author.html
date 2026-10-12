@@ -1729,7 +1729,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.63';
+  const BUILD = '2026.10.12.64';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3891,7 +3891,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // pre-rendered slab. That is what lets the tiled path have a floor: there is no pre-render big
   // enough at 262144, and never needs to be. Everything else here - the joints, the edge finish, the
   // chips, the slab clip - is vector and already works at any transform.
-  function drawTilesTo(F, tc, px, direct) {
+  // `only` is the target's own extent in frame units. Without it every output tile of a tiled render
+  // paints every piece of the whole floor and relies on the canvas to throw the result away - which it
+  // does, after the work. A piece that cannot land here is skipped before it is painted.
+  function drawTilesTo(F, tc, px, direct, only) {
+    const seen = t => {
+      if (!only) return true;
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const q of t.poly) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
+      return x1 >= only[0] && x0 <= only[2] && y1 >= only[1] && y0 <= only[3];
+    };
     if (!stoneReady) renderStoneOffscreen();
     const pat = PATTERNS[T.pattern](T.sizeIn);
     const inst = tileInstances(), chips = chipMap(), SET = picking() ? [] : sectionList();
@@ -3914,6 +3923,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // Built once, not per piece: it has to sort every instance to know what order they come in.
     const plan = (T.shuffle || T.assembly === 'stack') ? assemblyPlan(inst, T.shuffle) : null;
     for (const t of inst) {
+      if (!seen(t)) continue;                              // nothing of it reaches this target
       let poly = insetPoly(t.poly, inFr(T.groutIn) * 0);   // grout already in the spread; keep full poly
       if (T.edge === 'tumbled') poly = insetPoly(poly, inFr(0.04 * T.sizeIn));
       const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
@@ -3978,7 +3988,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     // At a zero joint this falls to one device pixel, which is the hairline a board edge actually is.
     if (T.joints && !pat.overlap) { tc.strokeStyle = GROUT; tc.lineWidth = Math.max(px, inFr(jointIn()));
-      for (const t of inst) { let poly = t.poly; const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
+      for (const t of inst) { if (!seen(t)) continue; let poly = t.poly; const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
         tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath(); tc.stroke(); } }
     tc.restore();                                        // the slab clip opened before the tiles
     drawScaleBar();
@@ -4617,6 +4627,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;   // transparent surround: past the slab is nothing
     cx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round';
     const STAGE = stageN();
+    const only = [ex0 / finalW, ey0 / finalW, (ex0 + ew) / finalW, (ey0 + eh) / finalW];
     drawTilesTo(null, cx, 1 / finalW, (tc, shiftNoBand, band) => {
       tc.save();
       woodBandY = STAGE > 1 ? cantBand(band) : 0;          // which board down the cant this piece came off
@@ -4624,7 +4635,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       g2d = tc; paintContent(false, false); g2d = prevG;
       woodBandY = 0;
       tc.restore();
-    });
+    }, only);
     applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true },
               { ox: ex0, oy: ey0, fw: finalW, fh: Math.round(W * H) });
     g2d = prevG;
