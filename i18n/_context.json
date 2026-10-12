@@ -1740,6 +1740,9 @@
   ],
   "where": "slider: how far along the trunk the plank runs. With the width it sets the board's proportions, so it also decides whether a round knot renders round"
  },
+ "lbl.board-inches": {"terms": ["wood"], "where": "label on two number boxes beside the Plank width and Plank length sliders. The sliders step 0.12 and 0.6 of an inch, which cannot land on a real board figure, and a board is quoted in inches anyway; these take the dimensions directly"},
+ "a11y.board-len-in": {"terms": ["wood"], "where": "accessible name for the board length number box, in inches"},
+ "a11y.board-wid-in": {"terms": ["wood"], "where": "accessible name for the board width number box, in inches"},
  "sl.wood-cutAngle": {
   "terms": [
    "wood"
