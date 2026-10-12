@@ -1724,7 +1724,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.49';
+  const BUILD = '2026.10.12.50';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3593,11 +3593,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // While Snag is armed the floor is the slab itself: one source, no sections, so every tap picks
   // off the original material rather than off the floor you have already composed.
   const picking = () => tool === 'snag';
+  // HOW MANY BOARDS THIS LOG ACTUALLY GIVES at this width and this saw plane. cantBand wraps a
+  // board's position into the width the log HAS there, so asking for more than this does not produce
+  // more wood - it produces the same wood again at a different offset, which reads as a floor of
+  // near-identical blocks. A 2.5 ft board from a log 1.7 ft to the bark is one board.
+  const boardsAvailable = () => {
+    if (currentMaterial() !== 'wood') return 8;
+    const F = woodField();
+    const ymax = Math.sqrt(Math.max(0, F.R * F.R - WOOD.plane * WOOD.plane));
+    const rng = Math.max(0, 2 * ymax - WOOD.wid);
+    return Math.max(1, Math.min(8, Math.floor(rng / Math.max(1e-6, WOOD.wid)) + 1));
+  };
   const stageN = () => {
     const s = picking() ? [] : sectionList();
     if (s.length) return Math.min(8, s.length);          // sections answer first, in any material
     if (currentMaterial() !== 'wood') return 1;
-    return Math.max(1, Math.min(8, Math.round(WOOD.stage) || 1));
+    // The ASK, clamped by what there is. Both halves matter: a slab can carry a stage from a wider
+    // board, and the slider can be dragged past what the current log yields.
+    return Math.max(1, Math.min(boardsAvailable(), Math.round(WOOD.stage) || 1));
   };
   // WHAT A SLOT IS, per pattern. A slot is a position TYPE, not a position - which is what lets a
   // shared tile keep one identity while every centre still sees a full set of different
@@ -7799,8 +7812,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   dev2KnotPitch: v => `${Math.round(v)}`,
                   dev2Rise: v => +v === 0 ? 'straight out' : `${Math.round(v)}\u00b0`,
                   dev2Prune: v => +v === 0 ? 'died on the tree' : (+v >= 1 ? 'taken off clean' : (+v).toFixed(2)),
-                  dev2Die: v => +v === 0 ? 'alive' : `${Math.round(v)}` };
+                  dev2Die: v => +v === 0 ? 'alive' : `${Math.round(v)}`,
+                  // the effective count, not the stored ask: a slab saved against a wider board can
+                  // carry a stage this log cannot fill, and printing the ask would be a lie.
+                  stage: v => `${Math.max(1, Math.min(boardsAvailable(), Math.round(v) || 1))}` };
   function showWood(k) {                                 // one slider's readout, from WOOD rather than from the input
+    // BOARDS is not a free number: the log yields what it yields. Move the slider's own ceiling to
+    // that, so the control cannot ask for wood that is not there and the count follows the board
+    // size the way it does in a mill.
+    if (k === 'stage' || k === 'wid' || k === 'plane') {
+      const el = document.getElementById('wood-stage');
+      if (el) { const n = boardsAvailable(); el.max = n; if (+el.value > n) el.value = n; }
+    }
     const out = document.getElementById('wood-' + k + 'V');
     if (out) out.textContent = WDFMT[k] ? WDFMT[k](WOOD[k]) : (+WOOD[k]).toFixed(3);
   }
