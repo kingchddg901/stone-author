@@ -1765,6 +1765,7 @@
  "hint.picking-shows-the-slab": {"terms": [], "where": "status when the Snag tool is armed. While picking, the floor shows the live slab rather than the composed sections, so every tap selects from the original material instead of from the floor already built out of earlier picks"},
  "hint.snag-took": {"placeholders": {"n": "how many sections are now kept, e.g. 3"}, "terms": [], "where": "status shown after snagging a tile"},
  "hint.cuts-full": {"terms": ["wood"], "where": "status when trying to keep a ninth cut"},
+ "sl.wood-plankWid": {"terms": ["wood"], "where": "slider in Floor planks: how wide the plank run cuts each floorboard, in INCHES. The floorboard is cut OUT of the mother board, whose own width is sl.wood-wid in feet - this is the size chosen, that one is the material available. A standard floorboard is about 8 inches"},
  "sl.wood-plankLen": {"terms": ["wood"], "where": "slider in Floor planks: how long the plank run cuts each plank, in INCHES. NOT the same control as sl.wood-len, which is the length of the board it is cut FROM, in feet. Keep the two names distinct"},
  "sl.wood-plankVary": {"terms": ["wood"], "where": "slider: how much plank lengths differ from the nominal, 0 = all identical"},
  "sl.wood-plankStagger": {"terms": ["wood"], "where": "slider: how far each row's end joints shift from the row below, 0 = joints stack into columns"},

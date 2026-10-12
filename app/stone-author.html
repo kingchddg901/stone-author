@@ -423,6 +423,7 @@
   </div></details>
   <details class="sec" data-mat-only="wood"><summary data-i18n="sec.floor-planks">Floor planks</summary><div class="body">
   <div class="sliders">
+    <div class="sl"><label for="wood-plankWid"><span data-i18n="sl.wood-plankWid">Plank width</span> <output id="wood-plankWidV"></output></label><input id="wood-plankWid" type="range" min="2" max="24" step="0.25"></div>
     <div class="sl"><label for="wood-plankLen"><span data-i18n="sl.wood-plankLen">Plank length</span> <output id="wood-plankLenV"></output></label><input id="wood-plankLen" type="range" min="6" max="96" step="1"></div>
     <div class="sl"><label for="wood-plankVary"><span data-i18n="sl.wood-plankVary">Length variation</span> <output id="wood-plankVaryV"></output></label><input id="wood-plankVary" type="range" min="0" max="1" step="0.01"></div>
     <div class="sl"><label for="chevangle"><span data-i18n="sl.chev-angle">Mitre angle</span> <output id="chevangleV"></output></label><input id="chevangle" type="range" min="15" max="75" step="1"></div>
@@ -1259,6 +1260,7 @@ window.SA_I18N = (() => {
   "sl.wood-flare": "Basal flare",
   "sl.wood-flareH": "Flare height",
   "sl.wood-zBase": "Height up trunk",
+  "sl.wood-plankWid": "Plank width",
   "sl.wood-plankLen": "Plank length",
   "sl.wood-plankVary": "Length variation",
   "sl.wood-plankStagger": "Joint stagger",
@@ -1724,7 +1726,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.50';
+  const BUILD = '2026.10.12.51';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3360,9 +3362,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // THE BOARD, in inches, for every layout that is cut from one rather than sized by T.sizeIn.
   // Shared so the plank run and the chevron cannot drift: a chevron whose planks were a different
   // width from the running bond's would be the same floor claiming two different boards.
-  const plankWidthIn = () => Math.max(0.5, WOOD.wid * 12);
+  const plankWidthIn = () => Math.max(0.5, Math.min(WOOD.plankWid, WOOD.wid * 12));
+  // Floored at the plank's own width, not at 1.5x it: a board shorter than it is wide is a block, and
+  // that is the only thing worth refusing. The old 1.5x clamp made a 2.5 ft wide board impossible to
+  // cut shorter than 3.75 ft, which is how a floor of four pieces happened.
   const plankLenIn = () => { const w = plankWidthIn();
-    return Math.min(Math.max(WOOD.plankLen, w * 1.5), Math.max(w * 1.5, WOOD.len * 12)); };
+    return Math.min(Math.max(WOOD.plankLen, w), Math.max(w, WOOD.len * 12)); };
   function plankInstances() {
     const wIn = plankWidthIn();                               // the plank IS the board: width and longest length
     const nom = plankLenIn();                                 // come from the cut, never from T.sizeIn
@@ -5002,6 +5007,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     trunkH: 60, zBase: 0, taper: 0.3,             // THE TAPER, as GROWTH: total trunk height, how far up this
                                                   // board sits, and how fast the leader climbed. The rings
                                                   // a height never saw are ABSENT there, not thinner.
+    plankWid: 7.5,                                // THE FLOORBOARD, in inches. Cut OUT of the mother
+                                                  // board, which is WOOD.wid/len in feet - this is the
+                                                  // size you choose, that one is the material you have.
     plankLen: 36, plankVary: 0.35,                // THE PLANK RUN: nominal board length in inches, how much
     plankStagger: 0.5,                            // lengths differ, and how far each row's joints shift from
                                                   // the row below. Width and max length come from the BOARD.
@@ -7793,7 +7801,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   taper: v => +v === 0 ? 'cylinder' : (+v).toFixed(2),
                   flare: v => +v === 0 ? 'none' : (+v).toFixed(2),
                   dEarly: v => `\u00d7${(+v).toFixed(2)}`, dMid: v => `\u00d7${(+v).toFixed(2)}`,
-                  dLate: v => `\u00d7${(+v).toFixed(2)}`, flareH: v => `${(+v).toFixed(1)}\u2032`, plankLen: v => `${Math.round(v)}\u2033`,
+                  dLate: v => `\u00d7${(+v).toFixed(2)}`, flareH: v => `${(+v).toFixed(1)}\u2032`, plankLen: v => `${Math.round(v)}\u2033`, plankWid: v => `${(+v).toFixed(2)}\u2033`,
                   plankVary: v => (+v).toFixed(2), plankStagger: v => (+v).toFixed(2),
                   eyeSpacing: v => `${(+v).toFixed(2)}\u2033`, eyeSize: v => `${(+v).toFixed(2)}\u2033`,
                   eyeDepth: v => (+v).toFixed(2),
