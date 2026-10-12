@@ -1711,7 +1711,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.41';
+  const BUILD = '2026.10.11.42';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -8927,7 +8927,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const across = Math.ceil(W / tileW), down = Math.ceil(H / tileH), N = across * down;
     if (offs.length !== N) throw new Error(`tiff: got ${offs.length} tiles, expected ${across}x${down}`);
     const dsc = desc ? new TextEncoder().encode(desc + '\0') : null;
-    const ENTRIES = dsc ? 14 : 13, IFD_LEN = 8 + ENTRIES * 20 + 8, pad8 = n => (n + 7) & ~7;
+    // ARITHMETIC, NOT BITWISE. `&` coerces to int32, so (n + 7) & ~7 silently wraps the moment the tile
+    // data passes 4 GB — which is the exact ceiling this whole file exists to escape, reintroduced by
+    // the alignment helper four lines under the comment that explains why BigTIFF was chosen. At
+    // 262144 the data ended just past 2^32, pad8 returned a value 4.29 billion BELOW `end`, and the
+    // first thing built from it was `new Uint8Array(gap)` with gap = -4294967295. Ninety-five minutes
+    // of render, failed at the last step, on the first output size large enough to reach it: 65535
+    // wrote 0.41 GB and 131072 wrote 1.35 GB, so nothing before this could ever have found it.
+    // Math.ceil is exact to 2^53, which is past any file a browser will write.
+    const ENTRIES = dsc ? 14 : 13, IFD_LEN = 8 + ENTRIES * 20 + 8, pad8 = n => Math.ceil(n / 8) * 8;
     const u64 = (dv, p, v) => { dv.setUint32(p, v >>> 0, true); dv.setUint32(p + 4, Math.floor(v / 4294967296), true); };
 
     const end = N ? offs[N - 1] + cnts[N - 1] : 16;
