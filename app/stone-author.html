@@ -1248,6 +1248,7 @@ window.SA_I18N = (() => {
   "hint.section-added": "Added {name} ({mat}) \u2014 {n} section(s). Your own slab is untouched; Load would have replaced it.",
   "hint.snag-needs-tiles": "Turn Lay tiles on first \u2014 Snag takes a tile, so there have to be tiles to take.",
   "hint.snag-tap-a-tile": "Tap on a tile. Snag keeps the piece you point at, at the coordinates it was cut from.",
+  "hint.picking-shows-the-slab": "Showing the slab so you can pick from it \u2014 tap tiles to keep them. Your sections come back when you leave Snag.",
   "hint.snag-took": "Snagged \u2014 {n} section(s). Every tile laid from it now shows that same piece, at nine times the detail.",
   "hint.cuts-full": "Eight kept cuts is the limit \u2014 each one is its own log to build.",
   "sl.wood-rings": "Rings",
@@ -1688,7 +1689,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.33';
+  const BUILD = '2026.10.11.34';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3454,20 +3455,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (sectionList().length >= 8) { hint(TR('hint.cuts-full')); return; }
     const t = tileInstanceAt(fx, fy);
     if (!t) { hint(TR('hint.snag-tap-a-tile')); return; }
-    const SET = sectionList();
-    const src = SET.length ? SET[Math.min(SET.length - 1, sectionOf(t, stageN()))] : null;
+    // TWO DIFFERENT QUESTIONS, and sharing one answer cost the append. SRC is where this tile gets
+    // its material - empty while picking, because the floor is the slab then. The LIST is what the
+    // new section joins, and that is always the real one: appending to the picking-empty copy made
+    // every tap replace the set instead of growing it.
+    const SRC = picking() ? [] : sectionList();
+    const src = SRC.length ? SRC[Math.min(SRC.length - 1, sectionOf(t, stageN()))] : null;
     const rec = src ? JSON.parse(JSON.stringify(src)) : sectionFromHere();
     rec.id = 'cut' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
     rec.cut = src && src.cut ? src.cut
       : { pattern: T.pattern, n: t.n, m: t.m, pi: t.pi, box: cutBoxFromInstance(t) };
     rec.name = TR('sec.snagged', { pat: T.pattern });    // the pattern is a slug, so it is not translated
-    sections = [...SET, rec];
+    sections = [...sectionList(), rec];
     showSetCount(); revealSections(); redraw(true); hint(TR('hint.snag-took', { n: sections.length }));
   }
   // How many sources the floor has. A kept set answers first - that is the "depending on choice" -
   // and the cant answers when there is nothing kept.
+  // While Snag is armed the floor is the slab itself: one source, no sections, so every tap picks
+  // off the original material rather than off the floor you have already composed.
+  const picking = () => tool === 'snag';
   const stageN = () => {
-    const s = sectionList();
+    const s = picking() ? [] : sectionList();
     if (s.length) return Math.min(8, s.length);          // sections answer first, in any material
     if (currentMaterial() !== 'wood') return 1;
     return Math.max(1, Math.min(8, Math.round(WOOD.stage) || 1));
@@ -3611,7 +3619,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const want = WOOD.y0 + k * WOOD.wid;
       return lo + (((want - lo) % rng) + rng) % rng - WOOD.y0;
     };
-    const SET = sectionList();
+    const SET = picking() ? [] : sectionList();
     if (SET.length) {
       // Each section is a whole slab, so each one is swapped in entire - material included. The
       // hand-rolled version here could only put WOOD and three colour tokens back, which is right
@@ -3669,7 +3677,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const px = 1 / (Wc * V.z);
     ctx.fillStyle = GROUT; ctx.fillRect(V.cx - 0.6 / V.z, V.cy - 0.6 / V.z, 1.2 / V.z, 1.2 / V.z);
     const pat = PATTERNS[T.pattern](T.sizeIn);
-    const inst = tileInstances(), chips = chipMap(), SET = sectionList();
+    const inst = tileInstances(), chips = chipMap(), SET = picking() ? [] : sectionList();
     const STAGE = stageN(), HS = H * STAGE;                // HS: the source's own height in slab units
     if (pat.overlap) inst.sort((a, b) => b.ctr[1] - a.ctr[1]);       // lower scales first, upper cover their tops
     const rng = mulberry32(1234567);
@@ -9330,7 +9338,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => { setMaterial(b.dataset.mat); press('[data-mat]', b); showGround();
  redraw(true); });
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
+    const was = picking();
     tool = b.dataset.tool; press('[data-tool]', b); hint();
+    // ARMING OR LEAVING SNAG CHANGES WHAT THE FLOOR IS, not just what a tap does: picking shows the
+    // slab, composing shows the sections. The offscreen is baked and cached, so without this the
+    // mode flips and the picture does not.
+    if (was !== picking()) { showSetCount(); redraw(true); }
     const show = tool === 'move' ? 'vein' : tool;
     for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'roller', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== show; }
   });
@@ -9672,7 +9685,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (!layTiles && lt2) lt2.click();                 // there has to be a tile to point at
       const tb = document.querySelector('[data-tool="snag"]');
       if (tb) tb.click();                                // arm the tool rather than copy what it does
-      hint(TR('hint.snag-tap-a-tile'));
+      hint(TR('hint.picking-shows-the-slab'));
     });
     const add = document.getElementById('sec-add'), clr = document.getElementById('sec-clear');
     if (add) add.addEventListener('click', () => {

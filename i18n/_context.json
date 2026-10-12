@@ -1757,6 +1757,7 @@
  "hint.section-added": {"placeholders": {"name": "the added slab's name, e.g. Carrara", "mat": "its material: stone, wood or glass", "n": "how many sections there are now, e.g. 3"}, "terms": [], "where": "status after adding a saved slab to the set as a section"},
  "hint.snag-needs-tiles": {"terms": [], "where": "status when Snag is used while the floor is not laid as tiles"},
  "hint.snag-tap-a-tile": {"terms": [], "where": "status when a Snag tap misses every tile"},
+ "hint.picking-shows-the-slab": {"terms": [], "where": "status when the Snag tool is armed. While picking, the floor shows the live slab rather than the composed sections, so every tap selects from the original material instead of from the floor already built out of earlier picks"},
  "hint.snag-took": {"placeholders": {"n": "how many sections are now kept, e.g. 3"}, "terms": [], "where": "status shown after snagging a tile"},
  "hint.cuts-full": {"terms": ["wood"], "where": "status when trying to keep a ninth cut"},
  "sl.wood-plankLen": {"terms": ["wood"], "where": "slider: nominal plank length in inches, capped at the board's own length"},

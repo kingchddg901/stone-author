@@ -485,6 +485,7 @@
  "hint.section-added": "Aggiunta {name} ({mat}) — {n} sezione/i. La tua lastra resta intatta; Carica l'avrebbe sostituita.",
  "hint.snag-needs-tiles": "Attiva prima Posa piastrelle — Preleva prende una piastrella, quindi devono essercene.",
  "hint.snag-tap-a-tile": "Tocca una piastrella. Preleva conserva il pezzo che indichi, alle coordinate da cui è stato tagliato.",
+ "hint.picking-shows-the-slab": "Mostra la lastra per poter scegliere — tocca le piastrelle da conservare. Le sezioni tornano quando esci da Preleva.",
  "hint.snag-took": "Prelevato — {n} sezione/i. Ogni piastrella posata da questa mostra ora lo stesso pezzo, con nove volte il dettaglio.",
  "hint.cuts-full": "Otto tagli salvati sono il massimo — ognuno è un tronco da costruire.",
  "sl.wood-plankLen": "Lunghezza tavola",
