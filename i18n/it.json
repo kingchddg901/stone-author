@@ -401,6 +401,8 @@
  "sec.granite-ground": "Fondo di granito",
  "sec.how-the-tools-read": "Come leggono gli strumenti",
  "sec.layers": "Livelli",
+ "note.floor-planks": "Questi parametri modellano solo il motivo a doghe — la lunghezza dell’asse, quanto variano le lunghezze e di quanto si spostano i giunti di ogni fila rispetto a quella sotto. Da quante tavole è ricavato il pavimento lo decide <b>Tavole</b>, in Piastrelle & pavimento, e quello vale per ogni motivo.",
+ "sec.floor-planks": "Doghe del pavimento",
  "sec.tiles-and-floor": "Piastrelle & pavimento",
  "sec.wood": "Legno",
  "sl.backlight": "Retroilluminazione",

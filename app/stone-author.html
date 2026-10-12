@@ -399,9 +399,6 @@
   </div>
   <div class="sliders" data-mat-only="wood">
     <div class="sl"><label for="wood-stage"><span data-i18n="sl.wood-stage">Boards</span> <output id="wood-stageV"></output></label><input id="wood-stage" type="range" min="1" max="8" step="1"></div>
-    <div class="sl"><label for="wood-plankLen"><span data-i18n="sl.wood-plankLen">Plank length</span> <output id="wood-plankLenV"></output></label><input id="wood-plankLen" type="range" min="6" max="96" step="1"></div>
-    <div class="sl"><label for="wood-plankVary"><span data-i18n="sl.wood-plankVary">Length variation</span> <output id="wood-plankVaryV"></output></label><input id="wood-plankVary" type="range" min="0" max="1" step="0.01"></div>
-    <div class="sl"><label for="wood-plankStagger"><span data-i18n="sl.wood-plankStagger">Joint stagger</span> <output id="wood-plankStaggerV"></output></label><input id="wood-plankStagger" type="range" min="0" max="1" step="0.01"></div>
   </div>
   <div class="grp" role="group" aria-label="Sections" data-i18n-attr="aria-label=a11y.sections"><span class="lbl" data-i18n="lbl.sections">Sections</span>
     <button id="sec-add" type="button" data-i18n="tool.keep-cut">Keep this cut</button>
@@ -421,6 +418,14 @@
     Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint.
     In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Plank run is the one layout that is not a repeating pattern: rows of boards of differing lengths with their end joints staggered. The plank is the board you cut — its width and its longest length come from the Plank controls above, not from Size — so Plank length is a nominal that Length variation scatters around, and Joint stagger is how far each row's joints shift from the row below. At zero they stack into columns, which is exactly what a floor is laid to avoid.
     Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.</p>
+  </div></details>
+  <details class="sec" data-mat-only="wood"><summary data-i18n="sec.floor-planks">Floor planks</summary><div class="body">
+  <div class="sliders">
+    <div class="sl"><label for="wood-plankLen"><span data-i18n="sl.wood-plankLen">Plank length</span> <output id="wood-plankLenV"></output></label><input id="wood-plankLen" type="range" min="6" max="96" step="1"></div>
+    <div class="sl"><label for="wood-plankVary"><span data-i18n="sl.wood-plankVary">Length variation</span> <output id="wood-plankVaryV"></output></label><input id="wood-plankVary" type="range" min="0" max="1" step="0.01"></div>
+    <div class="sl"><label for="wood-plankStagger"><span data-i18n="sl.wood-plankStagger">Joint stagger</span> <output id="wood-plankStaggerV"></output></label><input id="wood-plankStagger" type="range" min="0" max="1" step="0.01"></div>
+  </div>
+  <p class="note" data-i18n="note.floor-planks">These shape the plank-run pattern and nothing else — board length, how much the lengths differ, and how far each row’s joints shift from the row below. How many boards the floor is cut from is <b>Boards</b>, under Tiles &amp; floor, and that one applies to every pattern.</p>
   </div></details>
   <div id="ground" class="rail">
     <details class="sec" open><summary data-i18n="sec.coat-and-light">Coat & light</summary><div class="body">
@@ -1123,6 +1128,7 @@ window.SA_I18N = (() => {
   "note.each-line-keeps-what-it": "<b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw it, so changing them shapes the next line only. This generates the base structure; the colours here are only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor vein grown while zoomed in comes out shorter, at the scale you are working.",
   "note.granite": "<b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space. A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only specks already down are moved, so what you draw first is older rock.",
   "note.identity": "<b>Identity</b> shows what an animation would read: each line in its own colour, brightening along its length in the direction you drew it; web cracks brighten toward the line that spread them. Nothing had to be traced &mdash; the line was known when it was made.",
+  "note.floor-planks": "These shape the plank-run pattern and nothing else — board length, how much the lengths differ, and how far each row’s joints shift from the row below. How many boards the floor is cut from is <b>Boards</b>, under Tiles & floor, and that one applies to every pattern.",
   "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint. In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Plank run is the one layout that is not a repeating pattern: rows of boards of differing lengths with their end joints staggered. The plank is the board you cut — its width and its longest length come from the Plank controls above, not from Size — so Plank length is a nominal that Length variation scatters around, and Joint stagger is how far each row's joints shift from the row below. At zero they stack into columns, which is exactly what a floor is laid to avoid. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
   "note.magnet": "<b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab. The Angle view colours every speck by the way it points, so alignment shows as a single colour.",
   "opt.fmt-png": "PNG",
@@ -1157,6 +1163,7 @@ window.SA_I18N = (() => {
   "sec.granite-ground": "Granite ground",
   "sec.how-the-tools-read": "How the tools read",
   "sec.layers": "Layers",
+  "sec.floor-planks": "Floor planks",
   "sec.tiles-and-floor": "Tiles & floor",
   "sl.backlight": "Back light",
   "sl.bandAngle": "Angle",
@@ -1711,7 +1718,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.44';
+  const BUILD = '2026.10.12.45';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those

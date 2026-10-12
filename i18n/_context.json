@@ -1405,6 +1405,8 @@
  "sec.layers": {
   "where": "title of a collapsible section in the right-hand rail"
  },
+ "note.floor-planks": {"terms": [], "where": "the note under the Floor planks sliders. It says these three shape the plank-run pattern only, and that the control for HOW MANY boards the floor is cut from lives elsewhere (Boards, under Tiles & floor) and applies to every pattern. Written because all four sat in one block and the one actually doing the work read as a plank setting"},
+ "sec.floor-planks": {"terms": [], "where": "section heading in the right-hand rail, directly under Tiles & floor, and shown only for wood. It holds the three controls that shape the plank-run pattern"},
  "sec.tiles-and-floor": {
   "where": "title of a collapsible section in the right-hand rail"
  },
