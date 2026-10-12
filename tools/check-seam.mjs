@@ -82,6 +82,28 @@ import { inflateSync } from 'zlib';
 
 const BASE = 64;            // columns fitted each side of a join, for the step test
 const BAND = 1024;          // rows per band; bands are the sample for the roughness test
+
+// WHAT SIZE WOULD BE JUDGEABLE?
+//
+// The SKIP below is honest - a 2048 master in 1024 passes has ONE join and TWO bands - and the
+// self-test proves the blindness rather than leaving it to be assumed: on such a file a constant
+// +1.0 and a sign-varying 0.3 are both injected at every join and the gate stays green, because it
+// never gets as far as a verdict. What "too few cells" does not say is what to render instead, and
+// the arithmetic is not guessable from the message: cells are JOINS x BANDS, joins come from the
+// PASS size, and bands are fixed 1024-row slices of the HEIGHT. So answer it both ways round - a
+// smaller pass at this size, or this pass at a larger size - and let the caller pick.
+const joinsIn = (w, pass) => { let n = 0; for (let x = pass; x < w - BASE; x += pass) if (x >= BASE) n++; return n; };
+const clears = (w, h, pass) => { const j = joinsIn(w, pass); return j * Math.ceil(h / BAND) >= 20 && j * Math.ceil(h / pass) >= 4; };
+function judgeable(p) {
+  const out = [];
+  for (let pass = p.pass >> 1; pass >= 64; pass >>= 1)
+    if (clears(p.w, p.h, pass)) { out.push(`force the tile to ${pass} at this size`); break; }
+  for (let k = 2; k <= 64; k *= 2) {
+    const w = p.w * k, h = Math.round(p.h * k);
+    if (clears(w, h, p.pass)) { out.push(`${out.length ? 'or keep' : 'keep'} ${num(p.pass)} and render at ${num(w)}`); break; }
+  }
+  return out.length ? `to get a verdict: ${out.join(', ')}` : 'no reachable size clears the bar for this plan';
+}
 const Z_FAIL = 4;           // standard errors the joins must sit off the control mean, step test
 const MIN_STEP = 0.5;       // ...and at least this much of 255
 const RATIO_FAIL = 3;       // join roughness over control roughness
@@ -340,7 +362,8 @@ function audit(path, inject, quiet) {
       }
 
     if (stepJ.length < 4 || roughJ.length < 20) {
-      console.log(`${path}\n  SKIP     too few cells to judge (${stepJ.length} step cells, ${roughJ.length} bands)`);
+      console.log(`${path}\n  SKIP     too few cells to judge (${stepJ.length} step cells, ${roughJ.length} bands; needs 4 and 20)`);
+      console.log(`           ${judgeable(p)}`);
       return true;
     }
 
