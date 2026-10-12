@@ -150,7 +150,7 @@
  "big.extreme": {
   "where": "label on the second toggle, which unlocks the single largest export width"
  },
- "big.once": {"terms": [], "where": "label on the third and last export-size tick, nested under Extreme. Offers 131072, one step above the 65535 that Chrome's canvas limit imposes on the PNG path; the TIFF path streams tiles and never allocates a canvas that wide, so the ceiling there was the dropdown rather than the renderer"},
+ "big.once": {"terms": [], "where": "label on the third and last export-size tick, nested under Extreme. Opens the sizes past the 65535 that Chrome's canvas limit imposes on the PNG path - 131072 and 262144 - which only the tiled TIFF path can produce, since it streams tiles and never allocates a canvas that wide. Named for the tier's character rather than for any one size in it: the tick does not persist, so it is a decision taken again each time"},
  "big.large": {
   "where": "label on the toggle that unlocks the export widths above 16384, in the File section"
  },
@@ -186,7 +186,7 @@
  "big.warn": {
   "where": "the warning shown, and confirmed, when Large render is switched on"
  },
- "big.warn-once": {"terms": [], "where": "the dialog shown when the 131072 tick is set. States the cost, that it is TIFF only, that nothing will open the file, and that the detail does not run out at any size so the honest stopping point is what the output can show"},
+ "big.warn-once": {"terms": [], "where": "the dialog shown when the one-off tick is set. Gives the MEASURED cost of both sizes it opens, that they are TIFF only, that nothing on the machine will open the files, and that the detail does not run out at any size - so the honest stopping point is what the output can show rather than what the field has left"},
  "btn.cal-cancel": {
   "where": "button in the Calibrate the pen section, shown only while calibrating"
  },

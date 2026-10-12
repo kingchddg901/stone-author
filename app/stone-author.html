@@ -703,7 +703,7 @@
   <details class="sec" id="rendersec"><summary data-i18n="sec.render">Render</summary><div class="body">
     <div class="grp" role="group" aria-label="Render" data-i18n-attr="aria-label=a11y.render">
       <button id="export" type="button" data-i18n="btn.export">Export</button>
-      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option><option value="131072" data-tier="once">131072</option></select>
+      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option><option value="131072" data-tier="once">131072</option><option value="262144" data-tier="once">262144</option></select>
       <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select><select id="expfmt" aria-label="Export format" title="Export format" data-i18n-attr="aria-label=a11y.export-format;title=a11y.export-format"><option value="png" data-i18n="opt.fmt-png">PNG</option><option value="tiff" data-i18n="opt.fmt-tiff">TIFF</option></select>
       <span class="stat" id="expcap"></span>
     </div>
@@ -711,7 +711,7 @@
     <div class="tiers" id="tiers" hidden>
       <label class="tgl"><input type="checkbox" id="tier-large"><span data-i18n="big.large">Large render</span></label>
       <label class="tgl" id="tier-extreme-row" hidden><input type="checkbox" id="tier-extreme"><span data-i18n="big.extreme">Extreme</span></label>
-      <label class="tgl" id="tier-once-row" hidden><input type="checkbox" id="tier-once"><span data-i18n="big.once">131072, once</span></label>
+      <label class="tgl" id="tier-once-row" hidden><input type="checkbox" id="tier-once"><span data-i18n="big.once">Once only</span></label>
       <span class="stat" id="tier-note"></span>
     </div>
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.tile-probe-note">Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width - it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered. On a device short of memory it is often worth taking one size BELOW what the planner settles on: a large tile can lose light at the joins in a way a single calibration tile cannot show, and on the slowest hardware here the smaller tile was also the faster one. A suggestion, not a rule — it costs a capable machine speed for nothing.</span></div>
@@ -796,7 +796,7 @@ window.SA_I18N = (() => {
   "app.title": "Stone author",
   "big.confirm": "Start {w} × {h} render?\n\n{gpx} gigapixels. This may run for several minutes and produce a file approaching or exceeding 1 GB. Other software may need tens of gigabytes to open it.",
   "big.extreme": "Extreme",
-  "big.once": "131072, once",
+  "big.once": "Once only",
   "big.large": "Large render",
   "big.mem-rec": "Recommended: {gb} GB of memory — the machine this tier is known to finish on. Below that it is untested, not unsupported.",
   "big.mem-reported": "This browser reports {gb} GB — a rounded figure, and some browsers cap it.",
@@ -805,7 +805,7 @@ window.SA_I18N = (() => {
   "big.note": "Above {px}px the export streams the picture in bands. It cannot resume — do not close the tab.",
   "big.note-tiled": "Above {px}px the export renders one tile at a time and writes each to disk as it goes. It cannot resume — do not close the tab.",
   "big.warn": "This is not fast, and it will eat storage.\n\nWhile it runs it will take up to a quarter of this device's memory — deliberately. A smaller share forces smaller tiles, and at these sizes that is what makes a picture come out dim.\n\nIt has not been known to crash a machine, across every device it has been tried on. What you are risking is the render itself: it cannot resume, so closing the tab or navigating away loses the lot. Close anything you are not using.",
-  "big.warn-once": "131072 is four times the pixels of a 65535.\n\nOn a machine that renders 65535 in half an hour, expect something over two hours and a file of a couple of gigabytes. It is TIFF only: no canvas on any engine is that wide, so only the tiled path can produce it, and nothing on this machine will open the result.\n\nIt is not the detail limit either. Measured on a real master, the octave above 131072 still holds about a fifth of the picture's contrast, so there is no size at which this stops paying. 65535 is already 683 DPI across eight feet, which is past what print or any screen can take delivery of.\n\nThis tick does not persist. Decide it again next time.",
+  "big.warn-once": "Past 65535 the sizes here are one-off renders, not settings.\n\n131072 is four times the pixels of a 65535, and 262144 is sixteen. Measured on a 16 GB desktop: 131072 took 24 minutes and wrote 1.3 GB, so expect 262144 to be nearer an hour and about five gigabytes \u2014 and the staging copy may want that much again in free disk. It is TIFF only: no canvas on any engine is that wide, so only the tiled path can produce one, and nothing on this machine will open the result. A 65535 already needed 27 GB of paging to open in an image editor.\n\nIt is not the detail limit either. Measured on a real master, the octave above 131072 still holds about a fifth of the picture's contrast, so there is no size at which this stops paying. 65535 is already 683 DPI across eight feet, past what print or any screen can take delivery of. The stopping point is what the output can show, not what the field runs out of.\n\nThis tick does not persist. Decide it again next time.",
   "btn.cal-cancel": "Cancel",
   "btn.cal-clear": "Forget",
   "btn.cal-start": "Start",
@@ -1711,7 +1711,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.11.39';
+  const BUILD = '2026.10.11.40';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -10148,10 +10148,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!tierExtreme) tierOnce = false;
     applyTiers();
   });
-  // THE THIRD TICK. 131072 is TIFF only and the tooWide rule already sees to that: it is wider than
-  // any canvas this engine will hand over, so the option stays disabled unless the format is TIFF,
-  // which streams tiles and never allocates one. Its own dialog, because the step is not the same
-  // kind of step as the two below it - four times the pixels of a 65535, and a file nobody opens.
+  // THE THIRD TICK, which now opens two sizes rather than one. Both are TIFF only and the tooWide
+  // rule already sees to that: they are wider than any canvas this engine will hand over, so the
+  // options stay disabled unless the format is TIFF, which streams tiles and never allocates one.
+  // Its own dialog, because the step is not the same kind of step as the two below it - 4x and 16x
+  // the pixels of a 65535, and files nobody opens. 262144 is the last one: measured, 131072 took 24
+  // minutes and 1.3 GB on a 16 GB desktop, so the tier above this is a storage question, not a time
+  // one. There is no size at which the field runs out of detail, so the ceiling has to be a choice.
   document.getElementById('tier-once').addEventListener('change', async () => {
     const box = document.getElementById('tier-once');
     if (box.checked && !(await bigDialog(TR('big.warn-once'), TR('btn.understood')))) { box.checked = false; tierOnce = false; applyTiers(); return; }
@@ -10279,8 +10282,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // attempted and never finished is refused next time — not because it is impossible, but because this
   // device has evidence against it and there is a smaller one to try. A render that completes clears it,
   // so a size that failed for a passing reason can come back.
-  const TILE_PROOF_KEY = 'stone-author:plan:v4';   // v4: the choice reads headroom, so every v3 plan was picked under a policy that no longer applies
-  const planKey = W => calSig() + ':' + W + ':' + (uvMode ? 'uv' : 'day') + ':m' + MEM_EASY + (navigator.deviceMemory > 0 ? 'k' : 'u');
+  const TILE_PROOF_KEY = 'stone-author:plan:v5';   // v5: the choice reads POOL WIDTH, so every v4 plan was raced on sequential wall clock alone
+  const planKey = W => calSig() + ':' + W + ':' + (uvMode ? 'uv' : 'day') + ':m' + MEM_EASY + ':s' + MEM_SHARE + (navigator.deviceMemory > 0 ? 'k' : 'u');
   function planRec(W) {
     try { return JSON.parse(localStorage.getItem(TILE_PROOF_KEY) || '{}')[planKey(W)] || {}; } catch (_) { return {}; }
   }
@@ -10762,6 +10765,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const canBlur = sigma > 0 ? canBloom() : true;      // one probe, shared with both PNG paths
     const probeSigma = canBlur ? sigma : 0;                  // nothing to learn from asking again per size
     const budget = memBudget();
+    // The same two figures the plan RETURNS, named here so the planner can ask the pool how wide it will
+    // run before choosing. tileMBof must stay identical to the returned tileMB: tilePool divides by that
+    // one, and a planner scoring against a different figure predicts a width that never arrives.
+    const budgetMB = Math.round(budget / 1e6);
+    const tileMBof = t => Math.round((t + 2 * bleed) ** 2 * 4 / 1e6);
+    const widthOf = t => poolWidthFor(budgetMB, tileMBof(t)) || 1;   // 0 (no pool) scores as sequential
     const proven = forcedTile() ? 0 : provenTile(W);
     const died = forcedTile() ? [] : diedAt(W);          // sizes this machine started and never came back from
     let ts = Math.min(W, 8192);
@@ -10892,10 +10901,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         ? TR('exp.err.dim', { px: W, pct: Math.round(100 * bestLit) })
         : TR('exp.err.tile', { px: W })) + '  [' + trail.join('  ') + ']');
       const safe = ok.reduce((a, b) => (b.ts < a.ts ? b : a));        // smallest that calibrated
-      const fast = ok.reduce((a, b) => (b.est < a.est ? b : a));      // lowest MEASURED total, not the biggest
+      // LOWEST WALL CLOCK, which is not the lowest est. est is the sequential total - one tile measured,
+      // multiplied by the pass count - and it rewards the big tile for amortising per-pass overhead. The
+      // pool paints N at once and N shrinks as the tile grows, so the quantity that decides is est/N.
+      // Where there is no pool widthOf is 1 and this is exactly the old comparison.
+      const wallOf = c => c.est / widthOf(c.ts);
+      const fast = ok.reduce((a, b) => (wallOf(b) < wallOf(a) ? b : a));
       const memKnown = navigator.deviceMemory > 0;
-      const roomy = memKnown && fast.need <= MEM_EASY * budget;
+      // WHAT IS LIVE AT THE PEAK. `need` is ONE tile, which is the sequential truth; with the pool on,
+      // N canvases exist at the same moment. A candidate that sits under half the ceiling alone and over
+      // it eight-wide is precisely the candidate that pages, and judging it alone is how it got picked.
+      const peakOf = c => { const n = widthOf(c.ts); return n > 1 ? n * tileMBof(c.ts) * 1e6 : c.need; };
+      const roomy = memKnown && peakOf(fast) <= MEM_EASY * budget;
       ts = (roomy ? fast : safe).ts;
+      if (ok.length > 1 && widthOf(fast.ts) > 1) trail.push('pool ' + ok.map(c => c.ts + 'x' + widthOf(c.ts) +
+        '=' + Math.round(peakOf(c) / 1e6) + 'MB').join(' '));
       if (ok.length > 1) trail.push('chose ' + ts + ': ' + (roomy
         ? Math.round(fast.need / 1e6) + 'MB is under half the ' + Math.round(budget / 1e6) + 'MB ceiling, take the speed'
         : !memKnown
@@ -10914,11 +10934,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!Number.isInteger(k) || store < 256) throw new Error(TR('exp.err.tile', { px: W }));
     trail.push('store ' + store + ' x' + k);
     const across = Math.ceil(W / store), down = Math.ceil(FH / store);
-    return { FH, ts, store, k, bleed, sigma, wins, canBlur, trail, proven, memShare: MEM_SHARE, budgetMB: Math.round(budget / 1e6),
+    return { FH, ts, store, k, bleed, sigma, wins, canBlur, trail, proven, memShare: MEM_SHARE, budgetMB,
              across, down, tiles: across * down,                  // the STORED grid, what the file declares
              rAcross: Math.ceil(W / ts), rDown: Math.ceil(FH / ts),
              renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
-             tileMB: Math.round((ts + 2 * bleed) ** 2 * 4 / 1e6) };
+             tileMB: tileMBof(ts) };
   }
   // WHAT THE SERIALISED CORE REPRODUCES EXACTLY, and nothing else. Measured, not assumed: with
   // these three false the parallel and sequential paths differ by zero bytes.
@@ -10930,11 +10950,23 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // timing and the blank-tile retry all read in sequence - so the win comes from having the next few
   // already in flight. Bounded by the plan's own memory arithmetic, because that budget was written
   // for ONE tile at a time and N in flight multiply it.
-  async function tilePool(W, p) {
-    if (EXP_FORCE_SEQ || !corePaintsThis()) return null;
-    const room = Math.floor(p.budgetMB / Math.max(1, p.tileMB));
+  // HOW MANY TILES WILL BE IN FLIGHT AT ONCE. Asked by tiffPlan BEFORE it picks the tile and by
+  // tilePool AFTER, through this one function, because a planner that optimises for a width the pool
+  // does not deliver has moved the defect rather than fixed it. 0 means there will be no pool at all.
+  //
+  // NOTE the divisor is the BARE tile: tilePool's workers each allocate `surfaces` of them when the slab
+  // blurs, so on a blurred slab the real footprint is a multiple of this and the pool over-subscribes.
+  // Left alone deliberately - correcting it narrows the pool on every blurred slab, which is a different
+  // change with its own measurement, not a rider on this one.
+  function poolWidthFor(budgetMB, tileMB) {
+    if (EXP_FORCE_SEQ || !corePaintsThis()) return 0;
+    const room = Math.floor(budgetMB / Math.max(1, tileMB));
     const n = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8, room));
-    if (n < 2) return null;                                // one worker is slower than no worker
+    return n < 2 ? 0 : n;                                  // one worker is slower than no worker
+  }
+  async function tilePool(W, p) {
+    const n = poolWidthFor(p.budgetMB, p.tileMB);
+    if (!n) return null;
     const bs = W / COAT_REF, finalW = W, finalH = p.FH;
     const [clB, bdB, brB] = await Promise.all([
       layVis('clouds') && G.cloudStrength > 0 ? createImageBitmap(ensureClouds()) : null,
@@ -10959,14 +10991,47 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } catch (e) { for (const q of pool) q.w.terminate(); URL.revokeObjectURL(url); throw e; }
     if (clB) clB.close(); if (bdB) bdB.close(); if (brB) brB.close();
     const inflight = new Map();                            // n -> Promise<ImageBitmap>
+    // A POOL THAT MEASURES WHETHER IT IS TOO WIDE, because nothing it can ASK will tell it. The budget
+    // this width came from is deviceMemory x MEM_SHARE, which is the machine's TOTAL rounded down - it
+    // read 12885 MB on a 16 GB desktop that had about 2300 MB free, and eight tiles allocated inside
+    // that fiction without a single throw and then paged for three hours. An allocation probe would
+    // have agreed with it. Paging does not fail, it just takes longer, so TIME is the only witness.
+    //
+    // The first tile paints alone and its time is the baseline: the same work, on this machine, in this
+    // worker, moments ago. After that a pool with room costs each tile roughly that again, and a pool
+    // that is swapping costs several times it. Monotone downward only - a width that was too wide does
+    // not become right later in the same render, and re-initialising a worker means re-posting every
+    // modulator bitmap.
+    const SHED_AT = 3;        // 8 workers sharing bandwidth cost each other well under 2x; swapping is 5-20x
+    let target = 1, base = 0;                              // ramp from one so the first tile is the baseline
+    const recent = [], shedLog = [];
+    const busyCount = () => { let b = 0; for (const q of pool) if (q.busy) b++; return b; };
+    function poolSettle(q, ms) {
+      q.busy = false;
+      if (!base) { base = Math.max(1, ms); target = n; return; }        // the solo tile: then open up
+      recent.push(ms);
+      if (recent.length >= Math.max(2, target)) {
+        const med = recent.slice().sort((a, b) => a - b)[recent.length >> 1];
+        recent.length = 0;
+        if (med > SHED_AT * base && target > 2) {
+          target--;
+          shedLog.push(target + '@' + Math.round(med / base) + 'x');    // what it dropped to, and on what
+        }
+      }
+      // Surplus workers are TERMINATED, not merely left idle: the point of shedding is the memory they
+      // are holding, and an idle worker holds its tile canvas exactly as a busy one does.
+      if (pool.length > target) { const i = pool.indexOf(q); if (i >= 0) { q.w.terminate(); pool.splice(i, 1); } }
+    }
     const start = (idx) => {
       if (idx >= p.renders || inflight.has(idx)) return;
+      if (busyCount() >= target) return;
       const q = pool.find(x => !x.busy);
       if (!q) return;
       q.busy = true;
+      const t0 = performance.now();
       const gx = idx % p.rAcross, gy = (idx / p.rAcross) | 0;
       inflight.set(idx, new Promise((res, rej) => {
-        q.w.onmessage = e => { q.busy = false; res(e.data.bmp); };
+        q.w.onmessage = e => { poolSettle(q, performance.now() - t0); res(e.data.bmp); };
         q.w.onerror = e => { q.busy = false; rej(new Error('render worker: ' + (e.message || 'threw'))); };
         q.w.postMessage({ i: idx, tx0: gx * p.ts, ty0: gy * p.ts, tileW: p.ts, tileH: p.ts, keepBleed: true,
                           ew: p.ts + 2 * p.bleed, eh: p.ts + 2 * p.bleed, ex0: gx * p.ts - p.bleed,
@@ -10974,7 +11039,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }));
     };
     return {
-      workers: n,
+      get workers() { return target; },                    // the width that RAN, which shedding may have cut
+      planned: n,
+      get shed() { return shedLog; },
       async tile(idx) {
         start(idx);
         for (let k = 1; k < n; k++) start(idx + k);        // keep the rest of the pool fed
@@ -11070,6 +11137,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         c.width = 1; c.height = 1;                         // only now: every quarter has been read
         tileMs.push(Math.round(performance.now() - tTile)); tileBytes.push(tb);
       }
+      // Read BEFORE the close, because the close nulls it. This field spent its whole life unable to
+      // appear: the metadata below asked `pool ? pool.workers : undefined` after this line had already
+      // run, so every master said "painted on this thread" whatever had happened.
+      const poolRan = pool ? { n: pool.workers, planned: pool.planned, shed: pool.shed.slice() } : null;
       if (pool) { pool.close(); pool = null; }
       proveTile(p.ts, W);                                  // settled: every render after this one matches it
       const msRender = Date.now() - tR;
@@ -11125,7 +11196,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         plan: { budgetMB: p.budgetMB, memShare: p.memShare, mem: navigator.deviceMemory || null,
                 proven: p.proven || undefined, tried: p.trail },
         toDisk: sink.toDisk, bytes,
-        workers: pool ? pool.workers : undefined,          // absent = painted on this thread
+        // absent = painted on this thread. `planned` and `shed` appear only when the pool narrowed
+        // itself mid-render, which is the machine saying the budget was too generous for it.
+        workers: poolRan ? poolRan.n : undefined,
+        poolPlanned: poolRan && poolRan.planned !== poolRan.n ? poolRan.planned : undefined,
+        poolShed: poolRan && poolRan.shed.length ? poolRan.shed : undefined,
         ms: { render: msRender, total: Date.now() - expT0 },
         // Paired on purpose: time ALONE cannot say why a tile was slow. Against its own byte count it
         // can -- time that tracks bytes is the picture being dense, time that spikes where bytes did

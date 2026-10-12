@@ -156,8 +156,14 @@ if (!/ew \* ew \* 4 > CANVAS_HARD_MAX/.test(plan)) fail.push('nothing stops an a
 // differs between two tiles that both calibrated - 14% of a desktop's budget against 56% of a tablet's.
 if (/a\.est - b\.est/.test(plan))
   fail.push('the choice is back on the time estimate alone, whose ordering is fixed by its own formula - it can only ever take the biggest candidate');
-if (!/fast\.need <= MEM_EASY \* budget/.test(plan))
+if (!/peakOf\(fast\) <= MEM_EASY \* budget/.test(plan))
   fail.push('the choice does not weigh the winner against the memory ceiling, so a tablet grazing its cap takes the same tile as a desktop with 6 GB spare');
+// AND IT HAS TO WEIGH WHAT IS ACTUALLY LIVE. `need` is one tile, which was the whole truth while tiles
+// were painted one at a time. The pool holds N at once, so a candidate that sits under half the ceiling
+// alone and over it eight-wide passed this test and then paged: measured at 131072, eight 8192 tiles are
+// 2152MB of canvas against the ~2300MB that machine actually had free, and the gate saw 336MB.
+if (!/const peakOf = c => \{ const n = widthOf\(c\.ts\); return n > 1 \? n \* tileMBof\(c\.ts\) \* 1e6 : c\.need; \}/.test(plan))
+  fail.push('the ceiling test judges ONE tile while the pool holds N, so the candidate that pages is the one it waves through');
 if (!/need: needOf\(proven\)/.test(plan))
   fail.push('a remembered plan carries no memory figure, so the headroom test reads undefined and silently takes the protective tile every time');
 if (!/const safe = ok\.reduce\(\(a, b\) => \(b\.ts < a\.ts \? b : a\)\)/.test(plan))
@@ -167,8 +173,23 @@ if (!/const safe = ok\.reduce\(\(a, b\) => \(b\.ts < a\.ts \? b : a\)\)/.test(pl
 // 8192, a 60% overshoot, and 8192 draws 0.32 Gpx against 4096's 0.29. ms x passes carries both.
 if (/const fast = ok\[ok\.length - 1\]|const fast = ok\[0\]/.test(plan))
   fail.push('the fast candidate is taken by position rather than by its measured estimate: at a width where the tile grid does not divide, the biggest tile is the SLOWER one and costs three times the memory');
-if (!/const fast = ok\.reduce\(\(a, b\) => \(b\.est < a\.est \? b : a\)\)/.test(plan))
+if (!/const fast = ok\.reduce\(\(a, b\) => \(wallOf\(b\) < wallOf\(a\) \? b : a\)\)/.test(plan))
   fail.push('the fast candidate is not chosen on its measured estimate');
+// PER WORKER, not in total. est is the SEQUENTIAL wall clock - one measured tile times the pass count -
+// and it rewards the big tile for amortising per-pass overhead. That is the same tile the pool can run
+// fewest of at once, so the sequential winner and the real winner come apart exactly where the device is
+// tight: at 65536 on 2 GB, 8192 wins on est (16800ms against 19200ms) and loses the wall clock, because
+// the budget holds five of it and eight of the other. tools/probe-pool-width.mjs is that case.
+if (!/const wallOf = c => c\.est \/ widthOf\(c\.ts\)/.test(plan))
+  fail.push('the fast candidate is scored on the sequential total, which can only ever prefer the tile the pool runs fewest of');
+// ONE ANSWER FOR BOTH HALVES. A planner that predicts a width tilePool does not deliver has moved the
+// defect, not fixed it, and nothing else here would notice: both sides would be internally consistent.
+if ((app.match(/Math\.min\(navigator\.hardwareConcurrency \|\| 4, 8/g) || []).length !== 1)
+  fail.push('the pool width is computed in more than one place, so the planner can optimise for a width the pool will not run');
+if (!/const n = poolWidthFor\(p\.budgetMB, p\.tileMB\)/.test(app))
+  fail.push('tilePool no longer asks poolWidthFor, so the width the planner chose against is not the width it gets');
+if (!/const tileMBof = t => Math\.round\(\(t \+ 2 \* bleed\) \*\* 2 \* 4 \/ 1e6\)/.test(plan) || !/tileMB: tileMBof\(ts\)/.test(plan))
+  fail.push('the tile figure the planner scores against is not the one the plan returns, so poolWidthFor is asked two different questions');
 // An unknown ceiling is not a generous one. deviceMemory is Chromium-only, so Safari and Gecko fall back
 // to a flat 4 GB that nothing measured - and an iPhone is the device least able to honour it.
 if (!/const memKnown = navigator\.deviceMemory > 0/.test(plan))
