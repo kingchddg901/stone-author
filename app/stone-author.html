@@ -1729,7 +1729,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.67';
+  const BUILD = '2026.10.13.68';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1773,7 +1773,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // is theirs and is shown untouched. Only an untouched built-in resolves through the pack.
   const layName = L => (L && L.labelKey && TR(L.labelKey)) || (L && L.label) || (L && L.key) || '';
   const COLOUR_TOKENS = [
-    { key: 'ground', labelKey: 'lay.base-ground', label: TR('lay.base-ground') }, { key: 'major', mat: 'stone', label: TR('lay.major-veins') }, { key: 'minor', mat: 'stone', label: TR('lay.minor-veins') },
+    // THE GROUND IS PER MATERIAL. It used to be one token for all three, which is defensible for a
+    // material that paints over it and wrong for one that does not: the wood raster writes alpha 255
+    // across the whole slab, so the ground beneath is invisible, while glass is a transmission model
+    // and the ground is most of what you see through it. A ground chosen to make stone dramatic
+    // therefore followed the author into glass and swallowed it.
+    //
+    // Stone KEEPS the name `ground`, so every slab already on disk still owns its ground and no
+    // master re-dates. Wood and glass get their own, and they are deliberately given no `def`:
+    // unset means INHERIT, and groundCol resolves an unset one to `ground`. So an old file opens
+    // exactly as it did, and the link breaks the first time a material's own ground is set.
+    { key: 'ground', labelKey: 'lay.base-ground', label: TR('lay.base-ground'), mat: 'stone' },
+    { key: 'woodGround', labelKey: 'lay.base-ground', label: TR('lay.base-ground'), mat: 'wood', inheritGround: true },
+    { key: 'glassGround', labelKey: 'lay.base-ground', label: TR('lay.base-ground'), mat: 'glass', inheritGround: true },
+    { key: 'major', mat: 'stone', label: TR('lay.major-veins') }, { key: 'minor', mat: 'stone', label: TR('lay.minor-veins') },
     { key: 'web', mat: 'stone', labelKey: 'lay.fracture-web', label: TR('lay.fracture-web') }, { key: 'micro', mat: 'stone', label: TR('lay.micro-specks') }, { key: 'styl', mat: 'stone', label: TR('lay.stylolite-seam') },
     { key: 'drusy', mat: 'stone', labelKey: 'lay.drusy-sparkle', label: TR('lay.drusy-sparkle') }, { key: 'halo', mat: 'stone', label: TR('lay.vein-halo') },
     // Wood's two. `def` rather than a seed: seedColours writes into OVR, OVR is hashed by renderSig,
@@ -3546,9 +3559,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // and a user can add layers, so stone's set cannot be written down. Listing it by name is what
   // dropped every `lay:*` on a per-material load - neither copied nor cleared, so it kept whatever
   // the slab before it had, and stone came back with no colours at all.
-  const SHARED_TOKENS = ['ground', 'specTint'];
-  const WOOD_TOKENS = ['woodEarly', 'woodLate', 'woodHeart', 'woodKnot', 'woodMineral'];
-  const GLASS_TOKENS = ['glassA', 'glassB', 'glassC', 'glassD', 'glassE', 'glassF'];
+  // `ground` is NOT here any more. It is stone's, by falling through tokenOwner to stone the way
+  // every other stone token does, and wood and glass carry their own - so saving one material takes
+  // its ground with it and leaves the other two alone, which is what the button has always claimed.
+  const SHARED_TOKENS = ['specTint'];
+  const WOOD_TOKENS = ['woodEarly', 'woodLate', 'woodHeart', 'woodKnot', 'woodMineral', 'woodGround'];
+  const GLASS_TOKENS = ['glassA', 'glassB', 'glassC', 'glassD', 'glassE', 'glassF', 'glassGround'];
   const tokenOwner = k => WOOD_TOKENS.indexOf(k) >= 0 ? 'wood'
     : GLASS_TOKENS.indexOf(k) >= 0 ? 'glass'
     : SHARED_TOKENS.indexOf(k) >= 0 ? 'shared' : 'stone';
@@ -3782,7 +3798,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const c = stoneC.getContext('2d');
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cw, ch);
     c.fillStyle = STONE_BG; c.fillRect(0, 0, cw, ch);
-    if (layVis('base')) { c.globalAlpha = layOp('base'); c.fillStyle = COL.ground; c.fillRect(0, 0, cw, ch); c.globalAlpha = 1; }  // slab's own ground, so tiles are stone not grout
+    if (layVis('base')) { c.globalAlpha = layOp('base'); c.fillStyle = groundCol(); c.fillRect(0, 0, cw, ch); c.globalAlpha = 1; }  // slab's own ground, so tiles are stone not grout
     const prev = g2d; g2d = c; c.lineCap = 'round'; c.lineJoin = 'round';
     // ONE BAND PER BOARD. woodRect boxes the SLAB rectangle under the current transform, never the
     // canvas, so a taller canvas on its own paints nothing extra - translating the transform down by
@@ -4433,7 +4449,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ox.setTransform(1, 0, 0, 1, 0, 0); ox.globalAlpha = 1;
     if (backlit) { ox.fillStyle = '#0b0b0e'; ox.fillRect(0, 0, oc.width, oc.height); }
     else if (uvMode) { ox.fillStyle = UV_GROUND; ox.fillRect(0, 0, oc.width, oc.height); }
-    else { ox.fillStyle = STONE_BG; ox.fillRect(0, 0, oc.width, oc.height); if (layVis('base')) { ox.globalAlpha = layOp('base'); ox.fillStyle = COL.ground; ox.fillRect(0, 0, oc.width, oc.height); ox.globalAlpha = 1; } }
+    else { ox.fillStyle = STONE_BG; ox.fillRect(0, 0, oc.width, oc.height); if (layVis('base')) { ox.globalAlpha = layOp('base'); ox.fillStyle = groundCol(); ox.fillRect(0, 0, oc.width, oc.height); ox.globalAlpha = 1; } }
     ox.setTransform(W, 0, 0, W, 0, 0); ox.lineCap = 'round'; ox.lineJoin = 'round'; g2d = ox;
     if (backlit) paintBacklit(oc, bs); else paintContent(false, false);
     applyCoat(oc, ox, bs, { ident: false, uvMode, backlit });
@@ -4454,7 +4470,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     lightSpectrum = spec; uvMode = spec !== 0;
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;
     if (uvMode) { cx.fillStyle = UV_GROUND; cx.fillRect(0, 0, w, h); }
-    else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, w, h); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, w, h); cx.globalAlpha = 1; } }
+    else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, w, h); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = groundCol(); cx.fillRect(0, 0, w, h); cx.globalAlpha = 1; } }
     cx.setTransform(tf[0], tf[1], tf[2], tf[3], tf[4], tf[5]); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
     paintContent(false, false);
     applyCoat(c, cx, coatScale, { ident: false, uvMode, backlit: false, tiled: !!tile }, tile);
@@ -4530,7 +4546,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = bleedPx != null ? bleedPx : coatReach(bs); glowPx = BLOOM_DRAW ? 16 * bs : 0;
     const fc = document.createElement('canvas'); fc.width = finalW; fc.height = finalH;
     const fx = fc.getContext('2d'), prevG = g2d;
-    const baseFill = cx2 => { cx2.setTransform(1, 0, 0, 1, 0, 0); if (uvMode) { cx2.fillStyle = UV_GROUND; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else { cx2.fillStyle = STONE_BG; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); if (layVis('base')) { cx2.globalAlpha = layOp('base'); cx2.fillStyle = COL.ground; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); cx2.globalAlpha = 1; } } };
+    const baseFill = cx2 => { cx2.setTransform(1, 0, 0, 1, 0, 0); if (uvMode) { cx2.fillStyle = UV_GROUND; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else { cx2.fillStyle = STONE_BG; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); if (layVis('base')) { cx2.globalAlpha = layOp('base'); cx2.fillStyle = groundCol(); cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); cx2.globalAlpha = 1; } } };
     baseFill(fx);                                          // fill the assembly canvas so any sub-pixel gaps read as base, not transparent
     const tc = document.createElement('canvas'), tcx = tc.getContext('2d');
     const jobs = [];
@@ -4610,7 +4626,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const cx = c.getContext('2d');
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;
     if (uvMode) { cx.fillStyle = UV_GROUND; cx.fillRect(0, 0, finalW, eh); }
-    else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, finalW, eh); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, finalW, eh); cx.globalAlpha = 1; } }
+    else { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, finalW, eh); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = groundCol(); cx.fillRect(0, 0, finalW, eh); cx.globalAlpha = 1; } }
     const tile = { ox: 0, oy: ey0, fw: finalW, fh: finalH };
     cx.setTransform(finalW, 0, 0, finalW, 0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
     paintContent(false, false);
@@ -4685,7 +4701,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (uvMode) { cx.fillStyle = UV_GROUND; cx.fillRect(0, 0, ew, eh); }
     else {
       cx.fillStyle = STONE_BG; cx.fillRect(0, 0, ew, eh);
-      if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, ew, eh); cx.globalAlpha = 1; }
+      if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = groundCol(); cx.fillRect(0, 0, ew, eh); cx.globalAlpha = 1; }
     }
     cx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
     paintContent(false, false);
@@ -4764,7 +4780,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       glassFlow, glassFormT, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
       glassCellSpread, glassUnform, glassLay, glassWarp, glassUnwarp, rollerBake, paintGlassContent,
       rollStamp, rollStampAt, rollerAt, rollerHand, rollerPath, moonDisp, warpMaskAt, gatherMasks,
-      fbm2, woodAtan2,
+      fbm2, woodAtan2, groundCol,
       resample, smoothPath, handRoute, pathLen, segD, tangent, roughen, lineGeom, curvature, sinuate,
       vnoise, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
@@ -4783,7 +4799,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `self.onmessage=function(e){var d=e.data;\n`;
     s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
     s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
-    s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_DARK;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=COL.ground;tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
+    s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_DARK;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
     s += `paintContent(false,false);\n`;
     s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:false,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
@@ -4861,7 +4877,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     else if (uvMode) { ctx.fillStyle = UV_GROUND; ctx.fillRect(0, 0, cv.width, cv.height); }   // BLACK LIGHT: the stone body goes dark, only fluorescence glows
     else {                                               // base layer is the ground: neutral behind it, ground on top at its opacity
       ctx.fillStyle = STONE_BG; ctx.fillRect(0, 0, cv.width, cv.height);
-      if (layVis('base')) { ctx.globalAlpha = layOp('base'); ctx.fillStyle = COL.ground; ctx.fillRect(0, 0, cv.width, cv.height); ctx.globalAlpha = 1; }
+      if (layVis('base')) { ctx.globalAlpha = layOp('base'); ctx.fillStyle = groundCol(); ctx.fillRect(0, 0, cv.width, cv.height); ctx.globalAlpha = 1; }
     }
     const k = Wc * V.z * dpr;
     ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);
@@ -5074,6 +5090,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // graphic, so it reads as one sheen across the whole face rather than as the material's own optics.
   // applyCoat asks and never learns which material answered - the same contract as jointIn.
   function surfaceGloss() { return MATERIAL === 'wood' ? Math.max(0, Math.min(1, WOOD.glaze || 0)) : 0; }
+  // THE GROUND THIS MATERIAL IS LAID ON. The canvas preparation is above the fork - renderFull,
+  // renderStoneOffscreen and the tiled plan's baseFill all paint a ground before any material runs,
+  // and none of them may ask which one it is. So they ask here. An UNSET per-material ground
+  // resolves to `ground`, which is what every slab written before this carried, so an old file
+  // renders identically until its material's own ground is set.
+  function groundCol() {
+    const k = MATERIAL === 'wood' ? 'woodGround' : MATERIAL === 'glass' ? 'glassGround' : null;
+    return (k && OVR[k]) ? OVR[k] : COL.ground;
+  }
   // THE SAME DECLARATION, FOR A SERIALISED COPY OF THE ENGINE. The worker render core is this file's
   // own functions put through toString(), so it needs the discriminator declared in its scope too -
   // and writing that line in the generator would name the token outside these markers, which the
@@ -6621,7 +6646,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // thick sheet looks green down its edge: it is path length, not a pigment.
     const kr = 0.075 * TINT, kg = 0.022 * TINT, kb = 0.055 * TINT;
     const ang = G.lightAngle * Math.PI / 180, Lx = Math.cos(ang), Ly = -Math.sin(ang);
-    const [LBR, LBG, LBB] = hexRGB(COL.ground || '#e6e6e4');     // the light behind the sheet
+    const [LBR, LBG, LBB] = hexRGB(groundCol() || '#e6e6e4');     // the light behind the sheet
     // EACH CANE'S OWN ABSORPTION. A colour is what it does NOT absorb, so k runs with (1 - channel)
     // and the thickness decides the path length: the same cane is deep where the sheet is thick and
     // pale where it is thin, which is how one colour varies across a hand-made sheet without ever
@@ -7432,7 +7457,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // ONLY THIS MATERIAL'S TOKENS. The fork fixed the renderer; the editor was still offering wood
     // five colours nothing stone paints, and offering wood six stone layers that do not exist in it.
     const MTOK = COLOUR_TOKENS.filter(tk => !tk.mat || tk.mat === currentMaterial());
-    kit.registerTokenGroup({ id: 'colour', label: TR('lay.colour-per-layer'), tokens: MTOK.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: CARRARA_COL[tk.key] ?? tk.def })) });
+    // An inheriting ground has no default of its own on purpose, so its swatch would read black
+    // while the render used the slab's `ground`. The control shows what is actually being painted;
+    // this group is re-registered per material, so it follows.
+    kit.registerTokenGroup({ id: 'colour', label: TR('lay.colour-per-layer'), tokens: MTOK.map(tk => ({ key: tk.key, label: tk.label, type: 'color', default: tk.inheritGround ? COL.ground : (CARRARA_COL[tk.key] ?? tk.def) })) });
     // The whole effects group is stone layers - major, minor, web, micro, styl, drusy - so in wood
     // it is not registered rather than registered empty.
     if (currentMaterial() === 'stone') kit.registerTokenGroup({ id: 'effects', label: TR('lay.effects-per-layer'), tokens: FX_LAYERS.flatMap(k => {
@@ -9427,7 +9455,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   function expBaseMask(W) {                               // base value map: the base composite as luminance
     const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
-    cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = COL.ground; cx.fillRect(0, 0, c.width, c.height);
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = groundCol(); cx.fillRect(0, 0, c.width, c.height);
     cx.setTransform(W, 0, 0, W, 0, 0);
     if (G.brecStrength > 0) cx.drawImage(ensureBreccia(), 0, 0, 1, H);
     if (G.cloudStrength > 0) { cx.globalCompositeOperation = 'soft-light'; cx.drawImage(ensureClouds(), 0, 0, 1, H); cx.globalCompositeOperation = 'source-over'; }
@@ -9450,7 +9478,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d, saved = layers.map(L => L.on), sv = soloLay; soloLay = null;
     for (const L of layers) L.on = (L.bucket === bucketKey);
     cx.setTransform(1, 0, 0, 1, 0, 0);
-    if (bucketKey === 'base') { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, c.width, c.height); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = COL.ground; cx.fillRect(0, 0, c.width, c.height); cx.globalAlpha = 1; } }
+    if (bucketKey === 'base') { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, c.width, c.height); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = groundCol(); cx.fillRect(0, 0, c.width, c.height); cx.globalAlpha = 1; } }
     cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; paintContent(false, false); g2d = prev;
     layers.forEach((L, i) => L.on = saved[i]); soloLay = sv; return c;
   }
