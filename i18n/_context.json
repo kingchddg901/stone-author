@@ -1217,7 +1217,6 @@
  "sec.kept-cut": {"terms": ["wood"], "where": "name given to a section converted from a slab saved when these were wood-only kept cuts"},
  "mat.glass": {"terms": ["glass"], "where": "button: switch the slab to the glass material"},
 
- "mat.composite": {"terms": [], "where": "button beside Stone/Wood/Glass: switches to the composite view, where a floor is assembled from several kept sections. It is a VIEW, not a fourth material"},
  "sec.glass": {"terms": ["glass"], "where": "section heading for the glass controls"},
  "lbl.forming": {"terms": ["glass"], "where": "label: which process formed this sheet"},
  "a11y.glass-form": {"terms": ["glass"], "where": "accessible name for the forming-process buttons"},

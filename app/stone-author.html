@@ -22,8 +22,7 @@
      several ("wood glass"). */
   body[data-mat="stone"] [data-mat-only]:not([data-mat-only~="stone"]),
   body[data-mat="wood"] [data-mat-only]:not([data-mat-only~="wood"]),
-  body[data-mat="glass"] [data-mat-only]:not([data-mat-only~="glass"]),
-  body[data-mat="composite"] [data-mat-only]:not([data-mat-only~="composite"]) { display: none !important; }
+  body[data-mat="glass"] [data-mat-only]:not([data-mat-only~="glass"]) { display: none !important; }
   body[data-mat="glass"] #g-glass { order: -2; }
   /* In wood the material panel goes to the TOP of the rail. Two `order` rules rather than moving
      the markup, because in stone the ground panels have to come back in their own order. */
@@ -208,12 +207,6 @@
       <button id="m-stone" type="button" data-mat="stone" aria-pressed="true" data-i18n="mat.stone">Stone</button>
       <button id="m-wood" type="button" data-mat="wood" aria-pressed="false" data-i18n="mat.wood">Wood</button>
       <button id="m-glass" type="button" data-mat="glass" aria-pressed="false" data-i18n="mat.glass">Glass</button>
-      <!-- NOT A FOURTH material. The fork's contract is that a material supplies a FIELD and a way
-           to query a 2D face out of it; a composite supplies none - it arranges slabs that each
-           have one. So this switches the VIEW, and the discriminator keeps tracking the live slab.
-           (Written without naming the token: check-material-fork matches it anywhere outside the
-           seam, comments included, and it caught this one.) -->
-      <button id="m-composite" type="button" data-mat="composite" aria-pressed="false" data-i18n="mat.composite">Composite</button>
     </div>
     <div class="grp" role="group" aria-label="Family" data-mat-only="stone" data-i18n-attr="aria-label=a11y.family"><span class="lbl" data-i18n="lbl.family">Family</span>
       <button id="f-carrara" type="button" data-fam="carrara" data-i18n="fam.carrara">Carrara</button>
@@ -1115,7 +1108,6 @@ window.SA_I18N = (() => {
   "sec.kept-cut": "Kept cut",
   "sec.snagged": "Snagged {pat}",
   "mat.glass": "Glass",
-  "mat.composite": "Composite",
   "sec.glass": "Glass",
   "lbl.forming": "Formed by",
   "a11y.glass-form": "Forming process",
@@ -1740,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.13.76';
+  const BUILD = '2026.10.13.77';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3662,31 +3654,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const rng = Math.max(0, 2 * ymax - WOOD.wid);
     return Math.max(1, Math.min(8, Math.floor(rng / Math.max(1e-6, WOOD.wid)) + 1));
   };
-  // THE COMPOSITE VIEW. Declared here, beside the question it answers, rather than beside the
-  // material fork it is not part of - it has to be initialised before anything can call stageN,
-  // and a `let` further down the file would be in its temporal dead zone if a boot path got there
-  // first. Not serialised: which slab you had open is state, which TAB you had open is not.
-  let compView = false;
-  // WHEN DO SECTIONS ASSEMBLE INTO A PICTURE? Only while the composite view is open. In a material
-  // view you are authoring ONE slab and that is what the canvas should show you - the sections are
-  // still listed, still settable, and the tile-source preview still says where each will land, but
-  // the floor does not assemble them under you. Keep a tile, press Build, switch tabs to look.
-  //
-  // Asked HERE because stageN is the one question every render path asks: the band count in
-  // renderStoneOffscreen, STAGE in drawTilesTo and renderFloorTile, and the source index in snag
-  // all come through it. Gating it once means no render path can disagree with another about
-  // whether this picture is a composite. `picking()` already suppressed sections the same way.
-  // THE VIEW DECIDES, AND ONLY THE VIEW. This read `compView && !picking()`, and picking() is
-  // `tool === 'snag'` - which is the tool you are holding the entire time you build a composite,
-  // because snagging tiles is HOW you build one. Seven sections kept, switch to the composite tab,
-  // nothing assembles: the tool you used to make it was still selected.
-  //
-  // Suppressing sections while picking was right when the tab did not exist - it was the only way
-  // to say "show me the slab I am picking from rather than the floor". The view says that now, in
-  // a material tab, explicitly. The tool does not get a second vote.
-  const compositeOn = () => compView;
   const stageN = () => {
-    const s = compositeOn() ? sectionList() : [];
+    const s = picking() ? [] : sectionList();
     if (s.length) return Math.min(8, s.length);          // sections answer first, in any material
     if (currentMaterial() !== 'wood') return 1;
     // The ASK, clamped by what there is. Both halves matter: a slab can carry a stage from a wider
@@ -3836,12 +3805,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // last build stays on screen and the button can read `!stoneReady` to know it is out of date.
   // The FIRST build is never held - there would be nothing to look at - which is what everBuilt is.
   let everBuilt = false;
-  // ...AND ONLY WHILE THE PICTURE IS ACTUALLY A COMPOSITE. This asked only whether sections EXIST,
-  // which is a different question now that the tab decides whether they assemble. In a material tab
-  // with sections kept, stageN correctly drops to one band - but the hold blocked the rebuild, so
-  // the floor went on blitting the stale SEVEN-band composite canvas while sampling it as one. Every
-  // tile then pulled from the wrong place, which reads as a floor of identical repeating tiles.
-  const holdingBuild = () => everBuilt && compositeOn() && sectionList().length > 1;
+  const holdingBuild = () => everBuilt && sectionList().length > 1;
   const stoneSource = () => { if (!stoneReady && !holdingBuild()) renderStoneOffscreen(); else syncBuild(); };
   function syncBuild() {
     const b = document.getElementById('sec-build');
@@ -8922,7 +8886,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Push the whole of the state into the controls - after a load, every control must match.
   function syncUI() {
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
-    pv('data-mat', compView ? 'composite' : currentMaterial()); pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
+    pv('data-mat', currentMaterial()); pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
     pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : T.assembly === 'stack' ? 'stack' : 'order'); pv('data-unit', T.units);
     if (typeof syncGroups === 'function') syncGroups();   // which groupings this pattern HAS, not just which is pressed
     if (typeof syncTileLocks === 'function') syncTileLocks();   // a loaded slab may arrive holding cuts
@@ -9874,15 +9838,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
   for (const b of document.querySelectorAll('[data-species]')) b.addEventListener('click', () => { applySpecies(b.dataset.species); hint(TR('hint.species-seeded', { name: b.textContent })); });
-  // THE COMPOSITE IS A VIEW, NOT A MATERIAL. setMaterial coerces anything it does not know to
-  // stone, so routing this button through it would silently switch the slab to stone and lose the
-  // author's place. It sets compView instead; syncUI puts that on the body, where the same
-  // data-mat-only rules that hide the wood and glass panels hide everything that is not composite.
-  for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => {
-    compView = b.dataset.mat === 'composite';
-    if (!compView) setMaterial(b.dataset.mat);
-    press('[data-mat]', b); showGround(); redraw(true);
-  });
+  for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => { setMaterial(b.dataset.mat); press('[data-mat]', b); showGround();
+ redraw(true); });
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     const was = picking();
     tool = b.dataset.tool; press('[data-tool]', b); hint();
@@ -10142,10 +10099,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function drawSetter() {
     const host = document.getElementById('sec-setter');
     if (!host) return;
-    // NOT stageN: that answers "is this picture a composite", which is false in a material view by
-    // design. The setter answers a different question - where would each section land if it were -
-    // and it has to keep answering it while you author, which is the whole point of it being here.
-    const L = sectionList(), N = Math.max(1, Math.min(8, L.length));
+    const L = sectionList(), N = stageN();
     if (!L.length || !layTiles) { host.hidden = true; host.innerHTML = ''; return; }
     const R = rosetteOf(), k = R && N >= R.slots ? R.slots : N;
     const pat = PATTERNS[T.pattern] && PATTERNS[T.pattern](T.sizeIn);
