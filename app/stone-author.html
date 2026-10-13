@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.13.71';
+  const BUILD = '2026.10.13.72';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3670,6 +3670,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Patterns not named here are plain cuts: one slot, and the sections simply cycle per cell.
   // Flat, maximally separated, and never tinted by the light: these are identities, not glass.
   const SLOT_INK = ['#c4302b', '#2e8b57', '#2f6f8f', '#7a3b8e', '#d98324', '#8e8e96', '#c8c846', '#46c8c8'];
+  // A LOW-RES SAMPLE OF EACH SECTION, HARVESTED RATHER THAN RENDERED.
+  //
+  // renderStoneOffscreen already paints every kept section into its own band of stoneC at ~700px,
+  // and band k IS section k. So a preview is one scaled drawImage out of a canvas already in
+  // memory - no second paintContent, no applySlabState, no field rebuild. That matters because the
+  // expensive half of a section is the state swap and the geometry/field build, and NEITHER scales
+  // with output size: a "tiny" thumbnail rendered separately would have cost nearly what a whole
+  // band costs. Harvesting makes it free, and correct by construction - the thumbnails are stale
+  // exactly when the floor is, because they are cut from the same build.
+  const THUMB_W = 72;
+  const secThumbs = [];
   const ev = v => ((v % 2) + 2) % 2;
   // A pattern declares one or more GROUPINGS. A grouping is a motif - the set of tiles that must
   // not repeat a section - plus the slot each tile takes inside it. It was called ROSETTE when a
@@ -3852,6 +3863,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         paintContent(false, false);
         c.restore();
       });
+      // band k is section k, at this build's resolution; take the preview off it while it is here
+      secThumbs.length = 0;
+      for (let k = 0; k < st; k++) {
+        const t = document.createElement('canvas');
+        t.width = THUMB_W; t.height = Math.max(1, Math.round(THUMB_W * H));
+        t.getContext('2d').drawImage(stoneC, 0, k * cw * H, cw, cw * H, 0, 0, t.width, t.height);
+        secThumbs.push(t);
+      }
     } else {
       for (let k = 0; k < st; k++) {
         woodBandY = st > 1 ? cantBand(k) : 0;
@@ -10031,8 +10050,6 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const to = target && !target.hidden ? target : el;
     if (to.scrollIntoView) to.scrollIntoView({ block: 'center' });
   }
-  const secSwatch = s => { const m = s.mat || (s.slab && s.slab.material) || 'stone';
-    return m === 'wood' ? '#8a5a2b' : m === 'glass' ? '#4f8fa8' : '#9a9a93'; };
   function showSetCount() {
     const el = document.getElementById('sec-count');
     if (el) el.textContent = sectionList().length ? String(sectionList().length) : '\u2014';
@@ -10050,7 +10067,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       row.className = 'grp';
       row.style.cssText = 'display:flex;align-items:center;gap:4px;margin:2px 0';
       const dot = document.createElement('span');
-      dot.style.cssText = 'width:12px;height:12px;border-radius:3px;flex:0 0 auto;background:' + secSwatch(s);
+      // THE ROW WEARS ITS SLOT COLOUR. secSwatch keys on MATERIAL, so two stone sections were the
+      // same swatch and the list could not be read against the preview at all. The ink is indexed
+      // by position, which is what makes reordering mean something: a section takes the colour of
+      // the slot it moves into. Material stays, as the tooltip.
+      dot.style.cssText = 'width:12px;height:12px;border-radius:3px;flex:0 0 auto;background:' + SLOT_INK[i % SLOT_INK.length];
       dot.title = s.mat || '';
       const nm = document.createElement('input');
       nm.type = 'text'; nm.value = s.name || ''; nm.style.cssText = 'flex:1 1 auto;min-width:40px';
@@ -10089,23 +10110,54 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const lbl = document.createElement('div');
     lbl.className = 'lbl'; lbl.textContent = TR('lbl.tile-source');
     host.appendChild(lbl);
-    const cells = [];
-    for (let n = 0; n < 2; n++) for (let m = 0; m < 2; m++) pat.polys.forEach((poly, pi) => {
-      cells.push({ pi, m, n, pts: poly.map(q => [q[0] + n * pat.ax[0] + m * pat.ay[0], q[1] + n * pat.ax[1] + m * pat.ay[1]]) });
-    });
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const c of cells) for (const q of c.pts) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
+    // ONE MOTIF PER PICK TIER, SIDE BY SIDE - not one taller lattice.
+    //
+    // sectionOf returns `slot + pick * k`, and pick is built from (m >> 1) and (n >> 1), both of
+    // which are ZERO across a 2x2 block. So every section past the grouping's own slot count was
+    // unreachable from here: with 8 sections on a 5-slot octagon, 5..7 exist on the floor and could
+    // never be shown or clicked. The rosette slots themselves were always fine - slotOf keys on the
+    // PARITY of m and n, and a 2x2 holds both - which is why octagon's five and rhombus's five come
+    // out complete. It was only ever the tier that was missing.
+    //
+    // Widening to 2x4 reaches it, and is the wrong shape: it doubles the worst dimension of the
+    // worst pattern (the fit note below exists because a 2x2 of rhombi is already far taller than
+    // it is wide), and it implies the lattice grew, which is a lie about the pattern. A tier is not
+    // a position in the motif - it is which copy of the slot palette that region draws from. So the
+    // same motif, once per tier, at ONE shared scale so cells stay comparable across tiers.
+    const tiers = Math.max(1, Math.ceil(N / Math.max(1, k)));
+    const blocks = [];
+    for (let p = 0; p < tiers; p++) {
+      const cs = [];
+      for (let n = 2 * p; n < 2 * p + 2; n++) for (let m = 0; m < 2; m++) pat.polys.forEach((poly, pi) => {
+        cs.push({ pi, m, n, pts: poly.map(q => [q[0] + n * pat.ax[0] + m * pat.ay[0], q[1] + n * pat.ax[1] + m * pat.ay[1]]) });
+      });
+      let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+      for (const c of cs) for (const q of c.pts) { if (q[0] < bx0) bx0 = q[0]; if (q[0] > bx1) bx1 = q[0]; if (q[1] < by0) by0 = q[1]; if (q[1] > by1) by1 = q[1]; }
+      blocks.push({ cs, bx0, by0, bw: (bx1 - bx0) || 1, bh: (by1 - by0) || 1 });
+    }
     // SIZED TO THE MOTIF, not to a fixed box. A 2x2 block of rhombi is far taller than it is wide
     // and left half of a 190x120 canvas empty, which reads as a widget that failed to draw. Fit
     // first, then make the canvas the size of what was fitted.
-    const bw = (x1 - x0) || 1, bh = (y1 - y0) || 1;
-    const z = Math.min(182 / bw, 122 / bh);
-    const W = Math.round(bw * z) + 8, Hh = Math.round(bh * z) + 8;
+    const GAP = 6;
+    const availW = (182 - GAP * (tiers - 1)) / tiers;
+    const z = Math.min.apply(null, blocks.map(b => Math.min(availW / b.bw, 122 / b.bh)));
+    // Baked ONCE, so painting and hit-testing cannot drift apart - they read the same points.
+    const cells = [];
+    let ox = 4;
+    for (const b of blocks) {
+      for (const c of b.cs) {
+        c.dp = c.pts.map(q => [ox + (q[0] - b.bx0) * z, 4 + (q[1] - b.by0) * z]);
+        c.box = [ox, 4, b.bw * z, b.bh * z];
+        cells.push(c);
+      }
+      ox += b.bw * z + GAP;
+    }
+    const W = Math.round(ox - GAP) + 4;
+    const Hh = Math.round(Math.max.apply(null, blocks.map(b => b.bh)) * z) + 8;
     const cv = document.createElement('canvas');
     cv.width = W * 2; cv.height = Hh * 2; cv.style.cssText = 'width:' + W + 'px;height:' + Hh + 'px;cursor:pointer;display:block';
     const g = cv.getContext('2d'); g.scale(2, 2);
-    const px = q => 4 + (q[0] - x0) * z, py = q => 4 + (q[1] - y0) * z;
-    const slotOfCell = c => R && N >= R.slots ? R.slotOf(c.pi, c.m, c.n) % R.slots : (((c.m + 2 * c.n) % N) + N) % N;
+    const px = q => q[0], py = q => q[1];                // dp is already in canvas coordinates
     const same = (a, b) => a && b && a.pi === b.pi && a.m === b.m && a.n === b.n;
     if (!setterCell || !cells.some(c => same(c, setterCell))) setterCell = { pi: cells[0].pi, m: cells[0].m, n: cells[0].n };
     // A FILLED CELL SHOWS ITS SECTION; an empty one shows what the rule would do with it, dimmer, so
@@ -10115,9 +10167,19 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (const c of cells) {
         const ix = seededSection(c, N);
         const on = same(c, setterCell);
-        g.beginPath(); c.pts.forEach((q, j) => j ? g.lineTo(px(q), py(q)) : g.moveTo(px(q), py(q))); g.closePath();
-        g.fillStyle = ix >= 0 ? secSwatch(L[ix]) : SLOT_INK[slotOfCell(c) % SLOT_INK.length];
-        g.globalAlpha = on ? 1 : (ix >= 0 ? 0.85 : 0.35); g.fill(); g.globalAlpha = 1;
+        // The cell shows WHAT is there and WHICH it is: the section's own material, harvested from
+        // the band it was built in, tinted by the ink of the section that actually lands here.
+        // sectionOf is the floor's own answer, so the preview cannot disagree with the floor - the
+        // old code asked secSwatch for a seeded cell (keyed on MATERIAL, so two stone sections were
+        // one colour) and the raw slot for an unseeded one, which is two languages in one picture.
+        const sec = ((sectionOf(c, N) % SLOT_INK.length) + SLOT_INK.length) % SLOT_INK.length;
+        const ink = SLOT_INK[sec];
+        g.beginPath(); c.dp.forEach((q, j) => j ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.closePath();
+        const th = secThumbs[sectionOf(c, N)];
+        g.save(); g.clip();
+        if (th) { g.drawImage(th, c.box[0], c.box[1], c.box[2], c.box[3]); g.fillStyle = ink; g.globalAlpha = ix >= 0 ? 0.45 : 0.25; }
+        else { g.fillStyle = ink; g.globalAlpha = on ? 1 : (ix >= 0 ? 0.85 : 0.35); }
+        g.fill(); g.globalAlpha = 1; g.restore();
         g.strokeStyle = on ? '#fff' : '#20222a'; g.lineWidth = on ? 2 : 1; g.stroke();
       }
     };
@@ -10125,7 +10187,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     cv.addEventListener('click', e => {
       const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
       for (const c of cells) {                           // even-odd, the same test the floor uses
-        let inside = false, P = c.pts;
+        let inside = false, P = c.dp;
         for (let a = 0, b = P.length - 1; a < P.length; b = a++)
           if ((py(P[a]) > my) !== (py(P[b]) > my) && mx < (px(P[b]) - px(P[a])) * (my - py(P[a])) / (py(P[b]) - py(P[a])) + px(P[a])) inside = !inside;
         if (inside) { setterCell = { pi: c.pi, m: c.m, n: c.n }; drawSetter(); return; }
