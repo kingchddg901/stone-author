@@ -1729,7 +1729,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.66';
+  const BUILD = '2026.10.12.67';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4639,13 +4639,36 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     cx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round';
     const STAGE = stageN();
     const only = [ex0 / finalW, ey0 / finalW, (ex0 + ew) / finalW, (ey0 + eh) / finalW];
+    // THROUGH A SCRATCH CANVAS, BECAUSE putImageData IGNORES THE CLIP.
+    //
+    // paintContent writes the material as an ImageData band, and by specification putImageData is
+    // not affected by the clipping region, the transform, or compositing. Painting a piece straight
+    // into the target therefore overwrote the WHOLE band rectangle rather than the piece's polygon,
+    // and the last piece painted in a tile won. Under guide that is invisible - every piece samples
+    // the same continuous field at the same place, so whoever wins paints the same pixels - which is
+    // why this survived every floor rendered until one carried pieces from ELSEWHERE. Under stack or
+    // shuffle each output tile came out wearing one piece's grain, stamped across it and straight
+    // through the joints, with a hard vertical edge at the tile boundary. Measured on an 8,192
+    // master: the pass joins jumped 350x (stack) and 415x (shuffle) over any other column, while the
+    // same floor exported as a single-canvas PNG was correct - that path BLITS the piece out of a
+    // pre-rendered slab with drawImage, which does respect the clip.
+    //
+    // So do what the blit path does: paint into a scratch canvas of the same size and transform,
+    // then drawImage it through the clip, where it is confined to the piece. One scratch for the
+    // whole tile, cleared per piece; the clip is already set by drawTilesTo when it calls this.
+    const scr = document.createElement('canvas'); scr.width = ew; scr.height = eh;
+    const sx = scr.getContext('2d');
     drawTilesTo(null, cx, 1 / finalW, (tc, shiftNoBand, band) => {
-      tc.save();
+      sx.setTransform(1, 0, 0, 1, 0, 0); sx.clearRect(0, 0, ew, eh);
+      sx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); sx.lineCap = 'round'; sx.lineJoin = 'round';
       woodBandY = STAGE > 1 ? cantBand(band) : 0;          // which board down the cant this piece came off
-      tc.translate(-shiftNoBand[0], -shiftNoBand[1]);      // slide the slab under the piece
-      g2d = tc; paintContent(false, false); g2d = prevG;
+      sx.translate(-shiftNoBand[0], -shiftNoBand[1]);      // slide the slab under the piece
+      g2d = sx; paintContent(false, false); g2d = prevG;
       woodBandY = 0;
-      tc.restore();
+      // The clip is in device space and survives a transform change, so an identity blit still lands
+      // only inside the polygon. Past the slab the scratch is transparent and nothing is composited,
+      // which is the same honesty the blit path had.
+      tc.save(); tc.setTransform(1, 0, 0, 1, 0, 0); tc.drawImage(scr, 0, 0); tc.restore();
     }, only);
     applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true },
               { ox: ex0, oy: ey0, fw: finalW, fh: Math.round(W * H) });
