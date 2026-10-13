@@ -1729,7 +1729,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.13.69';
+  const BUILD = '2026.10.13.70';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3780,21 +3780,6 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const want = WOOD.y0 + k * WOOD.wid;
     return lo + (((want - lo) % rng) + rng) % rng - WOOD.y0;
   };
-  // DOES THE SLAB THE FLOOR IS CUT FROM GLOW? Back light used to be switched off the moment tiles
-  // were laid - `!layTiles && G.backlight > 0` at five call sites, with no comment anywhere saying
-  // why. The reason was structural, not a decision: paintBacklit builds ONE whole-slab body and
-  // blits it across 0..1 x H, and there was no per-piece path for it.
-  //
-  // There did not need to be. A floor is already the slab rearranged: renderFloor renders the whole
-  // slab into stoneC and every piece BLITS out of it at that piece's own shift. So a backlit stoneC
-  // makes the floor glow with no per-piece work at all - and because the shift is the piece's, each
-  // piece glows from WHERE IT WAS CUT. A shuffled floor pulls its glow from the piece's own source,
-  // not from the slot it landed in. The composite glows per piece because the composite always did
-  // everything per piece; it was only ever the source that was wrong.
-  //
-  // The whole-slab branches keep their `!layTiles` guard on purpose: that branch replaces the entire
-  // picture with a lit slab, which is right for a bare slab and would paint over the floor.
-  const floorGlows = () => G.backlight > 0;
   function renderStoneOffscreen(wide) {
     // THE SOURCE IS A CANT WHEN WOOD IS STAGED. The painter maps v through yy = y0 + (cvv/H)*wid, so
     // a canvas STAGE times taller simply answers for board positions y0 .. y0 + wid*STAGE - the same
@@ -3812,11 +3797,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     stoneC.width = cw; stoneC.height = ch;
     const c = stoneC.getContext('2d');
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cw, ch);
-    // A LIT SLAB IS COMPOSITED OVER THE DARK, not over its own ground: the ground's job under back
-    // light is to say how much passes (expBaseMask reads its luminance), and painting it here as well
-    // would add it twice.
-    c.fillStyle = floorGlows() ? '#0b0b0e' : STONE_BG; c.fillRect(0, 0, cw, ch);
-    if (!floorGlows() && layVis('base')) { c.globalAlpha = layOp('base'); c.fillStyle = groundCol(); c.fillRect(0, 0, cw, ch); c.globalAlpha = 1; }  // slab's own ground, so tiles are stone not grout
+    c.fillStyle = STONE_BG; c.fillRect(0, 0, cw, ch);
+    if (layVis('base')) { c.globalAlpha = layOp('base'); c.fillStyle = groundCol(); c.fillRect(0, 0, cw, ch); c.globalAlpha = 1; }  // slab's own ground, so tiles are stone not grout
     const prev = g2d; g2d = c; c.lineCap = 'round'; c.lineJoin = 'round';
     // ONE BAND PER BOARD. woodRect boxes the SLAB rectangle under the current transform, never the
     // canvas, so a taller canvas on its own paints nothing extra - translating the transform down by
@@ -3845,7 +3827,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         } else {
           c.setTransform(cw, 0, 0, cw, 0, k * cw * H);
         }
-        if (floorGlows()) paintBacklit(stoneC, cw / COAT_REF); else paintContent(false, false);
+        paintContent(false, false);
         c.restore();
       });
     } else {
@@ -3854,7 +3836,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         c.setTransform(1, 0, 0, 1, 0, 0); c.save();
         c.beginPath(); c.rect(0, k * cw * H, cw, cw * H); c.clip();
         c.setTransform(cw, 0, 0, cw, 0, k * cw * H);
-        if (floorGlows()) paintBacklit(stoneC, cw / COAT_REF); else paintContent(false, false);
+        paintContent(false, false);
         c.restore();
       }
     }
@@ -4697,9 +4679,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       sx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); sx.lineCap = 'round'; sx.lineJoin = 'round';
       woodBandY = STAGE > 1 ? cantBand(band) : 0;          // which board down the cant this piece came off
       sx.translate(-shiftNoBand[0], -shiftNoBand[1]);      // slide the slab under the piece
-      // The tiled path PAINTS where renderFloor blits, so the lit slab has to be asked for here too
-      // or a floor that glows on screen would export dark. Same scratch canvas, same clip.
-      g2d = sx; if (floorGlows()) paintBacklit(scr, bs); else paintContent(false, false); g2d = prevG;
+      g2d = sx; paintContent(false, false); g2d = prevG;
       woodBandY = 0;
       // The clip is in device space and survives a transform change, so an identity blit still lands
       // only inside the polygon. Past the slab the scratch is transparent and nothing is composited,
@@ -11336,9 +11316,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // these three false the parallel and sequential paths differ by zero bytes.
   // THE CORE HAS NO FLOOR PATH. drawTilesTo and renderFloorTile are not in its function list, and
   // exportTiff nulls the pool whenever tiles are laid - but this said YES for a floor, so the planner
-  // scored candidate tile sizes for a pool width it was never going to get and took the smaller tile
-  // that only pays off in parallel. Saying no here is what makes the plan match the run; it also
-  // covers a floor that GLOWS, which the core could not paint either.
+  // scored candidate tile sizes for a pool width it was never going to get, and took the smaller tile
+  // that only pays off in parallel. Saying no here is what makes the plan match the run. Wrong since
+  // the floor landed, and found while looking at something else.
   const corePaintsThis = () => !uvMode && !layTiles && !(!layTiles && G.backlight > 0) &&
     !gatherMasks().some(w => w.show != null) &&
     typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
