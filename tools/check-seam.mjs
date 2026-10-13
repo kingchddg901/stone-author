@@ -17,19 +17,33 @@
 //             as the median single-column jump at joins against the same statistic at control columns in
 //             the same file.
 //
-// WHAT A FLOOR MEASURES AGAINST THE SLAB IT WAS CUT FROM, 8,192 x 5,120 in 512 passes, the same
-// picture rendered twice on 2026-10-12 with Lay tiles off and on:
+// WHAT A FLOOR MEASURES AGAINST THE SLAB IT WAS CUT FROM. One rhombus floor at 17 in, 8,192 x 5,120
+// in 512 passes, rendered 2026-10-12 in every setting mode plus the slab it was cut from:
 //
-//   render              joins     controls   ratio
-//   slab (floor off)    0.0003    0.0007     0.5x     pass joins SMOOTHER than ordinary columns
-//   floor (hexagons)    0.0449    0.0065     6.9x
+//   render                  joins     controls   ratio
+//   slab (floor off)        0.0003    0.0007     0.5x    pass joins SMOOTHER than ordinary columns
+//   guide                   0.0039    0.0062     0.6x
+//   stack                   0.0176    0.0142     1.2x
+//   shuffle                 0.0156    0.0132     1.2x
 //
-// Two things to read off it. The tiled path itself puts NOTHING at a pass join - 0.5x is a join that
-// cannot be found - so a floor's 6.9x belongs to the floor and not to the renderer's tiling. And a
-// floor is intrinsically rougher EVERYWHERE, controls 0.0065 against 0.0007, because it has hairline
-// joints all over the picture; the join excess sits on top of that and is 0.038 of 255, a seventh of
-// one level. It does not fire: RATIO_FAIL is cleared but MIN_ROUGH is not, which is exactly the case
-// MIN_ROUGH exists for - a control this smooth makes any ratio large.
+// The tiled path itself puts NOTHING at a pass join, and neither does any assembly: 0.5x to 1.2x is a
+// join that cannot be found. A floor IS rougher everywhere than the slab - controls 0.006 to 0.014
+// against 0.0007 - because a laid floor has a joint every few inches and a reordered one has a
+// content change at every one of them. That belongs in the control term, which is why this test
+// compares a join to other columns of the SAME picture rather than one render to another.
+//
+// THE SAME TABLE BEFORE 35f0d2c, which is what a real defect looks like here:
+//
+//   guide                   0.0573    0.0036    16.0x
+//   stack                   1.8232    0.0052   350.1x   SEAM
+//   shuffle                 2.9697    0.0072   414.7x   SEAM
+//
+// paintContent writes its material with putImageData, which ignores the clip, so every piece
+// overwrote the whole band and the last one painted in a tile won - each 512 tile came out wearing
+// one piece's grain, stamped straight through the joints. Guide hid it completely: every piece
+// samples the same field at the same place, so whoever wins paints the same pixels. Note what the
+// fix did to the CONTROLS - they rose, 0.0052 to 0.0142 and 0.0072 to 0.0132. The discontinuities
+// did not go away. They moved off the tile grid and onto the polygons, where they belong.
 //
 // The S23 master of 2026-09-26 has the second and not the first: +0.080 signed (z +0.32, indistinguishable
 // from no seam) against a roughness ratio of 9.0x. A signed-only gate passes it. That is not hypothetical
