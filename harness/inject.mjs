@@ -21,6 +21,14 @@ const hook = `
     renderStreamedPNG, stripPlan, renderStrip,
     // the grid path: an arbitrary rectangle of the picture, and the tiled container it is written into
     renderOneTile, tiffPlan, tiffTiled, deflateBytes,
+    // THE FLOOR, both ways. Without these the harness could not reach the floor at all - it has only
+    // ever rendered the tiled SLAB - and a defect that put every output tile's material under one
+    // piece went green through CI for as long as it existed. renderFloor builds the whole picture on
+    // one canvas and BLITS each piece out of a pre-rendered slab; renderFloorTile paints each piece
+    // procedurally into one output tile. They must agree, and only a gate that can call both can say.
+    renderFloorTile, renderFloor, tileInstances,
+    get T() { return T; },
+    get layTiles() { return layTiles; }, set layTiles(v) { layTiles = !!v; },
     // the spectral resolver, so a gate can ask what an artifact glows at a given light without rendering
     emit, emitAt, setSpx: (v) => { lightSpectrum = v; uvMode = v !== 0; },
     // both signatures, so a gate can show which one answers "same picture?"
