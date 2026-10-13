@@ -73,9 +73,7 @@ path that taking one small want seriously actually produced.
   anywhere on the slab, and a piece is only offered where its whole shape is on the material — an
   offcut is not stock. Wood has no grout, because a floor of boards has no mortar and the line you
   see is the saw — unless a **glaze** turns it into printed ceramic. The floor exports at any size
-  through the same tiled path as a slab. (`penny`, `fishscale`, `arabesque` and `versailles` are in
-  the pattern table but have never had a control; a slab saved with one still renders.)
-  Marble **primitives** (clouds,
+  through the same tiled path as a slab. Marble **primitives** (clouds,
   banding, breccia, drusy, stylolites) and per-line **vein variants** (sinuous, dendritic,
   en-echelon, boudinage, halo). A **layer** model (eye / solo / opacity, blend, glow) and a
   **colour layer** — colour decoupled from the family, edited through the vendored token-theme-kit

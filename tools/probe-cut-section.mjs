@@ -57,10 +57,8 @@ const liftConst = re => {
 // The app's own geometry, lifted whole, so the probe cannot drift from what the floor does.
 const CAIRO = (SRC.match(/const CAIRO8 = [\s\S]*?\n {2}\];/) || [''])[0];
 const i0 = SRC.indexOf('const PATTERNS'), j0 = SRC.indexOf('\n  };', i0) + 5;
-// versailles delegates to a module defined elsewhere in the file; it is dropped rather than lifted
 // because it is not a lattice of its own and the claims below do not turn on it.
-const PAT_SRC = SRC.slice(i0, j0).replace(/\n\s*versailles: [^\n]*\n/, '\n');
-if (/versailles/.test(PAT_SRC)) throw new Error('probe: the versailles entry is still in - has its shape changed?');
+const PAT_SRC = SRC.slice(i0, j0);   // versailles is gone, so there is nothing to drop here
 
 // cutBoxFromInstance / cutScale / coverSrc, and tileInstances to feed them. ABLATE lets one claim
 // be re-run with a single piece of the real thing swapped out.
@@ -69,7 +67,10 @@ function build(ablate) {
     'const H = 0.625, IN = 8 * 12, inFr = v => v / IN;',
     "const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, chevAngle: 45 };",
     liftConst(/const polyCentroid = [^\n]*/),
-    CAIRO, lift('circlePoly'), lift('cairoCell'), PAT_SRC,
+    CAIRO, lift('cairoCell'), PAT_SRC,                       // circlePoly went with penny/fishscale
+    // LIFTED FROM THE APP, not restated: tileInstances reaches the table through this one lookup, so
+    // the probe has to have it or it is testing a different function from the one that ships.
+    liftConst(/const patternOf = .*/),                       // `.` already stops at the line end
     'const plankInstances = () => [];',
     lift('tileInstances'),
     ablate === 'no-shift'

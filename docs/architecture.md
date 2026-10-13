@@ -57,9 +57,9 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
   pools), on top of the ground and the fracture/speck structure.
 - **Vein-structure variants** (per line) — natural, **sinuous**, **dendritic**, **en-echelon**,
   **boudinage**, **halo**. Chosen on the vein tool; each line keeps its own.
-- **Tiles** — cut the slab into a repeating floor: 15 patterns (square, rectangle, subway,
-  hexagon, Cairo, diagonal, herringbone, basketweave, triangle, rhombus, octagon, penny, fish
-  scale, arabesque lantern, French/Versailles), with grout, kerf, edge finish, per-tile chipping.
+- **Tiles** — cut the slab into a repeating floor: 13 patterns (square, rectangle, subway,
+  hexagon, Cairo, diagonal, herringbone, basketweave, triangle, rhombus, octagon, and plank run
+  and chevron for wood), with grout, kerf, edge finish, per-tile chipping.
   Real sizes on an 8×5 ft slab. A tile can also be **kept as a section** — its shape together with
   the place on the slab it was cut from — and a floor laid out of sections drawn from any material;
   see [sections](sections.md).
@@ -133,7 +133,7 @@ drifts in character across its own width. Nothing stores a board.
 The fork lives at **exactly one function**, `paintContent`, between the authored content and everything
 downstream of the face. The coat and light tier, warp, masks, the layer and token spine, tiling, the
 tiled render, the master export, the device seal and i18n are all material-agnostic and must never learn
-which path they are on — tiling especially, since herringbone, basketweave and Versailles are *parquet*
+which path they are on — tiling especially, since herringbone, basketweave and chevron are *parquet*
 patterns that came from wood in the first place. `tools/check-material-fork.mjs` fails the build if the
 `MATERIAL` discriminator is read anywhere outside the marked seam.
 

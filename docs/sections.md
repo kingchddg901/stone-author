@@ -14,12 +14,16 @@ for every tile on every layout, and thrown away every time.
 
 `cutBoxFromInstance` keeps it. Given that box, the renderer draws the slab *windowed* to that region
 and magnified, which is pixel-identical to cropping the same region out of a full-size render.
-`tools/probe-cut-section.mjs` gates it: 19 claims over 14 patterns × 5 sizes, each re-run with the fix
+`tools/probe-cut-section.mjs` gates it: 17 claims over 12 patterns × 5 sizes, each re-run with the fix
 removed so the claim cannot pass vacuously. Mean difference against a crop: **0**.
 
-One pattern reports `n/a` rather than a number, and the reason is worth keeping: `fishscale` tiles
-overlap, so their shift is identically zero and there is nothing for the test to distinguish. A probe
-that printed `0` there would be claiming a pass it never earned.
+It used to report `n/a` for one pattern, and the reason is worth keeping even though the case no
+longer arises: `fishscale` tiles **overlap**, so their shift is identically zero and there was nothing
+for the test to distinguish. A probe that printed `0` there would have been claiming a pass it never
+earned. Fishscale was dropped on 2026-10-13 as one of four patterns that had never had a control, and
+it was the only overlapping one — so the probe's `n/a` branch, and the engine's `pat.overlap` handling
+(the no-spread pitch, the back-to-front sort, the per-tile outline), are now unexercised. They are
+kept rather than removed: they are the only description of what an overlapping pattern needs.
 
 ## Sections are material-agnostic
 

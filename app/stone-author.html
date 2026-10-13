@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.13.77';
+  const BUILD = '2026.10.13.78';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3323,32 +3323,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (let k = 0; k < 8; k++) { const a = Math.PI / 8 + Math.PI / 4 * k; oct.push([Rc * Math.cos(a), Rc * Math.sin(a)]); }
       const d = t / Math.SQRT2, sq = [[u / 2 + d, u / 2], [u / 2, u / 2 + d], [u / 2 - d, u / 2], [u / 2, u / 2 - d]];
       return { polys: [oct, sq], ax: [u, 0], ay: [0, u] }; },
-    // ---- curved shapes, approximated as many-point polygons so the same engine cuts them ----
-    penny: u => { const r = u / 2, c = circlePoly(0, 0, r);   // offset (hex) packing; grout fills the gaps
-      return { polys: [c], ax: [u, 0], ay: [u / 2, u * Math.sqrt(3) / 2] }; },
-    fishscale: u => { const c = circlePoly(0, 0, u * 0.62);   // rows overlap upward; drawn bottom-first
-      return { polys: [c], ax: [u, 0], ay: [u / 2, u * 0.5], overlap: true }; },
-    // a Moroccan-lantern tile: an elongated hexagon with three bulging (convex) edges and three
-    // notched (concave) edges, so a bulge nests into a neighbour's notch. Tiles by the hex lattice.
-    arabesque: u => { const W = u * 0.42, h = u * 0.28, H = u * 0.6, A = 0.14 * u, M = 8;
-      const Vs = [[0, H], [W, h], [W, -h], [0, -H], [-W, -h], [-W, h]], conv = [1, 1, 1, -1, -1, -1], pts = [];
-      for (let e = 0; e < 6; e++) { const a = Vs[e], b = Vs[(e + 1) % 6], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy), nx = dy / L, ny = -dx / L;
-        for (let k = 0; k < M; k++) { const t = k / M, off = conv[e] * A * Math.sin(Math.PI * t); pts.push([a[0] + dx * t + nx * off, a[1] + dy * t + ny * off]); } }
-      return { polys: [pts], ax: [2 * W, 0], ay: [W, H + h] }; },
-    versailles: u => versaillesModule(u),
   };
-  function circlePoly(cx, cy, r, n = 44) { const p = []; for (let k = 0; k < n; k++) { const a = 2 * Math.PI * k / n; p.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); } return p; }
-  // French / Versailles pattern: the industry 4-size module (8/16/24 on a 24 base), a rectangle
-  // tiled exactly by staggered rectangles. Verified to cover its module with no gaps/overlaps.
-  function versaillesModule(u) {
-    const s = u / 4, N = 8;                             // 8x8 module of small units; tile ~ u/4..3u/4
-    const rects = VERSAILLES.map(([x, y, w, h]) => [[x * s, y * s], [(x + w) * s, y * s], [(x + w) * s, (y + h) * s], [x * s, (y + h) * s]]);
-    return { polys: rects, ax: [N * s, 0], ay: [0, N * s] };
-  }
-  // Authentic French/Versailles pattern: an 8x8 module of four tile sizes (1x1, 1x2, 2x2, 2x3),
-  // laid so NO FOUR TILES MEET AT A POINT - the defining trait. Solved by backtracking, seed 2433.
-  const VERSAILLES = [[0,0,1,1],[1,0,2,3],[3,0,2,1],[5,0,2,2],[7,0,1,2],[0,1,1,2],[3,1,1,2],[4,1,1,2],
-    [5,2,3,2],[0,3,2,3],[2,3,3,2],[5,4,3,2],[2,5,1,1],[3,5,2,2],[0,6,3,2],[5,6,3,2],[3,7,2,1]];
   // Cairo pentagonal tiling: the Voronoi cells of the snub-square vertices at offset e = 2 - sqrt(3)
   // - eight congruent pentagons (four equal sides + a longer base) per 2x2 unit cell, which is the
   // real translational period (the sites checkerboard vertical/horizontal). Verified to tile.
@@ -3447,7 +3422,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   };
   function tileInstances() {
     if (T.pattern === 'plank') return plankInstances();       // not a lattice; it generates itself
-    const u = T.sizeIn, pat = PATTERNS[T.pattern](u);
+    const u = T.sizeIn, pat = patternOf(u);
     const noSpread = !!pat.overlap;                                   // scales overlap - never pushed apart
     // A pattern sized from the board rather than from u says so, and the joint spreads by ITS size.
     // Scaling a 5in plank's grout by a 13in tile size opens a quarter-inch joint and calls it 1/16.
@@ -3719,6 +3694,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // nothing errors and the floor still looks like a floor. It cost a render to spot (as T.pat,
   // which is not what the field is called) and only the slot-colour view showed it.
   for (const k in GROUPS) if (!PATTERNS[k]) console.error('GROUPS: no such pattern', k);   // developer check, never shown
+  // THE ONE LOOKUP. A slab records T.pattern BY NAME, so a slab written by a build that had a
+  // pattern this one does not - or hand-edited - would otherwise call undefined and take the whole
+  // render down with it. It lands on square instead, which every slab can draw.
+  const patternOf = (u) => (PATTERNS[T.pattern] || PATTERNS.square)(u);
   // The chosen grouping, or the pattern's first - so a slab saved before there was a choice, and a
   // key that no longer exists, both land on the one the pattern has always used.
   const groupsFor = () => GROUPS[T.pattern] || null;
@@ -3970,12 +3949,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       return x1 >= only[0] && x0 <= only[2] && y1 >= only[1] && y0 <= only[3];
     };
     stoneSource();
-    const pat = PATTERNS[T.pattern](T.sizeIn);
+    const pat = patternOf(T.sizeIn);
     const inst = tileInstances(), chips = chipMap(), SET = picking() ? [] : sectionList();
     // THE JOINTS, AND NOTHING OUTSIDE THEM. The floor is smaller than the slab by the kerf it cost to
     // cut it, so a backdrop over the whole frame would paint grout where there is no floor. Over the
     // tiles' own extent instead: background in the preview, TRANSPARENT in an export, which is what a
-    // remainder is. Taken from the tiles rather than from floorS, so a hexagon or a fishscale edge is
+    // remainder is. Taken from the tiles rather than from floorS, so a hexagon or an octagon edge is
     // covered exactly and not by a rectangle that guesses.
     // WHERE THE SLAB REACHES, and no further. The floor is the slab at floorPitch, so this rectangle
     // is the whole of the material. Grout fills it and every tile is clipped to it: past the edge
@@ -5123,7 +5102,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function currentMaterial() { return MATERIAL; }   // saving a slab reads through here, never the token
   // THE JOINT BETWEEN TWO PIECES, in inches. Grout is a tile idea: a floor of boards has no mortar in
   // it, the pieces butt and the line you see is the saw. The tile engine must not test which material
-  // it is on - herringbone and Versailles came from wood, it serves both and knows neither - so the
+  // it is on - herringbone and chevron came from wood, it serves both and knows neither - so the
   // question lives here and the material answers it. T.groutIn is left alone, so an author who sets a
   // grout for stone still has it when they switch back.
   function jointIn() { return (MATERIAL === 'wood' && !(WOOD.glaze > 0)) ? 0 : T.groutIn; }
@@ -10102,7 +10081,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const L = sectionList(), N = stageN();
     if (!L.length || !layTiles) { host.hidden = true; host.innerHTML = ''; return; }
     const R = rosetteOf(), k = R && N >= R.slots ? R.slots : N;
-    const pat = PATTERNS[T.pattern] && PATTERNS[T.pattern](T.sizeIn);
+    const pat = patternOf(T.sizeIn);
     if (!pat || !pat.polys) { host.hidden = true; host.innerHTML = ''; return; }
 
     host.hidden = false;
