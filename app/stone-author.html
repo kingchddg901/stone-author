@@ -1729,7 +1729,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.12.65';
+  const BUILD = '2026.10.12.66';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3746,6 +3746,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const pick = cls > 1 ? (((((t2.m >> 1) * 3 + (t2.n >> 1) * 5) % cls) + cls) % cls) : 0;
     return slot + pick * k;
   }
+  // WHERE BOARD k ACTUALLY COMES FROM. Stepping by wid from y0 marches straight off the log: six
+  // 0.44 ft boards need 2.6 ft of cant and an oak of radius 0.85 ft has 1.7 ft at the pith plane,
+  // so the far bands came out as bare background and the floor got solid black rows. Wrapping the
+  // position into the width the log HAS at this plane keeps every band real wood, and leaves band
+  // 0 exactly where y0 put it. A kept cut is never wrapped - that position is the user's choice.
+  //
+  // MODULE SCOPE BECAUSE TWO RENDERERS ASK IT. It lived inside renderStoneOffscreen and
+  // renderFloorTile called it anyway - a ReferenceError that never fired, because the call sits
+  // behind `STAGE > 1 ?` and no floor exported so far had more than one stage. A staged wood floor
+  // through the TIFF path would have thrown. It closes over nothing local: woodField and WOOD are
+  // both out here. See tools/check-scope.mjs, which now refuses this shape.
+  const cantBand = (k) => {
+    const F = woodField();
+    const ymax = Math.sqrt(Math.max(0, F.R * F.R - WOOD.plane * WOOD.plane));
+    const lo = -ymax, rng = Math.max(1e-6, (ymax - WOOD.wid) - lo);
+    const want = WOOD.y0 + k * WOOD.wid;
+    return lo + (((want - lo) % rng) + rng) % rng - WOOD.y0;
+  };
   function renderStoneOffscreen(wide) {
     // THE SOURCE IS A CANT WHEN WOOD IS STAGED. The painter maps v through yy = y0 + (cvv/H)*wid, so
     // a canvas STAGE times taller simply answers for board positions y0 .. y0 + wid*STAGE - the same
@@ -3773,18 +3791,6 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // A KEPT SET PAINTS ITS ENTRIES; otherwise the bands walk the cant. Entries are whole logs, so
     // each one rebuilds the field - unavoidable, and the reason the set is capped. The cant does not,
     // because its offset lives outside WOOD.
-    // WHERE BOARD k ACTUALLY COMES FROM. Stepping by wid from y0 marches straight off the log: six
-    // 0.44 ft boards need 2.6 ft of cant and an oak of radius 0.85 ft has 1.7 ft at the pith plane,
-    // so the far bands came out as bare background and the floor got solid black rows. Wrapping the
-    // position into the width the log HAS at this plane keeps every band real wood, and leaves band
-    // 0 exactly where y0 put it. A kept cut is never wrapped - that position is the user's choice.
-    const cantBand = (k) => {
-      const F = woodField();
-      const ymax = Math.sqrt(Math.max(0, F.R * F.R - WOOD.plane * WOOD.plane));
-      const lo = -ymax, rng = Math.max(1e-6, (ymax - WOOD.wid) - lo);
-      const want = WOOD.y0 + k * WOOD.wid;
-      return lo + (((want - lo) % rng) + rng) % rng - WOOD.y0;
-    };
     const SET = picking() ? [] : sectionList();
     if (SET.length) {
       // Each section is a whole slab, so each one is swapped in entire - material included. The
