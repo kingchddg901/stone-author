@@ -30,7 +30,7 @@ Nobody believes the rest came from that, so here is the lineage.
    you draw where the line goes, and the family decides what it becomes. Your line is the route;
    the family is the character.
 
-4. **Then it kept growing.** A pour brush. A tile engine (15 patterns, real grout and kerf). Pen
+4. **Then it kept growing.** A pour brush. A tile engine with real grout and kerf. Pen
    pressure and tilt. Gravity and magnet brushes. A layer model. Marble primitives — clouds,
    banding, breccia, drusy, stylolites. Vein-structure variants. Each addition was small; the sum
    outgrew the dashboard builder it lived in.
@@ -64,10 +64,18 @@ path that taking one small want seriously actually produced.
   Calacatta, Nero Marquina, Granite) decides what they are. Tools: Vein, Branch, Web,
   Stylolite, Pour, Gravity, Magnet, Chip, Tune, Cloud, Moon, Mask (protected islands / reality
   windows), Light, Move. Pen pressure and tilt (opt-in). **Lay tiles**
-  cuts the authored slab into a repeating pattern on a floor — 15 patterns (square, rectangle,
-  subway, hexagon, Cairo, diagonal, herringbone, basketweave, triangle, rhombus, octagon,
-  penny, fish scale, arabesque lantern, French/Versailles), with grout, kerf, edge finish,
-  and per-tile chipping. Sizes are real, on an 8×5 ft slab. Marble **primitives** (clouds,
+  cuts the authored slab into a repeating floor — 13 patterns (square, rectangle, subway, hexagon,
+  Cairo, diagonal, herringbone, basketweave, triangle, rhombus, octagon, plus **plank run** and
+  **chevron** for wood), with grout, kerf, edge finish and per-tile chipping. Sizes are real, on an
+  8×5 ft slab, and a floorboard is **sized** and cut from the mother board rather than the floor
+  being divided into a set number of boards. Assembly is **in order**, **off the stack** or
+  **shuffled**: the first keeps the grain running across joints, the last cuts each piece from
+  anywhere on the slab, and a piece is only offered where its whole shape is on the material — an
+  offcut is not stock. Wood has no grout, because a floor of boards has no mortar and the line you
+  see is the saw — unless a **glaze** turns it into printed ceramic. The floor exports at any size
+  through the same tiled path as a slab. (`penny`, `fishscale`, `arabesque` and `versailles` are in
+  the pattern table but have never had a control; a slab saved with one still renders.)
+  Marble **primitives** (clouds,
   banding, breccia, drusy, stylolites) and per-line **vein variants** (sinuous, dendritic,
   en-echelon, boudinage, halo). A **layer** model (eye / solo / opacity, blend, glow) and a
   **colour layer** — colour decoupled from the family, edited through the vendored token-theme-kit
@@ -91,11 +99,16 @@ burned pair that states the fiction, then the same pair raw — badged so a comp
 render are never mistaken for each other. CC0. See [`docs/gallery.md`](docs/gallery.md).
 
 ### `harness/` — the determinism harness
-A Playwright harness that renders each gallery hero from its slab under headless Chromium and gates on
-**self-determinism** (byte-identical twice from a fresh load). `inject.mjs` adds a render hook to a
-throwaway copy of the app (the shipped file stays clean); `render.mjs` runs the gate (`--write`
-regenerates the gallery PNGs); `.github/workflows/gallery.yml` runs it in CI. See
-[`docs/gallery.md`](docs/gallery.md).
+A Playwright harness that drives the real app under headless Chromium and gates the things a
+screenshot cannot: **self-determinism** (each gallery hero byte-identical twice from a fresh load),
+the grid export and its BigTIFF container, the **tiled floor** (every output tile carrying the
+material the whole picture would have put there), export progress, the spectrum and strain emission
+rules, the pen calibrator against a synthetic pen of known properties, a master's signature, and
+what the other two engines do with the same slab. `inject.mjs` adds a render hook to a throwaway
+copy of the app, so the shipped file stays clean; `render.mjs` runs the determinism gate (`--write`
+regenerates the gallery PNGs); `.github/workflows/gallery.yml` runs the set in CI. Several of these
+exist because no local run was possible — this machine cannot spawn a browser, so CI is their first
+run. See [`docs/gallery.md`](docs/gallery.md).
 
 ### `tools/` — the Python pipeline
 - **`stone_generate.py`** — generate stone as independent layers (L1 layering, L2 fractures,
@@ -234,9 +247,21 @@ stone's query is the identity, because the marks *are* the face, while wood's is
 growth-ring field, so one authored tree yields every board. Everything downstream of that face is
 already material-agnostic: layers, tokens, colour, the coat and light tier, warp, masks, tiling, the
 tiled render and the master export. `tools/check-material-fork.mjs` holds the line — the branch lives
-at one seam or it is not a fork. Metal is a later path. The tiled export now paints its tiles on a
-**worker pool** that reproduces the single-threaded render byte for byte, and the planner picks the
-tile size for the width that pool can actually run. Next up is a **WebGPU render pipeline** and
+at one seam or it is not a fork. Metal is a later path.
+
+What is *not* shared is the **ground** a slab is laid on, and the reason is a good example of the fork
+doing its job. One token served all three, which is defensible for a material that paints over it and
+wrong for one that does not: the wood raster writes alpha 255 across the whole slab, so the ground
+beneath is invisible, while glass is a transmission model and the ground is most of what you see
+through it. A ground chosen to make stone dramatic therefore followed the author into glass and
+swallowed it. Stone keeps the name, wood and glass have their own, and an unset one **inherits**, so
+no slab already saved renders differently until its material's ground is set.
+
+The tiled export now paints its tiles on a **worker pool** that reproduces the single-threaded render
+byte for byte, and the planner picks the tile size for the width that pool can actually run. A
+**floor** rides the same path — pieces painted straight from the field, since at 262,144 the slab they
+are cut from would be 10.7 GB and is never built — though the pool stands down for one, because its
+core is the slab painter and a floor would come back as the material it was cut from, silently. Next up is a **WebGPU render pipeline** and
 **layered PSD/PSB export** (one file-layer per authoring layer) — see the roadmap in
 [`docs/architecture.md`](docs/architecture.md) and [`docs/final-render.md`](docs/final-render.md).
 
