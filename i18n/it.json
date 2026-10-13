@@ -496,6 +496,8 @@
  "tool.keep-tile": "Salva una piastrella",
  "tool.add-saved": "Aggiungi una lastra salvata",
  "tool.clear-cuts": "Azzera",
+ "tool.build-composite": "Crea il composito",
+ "tip.build-composite": "Ricompone il composito dalle sue sezioni. Finché è conservata più di una sezione il pavimento non viene ricostruito mentre modifichi: premi qui quando vuoi vederlo.",
  "hint.cut-kept": "Salvato — {n} taglio/i. Ora il pavimento si ricava da questi; cambia qualsiasi cosa, anche la specie, e salvane un altro.",
  "hint.cuts-cleared": "Azzerato. Il pavimento torna a scendere lungo un solo tronco.",
  "hint.section-dropped": "Eliminata — ne restano {n}. Le piastrelle assegnate a questa tornano a scegliere da sole.",

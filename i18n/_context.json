@@ -1758,6 +1758,8 @@
  "tool.keep-tile": {"terms": [], "where": "button in the Sections group. Arms the Snag tool: tap a laid tile and that one piece becomes a section, at the coordinates it was cut from. The same thing the Snag tool in the rail does, put where the sections are"},
  "tool.add-saved": {"terms": [], "where": "button in the Sections group: open a saved slab file and add it to the set as a section, WITHOUT loading it over the slab you are working on. Load replaces everything including the section list, which makes composing a floor from several saved materials impossible"},
  "tool.clear-cuts": {"terms": ["wood"], "where": "button: discard every kept cut and go back to cutting one log"},
+ "tool.build-composite": {"terms": [], "where": "button: re-cut the composite floor from its kept sections. Only shown with two or more sections"},
+ "tip.build-composite": {"terms": [], "where": "tooltip on the Build composite button, explaining that the floor is not rebuilt automatically while sections are kept"},
  "hint.cut-kept": {"placeholders": {"n": "how many cuts are now kept, e.g. 3"}, "terms": ["wood"], "where": "status shown after keeping a cut"},
  "hint.cuts-cleared": {"terms": ["wood"], "where": "status after discarding every kept cut"},
  "hint.section-dropped": {"placeholders": {"n": "how many sections are left, e.g. 3"}, "terms": [], "where": "status shown after deleting one section from the list"},

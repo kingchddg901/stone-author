@@ -408,6 +408,7 @@
     <button id="sec-import" type="button" data-i18n="tool.add-saved">Add a saved slab</button>
     <input id="sec-importfile" type="file" hidden><!-- no accept: it locks iOS out, same as Load -->
     <button id="sec-clear" type="button" data-i18n="tool.clear-cuts">Clear</button>
+    <button id="sec-build" type="button" data-i18n="tool.build-composite" data-i18n-attr="title=tip.build-composite" title="Re-cut the composite from its sections. While more than one section is kept the floor is not rebuilt as you change things — press this when you want to see it." hidden>Build composite</button>
     <output id="sec-count"></output>
   </div>
   <div id="sec-list" class="tk" style="grid-column:1/-1"></div>
@@ -1280,6 +1281,8 @@ window.SA_I18N = (() => {
   "tool.keep-tile": "Keep a tile",
   "tool.add-saved": "Add a saved slab",
   "tool.clear-cuts": "Clear",
+  "tool.build-composite": "Build composite",
+  "tip.build-composite": "Re-cut the composite from its sections. While more than one section is kept the floor is not rebuilt as you change things — press this when you want to see it.",
   "hint.cut-kept": "Kept \u2014 {n} cut(s). The floor is laid from these now; change anything, even the species, and keep another.",
   "hint.cuts-cleared": "Cleared. The floor goes back to walking down one log.",
   "hint.section-dropped": "Dropped \u2014 {n} left. Any tile that was set to it goes back to choosing for itself.",
@@ -1729,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.13.70';
+  const BUILD = '2026.10.13.71';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3780,6 +3783,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const want = WOOD.y0 + k * WOOD.wid;
     return lo + (((want - lo) % rng) + rng) % rng - WOOD.y0;
   };
+  // THE COMPOSITE DOES NOT REBUILD UNDER YOU.
+  //
+  // Every control calls redraw(), and with sections the expensive half is renderStoneOffscreen: it
+  // swaps in each kept section's WHOLE slab and rebuilds that material's field per entry - the
+  // comment on the cant loop says as much, and it is why the set is capped at eight. Changing a
+  // name or an assignment paid for all of it.
+  //
+  // No new flag for "stale": stoneReady already is one. Holding means declining to clear it, so the
+  // last build stays on screen and the button can read `!stoneReady` to know it is out of date.
+  // The FIRST build is never held - there would be nothing to look at - which is what everBuilt is.
+  let everBuilt = false;
+  const holdingBuild = () => everBuilt && sectionList().length > 1;
+  const stoneSource = () => { if (!stoneReady && !holdingBuild()) renderStoneOffscreen(); else syncBuild(); };
+  function syncBuild() {
+    const b = document.getElementById('sec-build');
+    if (!b) return;
+    b.hidden = sectionList().length < 2;
+    b.setAttribute('aria-pressed', String(!stoneReady && everBuilt));   // pressed = there is something to build
+  }
   function renderStoneOffscreen(wide) {
     // THE SOURCE IS A CANT WHEN WOOD IS STAGED. The painter maps v through yy = y0 + (cvv/H)*wid, so
     // a canvas STAGE times taller simply answers for board positions y0 .. y0 + wid*STAGE - the same
@@ -3841,7 +3863,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
     }
     woodBandY = 0;
-    g2d = prev; stoneReady = true;
+    g2d = prev; stoneReady = true; everBuilt = true; syncBuild();
   }
   const chipMap = () => { const mp = new Map(); for (const mk of marks) if (mk.kind === 'chip') (mp.get(mk.tileKey) || mp.set(mk.tileKey, []).get(mk.tileKey)).push(mk); return mp; };
   function chipEdge(poly, mk) {                          // replace one edge with a jagged inward bite
@@ -3928,7 +3950,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (const q of t.poly) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
       return x1 >= only[0] && x0 <= only[2] && y1 >= only[1] && y0 <= only[3];
     };
-    if (!stoneReady) renderStoneOffscreen();
+    stoneSource();
     const pat = PATTERNS[T.pattern](T.sizeIn);
     const inst = tileInstances(), chips = chipMap(), SET = picking() ? [] : sectionList();
     // THE JOINTS, AND NOTHING OUTSIDE THEM. The floor is smaller than the slab by the kerf it cost to
@@ -4022,7 +4044,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // The live preview is one caller of it, with the view's own transform.
   function drawTiles(F) {
-    if (!stoneReady) renderStoneOffscreen();
+    stoneSource();
     drawTilesTo(F, ctx, 1 / (Wc * V.z));
   }
   // Edge finish: a lit chamfer. Edges facing the shared light (G.lightAngle) catch it; those facing away fall dark.
@@ -10167,6 +10189,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       hint(TR('hint.picking-shows-the-slab'));
     });
     const add = document.getElementById('sec-add'), clr = document.getElementById('sec-clear');
+    // THE EXPLICIT BUILD. Forces the rebuild the hold has been declining, then lays the floor from
+    // it. Clearing stoneReady first means pressing it with nothing outstanding still re-cuts, which
+    // is what a button called Build should do.
+    const bld = document.getElementById('sec-build');
+    if (bld) bld.addEventListener('click', () => { stoneReady = false; renderStoneOffscreen(); redraw(false); });
     if (add) add.addEventListener('click', () => {
       if (sectionList().length >= 8) { hint(TR('hint.cuts-full')); return; }
       // THE WHOLE SLAB, not a snapshot of one material's settings. The old version kept WOOD plus
