@@ -22,7 +22,8 @@
      several ("wood glass"). */
   body[data-mat="stone"] [data-mat-only]:not([data-mat-only~="stone"]),
   body[data-mat="wood"] [data-mat-only]:not([data-mat-only~="wood"]),
-  body[data-mat="glass"] [data-mat-only]:not([data-mat-only~="glass"]) { display: none !important; }
+  body[data-mat="glass"] [data-mat-only]:not([data-mat-only~="glass"]),
+  body[data-mat="composite"] [data-mat-only]:not([data-mat-only~="composite"]) { display: none !important; }
   body[data-mat="glass"] #g-glass { order: -2; }
   /* In wood the material panel goes to the TOP of the rail. Two `order` rules rather than moving
      the markup, because in stone the ground panels have to come back in their own order. */
@@ -207,6 +208,12 @@
       <button id="m-stone" type="button" data-mat="stone" aria-pressed="true" data-i18n="mat.stone">Stone</button>
       <button id="m-wood" type="button" data-mat="wood" aria-pressed="false" data-i18n="mat.wood">Wood</button>
       <button id="m-glass" type="button" data-mat="glass" aria-pressed="false" data-i18n="mat.glass">Glass</button>
+      <!-- NOT A FOURTH material. The fork's contract is that a material supplies a FIELD and a way
+           to query a 2D face out of it; a composite supplies none - it arranges slabs that each
+           have one. So this switches the VIEW, and the discriminator keeps tracking the live slab.
+           (Written without naming the token: check-material-fork matches it anywhere outside the
+           seam, comments included, and it caught this one.) -->
+      <button id="m-composite" type="button" data-mat="composite" aria-pressed="false" data-i18n="mat.composite">Composite</button>
     </div>
     <div class="grp" role="group" aria-label="Family" data-mat-only="stone" data-i18n-attr="aria-label=a11y.family"><span class="lbl" data-i18n="lbl.family">Family</span>
       <button id="f-carrara" type="button" data-fam="carrara" data-i18n="fam.carrara">Carrara</button>
@@ -402,7 +409,7 @@
   <div class="sliders" data-mat-only="wood">
     <div class="sl"><label for="wood-stage"><span data-i18n="sl.wood-stage">Boards</span> <output id="wood-stageV"></output></label><input id="wood-stage" type="range" min="1" max="8" step="1"></div>
   </div>
-  <div class="grp" role="group" aria-label="Sections" data-i18n-attr="aria-label=a11y.sections"><span class="lbl" data-i18n="lbl.sections">Sections</span>
+  <div class="grp" role="group" aria-label="Sections" data-mat-only="composite" data-i18n-attr="aria-label=a11y.sections"><span class="lbl" data-i18n="lbl.sections">Sections</span>
     <button id="sec-add" type="button" data-i18n="tool.keep-cut">Keep this cut</button>
     <button id="sec-snag" type="button" data-i18n="tool.keep-tile">Keep a tile</button>
     <button id="sec-import" type="button" data-i18n="tool.add-saved">Add a saved slab</button>
@@ -411,9 +418,9 @@
     <button id="sec-build" type="button" data-i18n="tool.build-composite" data-i18n-attr="title=tip.build-composite" title="Re-cut the composite from its sections. While more than one section is kept the floor is not rebuilt as you change things — press this when you want to see it." hidden>Build composite</button>
     <output id="sec-count"></output>
   </div>
-  <div id="sec-list" class="tk" style="grid-column:1/-1"></div>
-  <div id="tile-locked" class="lbl" style="grid-column:1/-1;opacity:0.8" hidden data-i18n="note.tile-locked">Pattern, size and kerf are fixed while a cut is held — a cut is a box measured against them. Clear the sections to change them.</div>
-  <div id="sec-setter" class="tk" style="grid-column:1/-1" hidden></div>
+  <div id="sec-list" class="tk" style="grid-column:1/-1" data-mat-only="composite"></div>
+  <div id="tile-locked" class="lbl" style="grid-column:1/-1;opacity:0.8" hidden data-mat-only="composite" data-i18n="note.tile-locked">Pattern, size and kerf are fixed while a cut is held — a cut is a box measured against them. Clear the sections to change them.</div>
+  <div id="sec-setter" class="tk" style="grid-column:1/-1" data-mat-only="composite" hidden></div>
   <div class="sliders" data-mat-only="wood">
     <div class="sl"><label for="wood-graft"><span data-i18n="sl.wood-graft">Graft branch from</span> <output id="wood-graftV"></output></label><input id="wood-graft" type="range" min="0" max="8" step="1"></div>
   </div>
@@ -1108,6 +1115,7 @@ window.SA_I18N = (() => {
   "sec.kept-cut": "Kept cut",
   "sec.snagged": "Snagged {pat}",
   "mat.glass": "Glass",
+  "mat.composite": "Composite",
   "sec.glass": "Glass",
   "lbl.forming": "Formed by",
   "a11y.glass-form": "Forming process",
@@ -1732,7 +1740,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.13.72';
+  const BUILD = '2026.10.13.73';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5121,6 +5129,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let MATERIAL = 'stone';                       // 'stone' | 'wood' | 'glass'
   function setMaterial(m) { MATERIAL = (m === 'wood' || m === 'glass') ? m : 'stone'; }
   function currentMaterial() { return MATERIAL; }   // saving a slab reads through here, never the token
+  // THE COMPOSITE VIEW. Deliberately outside MATERIAL: it is a panel the author works in, not a
+  // thing the renderer forks on, and nothing downstream of here may learn it exists. It is not
+  // serialised either - which slab you had open is state, which TAB you had open is not.
+  let compView = false;
   // THE JOINT BETWEEN TWO PIECES, in inches. Grout is a tile idea: a floor of boards has no mortar in
   // it, the pieces butt and the line you see is the saw. The tile engine must not test which material
   // it is on - herringbone and Versailles came from wood, it serves both and knows neither - so the
@@ -8886,7 +8898,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Push the whole of the state into the controls - after a load, every control must match.
   function syncUI() {
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
-    pv('data-mat', currentMaterial()); pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
+    pv('data-mat', compView ? 'composite' : currentMaterial()); pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
     pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : T.assembly === 'stack' ? 'stack' : 'order'); pv('data-unit', T.units);
     if (typeof syncGroups === 'function') syncGroups();   // which groupings this pattern HAS, not just which is pressed
     if (typeof syncTileLocks === 'function') syncTileLocks();   // a loaded slab may arrive holding cuts
@@ -9838,8 +9850,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
   for (const b of document.querySelectorAll('[data-species]')) b.addEventListener('click', () => { applySpecies(b.dataset.species); hint(TR('hint.species-seeded', { name: b.textContent })); });
-  for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => { setMaterial(b.dataset.mat); press('[data-mat]', b); showGround();
- redraw(true); });
+  // THE COMPOSITE IS A VIEW, NOT A MATERIAL. setMaterial coerces anything it does not know to
+  // stone, so routing this button through it would silently switch the slab to stone and lose the
+  // author's place. It sets compView instead; syncUI puts that on the body, where the same
+  // data-mat-only rules that hide the wood and glass panels hide everything that is not composite.
+  for (const b of document.querySelectorAll('[data-mat]')) b.addEventListener('click', () => {
+    compView = b.dataset.mat === 'composite';
+    if (!compView) setMaterial(b.dataset.mat);
+    press('[data-mat]', b); showGround(); redraw(true);
+  });
   for (const b of document.querySelectorAll('[data-tool]')) b.addEventListener('click', () => {
     const was = picking();
     tool = b.dataset.tool; press('[data-tool]', b); hint();
