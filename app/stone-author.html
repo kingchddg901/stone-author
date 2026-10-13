@@ -1740,7 +1740,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.13.75';
+  const BUILD = '2026.10.13.76';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3836,7 +3836,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // last build stays on screen and the button can read `!stoneReady` to know it is out of date.
   // The FIRST build is never held - there would be nothing to look at - which is what everBuilt is.
   let everBuilt = false;
-  const holdingBuild = () => everBuilt && sectionList().length > 1;
+  // ...AND ONLY WHILE THE PICTURE IS ACTUALLY A COMPOSITE. This asked only whether sections EXIST,
+  // which is a different question now that the tab decides whether they assemble. In a material tab
+  // with sections kept, stageN correctly drops to one band - but the hold blocked the rebuild, so
+  // the floor went on blitting the stale SEVEN-band composite canvas while sampling it as one. Every
+  // tile then pulled from the wrong place, which reads as a floor of identical repeating tiles.
+  const holdingBuild = () => everBuilt && compositeOn() && sectionList().length > 1;
   const stoneSource = () => { if (!stoneReady && !holdingBuild()) renderStoneOffscreen(); else syncBuild(); };
   function syncBuild() {
     const b = document.getElementById('sec-build');
