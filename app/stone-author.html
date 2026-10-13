@@ -1740,7 +1740,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.13.74';
+  const BUILD = '2026.10.13.75';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3676,7 +3676,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // renderStoneOffscreen, STAGE in drawTilesTo and renderFloorTile, and the source index in snag
   // all come through it. Gating it once means no render path can disagree with another about
   // whether this picture is a composite. `picking()` already suppressed sections the same way.
-  const compositeOn = () => compView && !picking();
+  // THE VIEW DECIDES, AND ONLY THE VIEW. This read `compView && !picking()`, and picking() is
+  // `tool === 'snag'` - which is the tool you are holding the entire time you build a composite,
+  // because snagging tiles is HOW you build one. Seven sections kept, switch to the composite tab,
+  // nothing assembles: the tool you used to make it was still selected.
+  //
+  // Suppressing sections while picking was right when the tab did not exist - it was the only way
+  // to say "show me the slab I am picking from rather than the floor". The view says that now, in
+  // a material tab, explicitly. The tool does not get a second vote.
+  const compositeOn = () => compView;
   const stageN = () => {
     const s = compositeOn() ? sectionList() : [];
     if (s.length) return Math.min(8, s.length);          // sections answer first, in any material
