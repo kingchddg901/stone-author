@@ -120,6 +120,10 @@ regenerates the gallery PNGs); `.github/workflows/gallery.yml` runs it in CI. Se
   and roadmap, plus the CPU/GPU split.
 - **`sections.md`** — a tile kept as a cut (its shape plus where on the slab it came from), the
   slot/seed distinction, the rhombus groupings and the cut lock.
+- **`tile-cutter.md`** — PARKED. Cutting a rendered master into its pieces afterwards from a vector
+  cut layer, and why that beat composing live: boxes predicted exactly by `(m, n)`, reassembly
+  bit-identical, four pieces tiling forever. Carries the per-pattern rectangular periods and the
+  three patterns that have no exact raster tile. Read before rebuilding an in-browser composite.
 - **`colour-layer.md`** — the colour engine: character vs colour, the vendored token-theme-kit as
   editor + resolver, the adjustment set, the per-id / speck-group colour, the canvas colour menu.
 - **`gallery.md`** — the gallery showcase, the render recipe, and the determinism harness/CI.
