@@ -9,7 +9,14 @@
 //
 // JSON IS THE SOURCE OF TRUTH AND THE TABLE IS DOWNSTREAM OF IT. buildTable is handed rows re-read from
 // index.json and never touches a master, so a published table cannot say anything the published JSON
-// does not. That split is the whole point, and tools/check-meta-index.mjs holds it.
+// does not. That split is the whole point.
+//
+// IT IS HELD BY THIS FILE'S SHAPE, NOT BY A GATE. This comment used to end "and
+// tools/check-meta-index.mjs holds it", which was never true: one commit introduced that name here and
+// the file was never written, so the split was asserted as enforced while nothing enforced it. The
+// structural argument still stands - buildTable cannot reach a master - but a reader should know that
+// is an argument and not a check. docs/sidecars/README.md carries a hand-written table that this tool
+// does not generate at all, which is exactly the hole such a gate would have found.
 import { readdirSync, statSync, writeFileSync, mkdirSync, readFileSync } from 'fs';
 import { join, basename, extname } from 'path';
 import { findMeta } from './lib/find-meta.mjs';

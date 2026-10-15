@@ -1,21 +1,31 @@
-# Master sidecars — one 65,535 px render per device, browser, and light
+# Master sidecars — the fleet, and the size ladder
 
-The metadata extract (a **sidecar**) from one **65,535 × 40,959** master (≈2.684 gigapixels) rendered on
-each device in the [fleet](../devices.md), under each browser engine it ran, in **daylight** (spectrum 0)
-and **UV / black light** (spectrum −1). Fourteen masters, fourteen sidecars.
+The metadata extract (a **sidecar**) from a master: what it was, what made it, and how long each tile
+took. **Sixteen masters, sixteen sidecars**, in two sets that are evidence for two different things.
+
+**The fleet** — one **65,535 × 40,959** master (≈2.684 gigapixels) rendered on each device in the
+[fleet](../devices.md), under each browser engine it ran, in **daylight** (spectrum 0) and **UV / black
+light** (spectrum −1). Fourteen masters of the same picture across six devices: evidence that the
+engines *agree*.
+
+**The size ladder** — the same picture at 131,072 and 262,144 px wide, on one desktop. Two masters:
+evidence that per-tile cost does not grow with the output.
 
 These are the data *from* the masters, not the masters: 13 GB of pixels carry about a third of a megabyte
 of checkable evidence, and this is that evidence. A master records its own build, engine, hardware class,
 tile plan, per-tile timings and the light it was written with — scanned out of the file's JSON block by
 [`tools/tiff-meta.mjs`](../../tools/tiff-meta.mjs) / [`tools/meta-index.mjs`](../../tools/meta-index.mjs)
-without decoding a pixel. The masters themselves are not published (400–800 MB each); render the slab
-yourself and compare — see [`docs/reproduce.md`](../reproduce.md).
+without decoding a pixel. The masters themselves are not published (400 MB to 4.26 GB each, about 19 GB
+in all); render the slab yourself and compare — see [`docs/reproduce.md`](../reproduce.md).
 
 **Device identity is sealed.** Each sidecar's `dev` field is encrypted (or withheld) under a key derived
 from the slab's own bytes — see [`docs/device-seal.md`](../device-seal.md). What stays in the clear is
 hardware **class** (engine, cores, memory, device-pixel-ratio, reported texture limit), which is what an
-audit needs and identifies nobody. The table below is generated from the sidecars in this folder, re-read
-from disk — it states nothing the JSON beside it does not.
+audit needs and identifies nobody. Every figure in the tables below is read out of the JSON beside it —
+except the **device** column, which is a label from [`docs/devices.md`](../devices.md), because a sidecar
+names hardware class and deliberately not a machine.
+
+## The fleet — one picture, six devices, three engines, two lights
 
 | device | engine | light | tile | tiles | min | med tile ms | light mean | lit>40 | glow rule | inputs | sidecar |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -45,3 +55,27 @@ Notes:
 - Three Android-Chrome devices (S23 Ultra, Tab A7 Lite, Tab A 8.0) share an `engine` string and are told
   apart by hardware class: cores 8 / maxTexture 8192 / dpr 2 (S23), cores 8 / 8192 / dpr 1.331 (A7 Lite),
   cores 4 / maxTexture 4096 (Tab A 8.0).
+
+## The size ladder — one picture, one desktop, 4× the width
+
+| master | gigapixels | tile | tiles | min | med tile ms | fastest | slowest | pool | build | sidecar |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 131,072 × 81,920 | 10.74 | 4096 | 640 | 24.3 | 1661 | 298 | 31131 | — | 2026.10.11.39 | `glass-131072-day-win-chrome-1011-203108.json` |
+| 262,144 × 163,840 | 42.95 | 4096 | 2560 | 95.2 | 1115 | 301 | 30752 | 8 workers | 2026.10.11.42 | `glass-262144-day-win-chrome-1012-003012.json` |
+
+Both are the slab `glass` on the desktop (win-chrome, 12 cores, 16 GB, dpr 1.2), daylight, bleed 4, and
+both carry `inputs` **`8c6d6582`** — the same signature over picture and light, so these are one picture
+at two sizes and not two pictures. Light mean 143.80 and lit>40 100.00% in both, which is the same thing
+said in pixels.
+
+- **The output grew 4× in each direction and the time grew 3.9×.** 640 tiles to 2,560, 24.3 min to 95.2.
+  Four times the tiles for four times the wall clock is the claim that per-tile cost is flat; coming in
+  slightly *under* it is the worker pool, which landed between build `.39` and `.42`. The median tile fell
+  from **1,661 ms to 1,115 ms** while the picture got sixteen times larger in area.
+- **The spread did not move**: fastest 298 ms against 301, slowest 31,131 ms against 30,752. The slow tail
+  is the same tail — tiles whose content is dense, not tiles that ran out of room.
+- Both forced tile 4096 against a 12,885 MB budget. The `.39` run records `4096/4104=67MB:forced, no blur`;
+  the `.42` run `4096:remembered, calibrated 173.7 vs 173.7 in 18605ms` — the calibration agreeing with
+  itself to a tenth after the plan was reused.
+- At the slab's real 8 × 5 ft, the 262,144 master is **2,731 DPI**. It stops there by decision rather than
+  by limit: opening one costs about 443 GB of working space.
