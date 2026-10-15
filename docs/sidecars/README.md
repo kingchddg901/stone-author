@@ -1,7 +1,7 @@
 # Master sidecars — the fleet, and the size ladder
 
 The metadata extract (a **sidecar**) from a master: what it was, what made it, and how long each tile
-took. **Sixteen masters, sixteen sidecars**, in two sets that are evidence for two different things.
+took. **Eighteen masters, eighteen sidecars**, in three sets that are evidence for three different things.
 
 **The fleet** — one **65,535 × 40,959** master (≈2.684 gigapixels) rendered on each device in the
 [fleet](../devices.md), under each browser engine it ran, in **daylight** (spectrum 0) and **UV / black
@@ -79,3 +79,53 @@ said in pixels.
   itself to a tenth after the plan was reused.
 - At the slab's real 8 × 5 ft, the 262,144 master is **2,731 DPI**. It stops there by decision rather than
   by limit: opening one costs about 443 GB of working space.
+
+## Cross-engine bit-identity — one picture, two engines, two architectures
+
+| device | engine | cores | workers | dpr | toDisk | min | med tile ms | file bytes | sidecar |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| iPhone 14 Pro — A16 Bionic | ios-safari | 4 reported, 6 real | 4 | 3 | true | 35.05 | 12 | 1,012,119,232 | `iPhone wood test-262144-day-ios-safari-1014-225800.json` |
+| Desktop — AMD Ryzen 5 5500 | win-chrome | 12 | 8 | 1.5 | false | 35.49 | 13 | 895,438,456 | `iPhone wood test-262144-day-win-chrome-1014-235042.json` |
+
+One slab at 262,144 × 163,840 — 42.95 gigapixels — in daylight, build `2026.10.14.82`, bleed 4, tile
+forced to 512 on both, 163,840 tiles each. Both carry `inputs` **`8cef8303`**, and both report light
+mean 52.84 at lit>40 98.77%.
+
+**Every one of the 163,840 tile pairs is byte-identical after inflation** — 160 GiB of RGBA on each
+side, zero differing bytes. Not a sample; the whole picture. A Blink renderer on x86-64 Windows and a
+WebKit renderer on ARM produced the same 43 gigapixels to the bit.
+
+- **The files differ by about 13% and none of it is pixels.** 895 MB against 1,012 MB for identical
+  image data. Masters are written with `CompressionStream('deflate')`, which exposes no level, so each
+  engine compresses at whatever its platform zlib defaults to. Re-deflating this master's own tiles at
+  each level reproduces the stored size exactly at **level 6**, and lands within 0.8% of the WebKit file
+  at **level 5**. File size is a property of the compressor, not of the picture — which
+  [`renderer-determinism.md`](../renderer-determinism.md) concludes by a different route, from engines
+  that genuinely drew different pixels.
+
+- **`tools/check-same-image.mjs` calls this pair DIFFERENT**, reporting *"a different length, so
+  different pixels"*. That is false here, and false by construction: the tool compares the compressed
+  region `[0, metaStart)` and cannot see through a compression-level difference. It is sound for two
+  masters from one engine and unsound for the cross-engine comparison its own header says it was written
+  to support. Compare inflated tile data, not stored bytes.
+
+- **This does not contradict [`renderer-determinism.md`](../renderer-determinism.md)**, which tables
+  WebKit against Blink as *not* bit-identical. That was measured on `Hero_Psyker` at **666 marks**; this
+  slab has **zero** — no marks, veins, cracks, specks, drusy or seams. The two results localise the
+  divergence rather than disagreeing. The base field is computed per pixel in JavaScript and written with
+  `putImageData`, which touches no rasteriser; marks, veins and blooms are drawn with
+  `createRadialGradient` and path operations, through Skia or CoreGraphics. **The field is exact across
+  engines; the drawn content is what differs.** Nothing here says a slab *with* content would agree, and
+  it is content that was already measured not to.
+
+- **The dead heat is not evidence of a shared ceiling.** 35.05 min against 35.49, 1.2% apart, reached
+  from opposite directions: WebKit opened at 89.9 tiles/s and shed 13.9% across the run, Blink held flat
+  at +0.4% from first decile to last. The phone was throttling and still finished first, on four workers
+  against eight — and `hardwareConcurrency` under-reports the A16 as 4 where it has 6, so that was four
+  workers on six cores. Whether two unlike machines converging on ~77 tiles/s is chance or a shared
+  serial constraint cannot be answered from two files.
+
+- **Slow tiles are not stalls at this magnitude.** WebKit logged 829 tiles over twice the median against
+  Blink's 46 — most likely `toDisk: true`, the phone streaming to storage mid-render. They cost 16.1 s
+  and 1.0 s, which is 0.77% and 0.05% of their runs. `tiff-meta` names that shape a STALL without
+  weighing what it cost.
