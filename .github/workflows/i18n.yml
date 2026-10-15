@@ -21,6 +21,7 @@ on:
       - 'tools/check-fn-refs.mjs'
       - 'tools/check-material-fork.mjs'
       - 'tools/check-scope.mjs'
+      - 'tools/check-worker-core.mjs'
       - 'docs/functions.md'
       - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
@@ -38,6 +39,7 @@ on:
       - 'tools/check-fn-refs.mjs'
       - 'tools/check-material-fork.mjs'
       - 'tools/check-scope.mjs'
+      - 'tools/check-worker-core.mjs'
       - 'docs/functions.md'
       - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
@@ -79,3 +81,5 @@ jobs:
         run: node tools/check-material-fork.mjs
       - name: Nothing is called from outside the function that declares it
         run: node tools/check-scope.mjs
+      - name: The worker core carries every name it reaches for
+        run: node tools/check-worker-core.mjs

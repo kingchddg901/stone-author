@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.14.81';
+  const BUILD = '2026.10.14.82';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4804,11 +4804,26 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // for EVERY material on every tile - so leaving it out did not break wood, it broke the pool.
       // It is self-contained here: the discriminator is declared by MATERIAL_DECL and WOOD is
       // serialised above, so carrying the function carries everything it reads.
-      fbm2, woodAtan2, groundCol, surfaceGloss,
+      // woodEye and woodStain are the knot and the mineral streak - woodSampler asks for both on the
+      // wood path, so leaving them out broke wood through the pool and nothing else.
+      // specRGB is what the highlight is MADE of, and applyCoat asks for it whenever gloss is above
+      // zero - which surfaceGloss makes true for any glazed wood, so this was the next one to throw.
+      // drawLayerArtifacts draws a metal layer's own veins and specks into the metal mask. Any slab
+      // with a metal layer reached it, and nothing gated that. It carries nothing new behind it.
+      fbm2, woodAtan2, groundCol, surfaceGloss, woodEye, woodStain, specRGB, drawLayerArtifacts,
       resample, smoothPath, handRoute, pathLen, segD, tangent, roughen, lineGeom, curvature, sinuate,
       vnoise, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
     s += `var WOOD=${JSON.stringify(WOOD)},LOG_FIT=${LOG_FIT};\n`;
+    // THE UNITS THE WOOD SAMPLER MEASURES IN. Constants, not functions, which is exactly why they
+    // were missed: a scan that looks for CALLS cannot see a value. woodSampler divides by WOOD_IN in
+    // three places, so wood through the pool threw on it the moment the function list stopped throwing.
+    s += `var WOOD_FT=${WOOD_FT},WOOD_IN=${WOOD_IN};\n`;
+    // woodBandY is WHICH BOARD down the cant this paint is for - renderStoneOffscreen sets it per
+    // band and paintWoodContent reads it, so the worker needs it to exist and to be writable. WOOD0
+    // is the pristine tree woodField falls back to. Both are values, which is the shape that hid
+    // from the first version of check-worker-core.mjs.
+    s += `var woodBandY=0,WOOD0=${JSON.stringify(WOOD0)};\n`;
     s += `var GLASS=${JSON.stringify(GLASS)},IN=${IN},SLAB_FT=${SLAB_FT};\n`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
     s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,view,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;
