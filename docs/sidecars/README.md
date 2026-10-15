@@ -1,7 +1,7 @@
 # Master sidecars — the fleet, and the size ladder
 
 The metadata extract (a **sidecar**) from a master: what it was, what made it, and how long each tile
-took. **Nineteen masters, nineteen sidecars**, in three sets that are evidence for three different things.
+took. **Twenty masters, twenty sidecars**, in four sets that are evidence for four different things.
 
 **The fleet** — one **65,535 × 40,959** master (≈2.684 gigapixels) rendered on each device in the
 [fleet](../devices.md), under each browser engine it ran, in **daylight** (spectrum 0) and **UV / black
@@ -24,6 +24,15 @@ hardware **class** (engine, cores, memory, device-pixel-ratio, reported texture 
 audit needs and identifies nobody. Every figure in the tables below is read out of the JSON beside it —
 except the **device** column, which is a label from [`docs/devices.md`](../devices.md), because a sidecar
 names hardware class and deliberately not a machine.
+
+**A SIDECAR CANNOT SAY WHAT MATERIAL IT IS, and it misleads you about it.** The app holds `MATERIAL`
+as `'stone' | 'wood' | 'glass'` (`app/stone-author.html:5119`); the metadata writer at `:9217` records
+`family` — a STONE family name — and never records `MATERIAL` at all. So a wood master reports
+`family: "carrara"`, and its `marks` / `lines` / `cracks` / `specks` / `drusy` / `seams` counts are the
+stone vocabulary, which on a wood slab describes nothing a viewer would see. Two of the four sets below
+are wood and read as marble. **Read the pixels, not the family.** Found 2026-10-15 by downsampling a
+master whose block said `carrara` and which is unmistakably wood — after the author of this file had
+already drawn the wrong conclusion from the block without looking at it.
 
 ## The fleet — one picture, six devices, three engines, two lights
 
@@ -119,13 +128,17 @@ stored bytes as well, all 1,008,199,704 of them, so the deflate is deterministic
   compressor, not the picture"*. The 11.6% here and the 13% above are one gap measured from either end.
 
 - **This does not contradict [`renderer-determinism.md`](../renderer-determinism.md)**, which tables
-  WebKit against Blink as *not* bit-identical. That was measured on `Hero_Psyker` at **666 marks**; this
-  slab has **zero** — no marks, veins, cracks, specks, drusy or seams. The two results localise the
-  divergence rather than disagreeing. The base field is computed per pixel in JavaScript and written with
-  `putImageData`, which touches no rasteriser; marks, veins and blooms are drawn with
-  `createRadialGradient` and path operations, through Skia or CoreGraphics. **The field is exact across
-  engines; the drawn content is what differs.** Nothing here says a slab *with* content would agree, and
-  it is content that was already measured not to.
+  WebKit against Blink as *not* bit-identical. That was measured on `Hero_Psyker` at **666 marks**, a
+  STONE slab. This one is **wood** — grain, a cathedral figure band and a board joint are plainly in it.
+  Its marks, veins and cracks all read zero because those are stone elements and this is not stone. The
+  picture is not empty, and an earlier draft of this section said it was, on the strength of a block that
+  never names the material. The two results localise the divergence rather than disagreeing: wood grain
+  is computed per pixel in JavaScript and written with `putImageData` (`app/stone-author.html:6765`,
+  `:6841`), which touches no rasteriser, while stone marks, veins and blooms are drawn with
+  `createRadialGradient` and path operations (`:4317`, `:4515`, `:4995`) through Skia or CoreGraphics.
+  **What is painted per pixel is exact across engines; what is rasterised is what differs.** A picture
+  with real structure in it agreeing to the bit is a stronger result than an empty one would have been.
+  Nothing here says a *stone* slab would agree, and stone was already measured not to.
 
 - **The dead heat is not evidence of a shared ceiling.** 35.05 min against 35.49, 1.2% apart, reached
   from opposite directions: WebKit opened at 89.9 tiles/s and shed 13.9% across the run, Blink held flat
@@ -149,3 +162,41 @@ stored bytes as well, all 1,008,199,704 of them, so the deflate is deterministic
   Blink's 46 — most likely `toDisk: true`, the phone streaming to storage mid-render. They cost 16.1 s
   and 1.0 s, which is 0.77% and 0.05% of their runs. `tiff-meta` names that shape a STALL without
   weighing what it cost.
+
+## The ceiling — what the smallest device in the fleet can finish
+
+| device | engine | cores | mem | maxTexture | workers | tile | tiles | min | med tile ms | sidecar |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Galaxy Tab A 8.0 (2019) — Snapdragon 429 | android-chrome | 4 | 2 GB | 4096 | **2**, shed from 4 | 1024 | 40960 | **365.0** | 359 | `stone-262144-day-android-chrome-1015-043639.json` |
+
+262,144 × 163,840 — the same 42.95 gigapixels as the pair above — `inputs` **`a5bb7b48`**, build
+`2026.10.14.82`, daylight, tile forced to 1024, `toDisk` true. **Also wood**, and a different picture
+from the pair above. The block calls the slab `stone` and the family `carrara` and records 5 marks, 16
+lines and 132 cracks; none of that describes what a viewer sees, for the reason given at the top of this
+file — the material is never recorded, so the stone vocabulary is all a reader gets.
+
+**It finished.** Six hours and five minutes on a 2019 budget tablet with four cores, 2 GB of reported
+memory and a 4,096 texture limit, against a 1,611 MB budget — 1.96 Mpx/s, about a tenth of what the
+desktop manages. That is the whole result. Nothing here is a comparison; the picture is not the one the
+cross-engine pair rendered and the tile size is not theirs either.
+
+- **It shed its pool too**, `poolShed ["3@3x","2@3x"]` — four to three to the floor of two, both steps at
+  exactly the `SHED_AT = 3` threshold, where the iPhone's fired at 6× and 4×. Two devices, two different
+  pressures, same mechanism, same floor.
+
+- **The −33% from first decile to last is the shed, not decay.** Decile 1 ran at 2.70 tiles/s before the
+  pool narrowed; deciles 2 through 10 read 1.88, 1.80, 1.79, 1.79, 1.80, 1.80, 1.81, 1.81, 1.81. Flat to
+  ±1% for five and a half hours on a device with 2 GB. Read the deciles before reading the trend.
+
+- **`tiff-meta` calls 43.9% of its tiles a STALL, and they are not.** 17,976 tiles over twice the median,
+  nominally 43.8% of the run. The series alternates strictly by parity instead: even-index intervals mean
+  242 ms, odd-index 827, a 1,069 ms cycle delivering two tiles. Slow runs number 17,961 with a median
+  length of 1 and a longest of 3 — isolated singles, which is what a two-beat rhythm looks like and not
+  what a stall looks like. It is not content: mean stored bytes are 19,998 for the slow population and
+  19,928 for the fast. It is not merely the worker count: the second iPhone master ran the same two
+  workers with an even/odd ratio of **1.00** against this one's **3.41**.
+
+  **The mechanism is open.** A fixed serial cost against a variable paint would leave the short beat
+  tight and the long beat broad; measured, it is the other way round — CV 0.376 short against 0.223 long.
+  So the rhythm is established and its cause is not. What follows regardless is that a per-tile outlier
+  count means nothing without checking whether the series alternates, and `tiff-meta` does not check.
