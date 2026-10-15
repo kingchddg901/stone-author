@@ -204,7 +204,13 @@ for (const path of paths) {
   const pt = m.perTile;
   if (pt && Array.isArray(pt.ms) && pt.ms.length) {
     const t = pt.ms, med = median(t), hi = t.filter(x => x > 2 * med);
-    console.log(`  per tile ${t.length} render tiles: median ${med} ms, fastest ${Math.min(...t)}, slowest ${Math.max(...t)}`);
+    // FOLD, DO NOT SPREAD. `Math.min(...t)` passes one argument per tile, and V8 gives up somewhere
+    // past a hundred thousand of them. No master had more than 10,240 tiles until a 262,144 was
+    // rendered at a forced 512 - 163,840 passes - and reading it threw RangeError: Maximum call
+    // stack size exceeded, on the line that reports how fast the tiles were.
+    let fastest = Infinity, slowest = -Infinity;    // `hi` is taken above, by the slow-tile list
+    for (const v of t) { if (v < fastest) fastest = v; if (v > slowest) slowest = v; }
+    console.log(`  per tile ${t.length} render tiles: median ${med} ms, fastest ${fastest}, slowest ${slowest}`);
     // The two signals must be read TOGETHER or they contradict each other. A slow tile is only evidence of
     // a stall if the time did NOT follow the bytes; where the correlation is high the outliers are simply
     // the dense tiles, which is the innocent answer. Reporting the outlier count on its own once printed
