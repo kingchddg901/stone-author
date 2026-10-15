@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.14.80';
+  const BUILD = '2026.10.14.81';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4800,7 +4800,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       glassFlow, glassFormT, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
       glassCellSpread, glassUnform, glassLay, glassWarp, glassUnwarp, rollerBake, paintGlassContent,
       rollStamp, rollStampAt, rollerAt, rollerHand, rollerPath, moonDisp, warpMaskAt, gatherMasks,
-      fbm2, woodAtan2, groundCol,
+      // surfaceGloss asks the fork how glossy the surface is on its own account, and applyCoat asks it
+      // for EVERY material on every tile - so leaving it out did not break wood, it broke the pool.
+      // It is self-contained here: the discriminator is declared by MATERIAL_DECL and WOOD is
+      // serialised above, so carrying the function carries everything it reads.
+      fbm2, woodAtan2, groundCol, surfaceGloss,
       resample, smoothPath, handRoute, pathLen, segD, tangent, roughen, lineGeom, curvature, sinuate,
       vnoise, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
@@ -5776,7 +5780,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // A section is a whole slab now, so the scion's tree is at .slab.wood and its palette at
     // .slab.OVR. And a section that is not wood cannot be one: there is no ring field in a sheet
     // of glass, so it grafts nothing rather than handing woodField an object with no rings in it.
-    const gAll = sectionList(), gSec = gIx > 0 ? gAll[gIx - 1] : null;
+    // ONLY WHEN A GRAFT IS ASKED FOR. This fetched the section list unconditionally and used it
+    // only when gIx > 0, which is fine on the main thread and fatal in the worker: the core carries
+    // marks, geo, G and COL but never `sections`, so a wood render through the pool died on
+    // "Can't find variable: sectionList" before it painted anything. Reported from an iPhone, which
+    // is simply where a wood render met the pool first - it would have done the same anywhere.
+    const gAll = gIx > 0 ? sectionList() : [], gSec = gIx > 0 ? gAll[gIx - 1] : null;
     const GE = gSec && gSec.slab && gSec.slab.material === 'wood' ? gSec.slab.wood : null;
     const GF = GE ? woodField(GE) : null, GKS = GF ? (GF.K - 1) / GF.LMAX : 0;
     const gov = (gSec && gSec.slab && gSec.slab.OVR) || {};
@@ -11393,7 +11402,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // scored candidate tile sizes for a pool width it was never going to get, and took the smaller tile
   // that only pays off in parallel. Saying no here is what makes the plan match the run. Wrong since
   // the floor landed, and found while looking at something else.
-  const corePaintsThis = () => !uvMode && !layTiles && !(!layTiles && G.backlight > 0) &&
+  // A GRAFT IS A SECOND TREE, AND THE CORE HAS ONE. woodSampler resolves a graft out of the kept
+  // SECTIONS - a whole slab each - and the worker is handed marks, geo, G and COL and nothing else.
+  // Shipping eight slabs to eight workers to paint one branch is not the trade; refusing the pool is.
+  // Silently dropping the scion would be worse than either: right size, right name, wrong tree.
+  const corePaintsThis = () => !uvMode && !layTiles && !(WOOD.graft > 0) && !(!layTiles && G.backlight > 0) &&
     !gatherMasks().some(w => w.show != null) &&
     typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
   let EXP_FORCE_SEQ = false;                               // the differential test flips this
