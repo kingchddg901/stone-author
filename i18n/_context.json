@@ -143,6 +143,8 @@
   "placeholders": {
    "gpx": "the pixel count in gigapixels, e.g. 2.684",
    "h": "the export height in pixels, grouped, e.g. 40,959",
+   "mult": "how many times this render is the 65,535 the fleet was measured at, a whole number, e.g. 16",
+   "open": "the working space an editor needs to open the file, in whole gigabytes, grouped, e.g. 443",
    "w": "the export width in pixels, grouped, e.g. 65,535"
   },
   "where": "the confirmation shown when starting the very largest render"

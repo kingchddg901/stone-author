@@ -893,4 +893,4 @@ it reports the size asked for and leaves the far end unwritten. See
   actually on offer, not a probe's answer to a different question. *(10490)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
   whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(10556)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(11682)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(11688)*
