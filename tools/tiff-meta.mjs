@@ -20,6 +20,22 @@ import { inflateSync } from 'zlib';
 // The build that began recording `lay`. A master older than this cannot say whether a floor was
 // laid, and must not be read as saying there was none.
 const LAY_SINCE = '2026.10.12.65';
+
+// The build that began recording `material`. Before it a master cannot say what it was made of, and
+// `family` is NOT the answer: family is the STONE family, and a slab carries stone, wood and glass at
+// once unless one is exported alone - so every wood master written before this build says
+// `family: "carrara"` with nothing beside it to contradict that. Two 43-gigapixel wood masters were
+// published as marble on exactly that reading. Absence here means "cannot say", never "stone".
+const MATERIAL_SINCE = '2026.10.15.83';
+
+// Numeric per component, not lexicographic: '2026.10.12.9' sorts ABOVE '2026.10.12.65' as text. At
+// module scope because two readers need it - the floor key and the material key - and the second could
+// not see it while it was declared inside the first one's branch.
+const cmpBuild = (a, b) => {
+  const p = String(a || '').split('.').map(Number), q = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(p.length, q.length); i++) { const d = (p[i] || 0) - (q[i] || 0); if (d) return d; }
+  return 0;
+};
 const num = n => n.toLocaleString('en-GB');
 const secs = ms => (ms / 1000 < 90 ? (ms / 1000).toFixed(1) + ' s' : (ms / 60000).toFixed(1) + ' min');
 const median = a => { const s = [...a].sort((x, y) => x - y); const h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
@@ -123,7 +139,12 @@ for (const path of paths) {
     ? `tiled ${m.tile} (${Math.ceil(m.w / m.tile)} x ${Math.ceil(m.h / m.tile)} = ${m.tiles}, rendered in ${m.renders || '?'} passes of ${m.render || '?'})`
     : m.streamed ? `streamed, ${m.bands} bands` : 'single stream';
   console.log(`  ${m.w ? num(m.w) + ' x ' + num(m.h) : '?'}  ${geom}`);
-  console.log(`  rendered ${m.at}  scope=${m.scope}  slab=${m.slab || '(not recorded)'}  family=${m.family}`);
+  const mat = m.material ? m.material
+    : cmpBuild(m.build, MATERIAL_SINCE) >= 0 ? '(absent, which this build should not produce)'
+    : `not recorded (build ${m.build || '?'} predates the key)`;
+  console.log(`  rendered ${m.at}  scope=${m.scope}  slab=${m.slab || '(not recorded)'}  material=${mat}`);
+  console.log(`           family=${m.family}${m.material && m.material !== 'stone'
+    ? ` — the STONE family, carried in every slab; it describes nothing in a ${m.material} master` : ''}`);
   console.log(`  spectrum ${m.spectrum}${m.spectrum === -1 ? ' (black light)' : m.spectrum === 0 ? ' (daylight)' : ''}   back light ${G.backlight ?? '?'}`);
   if (m.cross) console.log(`  crossfade ${m.cross.a} -> ${m.cross.b} at ${m.cross.t}   (the spectrum value above is where the dial was parked; the light was never read there)`);
   // inputs is the signature that answers "same picture"; state is kept only so older masters still read,
@@ -144,12 +165,6 @@ for (const path of paths) {
     console.log(`  floor    ${L.pattern}${L.chevAngle != null ? ` at ${L.chevAngle} deg` : ''}, ${size}, set ${L.setting}`);
     console.log(`           ${joint}${L.joints ? '' : ', joints not drawn'}, ${L.edge} edge${L.grouping ? `, grouping ${L.grouping}` : ''}`);
   } else if (m.tiled || m.tile) {
-    // Numeric per component, not lexicographic: '2026.10.12.9' sorts ABOVE '2026.10.12.65' as text.
-    const cmpBuild = (a, b) => {
-      const p = String(a || '').split('.').map(Number), q = b.split('.').map(Number);
-      for (let i = 0; i < Math.max(p.length, q.length); i++) { const d = (p[i] || 0) - (q[i] || 0); if (d) return d; }
-      return 0;
-    };
     console.log(cmpBuild(m.build, LAY_SINCE) >= 0
       ? `  floor    none laid — these pixels are the slab, not pieces cut from it`
       : `  floor    not recorded — build ${m.build || '?'} predates the floor key, so absence says nothing either way`);

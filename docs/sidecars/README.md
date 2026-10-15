@@ -25,14 +25,21 @@ audit needs and identifies nobody. Every figure in the tables below is read out 
 except the **device** column, which is a label from [`docs/devices.md`](../devices.md), because a sidecar
 names hardware class and deliberately not a machine.
 
-**A SIDECAR CANNOT SAY WHAT MATERIAL IT IS, and it misleads you about it.** The app holds `MATERIAL`
-as `'stone' | 'wood' | 'glass'` (`app/stone-author.html:5119`); the metadata writer at `:9217` records
-`family` — a STONE family name — and never records `MATERIAL` at all. So a wood master reports
-`family: "carrara"`, and its `marks` / `lines` / `cracks` / `specks` / `drusy` / `seams` counts are the
-stone vocabulary, which on a wood slab describes nothing a viewer would see. Two of the four sets below
-are wood and read as marble. **Read the pixels, not the family.** Found 2026-10-15 by downsampling a
-master whose block said `carrara` and which is unmistakably wood — after the author of this file had
-already drawn the wrong conclusion from the block without looking at it.
+**EVERY SIDECAR BELOW PREDATES THE MATERIAL KEY, so none of them can say what it is made of.** A slab
+carries stone, wood and glass at once unless one is exported alone, so `family` is the STONE family and
+is present whatever was drawn: a wood master reports `family: "carrara"`, and its `marks` / `lines` /
+`cracks` / `specks` / `drusy` / `seams` counts are the stone vocabulary, describing nothing a viewer of
+that master would see. **Two of the four sets below are wood and read as marble.** Found 2026-10-15 by
+downsampling a master whose block said `carrara` and which is unmistakably wood — after the author of
+this file had already drawn the wrong conclusion from the block without looking at the picture.
+
+**Fixed in build `2026.10.15.83`.** The export records `material` beside `family`
+(`app/stone-author.html:9225`), read through `currentMaterial()` exactly as saving a slab reads it — so
+the export records the answer and never branches on it, which is the only thing the material seam
+forbids. [`tools/tiff-meta.mjs`](../../tools/tiff-meta.mjs) gates the field on the build: a master older
+than `.83` prints *not recorded (build … predates the key)* rather than being read as stone, because
+absence means cannot-say and never marble. It cannot be retrofitted, so the twenty sidecars here stay as
+they are. **Read the pixels, not the family.**
 
 ## The fleet — one picture, six devices, three engines, two lights
 

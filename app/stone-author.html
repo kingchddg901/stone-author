@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.14.82';
+  const BUILD = '2026.10.15.83';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9214,7 +9214,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // which renderer made it - and the renderer changed three times today in ways that move output.
     // Cannot be retrofitted: a file written without it can never learn its own build.
     build: BUILD,
-    slab: fileStem(), marks: marks.length, lines: geo.lines.length, family: fam,
+    slab: fileStem(), marks: marks.length, lines: geo.lines.length,
+    // WHICH MATERIAL DREW THESE PIXELS. `family` is the STONE family, and a slab carries all three
+    // materials at once unless one is exported alone - so a wood master wrote `family: "carrara"` with
+    // nothing beside it to say otherwise, and two 43-gigapixel wood masters were published as marble
+    // because the block got read instead of the picture. Asked through currentMaterial(), the way
+    // saving a slab asks: the export records the answer and never branches on it, which is the only
+    // thing the seam forbids. Cannot be retrofitted - a file written without it can never learn its
+    // own material, so tiff-meta gates the field on the build that started writing it.
+    material: currentMaterial(), family: fam,
     // The element counts the stat line shows. Recorded because a master's cost is dominated by how
     // much is IN it, and without these a later reader cannot tell a slow machine from a busy picture.
     cracks: geo.web.length, specks: geo.specks.length, drusy: geo.drusy.length, seams: geo.styl.length,
