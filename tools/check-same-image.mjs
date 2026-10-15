@@ -10,6 +10,15 @@
 // timings. So the comparison runs over [0, metaStart) - the image - and the metadata is excluded by
 // LOCATION rather than by hoping it compares equal.
 //
+// IT RUNS IN TWO STAGES, because the stored bytes are not the question. Masters are written with
+// CompressionStream('deflate'), which exposes no level, so each platform's zlib picks its own: measured
+// at level 6 under Blink and level 5 under WebKit. On 2026-10-15 that made one picture 895 MB on a
+// desktop and 1,012 MB on an iPhone - 13% apart, on pixels that were identical to the bit across all
+// 163,840 tiles. THIS TOOL CALLED THAT A DIFFERENT PICTURE, in those words: "a different length, so
+// different pixels". It was the false alarm the tool exists to avoid, on the exact cross-engine claim
+// it was written to support. So a stored-byte mismatch is now a QUESTION: the tiles are inflated and the
+// pixels compared, and only a pixel difference is a difference.
+//
 //   node tools/check-same-image.mjs a.tif b.tif c.tif ...
 //   node tools/check-same-image.mjs --selftest
 //
@@ -23,6 +32,7 @@
 import { openSync, readSync, closeSync, statSync, writeFileSync, mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { inflateSync, deflateSync } from 'zlib';
 import { locateMeta } from './lib/find-meta.mjs';
 
 const CHUNK = 8 << 20;
@@ -88,6 +98,74 @@ function firstIfdOffset(path) {
   } catch (e) { return 0; } finally { closeSync(fd); }
 }
 
+// THE TILE INDEX, so the pixels can be compared instead of the bytes they happened to be stored as.
+// Reads the IFD only: 322/323 for the tile shape, 324/325 for where each tile lives, 259 for how it was
+// packed. Returns null for anything it cannot decode - a PNG master, an untiled TIFF, a big-endian file
+// this project never writes - and the caller SAYS SO rather than treating "cannot tell" as "same".
+const INFLATE = new Set([8, 32946]);        // Adobe Deflate and the zip-style tag; both are zlib streams
+function tileIndex(path) {
+  const fd = openSync(path, 'r');
+  try {
+    const at = (o, l) => { const b = Buffer.alloc(l); readSync(fd, b, 0, l, o); return b; };
+    const h = at(0, 16);
+    if (!(h[0] === 0x49 && h[1] === 0x49)) return null;      // little-endian only, which is what we write
+    const big = h.readUInt16LE(2) === 43;
+    const u64 = (b, p) => b.readUInt32LE(p) + b.readUInt32LE(p + 4) * 4294967296;
+    const ifd = big ? u64(h, 8) : h.readUInt32LE(4);
+    if (!ifd) return null;
+    const n = big ? u64(at(ifd, 8), 0) : at(ifd, 2).readUInt16LE(0);
+    const entSz = big ? 20 : 12, ent = at(ifd + (big ? 8 : 2), n * entSz);
+    const SZ = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 16: 8, 17: 8, 18: 8 }, tags = {};
+    for (let i = 0; i < n; i++) {
+      const e = i * entSz, tag = ent.readUInt16LE(e), ty = ent.readUInt16LE(e + 2);
+      const c = big ? u64(ent, e + 4) : ent.readUInt32LE(e + 4);
+      const by = (SZ[ty] || 0) * c, inl = big ? 8 : 4, vAt = e + (big ? 12 : 8);
+      const raw = by <= inl ? ent.subarray(vAt, vAt + by)
+                            : at(big ? u64(ent, vAt) : ent.readUInt32LE(vAt), by);
+      const v = [];
+      for (let k = 0; k < c; k++)
+        v.push(ty === 16 ? u64(raw, k * 8) : ty === 4 ? raw.readUInt32LE(k * 4)
+             : ty === 3 ? raw.readUInt16LE(k * 2) : raw[k]);
+      tags[tag] = v;
+    }
+    const offs = tags[324], cnts = tags[325];
+    if (!offs || !cnts || !offs.length || offs.length !== cnts.length) return null;
+    return { offs, cnts, comp: (tags[259] && tags[259][0]) || 1,
+             tw: tags[322] && tags[322][0], th: tags[323] && tags[323][0] };
+  } catch (e) { return null; } finally { closeSync(fd); }
+}
+
+// DO TWO MASTERS HOLD THE SAME PIXELS, however they were packed? Tile for tile, inflated. Slow on
+// purpose - a 43-gigapixel pair takes about three and a half minutes and reads 1.9 GB twice - which is
+// why it runs ONLY after the cheap stored-byte comparison has already failed. An unreadable index is
+// reported as unreadable; it is never reported as agreement.
+function comparePixels(pa, pb) {
+  const A = tileIndex(pa), B = tileIndex(pb);
+  if (!A || !B) return { error: 'no readable tile index in ' + baseName(!A ? pa : pb) };
+  if (A.comp !== B.comp) return { error: 'packed differently - codec ' + A.comp + ' against ' + B.comp };
+  if (A.comp !== 1 && !INFLATE.has(A.comp)) return { error: 'codec ' + A.comp + ' is not one this can unpack' };
+  if (A.offs.length !== B.offs.length)
+    return { error: 'a different number of tiles - ' + A.offs.length + ' against ' + B.offs.length };
+  if (A.tw !== B.tw || A.th !== B.th)
+    return { error: 'a different tile shape - ' + A.tw + 'x' + A.th + ' against ' + B.tw + 'x' + B.th };
+  const fa = openSync(pa, 'r'), fb = openSync(pb, 'r');
+  try {
+    const grab = (fd, o, l) => { const b = Buffer.alloc(l); readSync(fd, b, 0, l, o); return b; };
+    const open = A.comp === 1 ? (b => b) : (b => inflateSync(b));
+    let diff = 0, bytes = 0, firstTile = -1, worst = 0;
+    for (let i = 0; i < A.offs.length; i++) {
+      const a = open(grab(fa, A.offs[i], A.cnts[i])), b = open(grab(fb, B.offs[i], B.cnts[i]));
+      bytes += a.length;
+      if (a.length === b.length && a.equals(b)) continue;
+      diff++;
+      if (firstTile < 0) firstTile = i;
+      if (a.length === b.length)
+        for (let k = 0; k < a.length; k++) { const d = Math.abs(a[k] - b[k]); if (d > worst) worst = d; }
+    }
+    return { diff, tiles: A.offs.length, bytes, firstTile, worst };
+  } catch (e) { return { error: 'inflating: ' + e.message }; } finally { closeSync(fa); closeSync(fb); }
+}
+
 function describe(path) {
   const loc = locateMeta(path);
   if (!loc) return { path, error: 'no metadata block - not a master this tool can read' };
@@ -130,20 +208,44 @@ function run(paths, quiet) {
     const ref = g[0];
     for (const f of g.slice(1)) {
       compared++;
-      if (f.imageLen !== ref.imageLen) {
-        console.log('    DIFFERS  ' + baseName(f.path) + '   image region is ' + f.imageLen +
-          ' bytes against ' + ref.imageLen + ' - a different length, so different pixels');
+      // STAGE ONE, the fast path: two masters from one engine pack identically and settle here in
+      // seconds over the whole region. Agreement here is conclusive and needs nothing further.
+      let r = null;
+      if (f.imageLen === ref.imageLen) {
+        r = compareRegion(ref.path, f.path, ref.imageLen);
+        if (r.firstDiff < 0) {
+          console.log('    IDENTICAL  ' + baseName(f.path) + '   ' + r.examined + ' image bytes, byte for byte');
+          continue;
+        }
+      }
+      // STAGE TWO: the stored bytes disagree, which is not yet a verdict. Different deflate levels pack
+      // identical pixels to different lengths, so the only honest next question is what the tiles hold.
+      const px = comparePixels(ref.path, f.path);
+      if (px.error) {
+        // Fall back to what stage one saw. A master this cannot unpack still differs in its stored
+        // bytes, and the byte-level finding is the most that can honestly be said about it.
+        if (r) {
+          console.log('    DIFFERS  ' + baseName(f.path) + '   first at byte ' + r.firstDiff + ', ' +
+            r.diffBytes + ' of ' + r.examined + ' differ (' +
+            (100 * r.diffBytes / r.examined).toFixed(4) + '%)');
+        } else {
+          console.log('    DIFFERS  ' + baseName(f.path) + '   image region is ' + f.imageLen +
+            ' bytes against ' + ref.imageLen + ', and the pixels could not be compared: ' + px.error);
+        }
         failures++; continue;
       }
-      const r = compareRegion(ref.path, f.path, ref.imageLen);
-      if (r.firstDiff < 0) {
-        console.log('    IDENTICAL  ' + baseName(f.path) + '   ' + r.examined + ' image bytes, byte for byte');
-      } else {
-        console.log('    DIFFERS  ' + baseName(f.path) + '   first at byte ' + r.firstDiff + ', ' +
-          r.diffBytes + ' of ' + r.examined + ' differ (' +
-          (100 * r.diffBytes / r.examined).toFixed(4) + '%)');
-        failures++;
+      if (px.diff === 0) {
+        console.log('    IDENTICAL  ' + baseName(f.path) + '   ' + px.tiles + ' tiles, ' +
+          (px.bytes / 1073741824).toFixed(2) + ' GiB of pixels, byte for byte after inflation');
+        console.log('               stored image region differs by ' + (f.imageLen - ref.imageLen) +
+          ' bytes (' + (100 * (f.imageLen / ref.imageLen - 1)).toFixed(1) +
+          '%) - that is the compressor, not the picture');
+        continue;
       }
+      console.log('    DIFFERS  ' + baseName(f.path) + '   ' + px.diff + ' of ' + px.tiles +
+        ' tiles differ after inflation, first at tile ' + px.firstTile +
+        (px.worst ? ', worst byte delta ' + px.worst : ''));
+      failures++;
     }
     console.log('');
   }
@@ -181,6 +283,34 @@ function selftest() {
     writeFileSync(p, Buffer.concat([image, Buffer.from(meta(i), 'latin1')]));
     return p;
   };
+  // A MINIMAL BIGTIFF, because the stage-two path reads a real IFD and a flat buffer cannot exercise it.
+  // Laid out the way a master is: header, tile data, the two out-of-line arrays, the IFD, then the JSON
+  // block appended last - so the IFD sits between the pixels and the metadata exactly as it does in the
+  // files this tool is pointed at.
+  const u64 = v => { const b = Buffer.alloc(8); b.writeUInt32LE(v % 4294967296, 0);
+                     b.writeUInt32LE(Math.floor(v / 4294967296), 4); return b; };
+  const bigTiff = (name, tiles, level, i) => {
+    const p = join(dir, name), comp = tiles.map(t => deflateSync(t, { level })), n = comp.length;
+    let off = 16; const offs = [];
+    for (const c of comp) { offs.push(off); off += c.length; }
+    const offsAt = off, cntsAt = offsAt + 8 * n, ifdAt = cntsAt + 8 * n;
+    const head = Buffer.alloc(16);
+    head.write('II', 0, 'latin1'); head.writeUInt16LE(43, 2); head.writeUInt16LE(8, 4);
+    head.writeUInt16LE(0, 6); u64(ifdAt).copy(head, 8);
+    const short1 = v => { const b = Buffer.alloc(8); b.writeUInt16LE(v, 0); return b; };
+    const ent = (tag, ty, count, val) => {
+      const b = Buffer.alloc(20);
+      b.writeUInt16LE(tag, 0); b.writeUInt16LE(ty, 2); u64(count).copy(b, 4); val.copy(b, 12);
+      return b;
+    };
+    const tags = [ent(256, 4, 1, u64(256)), ent(257, 4, 1, u64(256)), ent(259, 3, 1, short1(8)),
+                  ent(322, 4, 1, u64(128)), ent(323, 4, 1, u64(128)),
+                  ent(324, 16, n, u64(offsAt)), ent(325, 16, n, u64(cntsAt))];
+    writeFileSync(p, Buffer.concat([head, ...comp, Buffer.concat(offs.map(u64)),
+      Buffer.concat(comp.map(c => u64(c.length))),
+      Buffer.concat([u64(tags.length), ...tags, u64(0)]), Buffer.from(meta(i), 'latin1')]));
+    return p;
+  };
   const img = Buffer.alloc(4096, 7);
   let pass = 0, fail = 0;
   const check = (name, got, want) => {
@@ -215,6 +345,26 @@ function selftest() {
     const longer = meta(2).split('"mean":1.0').join('"mean":1.0,"pad":"padding padding padding"');
     writeFileSync(p2, Buffer.concat([img, Buffer.from(longer, 'latin1')]));
     check('metadata of a different length', run([p1, p2], true), 0);
+
+    // 7-9. THE CASE THAT MADE STAGE TWO NECESSARY: identical pixels packed at different deflate levels.
+    //      This is the shape of the real failure - a desktop master and an iPhone master of one picture,
+    //      13% apart in stored bytes and identical across all 163,840 tiles - which this tool reported
+    //      as a different picture until it learned to inflate.
+    const tile = n => { const b = Buffer.alloc(8192);
+      for (let i = 0; i < b.length; i++) b[i] = (i * 7 + (i >> 5) * 13 + n) & 0xff; return b; };
+    const pix = [tile(0), tile(1), tile(2), tile(3)];
+    const lo = bigTiff('lo.tif', pix, 1, 1), hi = bigTiff('hi.tif', pix, 9, 2);
+    // THE TEST'S OWN ABLATION. If the two levels happened to pack to the same bytes, the next case would
+    // pass through stage ONE and prove nothing about stage two. Assert the premise before leaning on it.
+    check('the two levels really do pack to different sizes', statSync(lo).size !== statSync(hi).size, true);
+    check('same pixels, different deflate level', run([lo, hi], true), 0);
+
+    // ...and the ablation that stops "always identical" from passing: one byte of one tile moved, still
+    // at two different levels, so the only route to a verdict is through the inflated comparison.
+    const bent = pix.map(b => Buffer.from(b));
+    bent[2][4000] = (bent[2][4000] + 1) & 0xff;
+    check('one pixel moved, still different levels',
+      run([lo, bigTiff('hibent.tif', bent, 9, 2)], true), 1);
   } finally { rmSync(dir, { recursive: true, force: true }); }
   console.log(NL + pass + ' passed, ' + fail + ' failed');
   return fail ? 1 : 0;
