@@ -151,6 +151,26 @@ function tileIndex(path) {
 // purpose - a 43-gigapixel pair takes about three and a half minutes and reads 1.9 GB twice - which is
 // why it runs ONLY after the cheap stored-byte comparison has already failed. An unreadable index is
 // reported as unreadable; it is never reported as agreement.
+// DO THE TWO FILES PLACE THEIR TILES THE SAME WAY? Not what the tiles hold - where the directory says
+// each one IS. Added 2026-10-16 after a deliberately broken resume transposed two entries in the tile
+// directory and this tool called the result IDENTICAL: the tile DATA was untouched, byte for byte at
+// the same offsets, and only the mapping from index to offset had changed. The compared region ends at
+// the first IFD, and TileOffsets and TileByteCounts live AFTER it, so the one thing that had changed
+// was the one thing nothing looked at.
+//
+// Two files holding the same bytes in a different ORDER are not the same picture. Stage two already
+// knew that - comparePixels walks tag 324 and compares tile i against tile i - but it only ran when the
+// region comparison failed, and a transposition is invisible there. So the directories are checked
+// before stage one is allowed to settle anything.
+function sameDirectory(pa, pb) {
+  const A = tileIndex(pa), B = tileIndex(pb);
+  if (!A || !B) return true;                   // not readable here: stage two will say so properly
+  if (A.offs.length !== B.offs.length) return false;
+  for (let i = 0; i < A.offs.length; i++)
+    if (A.offs[i] !== B.offs[i] || A.cnts[i] !== B.cnts[i]) return false;
+  return true;
+}
+
 function comparePixels(pa, pb) {
   const A = tileIndex(pa), B = tileIndex(pb);
   if (!A || !B) return { error: 'no readable tile index in ' + baseName(!A ? pa : pb) };
@@ -258,9 +278,16 @@ function run(paths, quiet) {
       let r = null;
       if (f.imageLen === ref.imageLen) {
         r = compareRegion(ref.path, f.path, ref.imageLen);
-        if (r.firstDiff < 0) {
+        // THE DIRECTORY TOO, before this is allowed to mean anything. Identical bytes in a different
+        // order is a different picture, and it is exactly what a broken resume produces.
+        if (r.firstDiff < 0 && sameDirectory(ref.path, f.path)) {
           console.log('    IDENTICAL  ' + baseName(f.path) + '   ' + r.examined + ' image bytes, byte for byte');
           continue;
+        }
+        if (r.firstDiff < 0) {
+          console.log('    DIFFERS  ' + baseName(f.path) + '   the tile data is identical but the tile' +
+                      ' DIRECTORY is not - the same bytes placed differently is a different picture');
+          failures++; continue;
         }
       }
       // STAGE TWO: the stored bytes disagree, which is not yet a verdict. Different deflate levels pack
@@ -339,7 +366,7 @@ function selftest() {
   // `padByte` fills that padding, so a case can make two tilings disagree in padding alone and require
   // the comparison to ignore it.
   const SPP = 4;
-  const bigTiff = (name, img, W, H, TS, level, i, padByte = 0) => {
+  const bigTiff = (name, img, W, H, TS, level, i, padByte = 0, swap = null) => {
     const cols = Math.ceil(W / TS), rows = Math.ceil(H / TS), tiles = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
       const tl = Buffer.alloc(TS * TS * SPP, padByte);
@@ -353,6 +380,12 @@ function selftest() {
     const p = join(dir, name), comp = tiles.map(t => deflateSync(t, { level })), n = comp.length;
     let off = 16; const offs = [];
     for (const c of comp) { offs.push(off); off += c.length; }
+    // A TRANSPOSED DIRECTORY: the same bytes at the same places, two index entries exchanged. The tile
+    // DATA is untouched, so a comparison over the stored region cannot see it.
+    const lens = comp.map(c => c.length);
+    if (swap) { const [a, b] = swap;
+                const o = offs[a], l = lens[a];
+                offs[a] = offs[b]; lens[a] = lens[b]; offs[b] = o; lens[b] = l; }
     const offsAt = off, cntsAt = offsAt + 8 * n, ifdAt = cntsAt + 8 * n;
     const head = Buffer.alloc(16);
     head.write('II', 0, 'latin1'); head.writeUInt16LE(43, 2); head.writeUInt16LE(8, 4);
@@ -374,7 +407,7 @@ function selftest() {
                   ent(322, 4, 1, u64(TS)), ent(323, 4, 1, u64(TS)),
                   ent(324, 16, n, offsVal), ent(325, 16, n, cntsVal)];
     writeFileSync(p, Buffer.concat([head, ...comp, Buffer.concat(offs.map(u64)),
-      Buffer.concat(comp.map(c => u64(c.length))),
+      Buffer.concat(lens.map(u64)),
       Buffer.concat([u64(tags.length), ...tags, u64(0)]), Buffer.from(meta(i), 'latin1')]));
     return p;
   };
@@ -449,6 +482,15 @@ function selftest() {
     // reads DIFFERS, and the cross-tiling verdict above would be worth nothing.
     check('padding differs, picture does not',
       run([t128, bigTiff('t256pad.tif', pic, W, H, 256, 6, 2, 0xFF)], true), 0);
+
+    // 13. A TRANSPOSED DIRECTORY, which this tool called IDENTICAL until 2026-10-16. A deliberately
+     //    broken resume swapped two entries in a real master's tile directory: the tile DATA was
+     //    untouched, byte for byte at the same offsets, and only the mapping from index to offset had
+     //    changed. The compared region ends at the first IFD and the directory lives AFTER it, so the
+     //    one thing that had changed was the one thing nothing looked at. Same bytes in a different
+     //    order is a different picture.
+    const t128b = bigTiff('t128swap.tif', pic, W, H, 128, 6, 2, 0, [0, 3]);
+    check('a transposed tile directory is NOT identical', run([t128, t128b], true), 1);
   } finally { rmSync(dir, { recursive: true, force: true }); }
   console.log(NL + pass + ' passed, ' + fail + ' failed');
   return fail ? 1 : 0;

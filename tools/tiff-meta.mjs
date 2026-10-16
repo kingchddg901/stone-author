@@ -259,6 +259,38 @@ for (const path of paths) {
   } else if (m.tiled) {
     console.log('  per tile not recorded (master predates per-tile timing)');
   }
+  // DOES EVERY TILE SIT WHERE THE METADATA SAYS IT DOES? A master records what each tile WEIGHS and the
+  // directory records where each one IS, and the two are written from the same arrays - so they agree,
+  // unless something moved a tile without moving its entry. A deliberately broken resume on 2026-10-16
+  // transposed two directory entries: the tile data was untouched, byte for byte at the same offsets,
+  // and only the mapping changed. check-same-image missed it - the compared region stops at the first
+  // IFD and the directory lives after it - and so would every light figure, because a transposition
+  // moves pixels without altering one of them.
+  //
+  // This needs no second file. A master is checked against ITSELF, which is the only check available to
+  // someone holding one copy of something that took six hours.
+  //
+  // ONLY WHERE A RENDER TILE IS A STORED TILE. Above that the cut makes perTile.bytes a SUM over k x k
+  // pieces and there is nothing to line up one-to-one; the record in OPFS carries per-piece lengths and
+  // the master does not. Said rather than skipped, so a clean run on a cut master is not read as proof.
+  if (pt && Array.isArray(pt.bytes) && m.renders && m.tiles) {
+    if (m.renders !== m.tiles) {
+      console.log(`  placement  not checkable: ${num(m.renders)} render tiles cut into ${num(m.tiles)} stored,` +
+                  ` so a per-tile weight covers ${m.tiles / m.renders} pieces`);
+    } else try {
+      const tf = openTiff(path);
+      try {
+        const c = tf.cnts || [];
+        let bad = 0, first = -1;
+        for (let i = 0; i < Math.min(c.length, pt.bytes.length); i++)
+          if (c[i] !== pt.bytes[i]) { bad++; if (first < 0) first = i; }
+        console.log(bad
+          ? `  placement  ${num(bad)} of ${num(c.length)} tiles DO NOT WEIGH WHAT THE METADATA SAYS` +
+            ` — first at tile ${first}. A tile has moved without its entry: this is not the picture it claims.`
+          : `  placement  all ${num(c.length)} tiles weigh what the metadata says — none has moved`);
+      } finally { tf.close(); }
+    } catch (_) { /* not a tiled TIFF this can open: nothing to say */ }
+  }
   // --audit decodes every tile. Two failures hide from the metadata, and both were met on one day:
   //   a LOST CANVAS writes a fully transparent tile and the export reports success. The render fills an
   //   opaque ground before drawing, so alpha 0 is impossible in real output whatever the colour - and the
