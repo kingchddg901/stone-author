@@ -727,7 +727,7 @@
     <div class="tiers" id="tiers" hidden>
       <label class="tgl"><input type="checkbox" id="tier-large"><span data-i18n="big.large">Large render</span></label>
       <label class="tgl" id="tier-extreme-row" hidden><input type="checkbox" id="tier-extreme"><span data-i18n="big.extreme">Extreme</span></label>
-      <label class="tgl" id="tier-once-row" hidden><input type="checkbox" id="tier-once"><span data-i18n="big.once">Once only</span></label>
+      <label class="tgl" id="tier-once-row" hidden><input type="checkbox" id="tier-once"><span data-i18n="big.once">Unreasonable</span></label>
       <span class="stat" id="tier-note"></span>
     </div>
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.tile-probe-note">Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width - it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered. On a device short of memory it is often worth taking one size BELOW what the planner settles on: a large tile can lose light at the joins in a way a single calibration tile cannot show, and on the slowest hardware here the smaller tile was also the faster one. A suggestion, not a rule — it costs a capable machine speed for nothing.</span></div>
@@ -822,7 +822,7 @@ window.SA_I18N = (() => {
   "app.title": "Material author",
   "big.confirm": "Start {w} × {h} render?\n\n{gpx} gigapixels — {mult}× the 65,535 these figures come from. Measured there across six devices: 4 to 64 minutes and 0.17 to 0.74 GB, and that spread is the machine, not the picture. Both scale with the pixel count. Opening one in an editor needs roughly {open} GB of working space, because it pages the picture off disk rather than holding it.",
   "big.extreme": "Extreme",
-  "big.once": "Once only",
+  "big.once": "Unreasonable",
   "big.large": "Large render",
   "big.mem-rec": "Recommended: {gb} GB of memory — the machine this tier is known to finish on. Below that it is untested, not unsupported.",
   "big.mem-reported": "This browser reports {gb} GB — a rounded figure, and some browsers cap it.",
@@ -831,7 +831,7 @@ window.SA_I18N = (() => {
   "big.note": "Above {px}px the export streams the picture in bands. It cannot resume — do not close the tab.",
   "big.note-tiled": "Above {px}px the export renders one tile at a time and writes each to disk as it goes. A render that dies can be picked up again: the tiles already written are kept, and the next run continues from them.",
   "big.warn": "This is not fast, and it will eat storage.\n\nWhile it runs it will take up to a quarter of this device's memory — deliberately. A smaller share forces smaller tiles, and at these sizes that is what makes a picture come out dim.\n\nIt has not been known to crash a machine, across every device it has been tried on. What you are risking is the render itself: a render that dies can be picked up again, on this device and from this picture — the tiles already written are kept and the next run continues from them. Close anything you are not using.",
-  "big.warn-once": "Past 65535 the sizes here are one-off renders, not settings.\n\n131072 is four times the pixels of a 65535, and 262144 is sixteen. Measured, not estimated — but on ONE machine, a 16 GB 12-core desktop, because it is the only one that has run these tiers: 65535 took 5.6 minutes and wrote 0.52 GB, 131072 took 24 minutes and 1.35 GB, and 262144 took 95 minutes and 4.26 GB — four times the time for each doubling of the width, and the staging copy may want the file size again in free disk. It is TIFF only: no canvas on any engine is that wide, so only the tiled path can produce one. An editor will still open it, slowly: GIMP budgeted 110.8 GB of working space for the 131072 and 443 GB for the 262144, on a machine with 16 GB.\n\nIt is not the detail limit either. The field is procedural and has no resolution of its own, so a larger render keeps finding structure rather than magnifying what it already had — how much it finds depends on the slab. 65535 is already 683 DPI across eight feet, past what print or any screen can take delivery of. The stopping point is what the output can show, not what the field runs out of.\n\nThis tick does not persist. Decide it again next time.",
+  "big.warn-once": "Past 65535 the sizes here are one-off renders, not settings.\n\n131072 is four times the pixels of a 65535, and 262144 is sixteen. Measured, not estimated — but on ONE machine, a 16 GB 12-core desktop, because it is the only one that has run these tiers: 65535 took 5.6 minutes and wrote 0.52 GB, 131072 took 24 minutes and 1.35 GB, and 262144 took 95 minutes and 4.26 GB — four times the time for each doubling of the width, and the staging copy may want the file size again in free disk. It is TIFF only: no canvas on any engine is that wide, so only the tiled path can produce one. An editor will still open it, slowly: GIMP budgeted 110.8 GB of working space for the 131072 and 443 GB for the 262144, on a machine with 16 GB.\n\nIt is not the detail limit either. The field is procedural and has no resolution of its own, so a larger render keeps finding structure rather than magnifying what it already had — how much it finds depends on the slab. 65535 is already 683 DPI across eight feet, past what print or any screen can take delivery of. The stopping point is what the output can show, not what the field runs out of.\n\nThis tick lasts for this session only \u2014 a reload asks again.",
   "btn.cal-cancel": "Cancel",
   "btn.cal-clear": "Forget",
   "btn.cal-start": "Start",
@@ -1766,7 +1766,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.117';
+  const BUILD = '2026.10.16.118';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -11567,13 +11567,16 @@ self.onmessage = async (e) => {
     // true: armed, and nowhere to untick it. Both are per-render decisions by the declaration at the
     // top of this file; only tierLarge is a persisted setting.
     //
-    // OUTSIDE the size branch, because inside it the ladder survived any export at or below
-    // STRIP_FROM: arm Extreme, render a 2048 preview, and the ticks were still up afterwards. A tick
-    // is spent by the CLICK, not by how big the click turned out to be. The cost is that a small test
-    // export now costs the arming too - two clicks to put back, and the price of a rung meaning one
-    // render rather than one session. It sits after the confirm dialog bails out, so CANCELLING a
-    // giant render spends nothing.
-    tierExtreme = tierOnce = false; applyTiers();           // disarm on LAUNCH, not on success
+    // A RUNG IS NOW ARMED FOR THE SESSION, NOT SPENT BY A RENDER. The ticks used to be cleared here, so
+    // every giant render cost its arming again and a 2048 test export cost it too - a tick was spent by
+    // the CLICK, whatever size the click turned out to be. That was written when these sizes were
+    // unproven. They are not any more: the tiers have run repeatedly at 131072 and 262144, and the
+    // failure that did cost a render was arithmetic in tiffLayout, which no amount of re-ticking would
+    // have caught. The warning shown when a rung is ARMED is the gate; making the gate recur was
+    // friction without a finding behind it.
+    //
+    // Extreme and the rung above it still do not survive a RELOAD, so a new session arms them again and
+    // sees the warning again. Only Large persists, as it always has.
     // THE FLOOR ONLY RENDERS ON THE DIRECT PATH. Above it the export streams tiles through a core
     // that paints the slab, so the floor would come back as the material it was cut from - correct
     // size, correct name, wrong picture. Refuse and name the size that works.

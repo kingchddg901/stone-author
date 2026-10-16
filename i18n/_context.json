@@ -156,8 +156,7 @@
   "where": "label on the second toggle, which unlocks the single largest export width"
  },
  "big.once": {
-  "terms": [],
-  "where": "label on the third and last export-size tick, nested under Extreme. Opens the sizes past the 65535 that Chrome's canvas limit imposes on the PNG path - 131072 and 262144 - which only the tiled TIFF path can produce, since it streams tiles and never allocates a canvas that wide. Named for the tier's character rather than for any one size in it: the tick does not persist, so it is a decision taken again each time"
+  "where": "the third and last rung of the render-size ladder, above \"Large render\" and \"Extreme\", unlocking 131072 and 262144 px. Deliberately wry - these sizes are past anything a screen or a print can take delivery of, and the label admits it. Keep the joke if the language has one; an earnest word for \"excessive\" is fine if it does not. The key is named `once` for historical reasons - the rung used to be spent by a single render - and no longer means that."
  },
  "big.large": {
   "where": "label on the toggle that unlocks the export widths above 16384, in the File section"
