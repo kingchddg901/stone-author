@@ -718,7 +718,7 @@
   <details class="sec" id="rendersec"><summary><span data-i18n="sec.render">Render</span><span class="flag" id="resume-flag" hidden></span></summary><div class="body">
     <div class="grp" role="group" aria-label="Render" data-i18n-attr="aria-label=a11y.render">
       <button id="export" type="button" data-i18n="btn.export">Export</button>
-      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option><option value="131072" data-tier="once">131072</option><option value="262144" data-tier="once">262144</option></select>
+      <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option><option value="131072" data-tier="once">131072</option><option value="262144" data-tier="once">262144</option><option value="524288" data-tier="why">524288</option><option value="1048576" data-tier="why">1048576</option></select>
       <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select><select id="expfmt" aria-label="Export format" title="Export format" data-i18n-attr="aria-label=a11y.export-format;title=a11y.export-format"><option value="png" data-i18n="opt.fmt-png">PNG</option><option value="tiff" data-i18n="opt.fmt-tiff">TIFF</option></select>
       <span class="stat" id="expcap"></span>
     </div>
@@ -728,6 +728,7 @@
       <label class="tgl"><input type="checkbox" id="tier-large"><span data-i18n="big.large">Large render</span></label>
       <label class="tgl" id="tier-extreme-row" hidden><input type="checkbox" id="tier-extreme"><span data-i18n="big.extreme">Extreme</span></label>
       <label class="tgl" id="tier-once-row" hidden><input type="checkbox" id="tier-once"><span data-i18n="big.once">Unreasonable</span></label>
+      <label class="tgl" id="tier-why-row" hidden><input type="checkbox" id="tier-why"><span data-i18n="big.why">WHY</span></label>
       <span class="stat" id="tier-note"></span>
     </div>
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.tile-probe-note">Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width - it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered. On a device short of memory it is often worth taking one size BELOW what the planner settles on: a large tile can lose light at the joins in a way a single calibration tile cannot show, and on the slowest hardware here the smaller tile was also the faster one. A suggestion, not a rule — it costs a capable machine speed for nothing.</span></div>
@@ -823,6 +824,8 @@ window.SA_I18N = (() => {
   "big.confirm": "Start {w} × {h} render?\n\n{gpx} gigapixels — {mult}× the 65,535 these figures come from. Measured there across six devices: 4 to 64 minutes and 0.17 to 0.74 GB, and that spread is the machine, not the picture. Both scale with the pixel count. Opening one in an editor needs roughly {open} GB of working space, because it pages the picture off disk rather than holding it.",
   "big.extreme": "Extreme",
   "big.once": "Unreasonable",
+  "big.why": "WHY",
+  "big.warn-why": "These two are not a tier, they are the question in the name.\n\n524288 is four times the pixels of a 262144 and 1048576 is sixteen — 171.8 and 687.2 gigapixels. At the 0.084 bytes per pixel a 262144 of this slab actually measured, that is roughly 14 GB and 58 GB of file, and at four times the time for each doubling of the width, hours rather than minutes.\n\nNOTHING HERE IS KNOWN TO WORK AT THESE SIZES. The tile addressing is not the limit — it reaches to 8388608px. What has never been tried is whether this browser will hold 58 GB of origin-private storage, or hand you a file that size to save. Either can refuse, and it would refuse after the render, not before it.\n\nThe published site does not offer this rung at all. It is here because you are running the app off your own disk, where the only thing you can lose is your own evening.",
   "big.large": "Large render",
   "big.mem-rec": "Recommended: {gb} GB of memory — the machine this tier is known to finish on. Below that it is untested, not unsupported.",
   "big.mem-reported": "This browser reports {gb} GB — a rounded figure, and some browsers cap it.",
@@ -1766,7 +1769,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.122';
+  const BUILD = '2026.10.16.123';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1875,7 +1878,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let shortlist = null;                                  // sizes the planner would consider, from the last probe
   // tierOnce is deliberately not persisted, and neither is tierExtreme: a tick that survives a
   // reload is a setting, and this is a decision to take again each time.
-  let tierLarge = false, tierExtreme = false, tierOnce = false, fmtChosen = false;
+  let tierLarge = false, tierExtreme = false, tierOnce = false, tierWhy = false, fmtChosen = false;
+  // LOCAL ONLY, AND MEANT LITERALLY. The rung above Unreasonable is not offered by the published site
+  // at all - not greyed, not warned about, absent. 524,288 is 171.8 Gpx and 1,048,576 is 687.2, which
+  // at the measured 0.084 bytes per pixel is about 14 GB and 58 GB of file, and at the four-times-per
+  // -doubling the warning already states, roughly 90 minutes and six hours. Those are not numbers to
+  // put one tickbox away from a stranger on a phone. They are fine to put in front of somebody running
+  // the thing off their own disk, who already knows what it costs.
+  //
+  // The address packing reaches further than this: markPack gives cx and cy 14 bits each, so the cell
+  // lattice is good to 16,383 cells, or 8,388,608 px wide. 1,048,576 uses 2,047 of them.
+  const LOCAL_ONLY = (() => {
+    try {
+      const h = location.hostname;
+      return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1' || /.localhost$/.test(h);
+    } catch (_) { return false; }
+  })();
   let uvMode = false, lightSpectrum = 0, spotOn = false; const OVR_uv = {}, UV_DARK = '#0a0a0e', SPX_TOL = 0.12;
   // CROSSFADE: two chosen stops and a blend between them, with everything in between IGNORED. Sweeping
   // the spectrum walks the number line, so stops at -1, 0 and +1 mean 0 always interrupts a -1 -> +1
@@ -11491,12 +11509,17 @@ self.onmessage = async (e) => {
     // Without it neither path can work, so the tier is withheld rather than offered and broken.
     const what = document.getElementById('expwhat'), mob = typeof CompressionStream !== 'function';
     wrap.hidden = mob;                                     // not warned about here — simply not offered
-    if (mob) { tierLarge = tierExtreme = tierOnce = false; }
+    if (mob) { tierLarge = tierExtreme = tierOnce = tierWhy = false; }
+    if (!LOCAL_ONLY) tierWhy = false;                      // the site cannot reach it, however it got set
     document.getElementById('tier-large').checked = tierLarge;
     document.getElementById('tier-extreme-row').hidden = !tierLarge;
     document.getElementById('tier-extreme').checked = tierExtreme;
     document.getElementById('tier-once-row').hidden = !tierExtreme;
     document.getElementById('tier-once').checked = tierOnce;
+    // ABSENT off a local origin, not disabled. A control nobody can use is a question nobody should
+    // be asked, and this one would read as the app withholding something rather than as a line.
+    document.getElementById('tier-why-row').hidden = !tierOnce || !LOCAL_ONLY;
+    document.getElementById('tier-why').checked = tierWhy;
     // Decide the FORMAT before gating anything, because the two answer to different limits and the gate
     // has to know which one it is applying.
     const ff = document.getElementById('expfmt');
@@ -11512,7 +11535,8 @@ self.onmessage = async (e) => {
     for (const o of sel.options) {
       const t = o.dataset.tier;
       if (!t) continue;                                    // plain canvas sizes: gatePlain owns those
-      const armed = t === 'large' ? tierLarge : t === 'extreme' ? tierExtreme : tierOnce;
+      const armed = t === 'large' ? tierLarge : t === 'extreme' ? tierExtreme
+                  : t === 'why' ? (tierWhy && LOCAL_ONLY) : tierOnce;
       const tooWide = !tiff && +o.value > side;            // wider than a canvas this build can hold
       o.hidden = !armed;
       o.disabled = !armed || tooWide;
@@ -11590,6 +11614,14 @@ self.onmessage = async (e) => {
     tierOnce = box.checked;                                // never persisted: decide it again next time
     applyTiers();
   });
+  { const wb = document.getElementById('tier-why');
+    if (wb) wb.addEventListener('change', async () => {
+      if (wb.checked && !(await bigDialog(TR('big.warn-why'), TR('btn.understood')))) {
+        wb.checked = false; tierWhy = false; applyTiers(); return;
+      }
+      tierWhy = wb.checked;                                // never persisted, like the two rungs below it
+      applyTiers();
+    }); }
   document.getElementById('expres').addEventListener('change', applyTiers);
   document.getElementById('expfmt').addEventListener('change', () => { fmtChosen = true; applyExportCeiling(); });
 

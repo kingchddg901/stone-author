@@ -3732,5 +3732,11 @@
    "why": "a short technical reason, in English, from the verification that refused"
   },
   "where": "shown in the export status when an unfinished render was offered and then could not be resumed. The reassurance is the point: the previous version silently deleted the partial render at this moment, so the message must make clear that nothing was lost."
+ },
+ "big.why": {
+  "where": "the fourth and last rung of the render-size ladder, above \"Unreasonable\", offered ONLY when the app is served from a local machine. It unlocks 524288 and 1048576 px, sizes nobody has succeeded at. The name is the question you would ask on being shown it: keep it as a bare interrogative, upper case, one word if the language allows."
+ },
+ "big.warn-why": {
+  "where": "the dialogue shown when that rung is ticked. Line breaks kept as written. It is not discouraging for effect - every figure in it is measured or derived, and the last paragraph says plainly that this is only reachable locally."
  }
 }

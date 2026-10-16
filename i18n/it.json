@@ -750,5 +750,7 @@
  "btn.restart": "Ricomincia",
  "btn.discard": "Elimina",
  "btn.download": "Scarica",
- "exp.err.resume-refused": "Non è stato possibile riprendere quel render: {why}. Non è stato eliminato nulla: ogni tassello già scritto è ancora su disco. Ricomincia lo rigenera da zero; Elimina libera lo spazio."
+ "exp.err.resume-refused": "Non è stato possibile riprendere quel render: {why}. Non è stato eliminato nulla: ogni tassello già scritto è ancora su disco. Ricomincia lo rigenera da zero; Elimina libera lo spazio.",
+ "big.why": "PERCHÉ",
+ "big.warn-why": "Questi due non sono un livello, sono la domanda che dà loro il nome.\n\n524288 ha quattro volte i pixel di un 262144 e 1048576 sedici volte: 171,8 e 687,2 gigapixel. Ai 0,084 byte per pixel misurati su un 262144 di questa lastra, sono circa 14 GB e 58 GB di file, e a quattro volte il tempo per ogni raddoppio della larghezza, ore anziché minuti.\n\nNULLA QUI È NOTO FUNZIONARE A QUESTE DIMENSIONI. L'indirizzamento dei tasselli non è il limite: arriva a 8388608px. Ciò che non è mai stato provato è se questo browser reggerà 58 GB di archiviazione privata dell'origine, o se ti consegnerà un file di quelle dimensioni da salvare. Entrambi possono rifiutare, e rifiuterebbero dopo il render, non prima.\n\nIl sito pubblicato non offre affatto questo livello. È qui perché stai eseguendo l'app dal tuo disco, dove l'unica cosa che puoi perdere è la tua serata."
 }
