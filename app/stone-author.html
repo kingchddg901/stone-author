@@ -51,6 +51,10 @@
   .sec[open] > summary { color: var(--text); border-bottom: 1px solid var(--line); }
   .sec[open] > summary::before { transform: rotate(90deg); }
   .sec > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 6px; }
+  /* A standing fact carried by the section header itself, rather than announced over the page. The
+     summary is uppercase and widely tracked because it is a label; this is a sentence, so it opts out
+     of both. */
+  .sec > summary .flag { text-transform: none; letter-spacing: 0; color: var(--warn); font-size: 11px; }
   .sec .body { padding: 10px; display: grid; gap: 11px; }
   .sec .body > .note { font-size: 13px; }
   #field { display: block; width: 100%; max-width: min(100%, calc(56vh * 1.6)); aspect-ratio: 16 / 10;
@@ -711,7 +715,7 @@
       <input id="loadfile" type="file" hidden><!-- no accept: it locks iOS out entirely, see the change handler -->
     </div>
   </div></details>
-  <details class="sec" id="rendersec"><summary data-i18n="sec.render">Render</summary><div class="body">
+  <details class="sec" id="rendersec"><summary><span data-i18n="sec.render">Render</span><span class="flag" id="resume-flag" hidden></span></summary><div class="body">
     <div class="grp" role="group" aria-label="Render" data-i18n-attr="aria-label=a11y.render">
       <button id="export" type="button" data-i18n="btn.export">Export</button>
       <select id="expres" aria-label="Export width" title="Export width (px)" data-i18n-attr="aria-label=a11y.export-width;title=a11y.export-width-px"><option value="1024">1024</option><option value="2048" selected>2048</option><option value="4096">4096</option><option value="8192">8192</option><option value="16384">16384</option><option value="20480" data-tier="large">20480</option><option value="24576" data-tier="large">24576</option><option value="32768" data-tier="large">32768</option><option value="65535" data-tier="extreme">65535</option><option value="131072" data-tier="once">131072</option><option value="262144" data-tier="once">262144</option></select>
@@ -1038,6 +1042,7 @@ window.SA_I18N = (() => {
   "mat.stone": "Stone",
   "resume.go": "Resume {w} × {h}",
   "resume.note": "{n} of {of} tiles already on disk",
+  "resume.waiting": "You have an unfinished render",
   "resume.note-light": "{n} of {of} tiles already on disk, {light}",
   "resume.light-day": "daylight",
   "resume.light-uv": "black light, spectrum {s}",
@@ -1739,7 +1744,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.109';
+  const BUILD = '2026.10.16.111';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9927,13 +9932,24 @@ self.onmessage = async (e) => {
       return { job, text, file: await (await dir.getFileHandle('stone-master.rec')).getFile() };
     } catch (_) { return null; }        // no record at all, or one this build cannot read
   }
+  // THE SECTION HEADER CARRIES IT, rather than the page announcing it. The Resume button lives inside
+  // a collapsed section, so on load it is not merely unseen - it is unreachable without going looking,
+  // and a gated control nobody finds is the same as no control. A notice over the page would be a
+  // pop-up for something that is not urgent and does not expire; the header is a standing fact, in the
+  // one place that already means 'render', and opening it puts the button under the hand.
+  function resumeFlag(on) {
+    const f = document.getElementById('resume-flag');
+    if (!f) return;
+    f.textContent = on ? TR('resume.waiting') : '';
+    f.hidden = !on;
+  }
   let resumeJob = null, resumeShown = '';
   async function resumeOffer() {
     const row = document.getElementById('resume-row');
     if (!row) return;
     const sig = RESUME_ON ? renderSig() : null;
     const found = sig ? await resumeRecord(sig) : null;
-    if (!found) { resumeJob = null; resumeShown = ''; row.hidden = true; return; }
+    if (!found) { resumeJob = null; resumeShown = ''; row.hidden = true; resumeFlag(false); return; }
     // THE RECORD IS THE EXPENSIVE READ OF THE TWO, and this runs from applyTiers, which fires on every
     // change to an export control. The job file is bytes; the record at 163,840 tiles is not. Scan it
     // only when something the label is built from has moved, which also catches it growing mid-render.
@@ -9950,7 +9966,7 @@ self.onmessage = async (e) => {
         for (const r of resumeScan(new Uint8Array(await found.file.arrayBuffer())).rows)
           for (const q of r.pieces) seen.add(q.i);
       } catch (_) { seen.clear(); }
-      if (!seen.size) { resumeJob = null; resumeShown = ''; row.hidden = true; return; }  // nothing durable yet
+      if (!seen.size) { resumeJob = null; resumeShown = ''; row.hidden = true; resumeFlag(false); return; }  // nothing durable yet
       const light = resumeLight(found.job);
       document.getElementById('resume-go').textContent =
         TR('resume.go', { w: found.job.w, h: found.job.h });
@@ -9959,7 +9975,7 @@ self.onmessage = async (e) => {
         : TR('resume.note', { n: seen.size, of: found.job.across * found.job.down });
       resumeShown = key;
     }
-    resumeJob = found.job; row.hidden = false;
+    resumeJob = found.job; row.hidden = false; resumeFlag(true);
   }
 
   // AND DOES THE FILE STILL HOLD THE PICTURE IT CLAIMS? The signature says the inputs match; this asks
@@ -12682,6 +12698,18 @@ self.onmessage = async (e) => {
     for (const m of marks) { m.p = { ...NEXT }; m.fam = fam; }
     syncUI(); build(); draw();
   }
+  // AFTER THE SLAB IS BACK, because the offer is about THIS picture. applyTiers runs twice during boot
+  // and calls this each time, and both of those are before tryLoadLocal: renderSig there answers for
+  // the default slab, never the restored one, so the record could not match and the row stayed hidden
+  // on exactly the load it exists for. It read as a feature that simply did not work, and every gate
+  // was green - no gate executes a page.
+  resumeOffer();
+  // AND WHENEVER THE SECTION IS OPENED. Editing the slab moves renderSig, so an offer made before an
+  // edit is stale afterwards - still showing for a picture that has moved on. applyTiers covers the
+  // export controls; this covers reaching the section at all, which is the moment before anyone could
+  // act on it. Cheap: the job file is bytes, and the record is rescanned only when its text changes.
+  { const sec = document.getElementById('rendersec');
+    if (sec) sec.addEventListener('toggle', () => { if (sec.open) resumeOffer(); }); }
   if (window.ResizeObserver) {
     let w = cv.clientWidth;
     new ResizeObserver(() => { if (cv.clientWidth !== w) { w = cv.clientWidth; size(); draw(); } }).observe(cv);

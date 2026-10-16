@@ -737,5 +737,6 @@
  "resume.gone": "Questo dispositivo non offre più quella larghezza, quindi il render incompiuto non può continuare qui.",
  "resume.note-light": "{n} di {of} tasselli già su disco, {light}",
  "resume.light-day": "luce diurna",
- "resume.light-uv": "luce di Wood, spettro {s}"
+ "resume.light-uv": "luce di Wood, spettro {s}",
+ "resume.waiting": "Hai un render incompiuto"
 }

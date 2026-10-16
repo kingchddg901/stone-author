@@ -3661,5 +3661,8 @@
    "s": "the spectrum value, a negative number"
   },
   "where": "substituted into resume.note-light. The UV or black light the studio renders under, where only the UV palette glows. Lower case: it sits mid-sentence."
+ },
+ "resume.waiting": {
+  "where": "a short standing notice shown beside the word \"Render\" in that section's collapsed header, when an unfinished render of the picture on screen is waiting on disk. It is a sentence, not a label, and it is not dismissed - it disappears when the render is finished or abandoned."
  }
 }
