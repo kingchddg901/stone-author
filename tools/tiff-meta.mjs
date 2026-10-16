@@ -199,8 +199,21 @@ for (const path of paths) {
                                  ` the figure above is what it actually came out at. Compare it against a master of the same slab.]`);
   if (m.maxTexture) console.log(`           device reports MAX_TEXTURE_SIZE ${m.maxTexture}` +
                                 `${m.bleed && m.render ? `, this render needed ${m.render + 2 * m.bleed}px` : ''}`);
+  // FORCED BY WHOM. forcedTile() is true for two unrelated reasons - an operator naming a size, and a
+  // RESUME continuing on the plan its file was started with - and this printed both as the operator.
+  // A 262,144 resumed on 2026-10-16 read out as 'FORCED, floor overridden' when the planner had picked
+  // 2048 in the first sitting and nobody overrode anything.
+  //
+  // A master written before `tilePinned` existed cannot say which it was, and if it also resumed then
+  // BOTH readings are live. Saying so is the honest third state; the previous version simply asserted
+  // the operator, which is how a deliberate-looking experiment gets quoted back later as one.
+  const tileWhy = m => m.tilePinned
+    ? `   [pinned to ${m.forcedTile} by the resume — the plan its file was started with]`
+    : m.resumedTiles
+      ? `   [${m.forcedTile} forced, by an operator OR by the resume — this master predates the field that says which]`
+      : `   [FORCED to ${m.forcedTile} — floor overridden]`;
   if (m.plan) console.log(`  plan     budget ${m.plan.budgetMB} MB, tried  ${(m.plan.tried || []).join('   ')}` +
-                          `${m.forcedTile ? `   [FORCED to ${m.forcedTile} — floor overridden]` : ''}`);
+                          `${m.forcedTile ? tileWhy(m) : ''}`);
   if (m.arch || m.engine) console.log(`           ${m.engine || '?'}${m.arch ? ', ' + m.arch : ''}` +
     `${m.arch ? '' : ' (architecture not recorded)'}`);
   const seal = openDev(m.dev);
@@ -229,6 +242,36 @@ for (const path of paths) {
                 `${ms.render ? `   this sitting ${secs(ms.render)}, both sittings ${secs(sum)} from the per-tile sum` : ''}`);
   }
   if (m.resumeWhy) console.log(`  resumed  a prior render was refused: ${m.resumeWhy}`);
+
+  // MARKING, WHICH THIS TOOL SAID NOTHING ABOUT AT ALL until 2026-10-16 - the newest property of every
+  // master, invisible to its own reader. Worse, the count it would have printed is wrong on a resumed
+  // file: `markedCells` accumulates during the sitting that FINISHED, and unlike litSum, tileMs and
+  // tileBytes it is not seeded from the record, so a master picked up half way reports half its cells
+  // and looks authoritative doing it. The whole-master figure is derivable from geometry, so both are
+  // printed and the gap is named rather than left for somebody to trip over.
+  //
+  // AND WHY A MASTER CARRIES NONE. Three different reasons, which `markedCells: absent` cannot tell
+  // apart: rendered before marking existed, rendered with ?mark=0, or rendered at a tile size that is
+  // not a whole multiple of the 512 cell - at which markStamp declines every cell and says nothing.
+  // That last one is silent in the app and was only ever going to be noticed here.
+  {
+    const CELL = 512;
+    const whole = (W, H) => Math.floor(W / CELL) * Math.floor(H / CELL);
+    if (m.marked) {
+      const total = whole(m.w || 0, m.h || 0);
+      const partial = m.resumedTiles && total && m.markedCells && m.markedCells < total;
+      console.log(`  marked   v${m.marked}, ${num(m.markedCells || 0)} cell(s) of ${CELL}px stamped` +
+                  `${partial ? ` THIS SITTING` : ''}`);
+      if (total) console.log(`           the picture holds ${num(total)} whole cell(s)` +
+        `${partial ? ` — the rest were stamped before the resume and are not counted in the figure above`
+                   : m.markedCells === total ? ` — every one of them` : ''}`);
+    } else if (m.tile && m.tile % CELL !== 0) {
+      console.log(`  marked   none: tile ${m.tile} is not a whole multiple of the ${CELL}px cell, so a cell`);
+      console.log(`           would straddle two tiles and markStamp declined every one. Silently.`);
+    } else {
+      console.log(`  marked   none recorded — ?mark=0, or a build that predates marking`);
+    }
+  }
   const pt = m.perTile;
   if (pt && Array.isArray(pt.ms) && pt.ms.length) {
     const t = pt.ms, med = median(t), hi = t.filter(x => x > 2 * med);

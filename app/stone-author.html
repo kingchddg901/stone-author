@@ -1766,7 +1766,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.120';
+  const BUILD = '2026.10.16.121';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1865,6 +1865,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // it, written tonight; tierLarge was already there and the same browser probe found it.
   let glowKnob = null;                                   // null = auto; a number = the knob was moved
   let tilePick = 0;                                      // 0 = let the planner race; a size = the user chose
+  // WHO PINNED IT. forcedTile() is true for two unrelated reasons - an operator naming a size, and a
+  // RESUME continuing on the plan its file was started with - and the master reported both as the
+  // operator. A 262,144 resumed on 2026-10-16 published `forcedTile: 2048` and read out as 'FORCED,
+  // floor overridden', when the planner had picked 2048 in the first sitting and nobody overrode
+  // anything. A reader a year later concludes a human bypassed the probes. Same value, two meanings,
+  // so the provenance has to carry which.
+  let tilePinned = false;
   let shortlist = null;                                  // sizes the planner would consider, from the last probe
   // tierOnce is deliberately not persisted, and neither is tierExtreme: a tick that survives a
   // reload is a setting, and this is a decision to take again each time.
@@ -9947,7 +9954,7 @@ self.onmessage = async (e) => {
       if (!job || job.v !== 1 || !job.sig) return;
       if (String(job.sig).split(String.fromCharCode(124))[0] !== renderSig()) return;   // another picture
       if (!(job.ts > 0) || job.w !== W) return;
-      tilePick = job.ts;
+      tilePick = job.ts; tilePinned = true;     // from the record, not from a person
       const r = planRec(W);
       if ((r.bad || []).includes(job.ts))
         planWrite(W, { ok: r.ok || 0, bad: (r.bad || []).filter(v => v !== job.ts) });
@@ -12016,14 +12023,14 @@ self.onmessage = async (e) => {
       sel.length = 1;                                    // option 0 is Auto and always stays
       for (const t of pass) { const o = document.createElement("option"); o.value = String(t); o.textContent = String(t); sel.appendChild(o); }
       sel.value = pass.includes(+keep) ? keep : "0";
-      tilePick = +sel.value || 0;
+      tilePick = +sel.value || 0; tilePinned = false;
       if (stat) stat.textContent = !pass.length ? ""
         : TR("ui.tile-proven") + " " + pass.join(", ") +
           (shortlist ? "   " + TR("ui.tile-shortlist") + " " + (shortlist.length ? shortlist.join(", ") : TR("ui.tile-none")) : "");
     };
     let untested = [];
     if (btn && sel) {
-      sel.addEventListener("change", () => { tilePick = +sel.value || 0; });
+      sel.addEventListener("change", () => { tilePick = +sel.value || 0; tilePinned = false; });
       btn.addEventListener("click", async () => {
         const W = widthNow(), bs = W / COAT_REF, bleed = coatReach(bs, uvMode), sigma = coatReachAt(bs, lightSpectrum) > 0 ? bs * 3 : 0;
         btn.disabled = true; if (stat) stat.textContent = TR("ui.tile-probing");
@@ -12700,6 +12707,9 @@ self.onmessage = async (e) => {
         // tiled master silently leaves it out. Recorded rather than hidden until it is done per tile.
         omits: G.lens > 0 ? ['lens'] : undefined,
         forcedTile: forcedTile() || undefined,          // present only when the floor was overridden
+        // ...and whether that was a person or a resume. Absent means a person, which is what every
+        // master written before 2026-10-16 means by `forcedTile` too.
+        tilePinned: tilePinned || undefined,
         dimOverride: DIM_OK || undefined,            // the light veto was withheld: read the light below against a good master
         bloomDraw: BLOOM_DRAW || undefined,           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan
         // A LIFT OF EXACTLY ZERO IS A CHOICE, NOT AN ABSENCE. `|| undefined` dropped it, so every WebKit
