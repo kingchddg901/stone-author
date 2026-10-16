@@ -36,10 +36,12 @@ function liftFn(name) {
   for (;; i++) { if (SRC[i] === '{') d++; else if (SRC[i] === '}' && --d === 0) break; }
   return SRC.slice(hits[0], i + 1);
 }
-const NAMES = ['resumeSig', 'resumeRow', 'resumeScan', 'resumeState'];
+const NAMES = ['resumeSig', 'resumeRow', 'resumeScan', 'resumeState',
+               'resumeCheckCount', 'resumeSample', 'resumeVerify'];
 const BODY = NAMES.map(liftFn).join('\n');
 const APP = new Function(BODY + '; return {' + NAMES.join(',') + '};')();
-const { resumeSig, resumeRow, resumeScan, resumeState } = APP;
+const { resumeSig, resumeRow, resumeScan, resumeState,
+        resumeCheckCount, resumeSample, resumeVerify } = APP;
 
 let fails = 0;
 const ok = (name, cond, detail) => {
@@ -178,6 +180,56 @@ const ALL = [...Array(RENDERS).keys()];
      resumeSig({ ...base, build: '2026.01.01.1' }) === resumeSig({ ...base, build: '2099.12.31.9' }));
 }
 
+// ---- 5. do not resume on a hash alone --------------------------------------------------------------
+// On 2026-10-15 two UV masters of one slab shared renderSig 95ef95fe and did not share a picture. The
+// cause was never found and the state that produced the first is gone, so the signature cannot be
+// repaired - what can be done is to stop trusting it alone. These three decide how much evidence a
+// resume gathers, where it gathers it, and whether the evidence agrees.
+{
+  // HOW MANY. Asked of the per-tile timings the record already carries, so the master says what a
+  // verification tile costs on the device that wrote it.
+  const fast = new Array(200).fill(13);          // desktop at 512
+  const slow = new Array(40).fill(623);          // desktop at 4096
+  const grim = new Array(40).fill(4000);         // an A7 at 4096
+  ok('a 10 s budget buys hundreds of cheap tiles', resumeCheckCount(fast, 10000, 100) === 100);
+  ok('the same budget buys 16 expensive ones', resumeCheckCount(slow, 10000, 100) === 16,
+     String(resumeCheckCount(slow, 10000, 100)));
+  ok('and 2 on the slowest hardware', resumeCheckCount(grim, 10000, 100) === 2,
+     String(resumeCheckCount(grim, 10000, 100)));
+  // NEVER ZERO. A resume that gathers no evidence at all is the thing this exists to prevent, so even a
+  // tile dearer than the whole budget is checked once.
+  ok('never fewer than one, however dear the tile',
+     resumeCheckCount(new Array(10).fill(99999), 1000, 100) === 1);
+  ok('an empty record still asks for one', resumeCheckCount([], 10000, 100) === 1);
+
+  // WHICH ONES. First and last always - the last is nearest whatever stopped the render, the first
+  // catches a systematic placement error a middle sample sails past.
+  const rows = ALL.map(rowFor);
+  const three = resumeSample(rows, 3);
+  ok('the sample holds the first and the last written',
+     three.includes(rows[0].n) && three.includes(rows[rows.length - 1].n), JSON.stringify(three));
+  ok('the sample is the size asked for', three.length === 3, String(three.length));
+  ok('asking for more than exists returns all of them',
+     resumeSample(rows, 99).length === rows.length);
+  ok('an empty record samples nothing', resumeSample([], 5).length === 0);
+
+  // THE VERDICT. Compared compressed, which is what the file stores and what a re-render already has.
+  const B = (i, ...b) => ({ i, bytes: Uint8Array.from(b) });
+  const storedPieces = [B(0, 1, 2, 3), B(1, 4, 5, 6)];
+  ok('identical bytes pass', resumeVerify(storedPieces, [B(0, 1, 2, 3), B(1, 4, 5, 6)]).ok);
+  // ABLATIONS, one per way this can be wrong. A verdict that cannot go red would make the whole check
+  // theatre - and this one is the last thing standing between a resume and a master built from two
+  // different pictures.
+  ok('ABLATION one changed byte fails', !resumeVerify(storedPieces, [B(0, 1, 2, 9), B(1, 4, 5, 6)]).ok);
+  ok('ABLATION a different length fails', !resumeVerify(storedPieces, [B(0, 1, 2), B(1, 4, 5, 6)]).ok);
+  ok('ABLATION a different tile index fails', !resumeVerify(storedPieces, [B(7, 1, 2, 3), B(1, 4, 5, 6)]).ok);
+  ok('ABLATION a missing piece fails', !resumeVerify(storedPieces, [B(0, 1, 2, 3)]).ok);
+  // AND THE EMPTY CASE, which is the one a careless implementation passes: nothing compared against
+  // nothing is not agreement, it is no evidence.
+  ok('ABLATION nothing against nothing is NOT a pass', !resumeVerify([], []).ok);
+}
+
 console.log('');
 if (fails) { console.error('probe-resume: ' + fails + ' FAILED'); process.exit(1); }
-console.log('probe-resume: the record is sound — a crash at any row replays to the same file.');
+console.log('probe-resume: the record is sound — a crash at any row replays to the same file,');
+console.log('              and a resume will not be taken on a signature alone.');

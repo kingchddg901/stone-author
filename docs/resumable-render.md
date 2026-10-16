@@ -176,6 +176,46 @@ error. Rows are recorded in WRITE order and nothing reads them assuming an order
 count-based resume from quietly appearing - the loop consumes render tiles in index order today, the pool
 paints them out of order, and the sink is already index-addressed for the cut.
 
+## A signature is not evidence, and one of ours was wrong
+
+This document chose `renderSig` as the resume identity on the grounds that it covers the inputs that
+actually reach the pixels. On **2026-10-15** two UV masters of one slab shared `renderSig 95ef95fe` and
+did not share a picture: `light.mean` 64 against 61.33, with the planner's own reference measurement
+agreeing the picture had moved - 149.9 against 140.9 on the same calibration. Everything else the
+masters record was identical, including `stateSig`.
+
+The cause was never found. For that slab, every field `renderSig` leaves out is either empty
+(`sections`, `folders`, `perItem`), or correctly excluded - `wood` and `glass` cannot reach stone pixels,
+and `material: "stone"` is the default case the signature is built around. So it came from session state
+outside the slab, or a 32-bit CRC collision, and the state that produced the first master was gone before
+anyone looked. **It is not a regression** - the build of the day reproduces byte-identically, in both
+lights, across a probe race and a remembered plan alike.
+
+What survives is the lesson. **Resuming on a hash alone is trusting the one thing that has been observed
+to lie.** So before a resume is taken, tiles the file ALREADY HOLDS are re-rendered and compared byte for
+byte. A match is direct evidence the picture has not moved, rather than a promise. `harness/tiff.mjs`
+already gates the property this leans on - a tile re-renders bit-identically in isolation - so a mismatch
+means the picture changed, not that rendering is noisy.
+
+Three functions, pure and probed like the record:
+
+- **`resumeCheckCount(tileMs, budgetMs, cap)`** - how many can be afforded, asked of the file rather than
+  guessed. The record already carries the per-tile timings of the run that wrote it, so the master says
+  what a verification tile costs ON THAT DEVICE. One ten-second budget buys hundreds at 512 on a desktop,
+  sixteen at 4096, and two on an A7 - the slow devices check fewer without being told which they are.
+  Never fewer than one: a resume with no evidence at all is what this exists to prevent.
+- **`resumeSample(rows, want)`** - the first and the last written always, then an even spread. The last is
+  nearest whatever stopped the render; the first catches a systematic placement error a middle sample
+  would sail past. Even rather than random, so a failure reproduces by rerunning the check.
+- **`resumeVerify(stored, fresh)`** - the verdict, over compressed bytes, which is what the file stores and
+  what the render path already has. That leans on deflate being deterministic within one engine, measured
+  the same day at 263,979,432 bytes byte-identical across two runs. If it ever is not, this reports a
+  mismatch and the resume is abandoned: **failing closed costs a render that could have been saved,
+  failing open writes a master that is half one picture and half another and says nothing.**
+
+`tools/probe-resume.mjs` covers all three, including the ablation a careless implementation passes -
+nothing compared against nothing is not agreement, it is no evidence.
+
 ## Staging
 
 Each stage is useful alone, which matters because the value arrives before the whole thing is done.
@@ -186,8 +226,9 @@ Each stage is useful alone, which matters because the value arrives before the w
    master written the old way.
 2. **Write the manifest.** Still no resume UI. Now a killed render leaves a file *and* a statement of what
    is in it.
-3. **Offer the resume.** Match on `renderSig` plus geometry; render only the missing indices; write the
-   tail; verify.
+3. **Offer the resume.** Match on `renderSig` plus geometry, THEN re-render a sample of tiles the file
+   already holds and compare them byte for byte; render only the missing indices; write the tail; verify.
+   The signature decides whether to look; the tiles decide whether to trust.
 4. **Prove it by killing it.** The gate that matters: render a small grid, kill the page at a known tile,
    reload, resume, and compare the result byte for byte against the same grid rendered in one go. Until
    that test exists and has been seen to fail when resume is broken, the feature is not finished.

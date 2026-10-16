@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.89';
+  const BUILD = '2026.10.16.90';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9458,6 +9458,65 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       litSum += r.litSum; litUp += r.litUp; litN += r.litN;
     }
     return { offs, cnts, at, done, tileMs, tileBytes, litSum, litUp, litN };
+  }
+  // ---- and before trusting any of it: re-render a few tiles and look ------------------------------
+  // A SIGNATURE CAN BE WRONG, and on 2026-10-15 one was. Two UV masters of this slab shared
+  // renderSig 95ef95fe and did not share a picture - mean 64 against 61.33, with the planner's own
+  // reference measurement agreeing that the picture had moved. The cause was never found; the state
+  // that produced the first one no longer existed by the time anyone looked. What survives is the
+  // lesson: resuming into a half-written file on the strength of a hash is trusting the one thing that
+  // has already been observed to lie.
+  //
+  // So do not resume on a hash alone. Re-render tiles the file ALREADY HOLDS and compare them byte for
+  // byte. A match is direct evidence the picture has not moved, rather than a promise that it has not.
+  // harness/tiff.mjs already gates the property this leans on - a tile re-renders bit-identically in
+  // isolation - so a mismatch means the picture changed, not that rendering is noisy.
+
+  // HOW MANY CAN BE AFFORDED, asked of the file rather than guessed. The record carries the per-tile
+  // timings of the run that wrote it, so the master itself says what a verification tile costs ON THIS
+  // DEVICE: at 512 on a desktop the median was 13 ms and a ten-second budget buys hundreds, while the
+  // A7 at 4096 buys two. One budget, and the slow devices check fewer without being told which they
+  // are. Never fewer than one - a resume with no evidence at all is the thing this exists to prevent.
+  function resumeCheckCount(tileMs, budgetMs, cap) {
+    if (!tileMs || !tileMs.length) return 1;
+    const s = [...tileMs].sort((a, b) => a - b), med = s[s.length >> 1] || 1;
+    return Math.max(1, Math.min(cap, Math.floor(budgetMs / med)));
+  }
+
+  // WHICH ONES. The first and the last written always, then an even spread between them. The last
+  // matters most - it is the one nearest whatever stopped the render - and the first catches a
+  // systematic placement error that a sample from the middle would sail past. Even rather than random
+  // so that a failure can be reproduced by rerunning the same check.
+  function resumeSample(rows, want) {
+    const n = rows.length;
+    if (!n) return [];
+    if (want >= n) return rows.map(r => r.n);
+    const pick = new Set([0, n - 1]);
+    const extra = Math.max(0, want - pick.size);
+    for (let k = 0; k < extra; k++) pick.add(Math.round((k + 1) * (n - 1) / (extra + 1)));
+    return [...pick].sort((a, b) => a - b).map(i => rows[i].n);
+  }
+
+  // THE VERDICT, over bytes the caller has in hand: what the file holds against what a re-render just
+  // produced. Compared COMPRESSED, which is what the file stores and what the render path already has,
+  // so nothing is inflated to answer the question. That leans on deflate being deterministic within one
+  // engine - measured on 2026-10-15, two renders of one picture byte-identical across 263,979,432 bytes
+  // - and if it ever is not, this reports a mismatch and the resume is abandoned. Failing closed costs a
+  // render that could have been saved; failing open writes a master half of one picture and half of
+  // another, and says nothing.
+  function resumeVerify(stored, fresh) {
+    if (!stored.length || stored.length !== fresh.length)
+      return { ok: false, why: 'piece count ' + stored.length + ' against ' + fresh.length };
+    for (let k = 0; k < stored.length; k++) {
+      if (stored[k].i !== fresh[k].i)
+        return { ok: false, why: 'tile index ' + stored[k].i + ' against ' + fresh[k].i };
+      const a = stored[k].bytes, b = fresh[k].bytes;
+      if (a.length !== b.length)
+        return { ok: false, why: 'tile ' + stored[k].i + ' is ' + a.length + ' bytes, re-rendered ' + b.length };
+      for (let q = 0; q < a.length; q++)
+        if (a[q] !== b[q]) return { ok: false, why: 'tile ' + stored[k].i + ' differs at byte ' + q };
+    }
+    return { ok: true, checked: stored.length };
   }
   // ---- the same file, written to disk as it is made -------------------------------------------------
   // A tile held is a tile that has to be held again at the end. On a 3 GB tablet a 65535 master is about
