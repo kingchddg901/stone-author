@@ -1753,7 +1753,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.113';
+  const BUILD = '2026.10.16.114';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -12602,6 +12602,27 @@ self.onmessage = async (e) => {
         await d.save({ filename: fn.replace(/\.tif$/, '.zip'), data: zipOneStored(fn, blob, blob.size, crc) });
       } else if (runtime) throw new Error(TR('exp.err.no-download'));   // the sandbox blocks the anchor too
       else download(fn, blob);
+      // THE RECORD DIES WITH THE RENDER THAT FINISHED IT. Nothing removed it before, so after a
+      // successful save the job and its rows stayed on disk - and since the offer asks only whether a
+      // record EXISTS, the next load announced an unfinished render that had in fact finished.
+      //
+      // COUNTING TILES WOULD HAVE BEEN THE WRONG FIX. 'Every tile written' is not 'finished': on
+      // 2026-10-12 a 262144 master had all 2560 tiles on disk and died in tiffLayout before the first
+      // byte of the directory, which is the most valuable thing this feature can resume - ninety-five
+      // minutes recovered for the price of a tail. A record showing nothing remaining is exactly that
+      // case. So a record that SURVIVES must always mean unfinished, and that is arranged here, at the
+      // one moment a render is known to be done, rather than guessed at from its contents.
+      //
+      // THE MASTER ITSELF IS LEFT. It is the picture, it has just been handed to the browser to save,
+      // and removing gigabytes on the strength of a download this cannot observe is not a call to make
+      // in a finally-adjacent line. The next render truncates it; until then Discard is the way out.
+      try {
+        const odir = await navigator.storage.getDirectory();
+        for (const f of ['stone-master.rec', 'stone-master.json'])
+          try { await odir.removeEntry(f); } catch (_) { /* already gone */ }
+        resumeJob = null; resumeShown = ''; resumeFlag(false);
+        const rrow = document.getElementById('resume-row'); if (rrow) rrow.hidden = true;
+      } catch (_) { /* no OPFS here, so there was no record to clear */ }
       expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1);
       hint(TR('hint.exported-render', { px: W }));
     } catch (e) {
