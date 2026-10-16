@@ -3727,5 +3727,11 @@
  },
  "btn.download": {
   "where": "a button that saves the stored render to the device again."
+ },
+ "exp.err.resume-refused": {
+  "placeholders": {
+   "why": "a short technical reason, in English, from the verification that refused"
+  },
+  "where": "shown in the export status when an unfinished render was offered and then could not be resumed. The reassurance is the point: the previous version silently deleted the partial render at this moment, so the message must make clear that nothing was lost."
  }
 }

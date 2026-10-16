@@ -749,5 +749,6 @@
  "resume.confirm": "Erano {size}. Se è arrivato, la copia di lavoro può essere eliminata: controlla i download prima di rispondere, perché da qui non sono visibili.",
  "btn.restart": "Ricomincia",
  "btn.discard": "Elimina",
- "btn.download": "Scarica"
+ "btn.download": "Scarica",
+ "exp.err.resume-refused": "Non è stato possibile riprendere quel render: {why}. Non è stato eliminato nulla: ogni tassello già scritto è ancora su disco. Ricomincia lo rigenera da zero; Elimina libera lo spazio."
 }

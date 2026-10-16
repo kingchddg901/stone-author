@@ -892,6 +892,7 @@ window.SA_I18N = (() => {
   "exp.err.floor-size": "Above {px}px a PNG export streams full-width bands and draws the SLAB the floor was cut from, not the floor. Choose TIFF, which paints tile by tile and can draw a floor at any size, or a PNG at {px}px or less.",
   "exp.err.tile": "This device cannot hold a tile big enough for {px}px.",
   "exp.err.dim": "At {px}px every tile this device can hold came back dim — one was rendered and carried {pct}% of the light it should. This is not a memory limit: the blur stops working above a canvas this size. The render was refused rather than saved wrong. A smaller width needs a smaller canvas and should come out right.",
+  "exp.err.resume-refused": "That render could not be resumed: {why}. Nothing has been deleted — every tile already written is still on disk. Start over renders it again from nothing; Discard frees the space.",
   "exp.err.floor": "At {px}px this device can only manage {tile}px tiles, which are too small to carry the light — a black-light render would come out dim. Choose a smaller width.",
   "exp.err.blank": "Tile {n} of {total} came back unpainted twice, so the render was stopped rather than saved with holes in it. This device is short of memory — try a smaller width.",
   "exp.err.no-download": "This render cannot be saved from here. Sign in, or open the studio from its own page.",
@@ -1765,7 +1766,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.116';
+  const BUILD = '2026.10.16.117';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9505,6 +9506,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // 64-bit copies agreeing by chance is 2^-128; agreeing by construction is what a real mark does.
   // Two of three is enough, so one damaged copy is survivable and a three-way split reports absence
   // rather than inventing a reading.
+  // ONE PREPARATION, TWO READERS. The export writes a stored tile; the verification re-renders one to
+  // compare against what is written. They MUST produce identical bytes or every resume is refused -
+  // and they diverged the day marking went on by default, because only the export marked. The
+  // verification then saw the marks as a difference, refused every resume there had been since, and
+  // (until the stop in exportTiff) deleted the partial it had just refused. Measured 2026-10-16: 2,300
+  // tiles of a 262,144 black-light render.
+  //
+  // Neither caller prepares its own pixels now, so a third change to this cannot reach one and miss
+  // the other. The light sample stays with the export because it describes THAT render; it is taken
+  // after the mark deliberately, so the figure the master publishes describes the bytes the master
+  // holds rather than the picture before it was marked.
+  const markSigNow = () => MARK_ON ? (parseInt(renderSig() || '0', 16) >>> 0) : 0;
+  function storedTilePixels(cx, p, sx, sy, tx, ty, W, sig) {
+    // The FULL stored tile, padding included: TIFF wants every tile the same size and uses ImageWidth
+    // and ImageLength to say where the picture stops, so an edge tile is padded.
+    const px = cx.getImageData(p.bleed + sx * p.store, p.bleed + sy * p.store, p.store, p.store).data;
+    return { px, marked: MARK_ON ? markStamp(px, p.store, tx, ty, W, p.FH, sig) : 0 };
+  }
   function markRead(px, store, tx, ty) {
     const n = store / MARK_CELL, out = [];
     if (!Number.isInteger(n) || n < 1) return out;
@@ -10143,7 +10162,7 @@ self.onmessage = async (e) => {
       for (let sy = 0; sy < p.k; sy++) for (let sx = 0; sx < p.k; sx++) {
         const tx = gx * p.k + sx, ty = gy * p.k + sy;
         if (tx >= p.across || ty >= p.down) continue;
-        const px = cx.getImageData(p.bleed + sx * p.store, p.bleed + sy * p.store, p.store, p.store).data;
+        const px = storedTilePixels(cx, p, sx, sy, tx, ty, W, markSigNow()).px;
         fresh.push({ i: ty * p.across + tx,
                      bytes: await deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength)) });
       }
@@ -11502,10 +11521,13 @@ self.onmessage = async (e) => {
     const sel = document.getElementById('expres'), want = String(job.w);
     const opt = [...sel.options].find(o => o.value === want);
     if (!opt) { hint(TR('resume.gone')); return; }
+    // ARMED, NOT RE-ASKED. The tier gate exists to ask whether you mean to start a render this large.
+    // This record EXISTS only because that question was already answered and the render was started -
+    // it is the confirmation, in durable form. Asking again makes continuing harder than beginning,
+    // which is the wrong way round, and the dialogue that reached here has already stated the size, the
+    // light and how much is left. The tickbox route keeps its warning; it is the one that begins.
     const tier = opt.dataset.tier;
-    const armed = !tier || (tier === 'large' ? tierLarge : tier === 'extreme' ? tierExtreme : tierOnce);
-    if (!armed) {
-      if (!(await bigDialog(TR(tier === 'once' ? 'big.warn-once' : 'big.warn'), TR('btn.understood')))) return;
+    if (tier) {
       tierLarge = true;
       if (tier !== 'large') tierExtreme = true;
       if (tier === 'once') tierOnce = true;
@@ -12481,7 +12503,7 @@ self.onmessage = async (e) => {
       // the same signature a master publishes as `inputs`, plus the geometry the file was written with.
       // The key a marked tile carries: renderSig as a number, the same value the master publishes as
       // `inputs`. Taken once - it cannot change mid-render, and reading it per tile would invite it to.
-      const markSig = MARK_ON ? (parseInt(renderSig() || '0', 16) >>> 0) : 0;
+      const markSig = markSigNow();
       let markedCells = 0;
       const jobSig = resumeSig({ inputs: renderSig(), w: W, h: p.FH, ts: p.ts, store: p.store,
                                  bleed: p.bleed, across: p.across, down: p.down, renders: p.renders });
@@ -12502,6 +12524,18 @@ self.onmessage = async (e) => {
           if (!v.ok) { prior = null; resumeWhy = v.why; }
         } catch (ex) { prior = null; resumeWhy = String((ex && ex.message) || ex).slice(0, 120); }
       }
+      // AND IT IS NOT ALLOWED TO DELETE ONE EITHER, which the line above used to be. Falling through
+      // with `prior` null starts a FRESH render, and a fresh render's first act is to truncate the very
+      // master this record was offered for - so a refusal silently destroyed the work it was raised to
+      // save. Measured 2026-10-16: 2,300 tiles of a 262,144 black-light render, gone on pressing Resume.
+      // That made the button strictly more dangerous than ignoring it, which is the inverse of what it
+      // promises, and nothing in the dialogue said declining to resume meant deleting.
+      //
+      // So a refusal STOPS HERE. The file is left exactly as it stands, the reason is said now rather
+      // than only in the provenance block of a master that will never exist, and starting again is still
+      // one click away - through Start over or Discard, which remove the record deliberately and so
+      // leave nothing to refuse. A verification that is wrong now costs a button press, as advertised.
+      if (resumeWhy) { expStat(TR('exp.err.resume-refused', { why: resumeWhy }), -1); return; }
       const sink = await tiffSink(W, p.FH, p.store, p.store, {
         // `sig` was written TWICE here - resumeSig(...) computed in full and then overwritten by the
         // identical jobSig three lines down. Same value, so nothing was wrong; the first was simply dead.
@@ -12589,13 +12623,9 @@ self.onmessage = async (e) => {
         for (let sy = 0; sy < p.k; sy++) for (let sx = 0; sx < p.k; sx++) {
           const tx = gx * p.k + sx, ty = gy * p.k + sy;
           if (tx >= p.across || ty >= p.down) continue;    // this quarter lies past the picture entirely
-          // The FULL stored tile, padding included: TIFF wants every tile the same size and uses
-          // ImageWidth and ImageLength to say where the picture stops, so an edge tile is padded.
-          const px = cx.getImageData(p.bleed + sx * p.store, p.bleed + sy * p.store, p.store, p.store).data;
-          // BEFORE the light is sampled, so the figure the master publishes describes the bytes the
-          // master holds rather than the picture before it was marked. The difference is around 1e-4 of
-          // a level either way; describing the file is simply the honest one of the two.
-          if (MARK_ON) markedCells += markStamp(px, p.store, tx, ty, W, p.FH, markSig);
+          const prep = storedTilePixels(cx, p, sx, sy, tx, ty, W, markSig);
+          const px = prep.px;
+          markedCells += prep.marked;
           for (let i = 0; i < px.length; i += 400) {            // every 100th pixel: what --audit samples
             const l = (px[i] + px[i + 1] + px[i + 2]) / 3;
             litSum += l; if (l > 40) litUp++; litN++;
