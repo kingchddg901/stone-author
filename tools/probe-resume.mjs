@@ -36,12 +36,12 @@ function liftFn(name) {
   for (;; i++) { if (SRC[i] === '{') d++; else if (SRC[i] === '}' && --d === 0) break; }
   return SRC.slice(hits[0], i + 1);
 }
-const NAMES = ['resumeSig', 'resumeRow', 'resumeScan', 'resumeState',
+const NAMES = ['resumeSig', 'resumeRow', 'resumeScan', 'resumeState', 'resumePlan',
                'resumeCheckCount', 'resumeSample', 'resumeVerify',
                'mulberry32'];                 // the app's own PRNG: the sampler seeds from the signature
 const BODY = NAMES.map(liftFn).join('\n');
 const APP = new Function(BODY + '; return {' + NAMES.join(',') + '};')();
-const { resumeSig, resumeRow, resumeScan, resumeState,
+const { resumeSig, resumeRow, resumeScan, resumeState, resumePlan,
         resumeCheckCount, resumeSample, resumeVerify } = APP;
 
 let fails = 0;
@@ -261,6 +261,41 @@ const ALL = [...Array(RENDERS).keys()];
   // AND THE EMPTY CASE, which is the one a careless implementation passes: nothing compared against
   // nothing is not agreement, it is no evidence.
   ok('ABLATION nothing against nothing is NOT a pass', !resumeVerify([], []).ok);
+}
+
+// ---- 6. the decision: is what is on disk about THIS picture? ---------------------------------------
+// Every refusal here is final. There is no adapting a record to a job it was not written for, because a
+// master built from two pictures is one nothing afterwards could tell apart - the determinism gate would
+// pass it, the light figures would average, and it would look finished.
+{
+  const SIG = 'abc123|32768|20480|2048|2048|4|16|10|6';
+  const job = JSON.stringify({ v: 1, base: BASE, sig: SIG, w: 32768, renders: RENDERS });
+  const rec = encode(ALL);
+  const good = resumePlan(job, rec, SIG, N);
+  ok('a matching job and a sealed record resume', !!good && good.rows.length === RENDERS,
+     good ? good.rows.length + ' rows' : 'null');
+  ok('and replay to the same state as an uninterrupted run',
+     J(good.state) === J(resumeState(resumeScan(rec).rows, N, BASE)));
+
+  // THE REFUSALS, each the only thing standing between a resume and a wrong master.
+  ok('ABLATION a different signature refuses',
+     resumePlan(JSON.stringify({ v: 1, base: BASE, sig: SIG + 'x' }), rec, SIG, N) === null);
+  ok('ABLATION an unknown format version refuses',
+     resumePlan(JSON.stringify({ v: 2, base: BASE, sig: SIG }), rec, SIG, N) === null);
+  ok('ABLATION an unreadable job file refuses', resumePlan('{not json', rec, SIG, N) === null);
+  ok('ABLATION an empty record refuses - nothing sealed is nothing to resume',
+     resumePlan(job, new Uint8Array(0), SIG, N) === null);
+  // A record whose rows name tiles outside this grid is a record for another geometry wearing this
+  // signature. The signature cannot catch it; the grid can.
+  ok('ABLATION a tile index outside the grid refuses', resumePlan(job, rec, SIG, 4) === null);
+
+  // A TORN TAIL IS NORMAL, not a refusal: the rows that sealed are exactly what a killed render leaves.
+  const torn = rec.slice(0, rec.length - 5);
+  const t2 = resumePlan(job, torn, SIG, N);
+  ok('a torn tail resumes from the rows that sealed',
+     !!t2 && t2.rows.length === RENDERS - 1, t2 ? t2.rows.length + ' rows' : 'null');
+  ok('and reports where the sealed part ends',
+     !!t2 && t2.recBytes === encode(ALL.slice(0, RENDERS - 1)).length);
 }
 
 console.log('');

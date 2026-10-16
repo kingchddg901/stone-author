@@ -245,9 +245,22 @@ if (!app.includes('if (!(BLOOM_DRAW && glowPx > 0)) {'))
 if (!app.includes("removeEntry('stone-master.tif')"))
   fail.push('the OPFS scratch master is never removed: every render leaves one behind, and the old one is still there while the next is written');
 {
-  const rm = app.indexOf("removeEntry('stone-master.tif')"), mk = app.indexOf("getFileHandle('stone-master.tif'");
-  if (rm >= 0 && mk >= 0 && rm > mk)
+  // AGAINST THE WRITE, not against any mention. Stage 3 reads this file to verify a resume - re-rendering
+  // tiles and comparing them with what is on disk - and that read opens a handle BEFORE the fallback
+  // path removes anything, which is correct and which this check used to call a defect. The rule is
+  // about the handle that WRITES, so it is anchored on that one.
+  const rm = app.indexOf("removeEntry('stone-master.tif')");
+  const mk = app.indexOf("handle = await dir.getFileHandle('stone-master.tif'");
+  if (mk < 0)
+    fail.push('the createWritable fallback no longer takes its handle the way this check can find: re-anchor it');
+  else if (rm >= 0 && rm > mk)
     fail.push('the scratch master is removed AFTER its handle is taken, which either deletes the file being written or does nothing at all');
+  // And the same ordering in the writer worker, where the name is a parameter so the literal above
+  // cannot see it. The worker is the primary path now; the fallback is only reached when it refuses.
+  const wrm = app.indexOf('if (!m.resume) { try { await dir.removeEntry(m.name); } catch (_) {} }');
+  const wmk = app.indexOf('h = await fh.createSyncAccessHandle();');
+  if (wrm >= 0 && wmk >= 0 && wrm > wmk)
+    fail.push('the writer worker takes its sync access handle before dropping the old master, so the drop either deletes the file being written or silently fails');
 }
 
 // THE PREVIEW NEVER DRAWS PER-ELEMENT GLOW, INCLUDING INSIDE AN ISLAND. Zeroing glowPx in the live paint

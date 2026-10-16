@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.94';
+  const BUILD = '2026.10.16.97';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9459,6 +9459,23 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     return { offs, cnts, at, done, tileMs, tileBytes, litSum, litUp, litN };
   }
+  // WHAT IS ON DISK, AND IS IT ABOUT THIS PICTURE? Pure, so the probe can hold it: the caller hands in
+  // the job file and the record as bytes and gets back either null - start fresh - or the state a live
+  // sink would have held. Every refusal is silent and final; there is no adapting a record to a job it
+  // was not written for, because the result of getting that wrong is a master built from two pictures
+  // that nothing afterwards could tell apart.
+  function resumePlan(jobText, recBytes, sig, N) {
+    let job = null;
+    try { job = JSON.parse(jobText); } catch (_) { return null; }
+    if (!job || job.v !== 1 || job.sig !== sig) return null;      // a different picture, or a format we do not know
+    const { rows, bytes } = resumeScan(recBytes);
+    if (!rows.length) return null;                                // nothing sealed: there is nothing to resume
+    const st = resumeState(rows, N, job.base || 16);
+    // A row claiming a tile index outside the grid is a record for another geometry wearing this one's
+    // signature. Cheap to check and the only structural lie the signature cannot catch.
+    for (const r of rows) for (const pc of r.pieces) if (!(pc.i >= 0 && pc.i < N)) return null;
+    return { job, rows, state: st, recBytes: bytes };
+  }
   // ---- and before trusting any of it: re-render a few tiles and look ------------------------------
   // A SIGNATURE CAN BE WRONG, and on 2026-10-15 one was. Two UV masters of this slab shared
   // renderSig 95ef95fe and did not share a picture - mean 64 against 61.33, with the planner's own
@@ -9560,27 +9577,35 @@ self.onmessage = async (e) => {
   try {
     if (m.op === 'open') {
       const dir = await navigator.storage.getDirectory();
-      try { await dir.removeEntry(m.name); } catch (_) {}
+      if (!m.resume) { try { await dir.removeEntry(m.name); } catch (_) {} }
       const fh = await dir.getFileHandle(m.name, { create: true });
       h = await fh.createSyncAccessHandle();
-      h.truncate(0);
-      h.write(new Uint8Array(16), { at: 0 });
-      self.postMessage({ id: m.id, ok: true });
+      if (!m.resume) { h.truncate(0); h.write(new Uint8Array(16), { at: 0 }); }
+      else { h.truncate(m.at); }
+      self.postMessage({ id: m.id, ok: true, size: h.getSize() });
     } else if (m.op === 'recopen') {
       const dir = await navigator.storage.getDirectory();
-      try { await dir.removeEntry(m.name); } catch (_) {}
+      if (!m.resume) { try { await dir.removeEntry(m.name); } catch (_) {} }
       const fh = await dir.getFileHandle(m.name, { create: true });
       rec = await fh.createSyncAccessHandle();
-      rec.truncate(0); recAt = 0;
-      const jh = await dir.getFileHandle(m.job, { create: true });
-      const jw = await jh.createWritable({ keepExistingData: false });
-      await jw.write(m.text); await jw.close();
+      if (!m.resume) { rec.truncate(0); recAt = 0; }
+      else { rec.truncate(m.recAt); recAt = m.recAt; }
+      if (m.text) {
+        const jh = await dir.getFileHandle(m.job, { create: true });
+        const jw = await jh.createWritable({ keepExistingData: false });
+        await jw.write(m.text); await jw.close();
+      }
       self.postMessage({ id: m.id, ok: true });
     } else if (m.op === 'write') {
       const n = h.write(new Uint8Array(m.buf), { at: m.at });
       if (n !== m.buf.byteLength) throw new Error('EWRITE ' + n + ' ' + m.buf.byteLength);
       h.flush();
       self.postMessage({ id: m.id, ok: true });
+    } else if (m.op === 'read') {
+      const b = new Uint8Array(m.len);
+      const n = h.read(b, { at: m.at });
+      if (n !== m.len) throw new Error('EREAD ' + n + ' ' + m.len);
+      self.postMessage({ id: m.id, ok: true, buf: b.buffer }, [b.buffer]);
     } else if (m.op === 'rec') {
       const b = new Uint8Array(m.buf);
       const n = rec.write(b, { at: recAt });
@@ -9604,6 +9629,14 @@ self.onmessage = async (e) => {
   // first thing it touches is a render that can run for six hours. Without a flag, the only way back
   // from a bad writer is a revert and a deploy, and the device that needs this most is a tablet on the
   // other side of a share. Read once at boot, like ?tile= and ?mem= beside it.
+  // OFF UNTIL IT IS PROVEN. Stage 3 is the only part of this that can produce a WRONG master rather
+  // than merely lose one, and it cannot be executed where it was written - Playwright will not spawn
+  // here. So it is opt-in: ?resume=1 to try it, nothing at all otherwise, and the default flips when a
+  // real render on real hardware has been killed and picked up again. Read once at boot, beside the rest.
+  const RESUME_ON = (() => {
+    try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('resume') || ''); }
+    catch (_) { return false; }
+  })();
   const WRITER_OFF = (() => {
     try { return /^(0|off|no)$/i.test(new URLSearchParams(location.search).get('writer') || ''); }
     catch (_) { return false; }
@@ -9613,7 +9646,7 @@ self.onmessage = async (e) => {
   // master reporting it could not say which. A diagnostic with one code for three causes is a
   // diagnostic that still needs a round trip, which is the thing it exists to save.
   let writerWhy = null;
-  async function openWriter(name) {
+  async function openWriter(name, prior) {
     writerWhy = null;
     if (WRITER_OFF) { writerWhy = 'EWROFF'; return null; }       // ?writer=0 on the URL, read at boot
     if (typeof Worker !== 'function' || !(navigator.storage && navigator.storage.getDirectory)) {
@@ -9625,19 +9658,21 @@ self.onmessage = async (e) => {
       let seq = 0, failed = null;
       const waiting = new Map();
       wk.onmessage = e => { const q = waiting.get(e.data.id); if (!q) return; waiting.delete(e.data.id);
-                            if (e.data.ok) q.res(); else { failed = e.data.why; q.rej(new Error(e.data.why)); } };
+                            if (e.data.ok) q.res(e.data); else { failed = e.data.why; q.rej(new Error(e.data.why)); } };
       wk.onerror = e => { failed = (e && e.message) || 'writer worker threw';
                           for (const [, q] of waiting) q.rej(new Error(failed)); waiting.clear(); };
       const send = (msg, transfer) => new Promise((res, rej) => {
         const id = ++seq; waiting.set(id, { res, rej });
         wk.postMessage(Object.assign({ id }, msg), transfer || []);
       });
-      await send({ op: 'open', name });
+      await send({ op: 'open', name, resume: !!(prior && prior.at), at: prior ? prior.at : 0 });
       return {
         write: (at, buf) => send({ op: 'write', at, buf }, [buf]),
         // The RECORD, which is what makes a dead render recoverable rather than merely written. Opened
         // separately so a failure here loses the record and not the master.
-        recOpen: (name, job, text) => send({ op: 'recopen', name, job, text }),
+        recOpen: (name, job, text, resume, recAt) =>
+          send({ op: 'recopen', name, job, text, resume: !!resume, recAt: recAt || 0 }),
+        read: (at, len) => send({ op: 'read', at, len }).then(r => new Uint8Array(r.buf)),
         rec: (buf) => send({ op: 'rec', buf }, [buf]),
         pending: () => waiting.size,
         get failed() { return failed; },
@@ -9652,13 +9687,75 @@ self.onmessage = async (e) => {
     }
   }
 
-  async function tiffSink(W, H, tileW, tileH, job) {
+  // IS THERE A RENDER TO PICK UP, AND IS IT THIS ONE? Read before anything is opened, because nothing
+  // holds a handle yet and the main thread can read all three files directly. Returns a verified prior
+  // or null; there is no middle answer, and every failure takes the null.
+  async function resumeLoad(sig, N) {
+    if (!RESUME_ON) return null;
+    try {
+      const dir = await navigator.storage.getDirectory();
+      const txt = await (await (await dir.getFileHandle('stone-master.json')).getFile()).text();
+      const rec = new Uint8Array(await (await (await dir.getFileHandle('stone-master.rec')).getFile()).arrayBuffer());
+      return resumePlan(txt, rec, sig, N);
+    } catch (_) { return null; }        // no prior render, or one this build cannot read: start fresh
+  }
+
+  // AND DOES THE FILE STILL HOLD THE PICTURE IT CLAIMS? The signature says the inputs match; this asks
+  // the pixels. Tiles the record lists are re-rendered and compared against the bytes on disk, which is
+  // the only evidence that survives a signature being wrong - and on 2026-10-15 one was. Compared
+  // compressed, because that is what the file stores and what a re-render already has.
+  //
+  // SAMPLING IS EVIDENCE, NOT PROOF: a difference in 1% of tiles survives 16 samples 85% of the time.
+  // What makes that acceptable is the asymmetry - a verification that is WRONG costs a resume and
+  // nothing else, because the only thing it can do is refuse one. Being generous here is cheap and
+  // being strict here is free.
+  async function resumeVerified(prior, p, W) {
+    const want = resumeCheckCount(prior.state.tileMs, 10000, 100);
+    let seed = 0; for (const ch of prior.job.sig) seed = (seed * 31 + ch.charCodeAt(0)) | 0;
+    const picks = resumeSample(prior.rows, want, seed);
+    const byN = new Map(prior.rows.map(r => [r.n, r]));
+    const dir = await navigator.storage.getDirectory();
+    const tif = await (await dir.getFileHandle('stone-master.tif')).getFile();
+    for (const n of picks) {
+      const row = byN.get(n); if (!row) return { ok: false, why: 'row ' + n + ' vanished' };
+      const gx = n % p.rAcross, gy = (n / p.rAcross) | 0;
+      const c = (layTiles ? renderFloorTile : renderOneTile)(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
+      if (!tilePainted(c)) { c.width = 1; c.height = 1; return { ok: false, why: 'blank re-render at ' + n }; }
+      const cx = c.getContext('2d');
+      const fresh = [];
+      for (let sy = 0; sy < p.k; sy++) for (let sx = 0; sx < p.k; sx++) {
+        const tx = gx * p.k + sx, ty = gy * p.k + sy;
+        if (tx >= p.across || ty >= p.down) continue;
+        const px = cx.getImageData(p.bleed + sx * p.store, p.bleed + sy * p.store, p.store, p.store).data;
+        fresh.push({ i: ty * p.across + tx,
+                     bytes: await deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength)) });
+      }
+      c.width = 1; c.height = 1;
+      const stored = [];
+      let off = 0;
+      for (const pc of row.pieces) {
+        const o = prior.state.offs[pc.i];
+        stored.push({ i: pc.i, bytes: new Uint8Array(await tif.slice(o, o + pc.len).arrayBuffer()) });
+        off += pc.len;
+      }
+      const v = resumeVerify(stored, fresh);
+      if (!v.ok) return { ok: false, why: v.why };
+      await breathe();
+    }
+    return { ok: true, checked: picks.length };
+  }
+
+  async function tiffSink(W, H, tileW, tileH, job, prior) {
     const NAME = 'stone-master.tif', REC = 'stone-master.rec', JOB = 'stone-master.json';
     // THREE PATHS, BEST FIRST, and the two below are exactly what this file did before. Dropping them
     // would hand any device where the worker fails straight to the in-memory path - which is the one
     // that cannot hold a master on a tablet, so a failure to gain DURABILITY would cost the render
     // instead. Nothing here is allowed to be worse than what it replaces.
-    const wr = await openWriter(NAME);
+    // A VERIFIED PRIOR OR NOTHING. By the time this is called the caller has already matched the
+    // signature AND re-rendered a sample of the tiles the file holds; `prior` is that verdict, not a
+    // suggestion. Without it the file is truncated and the render starts from nothing, which is what
+    // every render before stage 3 did.
+    const wr = await openWriter(NAME, prior && prior.state);
     let w = null, handle = null;
     try {
       if (!wr && navigator.storage && navigator.storage.getDirectory) {
@@ -9680,6 +9777,15 @@ self.onmessage = async (e) => {
     const N = Math.ceil(W / tileW) * Math.ceil(H / tileH);
     const offs = new Array(N), cnts = new Array(N), order = [];   // `order` is write order; offs is by index
     let at = 16, done = 0;
+    // RESTORED, not recomputed. The offsets come from the record, in the write order the record kept,
+    // so the tiles already on disk keep the places they were written to and the next one lands where
+    // an uninterrupted run would have put it.
+    const resumed = !!(wr && prior && prior.state);
+    if (resumed) {
+      const st = prior.state;
+      for (let i = 0; i < N; i++) if (st.offs[i] !== undefined) { offs[i] = st.offs[i]; cnts[i] = st.cnts[i]; done++; }
+      at = st.at;
+    }
     // THE RECORD IS NEVER ALLOWED TO COST A RENDER. It exists so that a render which dies leaves a
     // statement of what is in the file; a render that dies BECAUSE of it would be a straight loss. So
     // every failure here sets recOk false and nothing else: the record stops, the master carries on,
@@ -9687,7 +9793,11 @@ self.onmessage = async (e) => {
     let recOk = false, recWhy = null, pending = [];
     if (wr && job) {
       try {
-        await wr.recOpen(REC, JOB, JSON.stringify(Object.assign({ v: 1, base: 16 }, job)));
+        // On a resume the job file is left alone - it already says what this is - and the record is cut
+        // back to the last sealed row, so the unsealed tail of a killed render is overwritten rather
+        // than read as data.
+        await wr.recOpen(REC, JOB, resumed ? null : JSON.stringify(Object.assign({ v: 1, base: 16 }, job)),
+                         resumed, resumed ? prior.recBytes : 0);
         recOk = true;
       } catch (ex) {
         // KEEP THE REASON. The first version swallowed it, and the first real render then reported
@@ -9735,6 +9845,8 @@ self.onmessage = async (e) => {
         catch (ex) { recOk = false; recWhy = String((ex && ex.message) || ex).slice(0, 120); }
       },
       get recording() { return recOk; },
+      get resumedTiles() { return resumed ? done : 0; },
+      read: (i) => wr.read(offs[i], cnts[i]),      // a stored tile back, for the verification
       get recordWhy() { return recOk ? null : recWhy; },
       async finish(desc) {
         if (done !== N) throw new Error(`tiff: wrote ${done} of ${N} tiles`);
@@ -11902,12 +12014,25 @@ self.onmessage = async (e) => {
       const p = await tiffPlan(W);
       // The job identity goes to the sink so the record can say WHAT it is a record of. resumeSig is
       // the same signature a master publishes as `inputs`, plus the geometry the file was written with.
+      const jobSig = resumeSig({ inputs: renderSig(), w: W, h: p.FH, ts: p.ts, store: p.store,
+                                 bleed: p.bleed, across: p.across, down: p.down, renders: p.renders });
+      // PICK UP, OR START OVER. Loaded, then VERIFIED by re-rendering tiles the file already holds -
+      // the signature decides whether to look, the tiles decide whether to trust. Any doubt at all
+      // takes the null and the render starts from nothing, which costs time and can never cost
+      // correctness.
+      let prior = await resumeLoad(jobSig, p.tiles);
+      let resumeWhy = null;
+      if (prior) {
+        expStat(TR('exp.preparing'), 0.01); await breathe();
+        const v = await resumeVerified(prior, p, W);
+        if (!v.ok) { prior = null; resumeWhy = v.why; }
+      }
       const sink = await tiffSink(W, p.FH, p.store, p.store, {
         sig: resumeSig({ inputs: renderSig(), w: W, h: p.FH, ts: p.ts, store: p.store,
                          bleed: p.bleed, across: p.across, down: p.down, renders: p.renders }),
         w: W, h: p.FH, ts: p.ts, store: p.store, bleed: p.bleed,
-        across: p.across, down: p.down, renders: p.renders,
-      });
+        across: p.across, down: p.down, renders: p.renders, sig: jobSig,
+      }, prior);
       const tR = Date.now();
       let bytes = 0;
       // WHERE THE TIME WENT, per render tile. Two performance.now() calls against a unit of work that
@@ -11933,8 +12058,20 @@ self.onmessage = async (e) => {
       // hand here for the deflate, so the same statistic tiff-meta computes (every 100th pixel, so the
       // two numbers are directly comparable) costs one pass over data already read.
       let litSum = 0, litUp = 0, litN = 0;
+      // SEEDED FROM THE RECORD, not from zero. These are what light.mean and the perTile arrays are
+      // built from, so a resume that restored only the tiles would publish a provenance block
+      // describing the part rendered after the crash - a master that looks finished and is not.
+      const skip = prior ? prior.state.done : null;
+      if (prior) {
+        litSum = prior.state.litSum; litUp = prior.state.litUp; litN = prior.state.litN;
+        for (const v of prior.state.tileMs) tileMs.push(v);
+        for (const v of prior.state.tileBytes) tileBytes.push(v);
+        bytes = prior.state.at - 16;
+      }
       for (let gy = 0; gy < p.rDown; gy++) for (let gx = 0; gx < p.rAcross; gx++) {
-        const n = gy * p.rAcross + gx, tTile = performance.now();
+        const n = gy * p.rAcross + gx;
+        if (skip && skip.has(n)) continue;                 // on disk already, and verified
+        const tTile = performance.now();
         let tb = 0;                                        // this render tile's share of the file
         // This tile's SHARE of the light, not the running total. The record carries deltas so a resume
         // adds them back up; a row holding the total would make every replay count the same pixels
@@ -12054,6 +12191,10 @@ self.onmessage = async (e) => {
         // Why not, when not. Absent on a master that recorded, and absent on every master written
         // before this build - so the field reads as "it did not, and here is the reason" or nothing.
         recordWhy: sink.recording ? undefined : (sink.recordWhy || undefined),
+        // A RESUMED MASTER SAYS SO. It is a legitimate thing and a reader should still know, because
+        // its tiles were painted in two sittings and possibly on two builds.
+        resumedTiles: sink.resumedTiles || undefined,
+        resumeWhy: resumeWhy || undefined,            // why a prior render was refused, when one was
         // absent = painted on this thread. `planned` and `shed` appear only when the pool narrowed
         // itself mid-render, which is the machine saying the budget was too generous for it.
         workers: poolRan ? poolRan.n : undefined,
