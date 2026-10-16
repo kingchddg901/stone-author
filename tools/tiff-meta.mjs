@@ -216,6 +216,19 @@ for (const path of paths) {
                 `${raw ? `   ${(raw / 1e6 / (ms.render / 1000)).toFixed(0)} MB/s of raw pixels in` : ''}` +
                 `${m.bytes ? `   ${(m.bytes / 1e6 / (ms.render / 1000)).toFixed(1)} MB/s out` : ''}`);
   }
+  // A RESUMED MASTER UNDERSTATES ITSELF, and the figure above is the one these tables quote. `ms.render`
+  // covers the sitting that FINISHED the file; a picture picked up after a crash cost that plus whatever
+  // the sitting before it spent. Both numbers are already here - per-tile values are arrival intervals,
+  // so they sum to wall clock, measured at 1.000 on every single-sitting master - and on a resumed one
+  // they sum across both. Measured 2026-10-16: a 32768 killed near half way reported 19.7 s and summed
+  // to 42.3 s, against 41.4 s for the same picture rendered straight through. 2.3% apart, which is the
+  // resume doing the same work in two halves rather than saving any of it.
+  if (m.resumedTiles && m.perTile && Array.isArray(m.perTile.ms)) {
+    let sum = 0; for (const v of m.perTile.ms) sum += v;
+    console.log(`  resumed  ${num(m.resumedTiles)} tile(s) came off the record` +
+                `${ms.render ? `   this sitting ${secs(ms.render)}, both sittings ${secs(sum)} from the per-tile sum` : ''}`);
+  }
+  if (m.resumeWhy) console.log(`  resumed  a prior render was refused: ${m.resumeWhy}`);
   const pt = m.perTile;
   if (pt && Array.isArray(pt.ms) && pt.ms.length) {
     const t = pt.ms, med = median(t), hi = t.filter(x => x > 2 * med);

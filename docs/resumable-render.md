@@ -1,6 +1,20 @@
 # A render that survives losing the page
 
-Status: **the part that can be tested is built and gated. The worker and the OPFS wiring are not.**
+Status: **built, and stage 4 passed on 2026-10-16.** A 32,768 was rendered, killed near half way, picked
+up and finished - and `check-same-image` found it **byte-identical to the same picture rendered straight
+through**: 280,144,040 image bytes, byte for byte. Stages 1 to 4 below are done. What has NOT been done
+is deliberately breaking the resume and watching that gate catch it; the comparison tool is independently
+proven able to go red on real masters, having reported 160 of 160 tiles differing on a genuinely
+different pair the night before, but the end-to-end break-and-catch is still owed.
+
+Stage 3 is behind `?resume=1` until that is done.
+
+**A RESUMED MASTER UNDERSTATES ITS OWN COST.** `ms.render` covers the sitting that FINISHED the file.
+Per-tile values are arrival intervals and sum to wall clock - 1.000 on every single-sitting master - so
+on a resumed one they sum across both sittings. The killed 32,768 reported 19.7 s and summed to 42.3 s,
+against 41.4 s for the same picture in one go: **2.3% apart**, which is the resume doing the same work in
+two halves rather than saving any of it. `tiff-meta` prints both, because the single figure is the one
+these tables quote.
 The record below - what is durably done, and what must match before a resume is legal - lives in the app
 as `resumeSig`, `resumeRow`, `resumeScan` and `resumeState`, and `tools/probe-resume.mjs` lifts those four
 and replays a crash at every row. Stages 1 to 4 are still ahead of it.
