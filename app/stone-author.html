@@ -9509,7 +9509,18 @@ self.onmessage = async (e) => {
   // Open the writer, or report why not. Every failure here is survivable - the caller falls back to the
   // path it used before - so this resolves null rather than throwing, and says nothing to the user:
   // a device without sync access handles still renders, it just cannot resume.
+  // AN ESCAPE HATCH FOR A PATH NOBODY HAS RUN. ?writer=0 refuses the worker and falls through to the
+  // two paths that were here before, which is what the app did up to and including build .87. It exists
+  // because this one cannot be tested where it was written - Playwright will not spawn here - and the
+  // first thing it touches is a render that can run for six hours. Without a flag, the only way back
+  // from a bad writer is a revert and a deploy, and the device that needs this most is a tablet on the
+  // other side of a share. Read once at boot, like ?tile= and ?mem= beside it.
+  const WRITER_OFF = (() => {
+    try { return /^(0|off|no)$/i.test(new URLSearchParams(location.search).get('writer') || ''); }
+    catch (_) { return false; }
+  })();
   async function openWriter(name) {
+    if (WRITER_OFF) return null;
     if (typeof Worker !== 'function' || !(navigator.storage && navigator.storage.getDirectory)) return null;
     let url = null, wk = null;
     try {
