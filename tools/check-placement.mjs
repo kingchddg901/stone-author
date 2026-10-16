@@ -70,7 +70,7 @@ console.log(`${W.toLocaleString()} x ${H.toLocaleString()}, tiled ${TW}, ${offs.
 
 const want = ALL ? offs.length : Math.min(40, offs.length);
 const step = Math.max(1, Math.floor(offs.length / want));
-let checked = 0, cells = 0, bad = [], unmarked = 0;
+let checked = 0, cells = 0, bad = [], unmarked = 0, sig = null;
 for (let i = 0; i < offs.length; i += step) {
   const px = inflateSync(at(offs[i], cnts[i]));
   const tx = i % cols, ty = (i / cols) | 0;
@@ -78,11 +78,16 @@ for (let i = 0; i < offs.length; i += step) {
   checked++;
   for (const c of got) {
     cells++;
+    // The key BEFORE the early exit. It was taken after it, so a cell that was correctly placed
+    // skipped past and only a MISPLACED one ever recorded a signature - which on a clean file is
+    // none, and the one line worth printing went missing on exactly the runs that pass.
+    if (c.present && c.got.ver === MARK_VER && sig === null) sig = c.got.sig;
     if (c.ok) continue;
     // A cell whose version is not ours is not a WRONG address, it is no address: an unmarked master,
     // or one written by a scheme this build does not know. Said apart, because treating "no mark" as
     // "moved" would condemn every master rendered before marking existed.
     if (!c.present || c.got.ver !== MARK_VER) { unmarked++; continue; }
+    if (sig === null) sig = c.got.sig;        // taken HERE, while the file is still open
     if (bad.length < 8) bad.push({ at: c.want, says: { cx: c.got.cx, cy: c.got.cy }, sig: c.got.sig });
   }
 }
@@ -97,9 +102,9 @@ if (unmarked === cells) {
 }
 if (unmarked) console.log(`  ${unmarked.toLocaleString()} cell(s) carry no readable mark`);
 if (!bad.length) {
-  const sig = (() => { for (let i = 0; i < offs.length; i += step) {
-    const g = markRead(inflateSync(at(offs[i], cnts[i])), TW, i % cols, (i / cols) | 0);
-    for (const c of g) if (c.ok) return c.got.sig; } return null; })();
+  // The signature was taken during the pass above. The first version looked it up afterwards, by which
+  // point the file had been closed - EBADF, at the very end of an otherwise clean run, which is the
+  // worst place to put a crash: everything it was asked to check had already passed.
   console.log(`  every cell read sits where it says it does` + (sig ? `, and all of them say picture ${sig}` : ''));
   process.exit(0);
 }
