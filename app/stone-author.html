@@ -1766,7 +1766,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.118';
+  const BUILD = '2026.10.16.119';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -8867,7 +8867,19 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Both records carry a timestamp and the newer one wins, which is what makes phone-to-desktop work.
   const STORE_KEY = 'stone-author:autosave:v1';
   let saveTimer = 0, cloudTimer = 0, cloudDoc = null, cloudAt = 0;
-  const wrap = () => ({ t: Date.now(), slab: serialize() });
+  // THE LIGHT RIDES HERE, NOT IN THE SLAB. It reaches the pixels - renderSig hashes it, and a daylight
+  // and a black-light master of one slab are different pictures - so it is not a mere viewing setting.
+  // But it must not go INSIDE serialize(): the device seal keys off a rest-spread over that object, so
+  // any new field there rotates the key and every master already sealed stops opening under a re-saved
+  // slab. That has cost a day of masters twice already. The wrapper is this device's own copy of where
+  // you left off, which is exactly what a light belongs to; a slab FILE still opens in daylight, so one
+  // sent to somebody else does not arrive wearing your light.
+  //
+  // WHY IT MATTERS BEYOND CONVENIENCE: a reload used to drop the light, so renderSig moved, so a killed
+  // UV render could never be matched to its own record. The offer simply did not appear, and nothing
+  // said why. Spectrum and beam only - a crossfade in progress still will not match after a reload,
+  // because crossOn and its two stops are not carried here.
+  const wrap = () => ({ t: Date.now(), slab: serialize(), light: { spectrum: lightSpectrum, spot: spotOn } });
   const unwrap = o => (o && o.slab ? o : { t: 0, slab: o });     // older autosaves stored the bare slab
 
   function writeLocal() {
@@ -8892,7 +8904,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function tryLoadLocal() {
     try {
       const s = localStorage.getItem(STORE_KEY);
-      if (s) { const r = unwrap(JSON.parse(s)); if (deserialize(r.slab)) { localAt = r.t || 0; return true; } }
+      if (s) {
+        const r = unwrap(JSON.parse(s));
+        if (deserialize(r.slab)) {
+          // AFTER deserialize, which clears the light on purpose so a loaded slab never arms one over
+          // a picture somebody just said they wanted unchanged. This is the autosave, not a file: the
+          // light it carries is the one this device was last working under.
+          if (r.light) { setSpectrum(+r.light.spectrum || 0); setSpot(!!r.light.spot); }
+          localAt = r.t || 0; return true;
+        }
+      }
     } catch (_) { /* ignore */ }
     return false;
   }
@@ -11188,6 +11209,14 @@ self.onmessage = async (e) => {
     document.getElementById('uv-toggle').setAttribute('aria-pressed', uvMode);
     syncCoat();                                            // whatever moved the light, the panel agrees with it
     if (uvMode && view !== 'stone') { view = 'stone'; press('[data-view]', document.getElementById('v-stone')); }
+    saveLocal();     // HERE, not at each call site: three routes move the light and only one of them saved
+  }
+  // ONE READER FOR THE BEAM TOO, so a restore and a click cannot disagree about the button's state.
+  function setSpot(on) {
+    spotOn = !!on;
+    const so = document.getElementById('spot-toggle');
+    if (so) so.setAttribute('aria-pressed', spotOn);
+    saveLocal();
   }
   document.getElementById('uv-toggle').addEventListener('click', () => {   // Black light = jump the light to the UV end (−1), or back to daylight
     setSpectrum(lightSpectrum !== 0 ? 0 : -1);
@@ -11244,7 +11273,7 @@ self.onmessage = async (e) => {
     });
   }
   { const so = document.getElementById('spot-toggle');     // SPOTLIGHT: the light becomes a movable beam (drag it with the Light tool)
-    if (so) so.addEventListener('click', () => { spotOn = !spotOn; so.setAttribute('aria-pressed', spotOn); hint(spotOn ? TR('hint.spotlight-on-only-artifacts-inside-the') : null); saveLocal(); redraw(false); }); }
+    if (so) so.addEventListener('click', () => { setSpot(!spotOn); hint(spotOn ? TR('hint.spotlight-on-only-artifacts-inside-the') : null); redraw(false); }); }
   for (const id of Object.keys(NEXT)) {
     const el = document.getElementById(id);
     if (!el) continue;
