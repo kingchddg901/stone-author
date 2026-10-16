@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.93';
+  const BUILD = '2026.10.16.94';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9608,9 +9608,16 @@ self.onmessage = async (e) => {
     try { return /^(0|off|no)$/i.test(new URLSearchParams(location.search).get('writer') || ''); }
     catch (_) { return false; }
   })();
+  // WHY IT REFUSED, kept where the sink can reach it. ENOWRITER meant three different things on its
+  // first outing - the flag was set, the platform has no sync handles, or the worker threw - and a
+  // master reporting it could not say which. A diagnostic with one code for three causes is a
+  // diagnostic that still needs a round trip, which is the thing it exists to save.
+  let writerWhy = null;
   async function openWriter(name) {
-    if (WRITER_OFF) return null;
-    if (typeof Worker !== 'function' || !(navigator.storage && navigator.storage.getDirectory)) return null;
+    writerWhy = null;
+    if (WRITER_OFF) { writerWhy = 'EWROFF'; return null; }       // ?writer=0 on the URL, read at boot
+    if (typeof Worker !== 'function' || !(navigator.storage && navigator.storage.getDirectory)) {
+      writerWhy = 'ENOPLATFORM'; return null; }                  // no workers, or no OPFS at all
     let url = null, wk = null;
     try {
       url = URL.createObjectURL(new Blob([WRITER_SRC], { type: 'text/javascript' }));
@@ -9640,6 +9647,7 @@ self.onmessage = async (e) => {
     } catch (_) {
       if (wk) { try { wk.terminate(); } catch (_) {} }
       if (url) { try { URL.revokeObjectURL(url); } catch (_) {} }
+      writerWhy = 'EWOPEN ' + String((_ && _.message) || _).slice(0, 90);
       return null;                                       // no sync handles here: the caller falls back
     }
   }
@@ -9689,7 +9697,7 @@ self.onmessage = async (e) => {
         recOk = false; recWhy = String((ex && ex.message) || ex).slice(0, 120);
       }
     } else if (wr) { recWhy = 'ENOJOB'; }            // the sink was given no identity to record
-    else { recWhy = 'ENOWRITER'; }               // no sync access handle on this device
+    else { recWhy = writerWhy || 'ENOWRITER'; }  // why the worker is not here, not merely that
     return {
       toDisk: !!w || !!wr, tiles: N,
       // Tiles arrive in whatever order they are produced. A tiled TIFF does not care — the offset array is
