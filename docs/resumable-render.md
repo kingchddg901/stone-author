@@ -190,6 +190,18 @@ error. Rows are recorded in WRITE order and nothing reads them assuming an order
 count-based resume from quietly appearing - the loop consumes render tiles in index order today, the pool
 paints them out of order, and the sink is already index-addressed for the cut.
 
+**`tiffLayout` did not keep that discipline, and was fixed on 2026-10-16.** It took the end of the file
+from `offs[N - 1] + cnts[N - 1]` — the tile with the highest *index*, which is a claim about *write*
+order and a different thing entirely. It held only because the export loop's nested quarters happen to
+finish on tile `N-1`; it would have stopped holding the day pool results are consumed as they land, or
+a cut reorders its pieces, or a resume fills a gap left in the middle. The end is now the maximum over
+every tile, and a tile that was never written throws instead of reaching the header as `NaN`.
+
+The cost of getting it wrong is not a failed render but a convincing one. Fed the same tiles in reverse
+write order, the old line put the directory **4,263,063,287 bytes inside the tile data** —
+[`probe-tiff-offsets`](../tools/probe-tiff-offsets.mjs) case E, with the ablation that proves a grid
+written in index order is unaffected, so what is under test is the ordering and not the arithmetic.
+
 ## A signature is not evidence, and one of ours was wrong
 
 This document chose `renderSig` as the resume identity on the grounds that it covers the inputs that

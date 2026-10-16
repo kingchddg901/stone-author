@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.105';
+  const BUILD = '2026.10.16.106';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9317,7 +9317,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const ENTRIES = dsc ? 14 : 13, IFD_LEN = 8 + ENTRIES * 20 + 8, pad8 = n => Math.ceil(n / 8) * 8;
     const u64 = (dv, p, v) => { dv.setUint32(p, v >>> 0, true); dv.setUint32(p + 4, Math.floor(v / 4294967296), true); };
 
-    const end = N ? offs[N - 1] + cnts[N - 1] : 16;
+    // THE TRUE END, NOT THE LAST INDEX. This was `offs[N - 1] + cnts[N - 1]`, which is a different
+    // claim: that the tile with the highest INDEX is the one written LAST. Offsets are handed out in
+    // WRITE order by a sink that is index-addressed, and resumeState's own comment refuses to assume
+    // that order for exactly this reason. It held here by ACCIDENT - the export loop's nested quarters
+    // happen to finish on tile N-1 - and stops holding the day pool results are consumed as they land,
+    // or a cut reorders its pieces, or a resume fills a gap left in the middle. Getting it wrong puts
+    // the IFD ON TOP of tile data at the last step of a render measured in hours, and what comes out
+    // is a master that looks valid and is not. A pass over N offsets is nothing beside that: 163,840
+    // of them costs well under a millisecond against the minutes that wrote them.
+    //
+    // The missing-tile throw is the other half. A hole used to surface only if it happened to be at
+    // N-1, where `undefined + undefined` is NaN and every position downstream silently becomes NaN.
+    let end = 16;
+    for (let i = 0; i < N; i++) {
+      if (offs[i] === undefined) throw new Error(`tiff: tile ${i} of ${N} was never written`);
+      const stop = offs[i] + cnts[i];
+      if (stop > end) end = stop;
+    }
     const ifdAt = pad8(end), gap = ifdAt - end;
     let ext = ifdAt + IFD_LEN;
     const dscAt = ext; if (dsc) ext = pad8(ext + dsc.length);

@@ -117,5 +117,71 @@ console.log('\nablation: pad8 back to the bitwise form');
   }
 }
 
+// ---- E, F: WRITE ORDER IS NOT INDEX ORDER ---------------------------------------------------------
+//
+// Offsets are handed out in WRITE order by a sink addressed by INDEX. `resumeState` says so in as many
+// words and refuses to assume the order; tiffLayout assumed it anyway, taking the end of the file from
+// `offs[N - 1] + cnts[N - 1]`. That holds only while the highest-INDEX tile is also the LAST WRITTEN -
+// an accident of today's export loop, not a property of the sink.
+//
+// THE INPUT THAT MAKES THIS RED is E: the same tiles, the same lengths, handed over in an order that
+// ends somewhere other than N-1. Under the old line the directory is placed BELOW the end of the tile
+// data, so the master overwrites its own last tile - with every byte already on disk, at the last step.
+
+// The same grid written back-to-front: tile N-1 goes down FIRST and tile 0 LAST. Every tile present,
+// every length unchanged; only the order they reached the sink differs.
+function reversed(across, down, end) {
+  const N = across * down, each = Math.floor((end - 16) / N);
+  const offs = new Array(N), cnts = new Array(N);
+  let at = 16;
+  for (let w = 0; w < N; w++) {                  // w is WRITE order, i is the tile's INDEX
+    const i = N - 1 - w;
+    cnts[i] = w === N - 1 ? end - at : each;
+    offs[i] = at; at += cnts[i];
+  }
+  return { offs, cnts, N };
+}
+
+console.log('');
+console.log('E  the same tiles written back-to-front: the data ends at index 0, not index N-1');
+{
+  const W = 262144, H = 163840, end = 4264729215;
+  const { offs, cnts, N } = reversed(Math.ceil(W / 4096), Math.ceil(H / 4096), end);
+  claim('the fixture really does end somewhere other than N-1',
+        offs[N - 1] + cnts[N - 1] < end && offs[0] + cnts[0] === end, true);
+  const ifdAt = u64at(layout(W, H, 4096, 4096, offs, cnts, 'probe').head, 8);
+  console.log('  E: data really ends ' + end + ', IFD at ' + ifdAt);
+  claim('the directory still lands after ALL the tile data', ifdAt >= end, true);
+  claim('and is 8-byte aligned', ifdAt % 8, 0);
+
+  // THE ABLATION. Put the index assumption back: E must go red while A - a grid written in index
+  // order - keeps passing, or what is under test is not the ordering.
+  const CUT = 'let end = 16;', TAIL = String.fromCharCode(10) + '    }';
+  const c0 = LAYOUT.indexOf(CUT), c1 = LAYOUT.indexOf(TAIL, c0);
+  const old = c0 < 0 || c1 < 0 ? LAYOUT
+    : LAYOUT.slice(0, c0) + 'let end = N ? offs[N - 1] + cnts[N - 1] : 16;' + LAYOUT.slice(c1 + TAIL.length);
+  if (old === LAYOUT) { console.log('  FAIL  could not find the end loop to ablate - probe is stale'); fails++; }
+  else {
+    const bad = build(old);
+    const badIfd = u64at(bad(W, H, 4096, 4096, offs, cnts, 'probe').head, 8);
+    claim('ABLATION the index assumption puts the directory INSIDE the tile data', badIfd < end, true);
+    console.log('          IFD at ' + badIfd + ', which is ' + (end - badIfd) + ' bytes BEFORE the data ends');
+    const a = grid(32, 20, 1348000003);
+    claim('while a grid written in INDEX order is unaffected - the defect is the ORDER',
+          u64at(bad(131072, 81920, 4096, 4096, a.offs, a.cnts, 'probe').head, 8) >= 1348000003, true);
+  }
+}
+
+console.log('');
+console.log('F  a tile that was never written');
+{
+  const { offs, cnts } = grid(8, 5, 100000);
+  delete offs[17];                               // a hole in the MIDDLE, where nothing used to look
+  let msg = null;
+  try { layout(32768, 20480, 4096, 4096, offs, cnts, 'probe'); } catch (e) { msg = String(e.message); }
+  claim('a hole anywhere is refused, not carried into the header', /never written/.test(msg || ''), true);
+  console.log('          ' + msg);
+}
+
 console.log(fails ? `\n${fails} FAILED\n` : '\nall claims hold\n');
 process.exit(fails ? 1 : 0);
