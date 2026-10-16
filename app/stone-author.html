@@ -738,10 +738,6 @@
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.glow-lift-note">Glow lift: under black light each element draws its own halo, and this mixes that halo toward white (or, negative, toward black). Auto uses the value measured for this browser engine so a set rendered across machines agrees. Turn Auto off to leave it deliberately — engine character is a choice, not a fault.</span></div>
     <div class="sl"><label for="glowlift"><span data-i18n="sl.glowlift">Glow lift</span> <output id="glowliftV"></output></label><input id="glowlift" type="range" min="-1" max="1" step="0.01" disabled></div>
     <div class="sl"><span class="lbl" data-i18n="lbl.glow-auto">Glow</span><div class="grp"><label class="tgl"><input type="checkbox" id="glow-auto" checked><span data-i18n="big.glow-auto">Auto</span></label></div></div>
-    <dialog id="bigdlg"><form method="dialog">
-      <p class="note" id="bigdlg-text"></p>
-      <div class="grp"><button value="cancel" data-i18n="btn.cancel">Cancel</button><button value="go" id="bigdlg-go" class="warn" data-i18n="btn.start-giant">Start giant render</button></div>
-    </form></dialog>
   </div></details>
   <details class="sec" data-mat-only="stone"><summary data-i18n="sec.how-the-tools-read">How the tools read</summary><div class="body">
   <p class="note" id="fwd" data-i18n="btn.fwd">Settings apply to your next line. Lines already down keep the settings they were drawn with. Pen pressure and tilt are among them: with pressure on, how hard you press sets a vein&rsquo;s width along its length and a pour&rsquo;s flow; with tilt on, leaning the pen further than you normally hold it softens the vein&rsquo;s edge along its length.</p>
@@ -767,6 +763,16 @@
   </div></details>
   </div><!-- /rail -->
   </div><!-- /work -->
+  <!-- AT THE END OF THE WRAP, NOT INSIDE A SECTION. This lived in the body of the Render section, which
+       is a collapsed <details> on load. showModal() promotes a dialogue to the top layer, but an ancestor
+       that is not rendering gives it a 0x0 box and it never paints - while `open` reads true the whole
+       time, so nothing in the page says anything is wrong. It only ever worked because the one caller
+       that existed, the giant-render warning, is reached by ticking a box INSIDE that section, so the
+       section was open by definition. The resume dialogue is raised on load, when it is not. -->
+    <dialog id="bigdlg"><form method="dialog">
+      <p class="note" id="bigdlg-text"></p>
+      <div class="grp"><button value="cancel" data-i18n="btn.cancel">Cancel</button><button value="go" id="bigdlg-go" class="warn" data-i18n="btn.start-giant">Start giant render</button></div>
+    </form></dialog>
 </div>
 <script id="sa-i18n">
 // Material Author i18n. English is the source of truth and ships inline; every user-facing string in the
@@ -1043,6 +1049,9 @@ window.SA_I18N = (() => {
   "resume.go": "Resume {w} × {h}",
   "resume.note": "{n} of {of} tiles already on disk",
   "resume.waiting": "You have an unfinished render",
+  "resume.dlg": "You have an unfinished render.\n\n{material}, {light}\n{w} × {h}\n{done} tiles done / {left} remaining",
+  "resume.light-unknown": "light not recorded",
+  "btn.resume": "Resume",
   "resume.note-light": "{n} of {of} tiles already on disk, {light}",
   "resume.light-day": "daylight",
   "resume.light-uv": "black light, spectrum {s}",
@@ -1744,7 +1753,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.111';
+  const BUILD = '2026.10.16.113';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9943,7 +9952,27 @@ self.onmessage = async (e) => {
     f.textContent = on ? TR('resume.waiting') : '';
     f.hidden = !on;
   }
-  let resumeJob = null, resumeShown = '';
+  // ASKED ONCE, ON LOAD. The header badge is the standing fact; this is the one moment it is worth
+  // interrupting for, because the alternative is discovering hours later that the work was already
+  // half done. Cancelling leaves the badge and the button exactly where they are.
+  //
+  // THE MATERIAL IS NOT IN THE RECORD AND DOES NOT NEED TO BE. It reaches the pixels, so it is inside
+  // `inputs`, which is a crc32 - unreadable. But this offer only EXISTS when that hash matches, and
+  // the material is part of what it hashes, so the material on screen IS the job's material. Stating
+  // it from currentMaterial() is not a guess; the match is what makes it true.
+  async function resumeAsk(done, of) {
+    const job = resumeJob;
+    if (!job) return;
+    const light = job.spectrum === undefined ? TR('resume.light-unknown')
+      : job.spectrum === 0 ? TR('resume.light-day') : TR('resume.light-uv', { s: job.spectrum });
+    const text = TR('resume.dlg', {
+      material: TR('mat.' + currentMaterial()), light,
+      w: job.w.toLocaleString(), h: job.h.toLocaleString(),
+      done: done.toLocaleString(), left: (of - done).toLocaleString(),
+    });
+    if (await bigDialog(text, TR('btn.resume'))) await resumeStart();
+  }
+  let resumeJob = null, resumeShown = '', resumeDone = 0, resumeOf = 0;
   async function resumeOffer() {
     const row = document.getElementById('resume-row');
     if (!row) return;
@@ -9973,6 +10002,7 @@ self.onmessage = async (e) => {
       document.getElementById('resume-note').textContent = light
         ? TR('resume.note-light', { n: seen.size, of: found.job.across * found.job.down, light })
         : TR('resume.note', { n: seen.size, of: found.job.across * found.job.down });
+      resumeDone = seen.size; resumeOf = found.job.across * found.job.down;
       resumeShown = key;
     }
     resumeJob = found.job; row.hidden = false; resumeFlag(true);
@@ -11358,7 +11388,7 @@ self.onmessage = async (e) => {
   // which is the part that costs the render rather than the click. The tier behind that width is armed
   // through the SAME dialogue the tickbox uses: the warning belongs to the size, not to the route that
   // reached it, and this route commits exactly as much work as the other one.
-  document.getElementById('resume-go').addEventListener('click', async () => {
+  async function resumeStart() {
     const job = resumeJob;
     if (!job) return;
     const sel = document.getElementById('expres'), want = String(job.w);
@@ -11381,7 +11411,8 @@ self.onmessage = async (e) => {
     // say. Saying so beats starting a render at a width that cannot match the record it came from.
     if (sel.value !== want) { hint(TR('resume.gone')); return; }
     document.getElementById('export').click();
-  });
+  }
+  document.getElementById('resume-go').addEventListener('click', resumeStart);
 
   document.getElementById('export').addEventListener('click', async () => {
     const W = +document.getElementById('expres').value;
@@ -12703,7 +12734,7 @@ self.onmessage = async (e) => {
   // the default slab, never the restored one, so the record could not match and the row stayed hidden
   // on exactly the load it exists for. It read as a feature that simply did not work, and every gate
   // was green - no gate executes a page.
-  resumeOffer();
+  resumeOffer().then(() => { if (resumeJob) resumeAsk(resumeDone, resumeOf); });
   // AND WHENEVER THE SECTION IS OPENED. Editing the slab moves renderSig, so an offer made before an
   // edit is stale afterwards - still showing for a picture that has moved on. applyTiers covers the
   // export controls; this covers reaching the section at all, which is the moment before anyone could

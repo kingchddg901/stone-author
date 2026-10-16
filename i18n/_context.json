@@ -3664,5 +3664,22 @@
  },
  "resume.waiting": {
   "where": "a short standing notice shown beside the word \"Render\" in that section's collapsed header, when an unfinished render of the picture on screen is waiting on disk. It is a sentence, not a label, and it is not dismissed - it disappears when the render is finished or abandoned."
+ },
+ "resume.dlg": {
+  "placeholders": {
+   "material": "stone, wood or glass, already translated",
+   "light": "the light it was rendered under, already translated",
+   "w": "its width in pixels",
+   "h": "its height in pixels",
+   "done": "how many tiles are already written",
+   "left": "how many are still to do"
+  },
+  "where": "the body of a dialogue shown once on page load when an unfinished render of the picture on screen is waiting. Blank lines and line breaks are kept as written."
+ },
+ "resume.light-unknown": {
+  "where": "stands in for the light in the resume dialogue when the record predates the field, so the light it was made under is genuinely not known. Not a guess, and not 'unknown light' - the record simply does not say. Lower case: it sits mid-line."
+ },
+ "btn.resume": {
+  "where": "the confirming button of the resume dialogue; it continues the unfinished render. An imperative verb, as on any button."
  }
 }

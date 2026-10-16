@@ -738,5 +738,8 @@
  "resume.note-light": "{n} di {of} tasselli già su disco, {light}",
  "resume.light-day": "luce diurna",
  "resume.light-uv": "luce di Wood, spettro {s}",
- "resume.waiting": "Hai un render incompiuto"
+ "resume.waiting": "Hai un render incompiuto",
+ "resume.dlg": "Hai un render incompiuto.\n\n{material}, {light}\n{w} × {h}\n{done} tasselli completati / {left} rimanenti",
+ "resume.light-unknown": "luce non registrata",
+ "btn.resume": "Riprendi"
 }
