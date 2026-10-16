@@ -1771,7 +1771,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.124';
+  const BUILD = '2026.10.16.125';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9378,6 +9378,46 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // The file's shape, computed from where the tiles actually landed: a 16-byte header, the tile payloads
   // back to back, then the directory that says where each one is. Shared by both writers below so they
   // cannot drift apart — they are not two formats, they are the same bytes assembled differently.
+  // THE REDUCER, for overview levels. A fixed 2x2 box and nothing adjustable about it: two renders of
+  // one picture must produce identical overviews, or a master with levels stops reproducing - and every
+  // cross-engine comparison in this repo rests on that. It is here rather than in the tool that will
+  // retrofit existing masters, so the two cannot fork; tools/lib/pyramid.mjs lifts it the way
+  // tools/lib/mark.mjs lifts the mark format.
+  //
+  // INTEGER, NOT CLAMPED. Uint8ClampedArray rounds half to EVEN on assignment, Math.round rounds half
+  // UP, and a reducer that used both would disagree with itself depending on which branch ran. The
+  // opaque path is `(sum + 2) >> 2`, exact and engine-independent; nothing reaches a clamp.
+  //
+  // ALPHA IS UNASSOCIATED here (ExtraSamples 2), so averaging RGB directly is only right while alpha is
+  // uniform. It is, in every render so far, which is exactly the sort of thing that stops being true
+  // without announcing it. The premultiplied sum over the alpha sum is correct either way and collapses
+  // to the plain average when alpha is constant, so the general case costs nothing to be right about.
+  function reduce2(src, w, h) {
+    const ow = w >> 1, oh = h >> 1;                      // whole blocks only; an odd edge is the caller's
+    const out = new Uint8Array(ow * oh * 4);
+    const row = w * 4;
+    for (let y = 0; y < oh; y++) {
+      const r0 = y * 2 * row, r1 = r0 + row;
+      for (let x = 0; x < ow; x++) {
+        const i0 = r0 + x * 8, i1 = r1 + x * 8, o = (y * ow + x) * 4;
+        const a = src[i0 + 3] + src[i0 + 7] + src[i1 + 3] + src[i1 + 7];
+        if (a === 1020) {                                // four opaque samples: the whole picture, today
+          out[o]     = (src[i0]     + src[i0 + 4] + src[i1]     + src[i1 + 4] + 2) >> 2;
+          out[o + 1] = (src[i0 + 1] + src[i0 + 5] + src[i1 + 1] + src[i1 + 5] + 2) >> 2;
+          out[o + 2] = (src[i0 + 2] + src[i0 + 6] + src[i1 + 2] + src[i1 + 6] + 2) >> 2;
+          out[o + 3] = 255;
+        } else if (a === 0) {
+          out[o] = out[o + 1] = out[o + 2] = out[o + 3] = 0;   // nothing there: no colour to carry
+        } else {
+          for (let c = 0; c < 3; c++)
+            out[o + c] = Math.round((src[i0 + c] * src[i0 + 3] + src[i0 + 4 + c] * src[i0 + 7]
+                                   + src[i1 + c] * src[i1 + 3] + src[i1 + 4 + c] * src[i1 + 7]) / a);
+          out[o + 3] = (a + 2) >> 2;
+        }
+      }
+    }
+    return out;
+  }
   function tiffLayout(W, H, tileW, tileH, offs, cnts, desc) {
     const across = Math.ceil(W / tileW), down = Math.ceil(H / tileH), N = across * down;
     if (offs.length !== N) throw new Error(`tiff: got ${offs.length} tiles, expected ${across}x${down}`);

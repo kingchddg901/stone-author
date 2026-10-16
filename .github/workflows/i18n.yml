@@ -11,37 +11,25 @@ on:
     paths:
       - 'app/stone-author.html'
       - 'i18n/**'
-      - 'tools/check-i18n.mjs'
-      - 'tools/check-build.mjs'
-      - 'tools/check-render-purity.mjs'
-      - 'tools/check-wake-lock.mjs'
-      - 'tools/check-device-seal.mjs'
-      - 'tools/check-bleed.mjs'
-      - 'tools/check-png-meta.mjs'
-      - 'tools/check-fn-refs.mjs'
-      - 'tools/check-material-fork.mjs'
-      - 'tools/check-scope.mjs'
-      - 'tools/check-worker-core.mjs'
+      # EVERYTHING IN tools/, not a list of names. The list was of check-* files only, so the six
+      # probes wired into this workflow on 2026-10-16 ran when the APP changed and never when the
+      # PROBE did - a gate can be edited into uselessness and nothing would have run it. A name that
+      # has to be added by hand is a name somebody forgets; the extra CI minutes on an unrelated
+      # script are cheaper than a silent gap.
+      - 'tools/**'
       - 'docs/functions.md'
-      - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
   pull_request:
     paths:
       - 'app/stone-author.html'
       - 'i18n/**'
-      - 'tools/check-i18n.mjs'
-      - 'tools/check-build.mjs'
-      - 'tools/check-render-purity.mjs'
-      - 'tools/check-wake-lock.mjs'
-      - 'tools/check-device-seal.mjs'
-      - 'tools/check-bleed.mjs'
-      - 'tools/check-png-meta.mjs'
-      - 'tools/check-fn-refs.mjs'
-      - 'tools/check-material-fork.mjs'
-      - 'tools/check-scope.mjs'
-      - 'tools/check-worker-core.mjs'
+      # EVERYTHING IN tools/, not a list of names. The list was of check-* files only, so the six
+      # probes wired into this workflow on 2026-10-16 ran when the APP changed and never when the
+      # PROBE did - a gate can be edited into uselessness and nothing would have run it. A name that
+      # has to be added by hand is a name somebody forgets; the extra CI minutes on an unrelated
+      # script are cheaper than a silent gap.
+      - 'tools/**'
       - 'docs/functions.md'
-      - 'tools/lib/device-seal.mjs'
       - '.github/workflows/i18n.yml'
   workflow_dispatch:
 
@@ -85,6 +73,8 @@ jobs:
         run: node tools/check-worker-core.mjs
       - name: A tile carries its address, and a moved one is caught
         run: node tools/probe-mark.mjs
+      - name: The overview reducer is a pure function of the picture
+        run: node tools/probe-reduce.mjs
       - name: Two masters of one picture are the same picture, and a marked one says so
         run: node tools/check-same-image.mjs --selftest
       - name: The directory lands after the tile data, whatever order the tiles arrived in
