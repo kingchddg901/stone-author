@@ -1,7 +1,7 @@
 # Master sidecars — the fleet, and the size ladder
 
 The metadata extract (a **sidecar**) from a master: what it was, what made it, and how long each tile
-took. **Twenty masters, twenty sidecars**, in four sets that are evidence for four different things.
+took. **Twenty-one masters, twenty-one sidecars**, in four sets that are evidence for four different things.
 
 **The fleet** — one **65,535 × 40,959** master (≈2.684 gigapixels) rendered on each device in the
 [fleet](../devices.md), under each browser engine it ran, in **daylight** (spectrum 0) and **UV / black
@@ -96,22 +96,43 @@ said in pixels.
 - At the slab's real 8 × 5 ft, the 262,144 master is **2,731 DPI**. It stops there by decision rather than
   by limit: opening one costs about 443 GB of working space.
 
-## Cross-engine bit-identity — one picture, two engines, two architectures
+## Cross-engine bit-identity — one picture, two engines, two architectures, two tile sizes
 
-| device | engine | cores | workers | dpr | toDisk | min | med tile ms | file bytes | sidecar |
+| device | engine | cores | workers | tile | toDisk | min | med tile ms | file bytes | sidecar |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| iPhone 14 Pro — A16 Bionic | ios-safari | 4 reported, 6 real | 4 | 3 | true | 35.05 | 12 | 1,012,119,232 | `iPhone wood test-262144-day-ios-safari-1014-225800.json` |
-| Desktop — AMD Ryzen 5 5500 | win-chrome | 12 | 8 | 1.5 | false | 35.49 | 13 | 895,438,456 | `iPhone wood test-262144-day-win-chrome-1014-235042.json` |
-| iPhone 14 Pro — A16 Bionic | ios-safari | 4 reported, 6 real | **2**, shed from 4 | 3 | true | 32.26 | 10 | 1,012,081,296 | `iPhone wood test-262144-day-ios-safari-1015-002415.json` |
+| Desktop — AMD Ryzen 5 5500 | win-chrome | 12 | 8 | 512 | false | 35.49 | 13 | 895,438,456 | `iPhone wood test-262144-day-win-chrome-1014-235042.json` |
+| iPhone 14 Pro — A16 Bionic | ios-safari | 4 reported, 6 real | 4 | 512 | true | 35.05 | 12 | 1,012,119,232 | `iPhone wood test-262144-day-ios-safari-1014-225800.json` |
+| iPhone 14 Pro — A16 Bionic | ios-safari | 4 reported, 6 real | **2**, shed from 4 | 512 | true | 32.26 | 10 | 1,012,081,296 | `iPhone wood test-262144-day-ios-safari-1015-002415.json` |
+| Galaxy S23 Ultra — Snapdragon 8 Gen 2 | android-chrome | 8 | **2**, shed from 8 | **1024** | true | 49.89 | 64 | 887,932,456 | `iPhone wood test on s23-262144-day-android-chrome-1015-084911.json` |
 
-One slab at 262,144 × 163,840 — 42.95 gigapixels — in daylight, build `2026.10.14.82`, bleed 4, tile
-forced to 512 on all three, 163,840 tiles each. All three carry `inputs` **`8cef8303`** and report light
-mean 52.84 at lit>40 98.77%.
+One slab at 262,144 × 163,840 — 42.95 gigapixels — in daylight, bleed 4. All four carry `inputs`
+**`8cef8303`** and report light mean 52.84 at lit>40 98.77%. Three are build `2026.10.14.82` at a forced
+tile 512, 163,840 tiles each; the S23 is build `2026.10.15.83` at tile 1024, 40,960 tiles. Only the S23's
+block can name its own material, because that key landed between the two builds — the other three say
+`family: carrara` on a wood slab and nothing else, which is the defect noted at the top of this file.
 
-**Every one of the 163,840 tile pairs is byte-identical after inflation** — 160 GiB of RGBA on each
-side, zero differing bytes. Not a sample; the whole picture. A Blink renderer on x86-64 Windows and a
-WebKit renderer on ARM produced the same 43 gigapixels to the bit. The two WebKit runs agree on their
-stored bytes as well, all 1,008,199,704 of them, so the deflate is deterministic within an engine too.
+**Every pixel of all four masters is identical.** Not a sample — the whole picture, every time:
+
+| pairing | compared | result |
+| --- | --- | --- |
+| Blink x86-64 @512 vs WebKit ARM @512 | 163,840 tile pairs, 160 GiB | 0 differing bytes |
+| Blink x86-64 @512 vs **Blink ARM @1024** | 40,960 tile pairs, 160 GiB | 0 differing bytes |
+| WebKit ARM @512 vs WebKit ARM @512 | 1,008,199,704 stored bytes | identical before inflation |
+
+Two engines, two CPU architectures, two tile sizes, four masters, nothing between them. The third row is
+the control: two runs on one device agree on their *stored* bytes, so the deflate is deterministic within
+an engine as well as the pixels being deterministic across engines.
+
+**The second row is the one that was not expected.** [`renderer-determinism.md`](../renderer-determinism.md)
+tables Blink-x86 against Blink-ARM as *not* bit-identical — ±1–3 levels, 0.03% beyond ±8 — measured on
+`Hero_Psyker` at 666 marks. On wood the same two engines agree exactly. That was predicted here from the
+paint path before the S23 master existed, and the master then agreed: what goes through `putImageData` is
+exact everywhere, what goes through the rasteriser is not.
+
+**And it says the tile size leaves no trace.** A 512-tiled render and a 1024-tiled render of one picture
+are not merely similar, they are byte-equal — so the bleed and the tile seam are invisible in the output,
+at a different tile size, on a different CPU architecture. The seam work elsewhere in this repo looked for
+a defect; this is the positive result, which is the harder one to get.
 
 - **The files differ by about 13% and none of it is pixels.** 895 MB against 1,012 MB for identical
   image data. Masters are written with `CompressionStream('deflate')`, which exposes no level, so each
@@ -153,6 +174,12 @@ stored bytes as well, all 1,008,199,704 of them, so the deflate is deterministic
   against eight — and `hardwareConcurrency` under-reports the A16 as 4 where it has 6, so that was four
   workers on six cores. Whether two unlike machines converging on ~77 tiles/s is chance or a shared
   serial constraint cannot be answered from two files.
+
+- **Every device that shed came out ahead of itself, and the S23 shed hardest of all**:
+  `["7@3x","6@3x","5@3x","4@10x","3@18x","2@13x"]` — eight workers down to two in six steps, the last
+  three at ten, eighteen and thirteen times the solo baseline. That is swapping, not contention, on a
+  handset reporting 8 GB. Tab A fired at exactly `3x` twice, the iPhone at `6x` and `4x`, the S23 up to
+  `18x`: one mechanism, one floor of two workers, three completely different pressures.
 
 - **The second WebKit run shed its own pool, and that is why it is the fastest of the three.** It planned
   four workers and recorded `poolShed ["3@6x","2@4x"]` — down to three when the median tile reached six
