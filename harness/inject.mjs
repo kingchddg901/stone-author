@@ -40,6 +40,7 @@ const hook = `
     resumeRow, resumeScan, resumeOffer,
     resumeAsk, resumeKind, resumeDiscard,
     storedTilePixels, markSigNow, resumeVerify,
+    masterBase, masterFiles, setMaterial: (m) => { MATERIAL = m; },
     tilePainted,                                 // the lost-canvas guard, so it can be shown to bite
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
     render: () => { size(); build(); stoneReady = false; draw(); },

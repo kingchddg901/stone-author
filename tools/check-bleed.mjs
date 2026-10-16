@@ -239,18 +239,22 @@ if (!app.includes('if (uv && !BLOOM_DRAW) r = Math.max(r, 8 * bs, 3 * bs);'))
 if (!app.includes('if (!(BLOOM_DRAW && glowPx > 0)) {'))
   fail.push('applyCoat runs the image-space bloom regardless of ?bloom=draw, so the drawn glow would be added ON TOP of the blurred one');
 
+// ANCHORED ON THE VARIABLE, NOT THE NAME. The scratch master is called master-<material>-<light>.tif
+// since 2026-10-16 - one slot per material and light, so stone, wood and glass can render at once -
+// and the literal these checks used to look for is now a computed name. A gate anchored on a string
+// that moved would have gone quiet rather than red, which is the worst way for a check to fail.
 // THE SCRATCH MASTER IS DROPPED BEFORE THE NEXT ONE IS WRITTEN. Nothing ever removed it, so a finished
 // render left a master-sized block of site data behind - and because createWritable swaps at close(), the
 // old file and the new one coexisted for the whole run. 1.5 GB of a tablet's storage to make 744 MB.
-if (!app.includes("removeEntry('stone-master.tif')"))
+if (!app.includes("removeEntry(NAME)"))
   fail.push('the OPFS scratch master is never removed: every render leaves one behind, and the old one is still there while the next is written');
 {
   // AGAINST THE WRITE, not against any mention. Stage 3 reads this file to verify a resume - re-rendering
   // tiles and comparing them with what is on disk - and that read opens a handle BEFORE the fallback
   // path removes anything, which is correct and which this check used to call a defect. The rule is
   // about the handle that WRITES, so it is anchored on that one.
-  const rm = app.indexOf("removeEntry('stone-master.tif')");
-  const mk = app.indexOf("handle = await dir.getFileHandle('stone-master.tif'");
+  const rm = app.indexOf("removeEntry(NAME)");
+  const mk = app.indexOf("handle = await dir.getFileHandle(NAME");
   if (mk < 0)
     fail.push('the createWritable fallback no longer takes its handle the way this check can find: re-anchor it');
   else if (rm >= 0 && rm > mk)

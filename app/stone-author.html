@@ -1766,7 +1766,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.121';
+  const BUILD = '2026.10.16.122';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9950,7 +9950,7 @@ self.onmessage = async (e) => {
     if (!RESUME_ON) return;
     try {
       const dir = await navigator.storage.getDirectory();
-      const job = JSON.parse(await (await (await dir.getFileHandle('stone-master.json')).getFile()).text());
+      const job = JSON.parse(await (await (await dir.getFileHandle((await masterFiles()).job)).getFile()).text());
       if (!job || job.v !== 1 || !job.sig) return;
       if (String(job.sig).split(String.fromCharCode(124))[0] !== renderSig()) return;   // another picture
       if (!(job.ts > 0) || job.w !== W) return;
@@ -9965,8 +9965,9 @@ self.onmessage = async (e) => {
     if (!RESUME_ON) return null;
     try {
       const dir = await navigator.storage.getDirectory();
-      const txt = await (await (await dir.getFileHandle('stone-master.json')).getFile()).text();
-      const rec = new Uint8Array(await (await (await dir.getFileHandle('stone-master.rec')).getFile()).arrayBuffer());
+      const F = await masterFiles();
+      const txt = await (await (await dir.getFileHandle(F.job)).getFile()).text();
+      const rec = new Uint8Array(await (await (await dir.getFileHandle(F.rec)).getFile()).arrayBuffer());
       return resumePlan(txt, rec, sig, N);
     } catch (_) { return null; }        // no prior render, or one this build cannot read: start fresh
   }
@@ -9995,10 +9996,46 @@ self.onmessage = async (e) => {
   // of tiles wants finishing, which takes seconds. A readable file wants SAVING, and that is the case
   // that has already cost real renders - a save window missed on a phone, with the finished master",
   // sitting in storage and nothing offering it back.
+  // ONE SLOT PER MATERIAL AND LIGHT, so stone, wood and glass can render at once in one tab origin -
+  // which was the farm all along: more than one UNIQUE picture at a time, never one picture split.
+  //
+  // WHAT IS IN THE NAME AND WHY. Material and light, because both are inside renderSig: whenever the
+  // offer matches, they match, so the name can be computed from the state on screen without reading
+  // anything. What is deliberately OUT:
+  //
+  //   the slab NAME - renderSig does not hash it, so a rename keeps the picture but would change the
+  //     filename and hide the partial. That is not hypothetical here: the device seal keyed on the name
+  //     once and a day of masters went unopenable when one was typed in.
+  //   the WIDTH - the offer has to find a 262,144 partial while the export menu still says 2048, which
+  //     is how every resume this morning began.
+  //
+  // Two pictures that share a material and a light collide on the name. Concurrently the handle lock
+  // refuses the second; sequentially the job's own sig refuses it, and since 43ed749 a refusal stops
+  // instead of truncating, so a collision costs a message rather than a render.
+  const masterBase = () => 'master-' + currentMaterial() + '-' + lightTag();
+  const MASTER_WAS = 'stone-master';          // everything written before 2026-10-16 lives under this
+  // THE MIGRATION IS A FALLBACK, NOT A RENAME. Renaming three files - one of them gigabytes - to adopt
+  // a partial would be a long copy at the worst moment. Reading the old names when the new ones are not
+  // there costs one failed getFileHandle and leaves the bytes where they are.
+  async function masterFiles() {
+    const of = b => ({ tif: b + '.tif', rec: b + '.rec', job: b + '.json' });
+    const base = masterBase();
+    try {
+      const dir = await navigator.storage.getDirectory();
+      await dir.getFileHandle(base + '.json');
+      return of(base);
+    } catch (_) { /* nothing under the current scheme */ }
+    try {
+      const dir = await navigator.storage.getDirectory();
+      await dir.getFileHandle(MASTER_WAS + '.json');
+      return of(MASTER_WAS);                  // a partial from before the rename, adopted where it lies
+    } catch (_) { /* nor an old one */ }
+    return of(base);                          // nothing yet: this is where a new render will write
+  }
   async function resumeMaster() {
     try {
       const dir = await navigator.storage.getDirectory();
-      const f = await (await dir.getFileHandle("stone-master.tif")).getFile();
+      const f = await (await dir.getFileHandle((await masterFiles()).tif)).getFile();
       if (!f.size) return null;
       const h = new Uint8Array(await f.slice(0, 2).arrayBuffer());
       return { size: f.size, complete: h[0] === 0x49 && h[1] === 0x49 };
@@ -10009,12 +10046,13 @@ self.onmessage = async (e) => {
   async function resumeRecord(sig) {
     try {
       const dir = await navigator.storage.getDirectory();
-      const text = await (await (await dir.getFileHandle('stone-master.json')).getFile()).text();
+      const F = await masterFiles();
+      const text = await (await (await dir.getFileHandle(F.job)).getFile()).text();
       const job = JSON.parse(text);
       if (!job || job.v !== 1 || !job.sig) return null;
       if (!(job.w > 0) || !(job.h > 0) || !(job.across > 0) || !(job.down > 0)) return null;
       if (String(job.sig).split(String.fromCharCode(124))[0] !== sig) return null;   // another picture
-      return { job, text, file: await (await dir.getFileHandle('stone-master.rec')).getFile() };
+      return { job, text, file: await (await dir.getFileHandle(F.rec)).getFile() };
     } catch (_) { return null; }        // no record at all, or one this build cannot read
   }
   // THE SECTION HEADER CARRIES IT, rather than the page announcing it. The Resume button lives inside
@@ -10039,7 +10077,8 @@ self.onmessage = async (e) => {
   async function resumeDiscard() {
     try {
       const dir = await navigator.storage.getDirectory();
-      for (const f of ["stone-master.tif", "stone-master.rec", "stone-master.json"])
+      const F = await masterFiles();
+      for (const f of [F.tif, F.rec, F.job])
         try { await dir.removeEntry(f); } catch (_) { /* already gone */ }
     } catch (_) { /* no OPFS: nothing to discard */ }
     resumeJob = null; resumeShown = ""; resumeFlag(false);
@@ -10058,7 +10097,7 @@ self.onmessage = async (e) => {
   async function resumeDownload(job) {
     try {
       const dir = await navigator.storage.getDirectory();
-      const blob = await (await dir.getFileHandle("stone-master.tif")).getFile();
+      const blob = await (await dir.getFileHandle((await masterFiles()).tif)).getFile();
       // A FRESH STAMP rather than the one the first attempt would have used. That save did not happen,
       // so no file anywhere carries the old name for this one to be consistent with.
       await saveBlob(expName(job.w, "tif"), blob);
@@ -10185,7 +10224,7 @@ self.onmessage = async (e) => {
     const picks = resumeSample(prior.rows, want, seed);
     const byN = new Map(prior.rows.map(r => [r.n, r]));
     const dir = await navigator.storage.getDirectory();
-    const tif = await (await dir.getFileHandle('stone-master.tif')).getFile();
+    const tif = await (await dir.getFileHandle((await masterFiles()).tif)).getFile();
     for (const n of picks) {
       const row = byN.get(n); if (!row) return { ok: false, why: 'row ' + n + ' vanished' };
       const gx = n % p.rAcross, gy = (n / p.rAcross) | 0;
@@ -10216,7 +10255,8 @@ self.onmessage = async (e) => {
   }
 
   async function tiffSink(W, H, tileW, tileH, job, prior) {
-    const NAME = 'stone-master.tif', REC = 'stone-master.rec', JOB = 'stone-master.json';
+    const F = await masterFiles();
+    const NAME = F.tif, REC = F.rec, JOB = F.job;
     // THREE PATHS, BEST FIRST, and the two below are exactly what this file did before. Dropping them
     // would hand any device where the worker fails straight to the in-memory path - which is the one
     // that cannot hold a master on a tablet, so a failure to gain DURABILITY would cost the render
@@ -10238,8 +10278,8 @@ self.onmessage = async (e) => {
         //
         // Here and not after the download, because the blob handed to the caller IS this file - removing
         // it at the end would pull the floor out from under a save still in flight.
-        try { await dir.removeEntry('stone-master.tif'); } catch (_) { /* not there yet, or in use */ }
-        handle = await dir.getFileHandle('stone-master.tif', { create: true });
+        try { await dir.removeEntry(NAME); } catch (_) { /* not there yet, or in use */ }
+        handle = await dir.getFileHandle(NAME, { create: true });
         w = await handle.createWritable({ keepExistingData: false });
         await w.write(new Uint8Array(16));                 // a placeholder; the real header goes in at the end
       }
@@ -10336,7 +10376,7 @@ self.onmessage = async (e) => {
           await wr.close();
           if (wr.failed) throw new Error('tiff: writer worker: ' + wr.failed);
           const dir = await navigator.storage.getDirectory();
-          const fh = await dir.getFileHandle('stone-master.tif');
+          const fh = await dir.getFileHandle(NAME);
           return { blob: await fh.getFile(), parts: null };  // disk-backed: handing this over copies nothing
         }
         if (!w) { const parts = [head, ...order, ...tail]; return { blob: new Blob(parts, { type: 'image/tiff' }), parts }; }
