@@ -146,9 +146,9 @@
   .tiers { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 10px; }
   .tgl { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); cursor: pointer; }
   .tgl input { accent-color: var(--warn); }
-  #bigdlg { max-width: 46ch; border: 1px solid var(--warn); border-radius: 8px; background: var(--ground); color: var(--text); }
-  #bigdlg::backdrop { background: rgba(0, 0, 0, .6); }
-  #bigdlg .note { max-width: none; margin-bottom: 12px; white-space: pre-line; }
+  #bigdlg, #resumedlg { max-width: 46ch; border: 1px solid var(--warn); border-radius: 8px; background: var(--ground); color: var(--text); }
+  #bigdlg::backdrop, #resumedlg::backdrop { background: rgba(0, 0, 0, .6); }
+  #bigdlg .note, #resumedlg .note { max-width: none; margin-bottom: 12px; white-space: pre-line; }
   button.warn { border-color: var(--warn); color: var(--warn); }
   .note b { color: var(--text); font-weight: 500; }
   .layers { display: grid; gap: 5px; width: 100%; }
@@ -773,6 +773,10 @@
       <p class="note" id="bigdlg-text"></p>
       <div class="grp"><button value="cancel" data-i18n="btn.cancel">Cancel</button><button value="go" id="bigdlg-go" class="warn" data-i18n="btn.start-giant">Start giant render</button></div>
     </form></dialog>
+  <dialog id="resumedlg"><form method="dialog">
+    <p class="note" id="resumedlg-text"></p>
+    <div class="grp"><button value="later" data-i18n="btn.cancel">Cancel</button><button value="discard" id="rd-discard" class="warn" data-i18n="btn.discard">Discard</button><button value="restart" id="rd-restart" data-i18n="btn.restart">Start over</button><button value="go" id="rd-go" class="warn"></button></div>
+  </form></dialog>
 </div>
 <script id="sa-i18n">
 // Material Author i18n. English is the source of truth and ships inline; every user-facing string in the
@@ -1049,7 +1053,15 @@ window.SA_I18N = (() => {
   "resume.go": "Resume {w} × {h}",
   "resume.note": "{n} of {of} tiles already on disk",
   "resume.waiting": "You have an unfinished render",
-  "resume.dlg": "You have an unfinished render.\n\n{material}, {light}\n{w} × {h}\n{done} tiles done / {left} remaining",
+  "resume.waiting-saved": "You have a render waiting to be saved",
+  "resume.save-go": "Save {w} × {h}",
+  "resume.dlg-saved": "A finished render is waiting to be saved.\n\n{material}, {light}\n{w} × {h}\n{size} on disk",
+  "resume.dlg-closed": "Every tile of this render is on disk, but the file was never closed.\n\n{material}, {light}\n{w} × {h}\n{size} on disk\n\nFinishing it takes seconds.",
+  "resume.confirm": "That was {size}. If it arrived, the working copy can go — check your downloads before you answer, because nothing here can see them.",
+  "btn.restart": "Start over",
+  "btn.discard": "Discard",
+  "btn.download": "Download",
+  "resume.dlg": "You have an unfinished render.\n\n{material}, {light}\n{w} × {h}\n{done} tiles done / {left} remaining\n{size} on disk",
   "resume.light-unknown": "light not recorded",
   "btn.resume": "Resume",
   "resume.note-light": "{n} of {of} tiles already on disk, {light}",
@@ -1753,7 +1765,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.114';
+  const BUILD = '2026.10.16.116';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9930,6 +9942,23 @@ self.onmessage = async (e) => {
     if (job.spectrum === undefined) return null;
     return job.spectrum === 0 ? TR('resume.light-day') : TR('resume.light-uv', { s: job.spectrum });
   }
+  // WHAT IS ACTUALLY ON DISK. The writer lays 16 ZERO BYTES where the header goes and writes the real
+  // one - "II", byte 0x49 - as its very last act, so byte 0 answers a question the record cannot: is
+  // this a readable TIFF, or a pile of tiles with no directory? The two want opposite offers. A pile
+  // of tiles wants finishing, which takes seconds. A readable file wants SAVING, and that is the case
+  // that has already cost real renders - a save window missed on a phone, with the finished master",
+  // sitting in storage and nothing offering it back.
+  async function resumeMaster() {
+    try {
+      const dir = await navigator.storage.getDirectory();
+      const f = await (await dir.getFileHandle("stone-master.tif")).getFile();
+      if (!f.size) return null;
+      const h = new Uint8Array(await f.slice(0, 2).arrayBuffer());
+      return { size: f.size, complete: h[0] === 0x49 && h[1] === 0x49 };
+    } catch (_) { return null; }
+  }
+  const resumeBytes = n => n >= 1073741824 ? (n / 1073741824).toFixed(2) + " GB"
+                        : n >= 1048576 ? Math.round(n / 1048576) + " MB" : Math.round(n / 1024) + " kB";
   async function resumeRecord(sig) {
     try {
       const dir = await navigator.storage.getDirectory();
@@ -9949,7 +9978,7 @@ self.onmessage = async (e) => {
   function resumeFlag(on) {
     const f = document.getElementById('resume-flag');
     if (!f) return;
-    f.textContent = on ? TR('resume.waiting') : '';
+    f.textContent = on ? TR(resumeKind() === 'saved' ? 'resume.waiting-saved' : 'resume.waiting') : '';
     f.hidden = !on;
   }
   // ASKED ONCE, ON LOAD. The header badge is the standing fact; this is the one moment it is worth
@@ -9960,35 +9989,110 @@ self.onmessage = async (e) => {
   // `inputs`, which is a crc32 - unreadable. But this offer only EXISTS when that hash matches, and
   // the material is part of what it hashes, so the material on screen IS the job's material. Stating
   // it from currentMaterial() is not a guess; the match is what makes it true.
-  async function resumeAsk(done, of) {
+  async function resumeDiscard() {
+    try {
+      const dir = await navigator.storage.getDirectory();
+      for (const f of ["stone-master.tif", "stone-master.rec", "stone-master.json"])
+        try { await dir.removeEntry(f); } catch (_) { /* already gone */ }
+    } catch (_) { /* no OPFS: nothing to discard */ }
+    resumeJob = null; resumeShown = ""; resumeFlag(false);
+    const row = document.getElementById("resume-row"); if (row) row.hidden = true;
+  }
+  // THE SAVE CONFIRM, which exists because no browser will tell us. The anchor path returns the moment
+  // a click is dispatched and everything after that is between the browser and the disk: a cancelled
+  // Save As, a full volume and a completed download are indistinguishable from in here. Firefox and
+  // Safari have no showSaveFilePicker to replace it with, so rather than three behaviours that differ
+  // by engine there is one that works everywhere: ask the person, who can see their downloads folder.
+  // Nothing is deleted until they say it arrived.
+  async function resumeConfirmSaved(size) {
+    if (await bigDialog(TR("resume.confirm", { size: resumeBytes(size) }), TR("btn.discard")))
+      await resumeDiscard();
+  }
+  async function resumeDownload(job) {
+    try {
+      const dir = await navigator.storage.getDirectory();
+      const blob = await (await dir.getFileHandle("stone-master.tif")).getFile();
+      // A FRESH STAMP rather than the one the first attempt would have used. That save did not happen,
+      // so no file anywhere carries the old name for this one to be consistent with.
+      await saveBlob(expName(job.w, "tif"), blob);
+      await resumeConfirmSaved(blob.size);
+    } catch (e) { hint(TR("hint.export-failed-msg", { err: errWhere(e) })); }
+  }
+  function resumeDialog(text, goLabel, canRestart) {
+    const d = document.getElementById("resumedlg");
+    if (!d || !d.showModal) return Promise.resolve(null);
+    document.getElementById("resumedlg-text").textContent = text;
+    document.getElementById("rd-go").textContent = goLabel;
+    document.getElementById("rd-restart").hidden = !canRestart;
+    d.returnValue = "";
+    return new Promise(res => {
+      const done = () => { d.removeEventListener("close", done); res(d.returnValue || null); };
+      d.addEventListener("close", done);                 // fires for a button AND for Escape
+      d.showModal();
+    });
+  }
+  // THREE STATES, TOLD APART BY EVIDENCE RATHER THAN GUESSED FROM A COUNT.
+  //
+  //   saved   the file on disk is a readable TIFF that was never saved. Byte 0 says so.
+  //   closed  every tile is written but the directory is not. Finishing costs seconds.
+  //   part    tiles remain.
+  //
+  // COUNTING TILES CANNOT SEPARATE THE FIRST TWO, and they want opposite offers. The 262144 master
+  // that died on 2026-10-12 had all 2560 tiles and no directory; a save window missed on a phone
+  // leaves all the tiles AND the directory. One wants finishing, the other wants saving, and a count
+  // reads them identically.
+  function resumeKind() {
+    if (resumeFile && resumeFile.complete) return 'saved';
+    if (resumeOf && resumeDone >= resumeOf) return 'closed';
+    return 'part';
+  }
+  async function resumeAsk() {
     const job = resumeJob;
     if (!job) return;
-    const light = job.spectrum === undefined ? TR('resume.light-unknown')
-      : job.spectrum === 0 ? TR('resume.light-day') : TR('resume.light-uv', { s: job.spectrum });
-    const text = TR('resume.dlg', {
-      material: TR('mat.' + currentMaterial()), light,
+    const kind = resumeKind();
+    const common = {
+      material: TR('mat.' + currentMaterial()),
+      light: job.spectrum === undefined ? TR('resume.light-unknown')
+        : job.spectrum === 0 ? TR('resume.light-day') : TR('resume.light-uv', { s: job.spectrum }),
       w: job.w.toLocaleString(), h: job.h.toLocaleString(),
-      done: done.toLocaleString(), left: (of - done).toLocaleString(),
-    });
-    if (await bigDialog(text, TR('btn.resume'))) await resumeStart();
+      size: resumeBytes(resumeFile ? resumeFile.size : 0),
+    };
+    const text = kind === 'saved' ? TR('resume.dlg-saved', common)
+               : kind === 'closed' ? TR('resume.dlg-closed', common)
+               : TR('resume.dlg', Object.assign({
+                   done: resumeDone.toLocaleString(),
+                   left: (resumeOf - resumeDone).toLocaleString() }, common));
+    const go = kind === 'saved' ? TR('btn.download') : TR('btn.resume');
+    const pick = await resumeDialog(text, go, kind === 'part');
+    if (pick === 'discard') return resumeDiscard();
+    // RESTART IS DISCARD AND RENDER, not a flag. Nothing has to learn to ignore a record that is no
+    // longer there, and the fresh-render path is the one that already truncates and starts clean.
+    if (pick === 'restart') { await resumeDiscard(); return resumeStart(job); }
+    if (pick === 'go') return kind === 'saved' ? resumeDownload(job) : resumeStart(job);
   }
-  let resumeJob = null, resumeShown = '', resumeDone = 0, resumeOf = 0;
+  let resumeJob = null, resumeShown = '', resumeDone = 0, resumeOf = 0, resumeFile = null;
   async function resumeOffer() {
     const row = document.getElementById('resume-row');
     if (!row) return;
     const sig = RESUME_ON ? renderSig() : null;
     const found = sig ? await resumeRecord(sig) : null;
+    resumeFile = found ? await resumeMaster() : null;
     if (!found) { resumeJob = null; resumeShown = ''; row.hidden = true; resumeFlag(false); return; }
     // THE RECORD IS THE EXPENSIVE READ OF THE TWO, and this runs from applyTiers, which fires on every
     // change to an export control. The job file is bytes; the record at 163,840 tiles is not. Scan it
     // only when something the label is built from has moved, which also catches it growing mid-render.
     //
-    // THE WHOLE JOB TEXT IS THE KEY, not the signature and the record's size. Those were what changed
-    // most obviously, and they are not what the label is built FROM: swap a record's job for one that
-    // differs only in `spectrum` and both are identical, so the row kept saying what the previous job
-    // said. Caught by an ablation, invisible to the path that shows it works - the stale text was
-    // right for the record before it.
-    const key = found.text + String.fromCharCode(124) + found.file.size;
+    // THE KEY IS EVERY INPUT, not the ones that looked like they mattered. Naming them by hand went
+    // wrong twice in a row, both times the same way: the key held what changed most OBVIOUSLY rather
+    // than what the labels are built FROM. First it was the signature and the record size, so a job
+    // differing only in `spectrum` left the row showing the previous job. Then it was the job text and
+    // the record size, so a master that had since been CLOSED - the whole difference between Resume and
+    // Download - left the button still offering to resume. Both read correct on the path that shows it
+    // works and wrong on an ablation.
+    //
+    // So it is now the three things this function reads, whatever they happen to contain. A fourth
+    // would have to be read here to matter, and reading it is what puts it in the key.
+    const key = JSON.stringify([found.text, found.file.size, resumeFile]);
     if (key !== resumeShown) {
       const seen = new Set();
       try {
@@ -9996,13 +10100,18 @@ self.onmessage = async (e) => {
           for (const q of r.pieces) seen.add(q.i);
       } catch (_) { seen.clear(); }
       if (!seen.size) { resumeJob = null; resumeShown = ''; row.hidden = true; resumeFlag(false); return; }  // nothing durable yet
-      const light = resumeLight(found.job);
-      document.getElementById('resume-go').textContent =
-        TR('resume.go', { w: found.job.w, h: found.job.h });
-      document.getElementById('resume-note').textContent = light
-        ? TR('resume.note-light', { n: seen.size, of: found.job.across * found.job.down, light })
-        : TR('resume.note', { n: seen.size, of: found.job.across * found.job.down });
+      // THE COUNTS FIRST. resumeKind() is built from them, and the labels below are built from it, so
+      // setting them afterwards had the row describing the state BEFORE this record - the same shape
+      // as the caching bug above, one layer down.
       resumeDone = seen.size; resumeOf = found.job.across * found.job.down;
+      const light = resumeLight(found.job);
+      const saved = resumeKind() === 'saved';
+      document.getElementById('resume-go').textContent = saved
+        ? TR('resume.save-go', { w: found.job.w, h: found.job.h })
+        : TR('resume.go', { w: found.job.w, h: found.job.h });
+      document.getElementById('resume-note').textContent = light
+        ? TR('resume.note-light', { n: seen.size, of: resumeOf, light })
+        : TR('resume.note', { n: seen.size, of: resumeOf });
       resumeShown = key;
     }
     resumeJob = found.job; row.hidden = false; resumeFlag(true);
@@ -11388,8 +11497,7 @@ self.onmessage = async (e) => {
   // which is the part that costs the render rather than the click. The tier behind that width is armed
   // through the SAME dialogue the tickbox uses: the warning belongs to the size, not to the route that
   // reached it, and this route commits exactly as much work as the other one.
-  async function resumeStart() {
-    const job = resumeJob;
+  async function resumeStart(job) {
     if (!job) return;
     const sel = document.getElementById('expres'), want = String(job.w);
     const opt = [...sel.options].find(o => o.value === want);
@@ -11412,7 +11520,7 @@ self.onmessage = async (e) => {
     if (sel.value !== want) { hint(TR('resume.gone')); return; }
     document.getElementById('export').click();
   }
-  document.getElementById('resume-go').addEventListener('click', resumeStart);
+  document.getElementById('resume-go').addEventListener('click', () => resumeStart(resumeJob));
 
   document.getElementById('export').addEventListener('click', async () => {
     const W = +document.getElementById('expres').value;
@@ -12602,27 +12710,17 @@ self.onmessage = async (e) => {
         await d.save({ filename: fn.replace(/\.tif$/, '.zip'), data: zipOneStored(fn, blob, blob.size, crc) });
       } else if (runtime) throw new Error(TR('exp.err.no-download'));   // the sandbox blocks the anchor too
       else download(fn, blob);
-      // THE RECORD DIES WITH THE RENDER THAT FINISHED IT. Nothing removed it before, so after a
-      // successful save the job and its rows stayed on disk - and since the offer asks only whether a
-      // record EXISTS, the next load announced an unfinished render that had in fact finished.
+      // ASKED, NOT ASSUMED. The previous version cleared the record here, on the reasoning that a
+      // render which reaches this line has finished. It has not: download() returns the moment a click
+      // is dispatched, and a cancelled Save As, a full volume and a completed download are
+      // indistinguishable from inside the page. Clearing on that basis ORPHANS the master - the file
+      // stays, no record matches it, and nothing can ever offer it back. That is precisely how a missed
+      // save window costs a render.
       //
-      // COUNTING TILES WOULD HAVE BEEN THE WRONG FIX. 'Every tile written' is not 'finished': on
-      // 2026-10-12 a 262144 master had all 2560 tiles on disk and died in tiffLayout before the first
-      // byte of the directory, which is the most valuable thing this feature can resume - ninety-five
-      // minutes recovered for the price of a tail. A record showing nothing remaining is exactly that
-      // case. So a record that SURVIVES must always mean unfinished, and that is arranged here, at the
-      // one moment a render is known to be done, rather than guessed at from its contents.
-      //
-      // THE MASTER ITSELF IS LEFT. It is the picture, it has just been handed to the browser to save,
-      // and removing gigabytes on the strength of a download this cannot observe is not a call to make
-      // in a finally-adjacent line. The next render truncates it; until then Discard is the way out.
-      try {
-        const odir = await navigator.storage.getDirectory();
-        for (const f of ['stone-master.rec', 'stone-master.json'])
-          try { await odir.removeEntry(f); } catch (_) { /* already gone */ }
-        resumeJob = null; resumeShown = ''; resumeFlag(false);
-        const rrow = document.getElementById('resume-row'); if (rrow) rrow.hidden = true;
-      } catch (_) { /* no OPFS here, so there was no record to clear */ }
+      // showSaveFilePicker would answer it on Chrome and Edge and nowhere else, so the choice was one
+      // behaviour that works everywhere against three that differ by engine. The person can see their
+      // downloads folder. Ask them, and delete nothing until they say it arrived.
+      await resumeConfirmSaved(blob.size);
       expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1);
       hint(TR('hint.exported-render', { px: W }));
     } catch (e) {
@@ -12755,7 +12853,7 @@ self.onmessage = async (e) => {
   // the default slab, never the restored one, so the record could not match and the row stayed hidden
   // on exactly the load it exists for. It read as a feature that simply did not work, and every gate
   // was green - no gate executes a page.
-  resumeOffer().then(() => { if (resumeJob) resumeAsk(resumeDone, resumeOf); });
+  resumeOffer().then(() => { if (resumeJob) resumeAsk(); });
   // AND WHENEVER THE SECTION IS OPENED. Editing the slab moves renderSig, so an offer made before an
   // edit is stale afterwards - still showing for a picture that has moved on. applyTiers covers the
   // export controls; this covers reaching the section at all, which is the moment before anyone could

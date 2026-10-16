@@ -3672,7 +3672,8 @@
    "w": "its width in pixels",
    "h": "its height in pixels",
    "done": "how many tiles are already written",
-   "left": "how many are still to do"
+   "left": "how many are still to do",
+   "size": "a file size with its unit, already formatted, e.g. \"4.26 GB\""
   },
   "where": "the body of a dialogue shown once on page load when an unfinished render of the picture on screen is waiting. Blank lines and line breaks are kept as written."
  },
@@ -3681,5 +3682,50 @@
  },
  "btn.resume": {
   "where": "the confirming button of the resume dialogue; it continues the unfinished render. An imperative verb, as on any button."
+ },
+ "resume.waiting-saved": {
+  "where": "the standing notice beside \"Render\" in that collapsed section header, for a render that FINISHED and was never saved - as opposed to one that stopped partway. A sentence, not a label."
+ },
+ "resume.save-go": {
+  "placeholders": {
+   "w": "width in pixels",
+   "h": "height in pixels"
+  },
+  "where": "the Resume button relabelled for a render that is finished and only needs saving. An imperative verb."
+ },
+ "resume.dlg-saved": {
+  "placeholders": {
+   "material": "stone, wood or glass, already translated",
+   "light": "the light, already translated",
+   "w": "width in pixels",
+   "h": "height in pixels",
+   "size": "a file size with its unit, already formatted, e.g. \"4.26 GB\""
+  },
+  "where": "the dialogue for a finished render that was never saved. Line breaks are kept as written."
+ },
+ "resume.dlg-closed": {
+  "placeholders": {
+   "material": "stone, wood or glass, already translated",
+   "light": "the light, already translated",
+   "w": "width in pixels",
+   "h": "height in pixels",
+   "size": "a file size with its unit, already formatted, e.g. \"4.26 GB\""
+  },
+  "where": "the dialogue for a render whose tiles are all written but whose file was never closed, so it is not yet readable. Line breaks are kept as written."
+ },
+ "resume.confirm": {
+  "placeholders": {
+   "size": "a file size with its unit, already formatted, e.g. \"4.26 GB\""
+  },
+  "where": "asked after a render is handed to the browser to save. No browser reports whether a download actually completed, so this asks the person, who can look. Answering yes deletes the working copy; the confirming button is labelled Discard."
+ },
+ "btn.restart": {
+  "where": "a button in the resume dialogue: abandon the unfinished render and start the same one again from nothing."
+ },
+ "btn.discard": {
+  "where": "a button that deletes the stored render and its record for good, freeing the space. Destructive and final."
+ },
+ "btn.download": {
+  "where": "a button that saves the stored render to the device again."
  }
 }

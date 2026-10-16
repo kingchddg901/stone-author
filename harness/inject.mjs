@@ -38,6 +38,7 @@ const hook = `
     // and a gated control that never appears is indistinguishable from a broken one. resumeRow builds
     // a record in the app's own format rather than a copy of it, which is the whole point.
     resumeRow, resumeScan, resumeOffer,
+    resumeAsk, resumeKind, resumeDiscard,
     tilePainted,                                 // the lost-canvas guard, so it can be shown to bite
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
     render: () => { size(); build(); stoneReady = false; draw(); },

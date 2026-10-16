@@ -739,7 +739,15 @@
  "resume.light-day": "luce diurna",
  "resume.light-uv": "luce di Wood, spettro {s}",
  "resume.waiting": "Hai un render incompiuto",
- "resume.dlg": "Hai un render incompiuto.\n\n{material}, {light}\n{w} × {h}\n{done} tasselli completati / {left} rimanenti",
+ "resume.dlg": "Hai un render incompiuto.\n\n{material}, {light}\n{w} × {h}\n{done} tasselli completati / {left} rimanenti\n{size} su disco",
  "resume.light-unknown": "luce non registrata",
- "btn.resume": "Riprendi"
+ "btn.resume": "Riprendi",
+ "resume.waiting-saved": "Hai un render in attesa di essere salvato",
+ "resume.save-go": "Salva {w} × {h}",
+ "resume.dlg-saved": "Un render completato è in attesa di essere salvato.\n\n{material}, {light}\n{w} × {h}\n{size} su disco",
+ "resume.dlg-closed": "Tutti i tasselli di questo render sono su disco, ma il file non è mai stato chiuso.\n\n{material}, {light}\n{w} × {h}\n{size} su disco\n\nCompletarlo richiede pochi secondi.",
+ "resume.confirm": "Erano {size}. Se è arrivato, la copia di lavoro può essere eliminata: controlla i download prima di rispondere, perché da qui non sono visibili.",
+ "btn.restart": "Ricomincia",
+ "btn.discard": "Elimina",
+ "btn.download": "Scarica"
 }
