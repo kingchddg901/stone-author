@@ -33,6 +33,11 @@ const hook = `
     emit, emitAt, setSpx: (v) => { lightSpectrum = v; uvMode = v !== 0; },
     // both signatures, so a gate can show which one answers "same picture?"
     stateSig, renderSig,
+    // THE RESUME OFFER, which has no other way in. The row is GATED - absent unless an unfinished
+    // render of this picture is on disk - so the only state reachable without these is the hidden one,
+    // and a gated control that never appears is indistinguishable from a broken one. resumeRow builds
+    // a record in the app's own format rather than a copy of it, which is the whole point.
+    resumeRow, resumeScan, resumeOffer,
     tilePainted,                                 // the lost-canvas guard, so it can be shown to bite
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
     render: () => { size(); build(); stoneReady = false; draw(); },

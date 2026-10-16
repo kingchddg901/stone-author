@@ -718,6 +718,7 @@
       <select id="expwhat" aria-label="What to export" title="What to export" data-i18n-attr="aria-label=a11y.export-what;title=a11y.export-what"><option value="all" data-i18n="opt.exp-all">Everything</option><option value="render" data-i18n="opt.exp-render">Just the render</option></select><select id="expfmt" aria-label="Export format" title="Export format" data-i18n-attr="aria-label=a11y.export-format;title=a11y.export-format"><option value="png" data-i18n="opt.fmt-png">PNG</option><option value="tiff" data-i18n="opt.fmt-tiff">TIFF</option></select>
       <span class="stat" id="expcap"></span>
     </div>
+    <div class="sl" id="resume-row" hidden><div class="grp"><button id="resume-go" type="button"></button><span class="stat" id="resume-note"></span></div></div>
     <div class="expprog" id="expprog" hidden><div class="expbar" id="expbar"><i id="expfill"></i></div><div class="exprow"><span class="stat" id="expstat"></span><span class="stat" id="expclock"></span></div></div>
     <div class="tiers" id="tiers" hidden>
       <label class="tgl"><input type="checkbox" id="tier-large"><span data-i18n="big.large">Large render</span></label>
@@ -814,8 +815,8 @@ window.SA_I18N = (() => {
   "big.mem-unknown": "This browser does not say how much memory this machine has.",
   "big.mem-budget": "This render may take up to {mb} MB of that.",
   "big.note": "Above {px}px the export streams the picture in bands. It cannot resume — do not close the tab.",
-  "big.note-tiled": "Above {px}px the export renders one tile at a time and writes each to disk as it goes. It cannot resume — do not close the tab.",
-  "big.warn": "This is not fast, and it will eat storage.\n\nWhile it runs it will take up to a quarter of this device's memory — deliberately. A smaller share forces smaller tiles, and at these sizes that is what makes a picture come out dim.\n\nIt has not been known to crash a machine, across every device it has been tried on. What you are risking is the render itself: it cannot resume, so closing the tab or navigating away loses the lot. Close anything you are not using.",
+  "big.note-tiled": "Above {px}px the export renders one tile at a time and writes each to disk as it goes. A render that dies can be picked up again: the tiles already written are kept, and the next run continues from them.",
+  "big.warn": "This is not fast, and it will eat storage.\n\nWhile it runs it will take up to a quarter of this device's memory — deliberately. A smaller share forces smaller tiles, and at these sizes that is what makes a picture come out dim.\n\nIt has not been known to crash a machine, across every device it has been tried on. What you are risking is the render itself: a render that dies can be picked up again, on this device and from this picture — the tiles already written are kept and the next run continues from them. Close anything you are not using.",
   "big.warn-once": "Past 65535 the sizes here are one-off renders, not settings.\n\n131072 is four times the pixels of a 65535, and 262144 is sixteen. Measured, not estimated — but on ONE machine, a 16 GB 12-core desktop, because it is the only one that has run these tiers: 65535 took 5.6 minutes and wrote 0.52 GB, 131072 took 24 minutes and 1.35 GB, and 262144 took 95 minutes and 4.26 GB — four times the time for each doubling of the width, and the staging copy may want the file size again in free disk. It is TIFF only: no canvas on any engine is that wide, so only the tiled path can produce one. An editor will still open it, slowly: GIMP budgeted 110.8 GB of working space for the 131072 and 443 GB for the 262144, on a machine with 16 GB.\n\nIt is not the detail limit either. The field is procedural and has no resolution of its own, so a larger render keeps finding structure rather than magnifying what it already had — how much it finds depends on the slab. 65535 is already 683 DPI across eight feet, past what print or any screen can take delivery of. The stopping point is what the output can show, not what the field runs out of.\n\nThis tick does not persist. Decide it again next time.",
   "btn.cal-cancel": "Cancel",
   "btn.cal-clear": "Forget",
@@ -1035,6 +1036,12 @@ window.SA_I18N = (() => {
   "mask.win.off": "Off",
   "mask.win.on": "On",
   "mat.stone": "Stone",
+  "resume.go": "Resume {w} × {h}",
+  "resume.note": "{n} of {of} tiles already on disk",
+  "resume.note-light": "{n} of {of} tiles already on disk, {light}",
+  "resume.light-day": "daylight",
+  "resume.light-uv": "black light, spectrum {s}",
+  "resume.gone": "This device no longer offers that width, so the unfinished render cannot be continued here.",
   "sl.glass-cords": "Canes",
   "sl.glass-cordN": "Cane colours",
   "sl.glass-cordScale": "Cane count",
@@ -1732,7 +1739,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.107';
+  const BUILD = '2026.10.16.109';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9891,6 +9898,70 @@ self.onmessage = async (e) => {
     } catch (_) { return null; }        // no prior render, or one this build cannot read: start fresh
   }
 
+  // IS A RESUME ON OFFER, AND FOR WHAT? The record has always been readable - resumePin opens it before
+  // it plans - and was never shown, so the only way to learn one was waiting was to start a render and
+  // read `resumedTiles` out of the master afterwards. With the default on that matters more rather than
+  // less: a render now picks up silently, and the cost it reports covers one sitting of two.
+  //
+  // GATED, NOT DISABLED. A resume that is not on offer is not a control anybody should have to reason
+  // about, so the row is absent rather than greyed. What it can SAY is what the record keeps as plain
+  // fields - `w`, `h`, the light, and the whole tile plan, which is there because a resumed job must
+  // continue on the plan the file was started with. What it cannot say is the MATERIAL: that reaches the
+  // pixels, so it lives inside `inputs`, which is a crc32 - checkable, never readable. It does not need
+  // to. The tab restores the slab, material and all, so the picture on screen IS the one the signature
+  // is compared against.
+  function resumeLight(job) {
+    // An older record has no `spectrum`. Say less rather than guess: a resume offered as daylight that
+    // is really black light would be a lie told at the one moment the user is deciding to spend hours.
+    if (job.spectrum === undefined) return null;
+    return job.spectrum === 0 ? TR('resume.light-day') : TR('resume.light-uv', { s: job.spectrum });
+  }
+  async function resumeRecord(sig) {
+    try {
+      const dir = await navigator.storage.getDirectory();
+      const text = await (await (await dir.getFileHandle('stone-master.json')).getFile()).text();
+      const job = JSON.parse(text);
+      if (!job || job.v !== 1 || !job.sig) return null;
+      if (!(job.w > 0) || !(job.h > 0) || !(job.across > 0) || !(job.down > 0)) return null;
+      if (String(job.sig).split(String.fromCharCode(124))[0] !== sig) return null;   // another picture
+      return { job, text, file: await (await dir.getFileHandle('stone-master.rec')).getFile() };
+    } catch (_) { return null; }        // no record at all, or one this build cannot read
+  }
+  let resumeJob = null, resumeShown = '';
+  async function resumeOffer() {
+    const row = document.getElementById('resume-row');
+    if (!row) return;
+    const sig = RESUME_ON ? renderSig() : null;
+    const found = sig ? await resumeRecord(sig) : null;
+    if (!found) { resumeJob = null; resumeShown = ''; row.hidden = true; return; }
+    // THE RECORD IS THE EXPENSIVE READ OF THE TWO, and this runs from applyTiers, which fires on every
+    // change to an export control. The job file is bytes; the record at 163,840 tiles is not. Scan it
+    // only when something the label is built from has moved, which also catches it growing mid-render.
+    //
+    // THE WHOLE JOB TEXT IS THE KEY, not the signature and the record's size. Those were what changed
+    // most obviously, and they are not what the label is built FROM: swap a record's job for one that
+    // differs only in `spectrum` and both are identical, so the row kept saying what the previous job
+    // said. Caught by an ablation, invisible to the path that shows it works - the stale text was
+    // right for the record before it.
+    const key = found.text + String.fromCharCode(124) + found.file.size;
+    if (key !== resumeShown) {
+      const seen = new Set();
+      try {
+        for (const r of resumeScan(new Uint8Array(await found.file.arrayBuffer())).rows)
+          for (const q of r.pieces) seen.add(q.i);
+      } catch (_) { seen.clear(); }
+      if (!seen.size) { resumeJob = null; resumeShown = ''; row.hidden = true; return; }  // nothing durable yet
+      const light = resumeLight(found.job);
+      document.getElementById('resume-go').textContent =
+        TR('resume.go', { w: found.job.w, h: found.job.h });
+      document.getElementById('resume-note').textContent = light
+        ? TR('resume.note-light', { n: seen.size, of: found.job.across * found.job.down, light })
+        : TR('resume.note', { n: seen.size, of: found.job.across * found.job.down });
+      resumeShown = key;
+    }
+    resumeJob = found.job; row.hidden = false;
+  }
+
   // AND DOES THE FILE STILL HOLD THE PICTURE IT CLAIMS? The signature says the inputs match; this asks
   // the pixels. Tiles the record lists are re-rendered and compared against the bytes on disk, which is
   // the only evidence that survives a signature being wrong - and on 2026-10-15 one was. Compared
@@ -11215,6 +11286,7 @@ self.onmessage = async (e) => {
       const moreBehindATick = !mob && !tierExtreme && [...sel.options].some(o => o.dataset.tier && +o.value <= side);
       cap.textContent = top ? TR(moreBehindATick ? 'exp.ceiling-direct' : 'exp.ceiling', { px: top }) : '';
     }
+    resumeOffer();      // async on purpose: the row settles when OPFS answers, and nothing waits on it
   }
 
   // Extreme's hardware recommendation. navigator.deviceMemory is rounded and unreliable in both directions:
@@ -11264,6 +11336,36 @@ self.onmessage = async (e) => {
   });
   document.getElementById('expres').addEventListener('change', applyTiers);
   document.getElementById('expfmt').addEventListener('change', () => { fmtChosen = true; applyExportCeiling(); });
+
+  // MATCH THE CONTROLS TO THE JOB, THEN GO. A resume whose width does not match is not a resume: `w` is
+  // in the signature, so a different width is a different job and the record is refused - silently,
+  // which is the part that costs the render rather than the click. The tier behind that width is armed
+  // through the SAME dialogue the tickbox uses: the warning belongs to the size, not to the route that
+  // reached it, and this route commits exactly as much work as the other one.
+  document.getElementById('resume-go').addEventListener('click', async () => {
+    const job = resumeJob;
+    if (!job) return;
+    const sel = document.getElementById('expres'), want = String(job.w);
+    const opt = [...sel.options].find(o => o.value === want);
+    if (!opt) { hint(TR('resume.gone')); return; }
+    const tier = opt.dataset.tier;
+    const armed = !tier || (tier === 'large' ? tierLarge : tier === 'extreme' ? tierExtreme : tierOnce);
+    if (!armed) {
+      if (!(await bigDialog(TR(tier === 'once' ? 'big.warn-once' : 'big.warn'), TR('btn.understood')))) return;
+      tierLarge = true;
+      if (tier !== 'large') tierExtreme = true;
+      if (tier === 'once') tierOnce = true;
+      applyTiers();                                  // the option is hidden until its tier is armed
+    }
+    sel.value = want;
+    const ff = document.getElementById('expfmt');
+    if (ff) { ff.value = 'tiff'; fmtChosen = true; }  // the record exists only for the tiled path
+    applyTiers();
+    // applyTiers moves the selection off an option it has disabled - too wide for this build's canvas,
+    // say. Saying so beats starting a render at a width that cannot match the record it came from.
+    if (sel.value !== want) { hint(TR('resume.gone')); return; }
+    document.getElementById('export').click();
+  });
 
   document.getElementById('export').addEventListener('click', async () => {
     const W = +document.getElementById('expres').value;
@@ -12246,10 +12348,18 @@ self.onmessage = async (e) => {
         } catch (ex) { prior = null; resumeWhy = String((ex && ex.message) || ex).slice(0, 120); }
       }
       const sink = await tiffSink(W, p.FH, p.store, p.store, {
-        sig: resumeSig({ inputs: renderSig(), w: W, h: p.FH, ts: p.ts, store: p.store,
-                         bleed: p.bleed, across: p.across, down: p.down, renders: p.renders }),
+        // `sig` was written TWICE here - resumeSig(...) computed in full and then overwritten by the
+        // identical jobSig three lines down. Same value, so nothing was wrong; the first was simply dead.
         w: W, h: p.FH, ts: p.ts, store: p.store, bleed: p.bleed,
         across: p.across, down: p.down, renders: p.renders, sig: jobSig,
+        // THE LIGHT, AS A FIELD RATHER THAN A HASH. It is already inside `inputs`, so a black-light
+        // record could never be offered for a daylight render - the signature refuses it. What the hash
+        // cannot do is SAY so, and the resume offer wants to. Adding it here is free: resumeSig lists
+        // the fields it joins, so a plain field beside them moves no signature and abandons no job in
+        // flight. A record written before this has no `spectrum` and the offer says less, rather than
+        // guessing - which is the same discipline the material gets, and the material does not need
+        // one: the tab restores the slab it belongs to.
+        spectrum: lightSpectrum,
       }, prior);
       const tR = Date.now();
       let bytes = 0;
