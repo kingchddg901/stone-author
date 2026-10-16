@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.15.87';
+  const BUILD = '2026.10.15.88';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9471,10 +9471,85 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // Where OPFS is missing it collects in memory instead, which is exactly what the app did before.
   // Chrome (including Android), Firefox 111 and Safari 17 have it; the file picker reaches far fewer.
+  // THE WRITER WORKER. createSyncAccessHandle writes IN PLACE - no swap file, and flush() makes the
+  // bytes durable - which is the whole reason a render can ever be resumed. It is worker-only by
+  // specification, so the sink has to live off the main thread, and this is the smallest worker that
+  // can own it. Written as a plain source string rather than through fn.toString(): it closes over
+  // nothing, so it carries no free variables and check-worker-core has nothing to catch here.
+  // A TEMPLATE LITERAL, not an array of quoted lines. check-i18n walks every single- and
+  // double-quoted string in the studio script looking for prose that never reached a pack, and it
+  // read three of this worker's CODE lines as English sentences - a fair catch by a heuristic that
+  // cannot tell generated code from writing. The render core is written the same way for the same
+  // reason. The error it can throw is a CODE rather than a sentence: a worker has no TR() to reach
+  // for, and an untranslatable sentence in a pack-checked file is the thing that gate exists to stop.
+  const WRITER_SRC = `let h = null;
+self.onmessage = async (e) => {
+  const m = e.data;
+  try {
+    if (m.op === 'open') {
+      const dir = await navigator.storage.getDirectory();
+      try { await dir.removeEntry(m.name); } catch (_) {}
+      const fh = await dir.getFileHandle(m.name, { create: true });
+      h = await fh.createSyncAccessHandle();
+      h.truncate(0);
+      h.write(new Uint8Array(16), { at: 0 });
+      self.postMessage({ id: m.id, ok: true });
+    } else if (m.op === 'write') {
+      const n = h.write(new Uint8Array(m.buf), { at: m.at });
+      if (n !== m.buf.byteLength) throw new Error('EWRITE ' + n + ' ' + m.buf.byteLength);
+      h.flush();
+      self.postMessage({ id: m.id, ok: true });
+    } else if (m.op === 'close') {
+      if (h) { h.flush(); h.close(); h = null; }
+      self.postMessage({ id: m.id, ok: true });
+    }
+  } catch (ex) { self.postMessage({ id: m.id, ok: false, why: String((ex && ex.message) || ex) }); }
+};`;
+
+  // Open the writer, or report why not. Every failure here is survivable - the caller falls back to the
+  // path it used before - so this resolves null rather than throwing, and says nothing to the user:
+  // a device without sync access handles still renders, it just cannot resume.
+  async function openWriter(name) {
+    if (typeof Worker !== 'function' || !(navigator.storage && navigator.storage.getDirectory)) return null;
+    let url = null, wk = null;
+    try {
+      url = URL.createObjectURL(new Blob([WRITER_SRC], { type: 'text/javascript' }));
+      wk = new Worker(url);
+      let seq = 0, failed = null;
+      const waiting = new Map();
+      wk.onmessage = e => { const q = waiting.get(e.data.id); if (!q) return; waiting.delete(e.data.id);
+                            if (e.data.ok) q.res(); else { failed = e.data.why; q.rej(new Error(e.data.why)); } };
+      wk.onerror = e => { failed = (e && e.message) || 'writer worker threw';
+                          for (const [, q] of waiting) q.rej(new Error(failed)); waiting.clear(); };
+      const send = (msg, transfer) => new Promise((res, rej) => {
+        const id = ++seq; waiting.set(id, { res, rej });
+        wk.postMessage(Object.assign({ id }, msg), transfer || []);
+      });
+      await send({ op: 'open', name });
+      return {
+        write: (at, buf) => send({ op: 'write', at, buf }, [buf]),
+        pending: () => waiting.size,
+        get failed() { return failed; },
+        async close() { try { await send({ op: 'close' }); } finally { wk.terminate(); URL.revokeObjectURL(url); } },
+        kill() { try { wk.terminate(); } catch (_) {} try { URL.revokeObjectURL(url); } catch (_) {} },
+      };
+    } catch (_) {
+      if (wk) { try { wk.terminate(); } catch (_) {} }
+      if (url) { try { URL.revokeObjectURL(url); } catch (_) {} }
+      return null;                                       // no sync handles here: the caller falls back
+    }
+  }
+
   async function tiffSink(W, H, tileW, tileH) {
+    const NAME = 'stone-master.tif';
+    // THREE PATHS, BEST FIRST, and the two below are exactly what this file did before. Dropping them
+    // would hand any device where the worker fails straight to the in-memory path - which is the one
+    // that cannot hold a master on a tablet, so a failure to gain DURABILITY would cost the render
+    // instead. Nothing here is allowed to be worse than what it replaces.
+    const wr = await openWriter(NAME);
     let w = null, handle = null;
     try {
-      if (navigator.storage && navigator.storage.getDirectory) {
+      if (!wr && navigator.storage && navigator.storage.getDirectory) {
         const dir = await navigator.storage.getDirectory();
         // DROP THE LAST ONE FIRST. The name is fixed, so masters do not accumulate across renders - but
         // nothing ever removed this file either, so a finished render leaves a master-sized block of site
@@ -9494,17 +9569,41 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const offs = new Array(N), cnts = new Array(N), order = [];   // `order` is write order; offs is by index
     let at = 16, done = 0;
     return {
-      toDisk: !!w, tiles: N,
+      toDisk: !!w || !!wr, tiles: N,
       // Tiles arrive in whatever order they are produced. A tiled TIFF does not care — the offset array is
       // what places them — so a rendered tile can be cut and its pieces written as they come.
       async add(i, tile) {
         if (offs[i] !== undefined) throw new Error('tiff: tile ' + i + ' written twice');
-        offs[i] = at; cnts[i] = tile.length; at += tile.length; done++;
+        const len = tile.length;                           // BEFORE the transfer: a transferred buffer
+        offs[i] = at; cnts[i] = len; at += len; done++;    // detaches and reads back as length 0
+        if (wr) {
+          if (wr.failed) throw new Error('tiff: writer worker: ' + wr.failed);
+          // BACKPRESSURE, not a round trip per tile. Awaiting every write costs a main-thread hop each
+          // time - at 163,840 tiles that is minutes of latency on a render that is not waiting for the
+          // disk. The worker writes synchronously and is far ahead of the deflate feeding it, so the
+          // queue only matters if something has gone wrong; this bounds it either way.
+          const p = wr.write(at - len, tile.buffer);
+          if (wr.pending() > 64) await p;
+          return;
+        }
         if (w) await w.write(tile); else order.push(tile);
       },
       async finish(desc) {
         if (done !== N) throw new Error(`tiff: wrote ${done} of ${N} tiles`);
         const { head, tail } = tiffLayout(W, H, tileW, tileH, offs, cnts, desc);
+        if (wr) {
+          // The tail goes where the tiles stopped, part by part, and the header last - same order as the
+          // writable path, but at explicit offsets because a sync handle does not carry a cursor.
+          let p = at;
+          for (const part of tail) { const u = part instanceof Uint8Array ? part : new Uint8Array(part);
+                                     await wr.write(p, u.slice().buffer); p += u.length; }
+          await wr.write(0, head.slice().buffer);
+          await wr.close();
+          if (wr.failed) throw new Error('tiff: writer worker: ' + wr.failed);
+          const dir = await navigator.storage.getDirectory();
+          const fh = await dir.getFileHandle('stone-master.tif');
+          return { blob: await fh.getFile(), parts: null };  // disk-backed: handing this over copies nothing
+        }
         if (!w) { const parts = [head, ...order, ...tail]; return { blob: new Blob(parts, { type: 'image/tiff' }), parts }; }
         for (const part of tail) await w.write(part);
         await w.write({ type: 'write', position: 0, data: head });
@@ -11719,7 +11818,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
             litSum += l; if (l > 40) litUp++; litN++;
           }
           const z = await deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength));
-          await sink.add(ty * p.across + tx, z); bytes += z.length; tb += z.length;   // straight to disk under OPFS
+          // LENGTH FIRST. The sink may TRANSFER this buffer to the writer worker, and a transferred
+          // buffer detaches - z.length reads back as 0 afterwards. Taking it after the call silently
+          // zeroed `bytes` and every perTile row, which is a master that looks finished and whose
+          // provenance block is wrong.
+          const zl = z.length;
+          await sink.add(ty * p.across + tx, z); bytes += zl; tb += zl;   // straight to disk under OPFS
         }
         c.width = 1; c.height = 1;                         // only now: every quarter has been read
         tileMs.push(Math.round(performance.now() - tTile)); tileBytes.push(tb);
