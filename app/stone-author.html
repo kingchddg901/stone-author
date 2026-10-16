@@ -825,7 +825,7 @@ window.SA_I18N = (() => {
   "big.extreme": "Extreme",
   "big.once": "Unreasonable",
   "big.why": "WHY",
-  "big.warn-why": "These two are not a tier, they are the question in the name.\n\n524288 is four times the pixels of a 262144 and 1048576 is sixteen — 171.8 and 687.2 gigapixels. At the 0.084 bytes per pixel a 262144 of this slab actually measured, that is roughly 14 GB and 58 GB of file, and at four times the time for each doubling of the width, hours rather than minutes.\n\nNOTHING HERE IS KNOWN TO WORK AT THESE SIZES. The tile addressing is not the limit — it reaches to 8388608px. What has never been tried is whether this browser will hold 58 GB of origin-private storage, or hand you a file that size to save. Either can refuse, and it would refuse after the render, not before it.\n\nThe published site does not offer this rung at all. It is here because you are running the app off your own disk, where the only thing you can lose is your own evening.",
+  "big.warn-why": "WHY?\n\nYou are requesting up to 687 billion pixels.\n\nThis feature is available locally because somebody has to test the limits.",
   "big.large": "Large render",
   "big.mem-rec": "Recommended: {gb} GB of memory — the machine this tier is known to finish on. Below that it is untested, not unsupported.",
   "big.mem-reported": "This browser reports {gb} GB — a rounded figure, and some browsers cap it.",
@@ -838,6 +838,8 @@ window.SA_I18N = (() => {
   "btn.cal-cancel": "Cancel",
   "btn.cal-clear": "Forget",
   "btn.cal-start": "Start",
+  "btn.because-i-can": "Because I Can",
+  "btn.perhaps-not": "Perhaps Not",
   "btn.cancel": "Cancel",
   "btn.clear": "Clear",
   "btn.colour-fromfam": "Palette from family",
@@ -1769,7 +1771,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.123';
+  const BUILD = '2026.10.16.124';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -11481,12 +11483,15 @@ self.onmessage = async (e) => {
   // addEventListener('close') ever fires — so a promise waiting on it hangs for ever and the toggle
   // silently does nothing. Resolve from the buttons, and watch `open` as the backstop, which also covers
   // Escape and a backdrop dismissal.
-  function bigDialog(text, goLabel) {
+  function bigDialog(text, goLabel, noLabel) {
     const d = document.getElementById('bigdlg');
     if (!d || !d.showModal) return Promise.resolve(confirm(text));   // no <dialog>: the browser's own
     document.getElementById('bigdlg-text').textContent = text;
     const go = document.getElementById('bigdlg-go'), no = d.querySelector('[value=cancel]');
     go.textContent = goLabel;
+    // WRITTEN EVERY TIME, not only when asked for. The element is shared by every caller, so a label
+    // one dialogue set would turn up on the next one that did not.
+    no.textContent = noLabel || TR('btn.cancel');
     return new Promise(res => {
       let done = false, poll = 0;
       const finish = v => {
@@ -11616,7 +11621,7 @@ self.onmessage = async (e) => {
   });
   { const wb = document.getElementById('tier-why');
     if (wb) wb.addEventListener('change', async () => {
-      if (wb.checked && !(await bigDialog(TR('big.warn-why'), TR('btn.understood')))) {
+      if (wb.checked && !(await bigDialog(TR('big.warn-why'), TR('btn.because-i-can'), TR('btn.perhaps-not')))) {
         wb.checked = false; tierWhy = false; applyTiers(); return;
       }
       tierWhy = wb.checked;                                // never persisted, like the two rungs below it
