@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.106';
+  const BUILD = '2026.10.16.107';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9756,10 +9756,6 @@ self.onmessage = async (e) => {
   // first thing it touches is a render that can run for six hours. Without a flag, the only way back
   // from a bad writer is a revert and a deploy, and the device that needs this most is a tablet on the
   // other side of a share. Read once at boot, like ?tile= and ?mem= beside it.
-  // OFF UNTIL IT IS PROVEN. Stage 3 is the only part of this that can produce a WRONG master rather
-  // than merely lose one, and it cannot be executed where it was written - Playwright will not spawn
-  // here. So it is opt-in: ?resume=1 to try it, nothing at all otherwise, and the default flips when a
-  // real render on real hardware has been killed and picked up again. Read once at boot, beside the rest.
   // ON. `?mark=0` turns it off, for reproducing a master from before 2026-10-16 or for a picture that
   // must not be altered at all.
   //
@@ -9787,9 +9783,33 @@ self.onmessage = async (e) => {
     try { return !/^(0|off|no)$/i.test(new URLSearchParams(location.search).get('mark') || ''); }
     catch (_) { return true; }
   })();
+  // ON. `?resume=0` turns it off, for a render that must start clean or a device whose record is
+  // suspect. Read once at boot, beside the rest.
+  //
+  // THIS IS THE ONLY PART THAT CAN PRODUCE A WRONG MASTER rather than merely lose one, so the bar for
+  // the default was never that the tests pass. It was a real render on real hardware, killed and picked
+  // up. On 2026-10-16 a 32,768 was rendered, killed near half way, reloaded and finished, and
+  // check-same-image found the result byte-identical to the same picture rendered straight through:
+  // 280,144,040 image bytes, byte for byte.
+  //
+  // THEN IT WAS BROKEN ON PURPOSE, which is the half that mattered more. A build that transposed two
+  // entries in the tile directory produced a master the gate called IDENTICAL - the tile DATA was
+  // untouched, so nothing comparing the stored region could see that two tiles had swapped places. The
+  // GATE was wrong, not the resume. sameDirectory() closed that, and positional marking exists because
+  // of it: every tile now carries the address it believes it holds. The break has since been seen to go
+  // red, which is what stage 4 asked for and what kept this flag off until now.
+  //
+  // WHAT IT STILL WILL NOT DO. `resumed` requires the OPFS writer, so a device that cannot open a sync
+  // access handle starts clean rather than pretending. A record belonging to another picture is refused
+  // on renderSig, silently and finally - there is no adapting one to a job it was not written for,
+  // because the result of getting that wrong is a master built from two pictures.
+  //
+  // AND A RESUMED MASTER UNDERSTATES ITS OWN COST. `ms.render` covers the sitting that FINISHED the
+  // file, while per-tile values are arrival intervals and sum across both sittings: the killed 32,768
+  // reported 19.7 s and summed to 42.3 s, against 41.4 s in one go. tiff-meta prints both.
   const RESUME_ON = (() => {
-    try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('resume') || ''); }
-    catch (_) { return false; }
+    try { return !/^(0|off|no)$/i.test(new URLSearchParams(location.search).get('resume') || ''); }
+    catch (_) { return true; }
   })();
   const WRITER_OFF = (() => {
     try { return /^(0|off|no)$/i.test(new URLSearchParams(location.search).get('writer') || ''); }

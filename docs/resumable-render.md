@@ -1,13 +1,22 @@
 # A render that survives losing the page
 
-Status: **built, and stage 4 passed on 2026-10-16.** A 32,768 was rendered, killed near half way, picked
-up and finished - and `check-same-image` found it **byte-identical to the same picture rendered straight
-through**: 280,144,040 image bytes, byte for byte. Stages 1 to 4 below are done. What has NOT been done
-is deliberately breaking the resume and watching that gate catch it; the comparison tool is independently
-proven able to go red on real masters, having reported 160 of 160 tiles differing on a genuinely
-different pair the night before, but the end-to-end break-and-catch is still owed.
+Status: **built, proven, and ON BY DEFAULT since 2026-10-16.** A 32,768 was rendered, killed near half
+way, picked up and finished - and `check-same-image` found it **byte-identical to the same picture
+rendered straight through**: 280,144,040 image bytes, byte for byte. Stages 1 to 4 below are done.
 
-Stage 3 is behind `?resume=1` until that is done.
+**The break-and-catch is done, and it is the half that mattered.** A build that transposed two entries in
+the tile directory produced a master the gate called **IDENTICAL**: the tile *data* was untouched, so
+nothing comparing the stored region could see that two tiles had swapped places. The GATE was wrong, not
+the resume. `sameDirectory()` closed that, and [positional marking](positional-marks.md) exists because
+of it - every tile now carries the address it believes it holds. Both are gated:
+`check-same-image --selftest` case 13, and [`tools/check-placement.mjs`](../tools/check-placement.mjs)
+against a real master.
+
+`?resume=0` turns it off, for a render that must start clean or a device whose record is suspect.
+
+**What it will not do.** A resume needs the OPFS writer: a device that cannot open a sync access handle
+starts clean rather than pretending. A record belonging to another picture is refused on `renderSig`,
+silently and finally - there is no adapting one to a job it was not written for.
 
 **A RESUMED MASTER UNDERSTATES ITS OWN COST.** `ms.render` covers the sitting that FINISHED the file.
 Per-tile values are arrival intervals and sum to wall clock - 1.000 on every single-sitting master - so
