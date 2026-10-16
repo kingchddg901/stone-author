@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.15.84';
+  const BUILD = '2026.10.15.85';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -10641,14 +10641,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                                 open: Math.round(W * h / 1e9 * 10.3).toLocaleString() })
               + '\n\n' + memNote(),
             TR('btn.start-giant')))) return;
-      // DISARM THE WHOLE LADDER ABOVE LARGE, not just the middle rung. Clearing tierExtreme alone
-      // left 131072 and 262144 still armed, so a 262144 render finished with 262144 STILL SELECTED
-      // where a 65535 fell back to the largest size on offer - two sizes behaving two ways for no
-      // reason a user could see. Worse, the Once row hides on !tierExtreme, so its tick went
-      // invisible while staying true: armed, and nowhere to untick it. Both are per-render decisions
-      // by the declaration at the top of this file; only tierLarge is a persisted setting.
-      tierExtreme = tierOnce = false; applyTiers();         // disarm on LAUNCH, not on success
     }
+    // DISARM THE WHOLE LADDER ABOVE LARGE, on EVERY launch. Clearing tierExtreme alone left 131072
+    // and 262144 still armed, so a 262144 render finished with 262144 STILL SELECTED where a 65535
+    // fell back to the largest size on offer - two sizes behaving two ways for no reason a user
+    // could see. Worse, the Once row hides on !tierExtreme, so its tick went invisible while staying
+    // true: armed, and nowhere to untick it. Both are per-render decisions by the declaration at the
+    // top of this file; only tierLarge is a persisted setting.
+    //
+    // OUTSIDE the size branch, because inside it the ladder survived any export at or below
+    // STRIP_FROM: arm Extreme, render a 2048 preview, and the ticks were still up afterwards. A tick
+    // is spent by the CLICK, not by how big the click turned out to be. The cost is that a small test
+    // export now costs the arming too - two clicks to put back, and the price of a rung meaning one
+    // render rather than one session. It sits after the confirm dialog bails out, so CANCELLING a
+    // giant render spends nothing.
+    tierExtreme = tierOnce = false; applyTiers();           // disarm on LAUNCH, not on success
     // THE FLOOR ONLY RENDERS ON THE DIRECT PATH. Above it the export streams tiles through a core
     // that paints the slab, so the floor would come back as the material it was cut from - correct
     // size, correct name, wrong picture. Refuse and name the size that works.
