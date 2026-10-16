@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.92';
+  const BUILD = '2026.10.16.93';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9676,13 +9676,20 @@ self.onmessage = async (e) => {
     // statement of what is in the file; a render that dies BECAUSE of it would be a straight loss. So
     // every failure here sets recOk false and nothing else: the record stops, the master carries on,
     // and what is on disk stops claiming tiles it can no longer vouch for.
-    let recOk = false, pending = [];
+    let recOk = false, recWhy = null, pending = [];
     if (wr && job) {
       try {
         await wr.recOpen(REC, JOB, JSON.stringify(Object.assign({ v: 1, base: 16 }, job)));
         recOk = true;
-      } catch (_) { recOk = false; }
-    }
+      } catch (ex) {
+        // KEEP THE REASON. The first version swallowed it, and the first real render then reported
+        // `recorded` absent with nothing to say why - the fourth time in one evening that a silent
+        // catch cost a round trip to a device on the other side of a share. A master that cannot
+        // explain its own degradation makes every diagnosis a guessing game.
+        recOk = false; recWhy = String((ex && ex.message) || ex).slice(0, 120);
+      }
+    } else if (wr) { recWhy = 'ENOJOB'; }            // the sink was given no identity to record
+    else { recWhy = 'ENOWRITER'; }               // no sync access handle on this device
     return {
       toDisk: !!w || !!wr, tiles: N,
       // Tiles arrive in whatever order they are produced. A tiled TIFF does not care — the offset array is
@@ -9715,10 +9722,12 @@ self.onmessage = async (e) => {
         // anyone waits for the acknowledgement. Awaiting would cost a main-thread hop PER RENDER TILE -
         // at 163,840 of them, minutes of latency on a render that is not waiting for the disk. The
         // close at the end is queued behind these, so finish() drains them without asking.
-        try { wr.rec(resumeRow(n, ms, bytes, dSum, dUp, dN, pieces).buffer).catch(() => { recOk = false; }); }
-        catch (_) { recOk = false; }
+        try { wr.rec(resumeRow(n, ms, bytes, dSum, dUp, dN, pieces).buffer)
+                .catch(ex => { recOk = false; recWhy = String((ex && ex.message) || ex).slice(0, 120); }); }
+        catch (ex) { recOk = false; recWhy = String((ex && ex.message) || ex).slice(0, 120); }
       },
       get recording() { return recOk; },
+      get recordWhy() { return recOk ? null : recWhy; },
       async finish(desc) {
         if (done !== N) throw new Error(`tiff: wrote ${done} of ${N} tiles`);
         const { head, tail } = tiffLayout(W, H, tileW, tileH, offs, cnts, desc);
@@ -12034,6 +12043,9 @@ self.onmessage = async (e) => {
         // Whether this render left a statement of itself behind. Absent means it did not, which is what
         // every master before 2026.10.16.92 means too.
         recorded: sink.recording || undefined,
+        // Why not, when not. Absent on a master that recorded, and absent on every master written
+        // before this build - so the field reads as "it did not, and here is the reason" or nothing.
+        recordWhy: sink.recording ? undefined : (sink.recordWhy || undefined),
         // absent = painted on this thread. `planned` and `shed` appear only when the pool narrowed
         // itself mid-render, which is the machine saying the budget was too generous for it.
         workers: poolRan ? poolRan.n : undefined,
