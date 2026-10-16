@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.99';
+  const BUILD = '2026.10.16.101';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9374,6 +9374,89 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const { head, tail } = tiffLayout(W, H, tileW, tileH, offs, cnts, desc);
     const parts = [head, ...tiles, ...tail];
     return { blob: new Blob(parts, { type: 'image/tiff' }), parts };   // parts, so a caller can checksum without a second copy
+  }
+  // ---- where a tile says it belongs ----------------------------------------------------------------
+  // A tile that moves takes its pixels with it and nothing in the picture objects. A transposed tile
+  // directory was shown on 2026-10-16 to survive a byte comparison of the stored region, every light
+  // figure, and the per-tile weights wherever a render tile is cut into several stored ones - because a
+  // transposition MOVES pixels without altering one of them. The only check that cannot be fooled is a
+  // tile that carries its own address.
+  //
+  // ON A LATTICE ANCHORED TO THE PICTURE, never to the tile. Marks placed at each tile's corner would
+  // move when the tile size moved, and that would cost the result this repo now rests on: a 512-tiled
+  // and a 1024-tiled render of one picture, byte-identical across 40,960 tiles. Every legal tile size -
+  // 512, 1024, 2048, 4096 - is a multiple of 512, so a 512 lattice cuts cleanly inside any of them and
+  // the same cell lands at the same absolute pixels whatever the planner chose.
+  //
+  // IN THE BLUE LOW BIT, bottom row of each cell, right to left. Blue carries about 7% of perceived
+  // luminance against green's 59%, so it is the quietest channel to disturb; the low bit is a change of
+  // at most one level and - unlike adding one - cannot clip at 255, where it simply goes down instead.
+  // It is also ABSOLUTE: reading needs the pixel and nothing else. Any rule that depended on what the
+  // pixel WOULD have been unmarked would need the cell re-rendered to read, which is the expensive
+  // check this exists to replace.
+  //
+  // 32 bits, three copies, 96 pixels of a 512-wide row - one pixel in 2,730 of a cell, at one level.
+  // SIXTY-FOUR BITS, as two 32-bit words so nothing here needs BigInt. The high word is version and
+  // address; the low word is `inputs` - renderSig, the same value every master publishes and every
+  // sidecar tabulates. That is the whole reason for the extra 32 bits: the address says WHERE a tile
+  // sits, and the key says WHICH PICTURE it sits in, so a fragment with no file around it is still
+  // attributable. It is a lookup key and not a proof - renderSig is a 32-bit CRC and was seen on
+  // 2026-10-15 to match across two masters that were not the same picture - but the address beside it
+  // IS proof, and the two answer different questions.
+  //
+  // The 14-bit axes were already enough for a 1,048,576 render (2048 x 1280 cells) and for anything up
+  // to 8.4 M wide, so the extra word buys the key rather than range.
+  const MARK_CELL = 512, MARK_BITS = 64, MARK_COPIES = 3, MARK_VER = 1;
+  // A VERSION IN THE PAYLOAD, because absence and an unknown scheme look identical otherwise. The
+  // material key taught that the hard way: a reader could not tell "no floor" from "this build never
+  // recorded one" until tiff-meta gated the field on a build.
+  function markPack(cx, cy, ver) {
+    return (((ver & 15) * 268435456) + ((cx & 16383) * 16384) + (cy & 16383)) >>> 0;
+  }
+  function markUnpack(v) {
+    return { ver: (v >>> 28) & 15, cx: (v >>> 14) & 16383, cy: v & 16383 };
+  }
+  // Stamps one STORED tile in place. `px` is its RGBA, `store` its side, (tx, ty) its place in the grid.
+  // Only a cell lying wholly inside W x H is marked: an edge cell is part padding, and padding is not
+  // the picture. Returns how many it wrote, so a caller can say nothing was marked rather than assume.
+  function markStamp(px, store, tx, ty, W, H, sig) {
+    const n = store / MARK_CELL;
+    if (!Number.isInteger(n) || n < 1) return 0;
+    let marked = 0;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const cx = tx * n + i, cy = ty * n + j;
+      if ((cx + 1) * MARK_CELL > W || (cy + 1) * MARK_CELL > H) continue;
+      const hi = markPack(cx, cy, MARK_VER), lo = (sig || 0) >>> 0;
+      const row = (j + 1) * MARK_CELL - 1, right = (i + 1) * MARK_CELL - 1;
+      for (let c = 0; c < MARK_COPIES; c++) for (let b = 0; b < MARK_BITS; b++) {
+        const o = (row * store + (right - (c * MARK_BITS + b))) * 4 + 2;
+        const bit = b < 32 ? (lo >>> b) & 1 : (hi >>> (b - 32)) & 1;
+        px[o] = (px[o] & 254) | bit;
+      }
+      marked++;
+    }
+    return marked;
+  }
+  // Reads them back and says, per cell, whether the address it carries is the address it occupies.
+  // Majority across the copies, so one damaged copy is survivable and a three-way disagreement is its
+  // own signal.
+  function markRead(px, store, tx, ty) {
+    const n = store / MARK_CELL, out = [];
+    if (!Number.isInteger(n) || n < 1) return out;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const row = (j + 1) * MARK_CELL - 1, right = (i + 1) * MARK_CELL - 1;
+      let lo = 0, hi = 0;
+      for (let b = 0; b < MARK_BITS; b++) {
+        let ones = 0;
+        for (let c = 0; c < MARK_COPIES; c++)
+          ones += px[(row * store + (right - (c * MARK_BITS + b))) * 4 + 2] & 1;
+        if (ones * 2 > MARK_COPIES) { if (b < 32) lo += Math.pow(2, b); else hi += Math.pow(2, b - 32); }
+      }
+      const got = markUnpack(hi >>> 0), want = { cx: tx * n + i, cy: ty * n + j };
+      got.sig = (lo >>> 0).toString(16);
+      out.push({ want, got, ok: got.ver === MARK_VER && got.cx === want.cx && got.cy === want.cy });
+    }
+    return out;
   }
   // ---- the resumable record: the part that can be tested ------------------------------------------
   // A render that dies has written real tiles to a real file and every one of them is wasted, because
