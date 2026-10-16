@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.101';
+  const BUILD = '2026.10.16.104';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9406,7 +9406,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // The 14-bit axes were already enough for a 1,048,576 render (2048 x 1280 cells) and for anything up
   // to 8.4 M wide, so the extra word buys the key rather than range.
-  const MARK_CELL = 512, MARK_BITS = 64, MARK_COPIES = 3, MARK_VER = 1;
+  // NINETY-SIX BITS: a magic word, the address, and the key. THE MAGIC IS NOT DECORATION - it is the
+  // only thing that distinguishes a mark from a picture. Copy agreement was tried first and is not
+  // enough: a smooth gradient increments blue at a regular pitch, so its low bits are PERIODIC, and
+  // three adjacent windows read the same value by construction. Run on a real unmarked master it
+  // reported cell after cell holding address (1092, 4369) of picture 11111111 - which is 0x1111 and
+  // 0x11111111, a repeating pattern, agreeing with itself and meaning nothing. A picture producing a
+  // chosen 32-bit constant AND repeating it three times is 2^-32 per copy; an unmarked master reads as
+  // unmarked, which is the behaviour that matters most, because the alternative accuses it of damage.
+  const MARK_CELL = 512, MARK_BITS = 96, MARK_COPIES = 3, MARK_VER = 1;
+  const MARK_MAGIC = 0x5A4D4B31 >>> 0;                   // "ZMK1", and nothing a gradient will make
   // A VERSION IN THE PAYLOAD, because absence and an unknown scheme look identical otherwise. The
   // material key taught that the hard way: a reader could not tell "no floor" from "this build never
   // recorded one" until tiff-meta gated the field on a build.
@@ -9426,35 +9435,53 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       const cx = tx * n + i, cy = ty * n + j;
       if ((cx + 1) * MARK_CELL > W || (cy + 1) * MARK_CELL > H) continue;
-      const hi = markPack(cx, cy, MARK_VER), lo = (sig || 0) >>> 0;
+      const w = [MARK_MAGIC, markPack(cx, cy, MARK_VER), (sig || 0) >>> 0];
       const row = (j + 1) * MARK_CELL - 1, right = (i + 1) * MARK_CELL - 1;
       for (let c = 0; c < MARK_COPIES; c++) for (let b = 0; b < MARK_BITS; b++) {
         const o = (row * store + (right - (c * MARK_BITS + b))) * 4 + 2;
-        const bit = b < 32 ? (lo >>> b) & 1 : (hi >>> (b - 32)) & 1;
-        px[o] = (px[o] & 254) | bit;
+        px[o] = (px[o] & 254) | ((w[(b / 32) | 0] >>> (b % 32)) & 1);
       }
       marked++;
     }
     return marked;
   }
   // Reads them back and says, per cell, whether the address it carries is the address it occupies.
-  // Majority across the copies, so one damaged copy is survivable and a three-way disagreement is its
-  // own signal.
+  //
+  // A MARK IS PRESENT ONLY WHEN THE COPIES AGREE, and that is not a refinement - it is the only thing
+  // separating a mark from noise. Per-bit majority always yields SOME value, and an unmarked master is
+  // full of pixels whose blue low bits are whatever the picture made them: a 4-bit version field matches
+  // by luck about one time in sixteen, so a reader trusting the version alone accuses an unmarked master
+  // of having moved its tiles. Measured, on a real one, before this was written. Three independent
+  // 64-bit copies agreeing by chance is 2^-128; agreeing by construction is what a real mark does.
+  // Two of three is enough, so one damaged copy is survivable and a three-way split reports absence
+  // rather than inventing a reading.
   function markRead(px, store, tx, ty) {
     const n = store / MARK_CELL, out = [];
     if (!Number.isInteger(n) || n < 1) return out;
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       const row = (j + 1) * MARK_CELL - 1, right = (i + 1) * MARK_CELL - 1;
-      let lo = 0, hi = 0;
-      for (let b = 0; b < MARK_BITS; b++) {
-        let ones = 0;
-        for (let c = 0; c < MARK_COPIES; c++)
-          ones += px[(row * store + (right - (c * MARK_BITS + b))) * 4 + 2] & 1;
-        if (ones * 2 > MARK_COPIES) { if (b < 32) lo += Math.pow(2, b); else hi += Math.pow(2, b - 32); }
+      const copies = [];
+      for (let c = 0; c < MARK_COPIES; c++) {
+        const w = [0, 0, 0];
+        for (let b = 0; b < MARK_BITS; b++)
+          if (px[(row * store + (right - (c * MARK_BITS + b))) * 4 + 2] & 1)
+            w[(b / 32) | 0] += Math.pow(2, b % 32);
+        copies.push([w[0] >>> 0, w[1] >>> 0, w[2] >>> 0]);
       }
-      const got = markUnpack(hi >>> 0), want = { cx: tx * n + i, cy: ty * n + j };
-      got.sig = (lo >>> 0).toString(16);
-      out.push({ want, got, ok: got.ver === MARK_VER && got.cx === want.cx && got.cy === want.cy });
+      // The magic first, then agreement. Either alone has been seen to pass on an unmarked picture.
+      let best = null, agree = 0;
+      for (const cand of copies) {
+        if (cand[0] !== MARK_MAGIC) continue;
+        let k = 0;
+        for (const v of copies) if (v[0] === cand[0] && v[1] === cand[1] && v[2] === cand[2]) k++;
+        if (k > agree) { agree = k; best = cand; }
+      }
+      const present = agree >= 2;
+      const want = { cx: tx * n + i, cy: ty * n + j };
+      const got = present ? markUnpack(best[1]) : { ver: 0, cx: -1, cy: -1 };
+      if (present) got.sig = best[2].toString(16);
+      out.push({ want, got, present, agree,
+                 ok: present && got.ver === MARK_VER && got.cx === want.cx && got.cy === want.cy });
     }
     return out;
   }
@@ -9716,6 +9743,15 @@ self.onmessage = async (e) => {
   // than merely lose one, and it cannot be executed where it was written - Playwright will not spawn
   // here. So it is opt-in: ?resume=1 to try it, nothing at all otherwise, and the default flips when a
   // real render on real hardware has been killed and picked up again. Read once at boot, beside the rest.
+  // OFF UNTIL IT HAS BEEN LOOKED AT. Marking alters every master: about one pixel in 10,923 moves by
+  // one level of blue, which is far below anything an eye resolves and is still a different file. Every
+  // master in docs/sidecars was rendered unmarked, and `inputs` does not change when marks are added -
+  // so a marked and an unmarked render of one picture share a signature and differ in bytes. That is the
+  // material key's shape again, and it wants the same discipline: prove it is invisible, then decide.
+  const MARK_ON = (() => {
+    try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('mark') || ''); }
+    catch (_) { return false; }
+  })();
   const RESUME_ON = (() => {
     try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('resume') || ''); }
     catch (_) { return false; }
@@ -12131,6 +12167,10 @@ self.onmessage = async (e) => {
       const p = await tiffPlan(W);
       // The job identity goes to the sink so the record can say WHAT it is a record of. resumeSig is
       // the same signature a master publishes as `inputs`, plus the geometry the file was written with.
+      // The key a marked tile carries: renderSig as a number, the same value the master publishes as
+      // `inputs`. Taken once - it cannot change mid-render, and reading it per tile would invite it to.
+      const markSig = MARK_ON ? (parseInt(renderSig() || '0', 16) >>> 0) : 0;
+      let markedCells = 0;
       const jobSig = resumeSig({ inputs: renderSig(), w: W, h: p.FH, ts: p.ts, store: p.store,
                                  bleed: p.bleed, across: p.across, down: p.down, renders: p.renders });
       // PICK UP, OR START OVER. Loaded, then VERIFIED by re-rendering tiles the file already holds -
@@ -12232,6 +12272,10 @@ self.onmessage = async (e) => {
           // The FULL stored tile, padding included: TIFF wants every tile the same size and uses
           // ImageWidth and ImageLength to say where the picture stops, so an edge tile is padded.
           const px = cx.getImageData(p.bleed + sx * p.store, p.bleed + sy * p.store, p.store, p.store).data;
+          // BEFORE the light is sampled, so the figure the master publishes describes the bytes the
+          // master holds rather than the picture before it was marked. The difference is around 1e-4 of
+          // a level either way; describing the file is simply the honest one of the two.
+          if (MARK_ON) markedCells += markStamp(px, p.store, tx, ty, W, p.FH, markSig);
           for (let i = 0; i < px.length; i += 400) {            // every 100th pixel: what --audit samples
             const l = (px[i] + px[i + 1] + px[i + 2]) / 3;
             litSum += l; if (l > 40) litUp++; litN++;
@@ -12316,6 +12360,10 @@ self.onmessage = async (e) => {
         recordWhy: sink.recording ? undefined : (sink.recordWhy || undefined),
         // A RESUMED MASTER SAYS SO. It is a legitimate thing and a reader should still know, because
         // its tiles were painted in two sittings and possibly on two builds.
+        // WHICH MARKING SCHEME, not merely that there was one. Absence and an unknown scheme look
+        // identical otherwise, which is the trap the material key fell into.
+        marked: markedCells ? MARK_VER : undefined,
+        markedCells: markedCells || undefined,
         resumedTiles: sink.resumedTiles || undefined,
         resumeWhy: resumeWhy || undefined,            // why a prior render was refused, when one was
         // absent = painted on this thread. `planned` and `shed` appear only when the pool narrowed

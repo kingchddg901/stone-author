@@ -34,8 +34,16 @@ function liftFn(name) {
   for (;; i++) { if (SRC[i] === '{') d++; else if (SRC[i] === '}' && --d === 0) break; }
   return SRC.slice(hits[0], i + 1);
 }
-const CONST = (SRC.match(/const MARK_CELL = [^\n]*/) || [])[0];
-if (!CONST) throw new Error('cannot find the MARK_ constants');
+// EVERY MARK_ constant, not just the first line. The magic word is on its own line and a lifter that
+// took one produced a ReferenceError at the first stamp - the same shape as the declarator bug in
+// check-worker-core, where reading one name off a line hid the rest.
+const CONST = (SRC.match(/^\s*const MARK_[^\n]*$/gm) || [])
+  // NOT the URL flag. A line declaring MARK_ON opens an IIFE, so "every const MARK_ line" swept in an
+  // unbalanced fragment and new Function died on end-of-input. Too broad, in the same way the
+  // declarator scan in check-worker-core was too narrow - a pattern that nearly matches the right
+  // thing is the one that costs an hour.
+  .filter(l => l.indexOf("=>") < 0).join("\n");
+if (!CONST) throw new Error("cannot find the MARK_ constants - this file is stale");
 const NAMES = ['markPack', 'markUnpack', 'markStamp', 'markRead'];
 const APP = new Function(CONST + '\n' + NAMES.map(liftFn).join('\n') +
                          '; return {' + NAMES.join(',') + ', MARK_CELL, MARK_BITS, MARK_COPIES, MARK_VER};')();
