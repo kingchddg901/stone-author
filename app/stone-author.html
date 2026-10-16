@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.15.86';
+  const BUILD = '2026.10.15.87';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9382,11 +9382,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // this logic can be tested at all - OPFS, and the worker that will own it, do not exist outside a
   // browser. Everything that cannot be tested is kept on the other side of them.
 
-  // WHAT MUST MATCH BEFORE A RESUME IS LEGAL. The build is in here deliberately. A later build may lay
-  // tiles out differently or paint them differently, and half a master from each is a corruption nobody
-  // could explain afterwards - so a new build abandons the old record rather than reasoning about it.
+  // WHAT MUST MATCH BEFORE A RESUME IS LEGAL: the signature over the inputs that reach the pixels, and
+  // the geometry the file was written with. `inputs` is renderSig() - the same value a master publishes -
+  // so a daylight and a black-light render of one slab do not look alike here, which stateSig could not
+  // tell apart. The render tile size is in it because it decides which pixels each tile saw: a resumed
+  // job must continue on the plan the file was started with, even where the device would now choose
+  // another one.
+  //
+  // THE BUILD IS DELIBERATELY NOT IN HERE, decided 2026-10-15. Including it is the safe reading - a later
+  // build could lay tiles out differently - but it means every deploy abandons every job in flight, and
+  // this repo shipped four builds in the day this was written. A six-hour render on the A7 cannot be
+  // hostage to a docs typo going out. What that costs is named rather than hidden: if the render path
+  // changes between two builds, a resumed master is half each and nothing here would say so. The master
+  // records the build it FINISHED under, so a cross-build resume is invisible in the provenance block -
+  // recording both would make it visible, and is not done yet.
   function resumeSig(o) {
-    return [o.build, o.inputs, o.w, o.h, o.ts, o.store, o.bleed, o.across, o.down, o.renders].join(String.fromCharCode(124));
+    return [o.inputs, o.w, o.h, o.ts, o.store, o.bleed, o.across, o.down, o.renders].join(String.fromCharCode(124));
   }
 
   // ONE ROW PER RENDER TILE, SEALED AT BOTH ENDS. A row is appended only after its whole cut is on disk,

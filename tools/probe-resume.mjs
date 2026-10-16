@@ -160,7 +160,7 @@ const ALL = [...Array(RENDERS).keys()];
 
 // ---- 4. the signature ------------------------------------------------------------------------------
 {
-  const base = { build: '2026.10.15.86', inputs: '8cef8303', w: 262144, h: 163840, ts: 2048,
+  const base = { inputs: '8cef8303', w: 262144, h: 163840, ts: 2048,
                  store: 2048, bleed: 4, across: 128, down: 80, renders: 10240 };
   const sig = resumeSig(base);
   let same = [];
@@ -170,6 +170,12 @@ const ALL = [...Array(RENDERS).keys()];
   }
   ok('every field in the signature changes it', same.length === 0, 'ignored: ' + same.join(', '));
   ok('the same plan gives the same signature', resumeSig({ ...base }) === sig);
+  // AND THE OTHER DIRECTION. The build was in here and was taken out on 2026-10-15, because including it
+  // abandons every job in flight on every deploy and this repo shipped four builds that day. That is a
+  // decision, so it is pinned from both sides: the loop above catches a field that stopped counting, and
+  // this catches the build quietly coming back and killing resumes nobody would connect to a deploy.
+  ok('the build does NOT take part in the signature',
+     resumeSig({ ...base, build: '2026.01.01.1' }) === resumeSig({ ...base, build: '2099.12.31.9' }));
 }
 
 console.log('');

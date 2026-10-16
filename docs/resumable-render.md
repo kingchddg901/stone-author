@@ -146,10 +146,18 @@ line from `resumeState` turns it red with the exact number, which is how that wa
 master's own `inputs` field IS `renderSig()` (`app/stone-author.html:9246`), so the signature a sidecar
 publishes and the signature a resume matches on are the same value.
 
-**It also carries the build, which this document did not ask for.** A later build may lay tiles out
-differently or paint them differently, and half a master from each would be a corruption nobody could
-explain afterwards. The cost is real and should be decided rather than inherited: every deploy abandons
-every resumable job in flight, and on 15 October this repo shipped four builds in a day.
+**The build is deliberately NOT in it, decided 2026-10-15.** Including it is the safe reading - a later
+build could lay tiles out differently, and half a master from each would be a corruption nobody could
+explain afterwards. It was taken out anyway, because it means every deploy abandons every job in flight,
+and this repo shipped four builds on the day this was written. A six-hour render on the A7 cannot be
+hostage to a docs typo going out.
+
+What that costs is named rather than hidden: **if the render path changes between two builds, a resumed
+master is half each and nothing would say so.** A master records the build it FINISHED under, so a
+cross-build resume is invisible in its own provenance block. Recording both builds would make it
+visible and is cheap; it is not done. The probe pins the decision from both sides - one case catches a
+field that stopped counting, another catches the build quietly coming back and killing resumes that
+nobody would connect to a deploy.
 
 **And it carries the accumulators, which this document missed entirely.** The export loop keeps more than
 tiles. `litSum`, `litUp` and `litN` become `light.mean` and `lit>40` in the provenance block - every light

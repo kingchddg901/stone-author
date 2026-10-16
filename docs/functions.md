@@ -834,27 +834,27 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
 - `zipStore(files)` — a store-only (uncompressed) zip `Blob` from `[{name, data}]`. PNGs are already
   compressed and `.ora` requires stored entries, so nothing is deflated. Writes local headers, a
   central directory, and the EOCD by hand. *(9268)*
-- `toU8(canvas)` — a canvas as PNG bytes (`toBlob` → `Uint8Array`). *(9548)*
+- `toU8(canvas)` — a canvas as PNG bytes (`toBlob` → `Uint8Array`). *(9559)*
 - `expCanvas(W)` / `polyPath(cx, pts)` — an off-screen slab-ratio canvas; a polyline subpath. *(2314/2315)*
-- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(9574)*
+- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(9585)*
 - `expBaseMask(W)` — the base composite (ground + breccia + clouds + bands) flattened to luminance:
-  the greyscale value map for the `base` bucket. *(9581)*
+  the greyscale value map for the `base` bucket. *(9592)*
 - `expCoverage(kind, W)` — white-on-black coverage for a consumer bucket (`major` / `minor` / `micro`
-  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(9592)*
+  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(9603)*
 - `expBucket(bucketKey, W)` — one bucket in colour, transparent elsewhere, by gating layers to that
-  bucket — the layer PNGs inside the `.ora`. *(9602)*
+  bucket — the layer PNGs inside the `.ora`. *(9613)*
 - `expIdT(W)` — the rich pair: a vein-**id** map (each line an rgb-encoded index) and an
-  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(9610)*
+  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(9621)*
 - `pathsJSON()` — the vectors as data: slab size in feet, then each line's `id / major / parent / at`,
-  its points, and its per-sample widths. *(9619)*
-- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(9620)*
+  its points, and its per-sample widths. *(9630)*
+- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(9631)*
 - `buildOraFrom(merged, buckets, order, W)` — an OpenRaster `.ora` assembled from already-encoded
   PNG bytes: a nested zip with `mimetype` stored first, a `stack.xml` (top child = top layer), the
   bucket layers under `data/`, and a `mergedimage` + thumbnail. Opens in Krita / GIMP / Photoshop.
-  Takes the encoded bytes rather than rendering them, so the encode happens once. *(9665)*
+  Takes the encoded bytes rather than rendering them, so the encode happens once. *(9676)*
 - `exportAll(W)` — assemble `render.png`, `masks/{base,major,minor,micro,web}.png`,
   `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, and
-  `slab.ora` into one zip and hand it to the viewer. *(9804)*
+  `slab.ora` into one zip and hand it to the viewer. *(9815)*
 
 ## Large renders — what a canvas can hold, and what to do past it
 
@@ -887,10 +887,10 @@ it reports the size asked for and leaves the far end unwritten. See
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
   family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(9211)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(10573)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(10584)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(10595)*
+  actually on offer, not a probe's answer to a different question. *(10606)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(10661)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(11810)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(10672)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(11821)*
