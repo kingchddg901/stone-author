@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.97';
+  const BUILD = '2026.10.16.98';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9690,6 +9690,23 @@ self.onmessage = async (e) => {
   // IS THERE A RENDER TO PICK UP, AND IS IT THIS ONE? Read before anything is opened, because nothing
   // holds a handle yet and the main thread can read all three files directly. Returns a verified prior
   // or null; there is no middle answer, and every failure takes the null.
+  // Read the job file before anything is planned. If it is about THIS picture, adopt its tile size and
+  // withdraw the death mark that killing the tab to test a resume will have left on it.
+  async function resumePin(W) {
+    if (!RESUME_ON) return;
+    try {
+      const dir = await navigator.storage.getDirectory();
+      const job = JSON.parse(await (await (await dir.getFileHandle('stone-master.json')).getFile()).text());
+      if (!job || job.v !== 1 || !job.sig) return;
+      if (String(job.sig).split(String.fromCharCode(124))[0] !== renderSig()) return;   // another picture
+      if (!(job.ts > 0) || job.w !== W) return;
+      tilePick = job.ts;
+      const r = planRec(W);
+      if ((r.bad || []).includes(job.ts))
+        planWrite(W, { ok: r.ok || 0, bad: (r.bad || []).filter(v => v !== job.ts) });
+    } catch (_) { /* no prior job, or one this build cannot read: plan normally */ }
+  }
+
   async function resumeLoad(sig, N) {
     if (!RESUME_ON) return null;
     try {
@@ -12011,6 +12028,18 @@ self.onmessage = async (e) => {
     hint(TR('hint.exporting-render', { w: W }));
     try {
       expStat(TR('exp.preparing'), null); await breathe();
+      // THE RECORD'S PLAN WINS, and that has to happen BEFORE the planner races. A resumed job must
+      // continue on the tile size the file was written with even where the device would now choose
+      // another - the doc said so and the first version asked the question backwards, matching the
+      // record against a plan already made. When they disagreed the resume was refused in silence.
+      //
+      // AND IT CLEARS THE DEATH MARK. markAttempt writes a tile size to `bad` before the first tile so
+      // that a tab which vanishes leaves evidence the size killed the device. Testing a resume means
+      // killing tabs on purpose, so every attempt poisoned one more size until 65535 had none left -
+      // while the probe, which does not consult that list, still reported four of them passing. A
+      // record with sealed rows is POSITIVE evidence the size ran: it painted those tiles and wrote
+      // them down. That outranks a suspicion raised by the same event.
+      await resumePin(W);
       const p = await tiffPlan(W);
       // The job identity goes to the sink so the record can say WHAT it is a record of. resumeSig is
       // the same signature a master publishes as `inputs`, plus the geometry the file was written with.
@@ -12024,8 +12053,14 @@ self.onmessage = async (e) => {
       let resumeWhy = null;
       if (prior) {
         expStat(TR('exp.preparing'), 0.01); await breathe();
-        const v = await resumeVerified(prior, p, W);
-        if (!v.ok) { prior = null; resumeWhy = v.why; }
+        // WRAPPED, because the claim made for this code was that a wrong verification can only REFUSE a
+        // resume - and that is only true if it cannot throw. It was not wrapped, and the first thing it
+        // threw took the whole export down with it. A verification is allowed to be wrong, confused, or
+        // broken; it is not allowed to cost a render.
+        try {
+          const v = await resumeVerified(prior, p, W);
+          if (!v.ok) { prior = null; resumeWhy = v.why; }
+        } catch (ex) { prior = null; resumeWhy = String((ex && ex.message) || ex).slice(0, 120); }
       }
       const sink = await tiffSink(W, p.FH, p.store, p.store, {
         sig: resumeSig({ inputs: renderSig(), w: W, h: p.FH, ts: p.ts, store: p.store,
