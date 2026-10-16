@@ -1766,7 +1766,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.119';
+  const BUILD = '2026.10.16.120';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -10114,6 +10114,12 @@ self.onmessage = async (e) => {
   async function resumeOffer() {
     const row = document.getElementById('resume-row');
     if (!row) return;
+    // NOT WHILE ONE IS RUNNING. During an export the offer is about the render being written: its count
+    // is already stale and climbing, and the button is inert anyway, because pressing it clicks an
+    // Export that is disabled for the duration. A control that looks live and does nothing is worse
+    // than an absent one, and the progress line is the feedback that press earned. The record is
+    // re-read in the finally, so whatever the render leaves behind is what shows afterwards.
+    if (exporting) { row.hidden = true; resumeFlag(false); return; }
     const sig = RESUME_ON ? renderSig() : null;
     const found = sig ? await resumeRecord(sig) : null;
     resumeFile = found ? await resumeMaster() : null;
@@ -10634,7 +10640,7 @@ self.onmessage = async (e) => {
   }
 
   async function exportAll(W, only) {
-    if (exporting) return; exporting = true; wakeOn(); sealing = sealDevice();
+    if (exporting) return; exporting = true; resumeOffer(); wakeOn(); sealing = sealDevice();
     // The MENUS go dead too, not just the button. Leaving them live means you can pick a different width
     // or scope mid-export, watch nothing happen, and reasonably conclude the app ignored you.
     const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
@@ -10749,7 +10755,7 @@ self.onmessage = async (e) => {
       const msg = TR('hint.export-failed-msg', { err: errWhere(e) });
       hint(msg); expStat(msg, -1);                         // stays on screen; the hint will not
     }
-    finally { btn.disabled = selW.disabled = selWhat.disabled = false; exporting = false; wakeOff(); }
+    finally { btn.disabled = selW.disabled = selWhat.disabled = false; exporting = false; wakeOff(); resumeOffer(); }
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
@@ -12509,7 +12515,7 @@ self.onmessage = async (e) => {
     };
   }
   async function exportTiff(W) {
-    if (exporting) return; exporting = true; wakeOn(); sealing = sealDevice();
+    if (exporting) return; exporting = true; resumeOffer(); wakeOn(); sealing = sealDevice();
     const btn = document.getElementById('export'), selW = document.getElementById('expres');
     const selF = document.getElementById('expfmt');
     btn.disabled = selW.disabled = selF.disabled = true;
@@ -12790,12 +12796,13 @@ self.onmessage = async (e) => {
     } finally {
       if (pool) { pool.close(); pool = null; }             // idempotent: the success path closes it too
       btn.disabled = selW.disabled = selF.disabled = false; exporting = false; wakeOff(); expFreeze();
+      resumeOffer();   // whatever this render left behind - finished, refused or killed - say so now
     }
   }
   // Render-only, streamed in bands. Shares the progress line, the clock and the failure handling with
   // the ordinary export; what differs is that nothing the size of the picture is ever allocated.
   async function exportStreamed(W) {
-    if (exporting) return; exporting = true; wakeOn(); sealing = sealDevice();
+    if (exporting) return; exporting = true; resumeOffer(); wakeOn(); sealing = sealDevice();
     const btn = document.getElementById('export'), selW = document.getElementById('expres'), selWhat = document.getElementById('expwhat');
     btn.disabled = selW.disabled = true;
     expReset();
@@ -12828,6 +12835,7 @@ self.onmessage = async (e) => {
       const msg = TR('hint.export-failed-msg', { err: errWhere(e) });
       hint(msg); expStat(msg, -1);
     } finally { btn.disabled = selW.disabled = false; exporting = false; wakeOff(); applyTiers(); }
+    // applyTiers already calls resumeOffer at its tail, so this path needs nothing further.
   }
   applyTiers();
   // Remember what you last chose. Per viewer, per device: a reload used to drop you back on Everything at
