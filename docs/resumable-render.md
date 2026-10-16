@@ -1,6 +1,9 @@
 # A render that survives losing the page
 
-Status: **proposed**. Nothing here is built.
+Status: **the part that can be tested is built and gated. The worker and the OPFS wiring are not.**
+The record below - what is durably done, and what must match before a resume is legal - lives in the app
+as `resumeSig`, `resumeRow`, `resumeScan` and `resumeState`, and `tools/probe-resume.mjs` lifts those four
+and replays a crash at every row. Stages 1 to 4 are still ahead of it.
 
 ## Why
 
@@ -128,6 +131,42 @@ full eight workers and never shed. Whatever that time is, it is not painting and
 This is worth knowing because it touches the same loop. It should not be bundled into the resumability
 work: one changes durability, the other changes scheduling, and mixing them would make a regression in
 either hard to attribute. Measure the overlap question separately first.
+
+## What is built, and three things this document did not say
+
+The four functions are pure and self-contained so that a probe can lift them by text and run them as
+themselves. That was the constraint, not a preference: OPFS and the worker that will own it do not exist
+outside a browser, and Playwright will not spawn on the machine this was written on, so anything decidable
+had to be decidable on the Node side of the boundary. `tools/probe-resume.mjs` proves a round trip, a torn
+tail cut at every byte of its last row, and a crash at every row index replaying to a byte-identical
+layout - with three ablations, because a comparison that cannot go red has proved nothing. Removing one
+line from `resumeState` turns it red with the exact number, which is how that was checked.
+
+**The identity is `renderSig`, and that is what the record stores.** Confirmed rather than assumed: the
+master's own `inputs` field IS `renderSig()` (`app/stone-author.html:9246`), so the signature a sidecar
+publishes and the signature a resume matches on are the same value.
+
+**It also carries the build, which this document did not ask for.** A later build may lay tiles out
+differently or paint them differently, and half a master from each would be a corruption nobody could
+explain afterwards. The cost is real and should be decided rather than inherited: every deploy abandons
+every resumable job in flight, and on 15 October this repo shipped four builds in a day.
+
+**And it carries the accumulators, which this document missed entirely.** The export loop keeps more than
+tiles. `litSum`, `litUp` and `litN` become `light.mean` and `lit>40` in the provenance block - every light
+figure in `docs/sidecars/README.md` comes from them - and `tileMs` / `tileBytes` become the `perTile`
+arrays the whole stall analysis rests on. A resume that restores only the tiles produces **a valid master
+with a wrong provenance block**: every pixel correct, the light figures describing only the part rendered
+after the crash. That is worse than a render that failed honestly, because it looks finished. The record
+therefore has one row per RENDER tile carrying that row's light and timing deltas alongside its cut.
+
+**The record is append-only and binary, not a JSON manifest.** Once the per-tile arrays are in it, a
+manifest rewritten whole at each checkpoint costs about 1.5 MB a time at 163,840 tiles - several hundred
+megabytes of writes over a run, on the device that can least afford them. A row is appended once and never
+revisited. Each row is sealed by repeating its payload length after the payload, so a row half-written when
+the power went fails to seal and the scan stops there: a torn tail is the normal shape of this file, not an
+error. Rows are recorded in WRITE order and nothing reads them assuming an order, which is what keeps a
+count-based resume from quietly appearing - the loop consumes render tiles in index order today, the pool
+paints them out of order, and the sink is already index-addressed for the cut.
 
 ## Staging
 

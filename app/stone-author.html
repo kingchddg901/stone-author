@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.15.85';
+  const BUILD = '2026.10.15.86';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9374,6 +9374,79 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const { head, tail } = tiffLayout(W, H, tileW, tileH, offs, cnts, desc);
     const parts = [head, ...tiles, ...tail];
     return { blob: new Blob(parts, { type: 'image/tiff' }), parts };   // parts, so a caller can checksum without a second copy
+  }
+  // ---- the resumable record: the part that can be tested ------------------------------------------
+  // A render that dies has written real tiles to a real file and every one of them is wasted, because
+  // nothing on disk says where they are. These three functions ARE that record. They are pure on
+  // purpose: tools/probe-resume.mjs lifts them and replays a crash in Node, which is the only place
+  // this logic can be tested at all - OPFS, and the worker that will own it, do not exist outside a
+  // browser. Everything that cannot be tested is kept on the other side of them.
+
+  // WHAT MUST MATCH BEFORE A RESUME IS LEGAL. The build is in here deliberately. A later build may lay
+  // tiles out differently or paint them differently, and half a master from each is a corruption nobody
+  // could explain afterwards - so a new build abandons the old record rather than reasoning about it.
+  function resumeSig(o) {
+    return [o.build, o.inputs, o.w, o.h, o.ts, o.store, o.bleed, o.across, o.down, o.renders].join(String.fromCharCode(124));
+  }
+
+  // ONE ROW PER RENDER TILE, SEALED AT BOTH ENDS. A row is appended only after its whole cut is on disk,
+  // so a row being present means every stored tile it lists is durable. The payload length is repeated
+  // after the payload: a row half-written when the power went fails to seal, and the scan stops there
+  // rather than reading a torn row as data. `pieces` is the cut - one render tile becomes k x k stored
+  // tiles at scattered indices - and it is recorded in WRITE order, which is the only order that
+  // reproduces the offsets.
+  function resumeRow(n, ms, bytes, litSum, litUp, litN, pieces) {
+    const len = 28 + pieces.length * 8;
+    const u8 = new Uint8Array(len + 8), dv = new DataView(u8.buffer);
+    dv.setUint32(0, len, true);
+    dv.setUint32(4, n, true); dv.setUint32(8, ms, true); dv.setUint32(12, bytes, true);
+    dv.setFloat64(16, litSum, true); dv.setUint32(24, litUp, true); dv.setUint32(28, litN, true);
+    let p = 32;
+    for (const q of pieces) { dv.setUint32(p, q.i, true); dv.setUint32(p + 4, q.len, true); p += 8; }
+    dv.setUint32(p, len, true);
+    return u8;
+  }
+
+  // READ BACK EVERYTHING THAT SEALED AND STOP AT THE FIRST THING THAT DID NOT. Returns the rows and how
+  // many bytes of the record they occupy, so the caller can cut the record back to exactly the durable
+  // part and append from there. A trailing byte that is not a whole sealed row is not an error - it is
+  // the normal shape of a file that was being written when the tab died.
+  function resumeScan(u8) {
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const rows = []; let p = 0;
+    while (p + 8 <= u8.length) {
+      const len = dv.getUint32(p, true);
+      if (len < 28 || (len - 28) % 8 !== 0 || p + 8 + len > u8.length) break;
+      if (dv.getUint32(p + 4 + len, true) !== len) break;            // torn: the seal does not match
+      const pieces = [];
+      for (let q = p + 32; q < p + 4 + len; q += 8)
+        pieces.push({ i: dv.getUint32(q, true), len: dv.getUint32(q + 4, true) });
+      rows.push({ n: dv.getUint32(p + 4, true), ms: dv.getUint32(p + 8, true),
+                  bytes: dv.getUint32(p + 12, true), litSum: dv.getFloat64(p + 16, true),
+                  litUp: dv.getUint32(p + 24, true), litN: dv.getUint32(p + 28, true), pieces });
+      p += 8 + len;
+    }
+    return { rows, bytes: p };
+  }
+
+  // REPLAY THE ROWS INTO THE STATE A LIVE SINK WOULD HAVE HELD. Offsets are assigned in WRITE order and
+  // NOTHING HERE ASSUMES WHAT THAT ORDER WAS - the record carries it. The export loop consumes render
+  // tiles in index order today, so a count would have worked today; the pool paints them out of order
+  // and the sink is already index-addressed for the cut, so a count would stop working silently the day
+  // the loop consumed whichever finished first. The record is the done-set, and there is no premise to
+  // rot. `litSum`, `litUp`, `litN`, `tileMs` and `tileBytes` come back too: they are not tiles, but
+  // losing them yields a valid master whose provenance block describes only the tiles after the crash,
+  // which is worse than a render that failed honestly.
+  function resumeState(rows, N, base) {
+    const offs = new Array(N), cnts = new Array(N), done = new Set();
+    const tileMs = [], tileBytes = [];
+    let at = base, litSum = 0, litUp = 0, litN = 0;
+    for (const r of rows) {
+      for (const q of r.pieces) { offs[q.i] = at; cnts[q.i] = q.len; at += q.len; }
+      done.add(r.n); tileMs.push(r.ms); tileBytes.push(r.bytes);
+      litSum += r.litSum; litUp += r.litUp; litN += r.litN;
+    }
+    return { offs, cnts, at, done, tileMs, tileBytes, litSum, litUp, litN };
   }
   // ---- the same file, written to disk as it is made -------------------------------------------------
   // A tile held is a tile that has to be held again at the end. On a 3 GB tablet a 65535 master is about
