@@ -21,33 +21,10 @@
 //   6  an edge cell that is part padding is left alone
 //
 //   node tools/probe-mark.mjs
-import { readFileSync } from 'fs';
+import { loadMark } from './lib/mark.mjs';
 
-const SRC = readFileSync(new URL('../app/stone-author.html', import.meta.url), 'utf8');
-function liftFn(name) {
-  const needle = 'function ' + name + '(';
-  const hits = [];
-  for (let k = SRC.indexOf(needle); k >= 0; k = SRC.indexOf(needle, k + 1)) hits.push(k);
-  if (!hits.length) throw new Error('cannot find ' + name + ' - probe is stale');
-  if (hits.length > 1) throw new Error(name + ' is defined ' + hits.length + ' times');
-  let i = SRC.indexOf('{', hits[0]), d = 0;
-  for (;; i++) { if (SRC[i] === '{') d++; else if (SRC[i] === '}' && --d === 0) break; }
-  return SRC.slice(hits[0], i + 1);
-}
-// EVERY MARK_ constant, not just the first line. The magic word is on its own line and a lifter that
-// took one produced a ReferenceError at the first stamp - the same shape as the declarator bug in
-// check-worker-core, where reading one name off a line hid the rest.
-const CONST = (SRC.match(/^\s*const MARK_[^\n]*$/gm) || [])
-  // NOT the URL flag. A line declaring MARK_ON opens an IIFE, so "every const MARK_ line" swept in an
-  // unbalanced fragment and new Function died on end-of-input. Too broad, in the same way the
-  // declarator scan in check-worker-core was too narrow - a pattern that nearly matches the right
-  // thing is the one that costs an hour.
-  .filter(l => l.indexOf("=>") < 0).join("\n");
-if (!CONST) throw new Error("cannot find the MARK_ constants - this file is stale");
-const NAMES = ['markPack', 'markUnpack', 'markStamp', 'markRead'];
-const APP = new Function(CONST + '\n' + NAMES.map(liftFn).join('\n') +
-                         '; return {' + NAMES.join(',') + ', MARK_CELL, MARK_BITS, MARK_COPIES, MARK_VER};')();
-const { markPack, markUnpack, markStamp, markRead, MARK_CELL, MARK_BITS, MARK_COPIES, MARK_VER } = APP;
+const { markPack, markUnpack, markStamp, markRead,
+        MARK_CELL, MARK_BITS, MARK_COPIES, MARK_VER } = loadMark();
 
 let fails = 0;
 const ok = (name, cond, detail) => {
@@ -76,18 +53,28 @@ const tile = (store, seed) => {
   ok('it reads back the address it was given', got.length === 1 && got[0].ok,
      JSON.stringify(got[0] && got[0].got));
 
-  let touched = 0, worst = 0, nonBlue = 0, raised = 0;
+  let touched = 0, worst = 0, nonBlue = 0, wrapped = 0, at255 = 0;
   for (let i = 0; i < before.length; i++) {
     if (before[i] === after[i]) continue;
     touched++;
     const d = after[i] - before[i];
     if (Math.abs(d) > worst) worst = Math.abs(d);
     if (i % 4 !== 2) nonBlue++;
-    if (d > 0 && before[i] === 255) raised++;
+    if (before[i] === 255 && after[i] === 0) wrapped++;
   }
+  // The ceiling guard used to read `d > 0 && before === 255`, which 8-bit arithmetic makes
+  // UNFALSIFIABLE: 255 + 1 wraps DOWN to 0, so that condition can never be true whatever markStamp
+  // does. It read as cover and was a preference. What actually catches a revert to the additive
+  // scheme is the wrap count and `worst <= 1` - ablating markStamp to `(v + bit) & 255` turns both
+  // red, and takes the address with them. Measured 2026-10-16 on the real 32768 master: blue never
+  // exceeds 209 anywhere in 671 million pixels, so the real data cannot exercise the ceiling at all.
+  // The fixture is the only thing that does, which is why this counts what it puts there.
+  for (let b = 0; b < MARK_BITS * MARK_COPIES; b++)
+    if (before[((MARK_CELL - 1) * S + (MARK_CELL - 1 - b)) * 4 + 2] === 255) at255++;
+  ok('the fixture puts blue 255 under the mark', at255 > 0, 'none — the ceiling guard is vacuous');
   ok('nothing but blue is touched', nonBlue === 0, nonBlue + ' non-blue bytes changed');
   ok('no change is bigger than one level', worst <= 1, 'worst ' + worst);
-  ok('nothing at 255 is pushed higher', raised === 0, String(raised));
+  ok('ABLATION nothing wraps past the ceiling', wrapped === 0, wrapped + ' wrapped 255 -> 0');
   ok('the payload fits its pixel budget', touched <= MARK_BITS * MARK_COPIES,
      touched + ' of ' + (S * S) + ' pixels, budget ' + MARK_BITS * MARK_COPIES);
 }

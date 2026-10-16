@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.104';
+  const BUILD = '2026.10.16.105';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9743,14 +9743,32 @@ self.onmessage = async (e) => {
   // than merely lose one, and it cannot be executed where it was written - Playwright will not spawn
   // here. So it is opt-in: ?resume=1 to try it, nothing at all otherwise, and the default flips when a
   // real render on real hardware has been killed and picked up again. Read once at boot, beside the rest.
-  // OFF UNTIL IT HAS BEEN LOOKED AT. Marking alters every master: about one pixel in 10,923 moves by
-  // one level of blue, which is far below anything an eye resolves and is still a different file. Every
-  // master in docs/sidecars was rendered unmarked, and `inputs` does not change when marks are added -
-  // so a marked and an unmarked render of one picture share a signature and differ in bytes. That is the
-  // material key's shape again, and it wants the same discipline: prove it is invisible, then decide.
+  // ON. `?mark=0` turns it off, for reproducing a master from before 2026-10-16 or for a picture that
+  // must not be altered at all.
+  //
+  // WHAT IT COSTS, measured on the 32768 x 20480 stone master, marked against unmarked, every byte:
+  // it writes 737,280 pixels (1 in 910) and half of those already carried the right bit, so 368,521
+  // actually change value (1 in 1,821). Every one is blue, and every one moves by exactly one level.
+  // Red and green are never touched. Nothing can wrap: `(v & 254) | bit` cannot exceed the value it
+  // started from, so a 255 goes DOWN to 254 rather than over the ceiling.
+  //
+  // WHY THAT IS BELOW SIGHT, rather than merely small. One level is the finest step the file or an
+  // 8-bit display can hold, so there is nothing thinner to render. More to the point the picture is
+  // already noisier than that: adjacent pixels in the wood differ by 2 and 3 levels of blue, and across
+  // all 671,088,640 pixels blue is odd 50.7% of the time. The low bit is a coin flip everywhere in the
+  // render already; a mark replaces one coin flip with another, at the same amplitude. Confirmed by eye
+  // at 25600% in GIMP against the unmarked twin, which reads 17,17,20 where the marked one reads
+  // 17,17,21 - a difference the Pointer dialog shows and the canvas cannot.
+  //
+  // THE ERA BOUNDARY, which is the part that bites. `inputs` does NOT change when marks are added, so
+  // a marked and an unmarked render of one picture share a signature and differ in bytes - every master
+  // in docs/sidecars predates this and carries none. check-same-image recognises that pair by its
+  // signature (blue only, mark rows only, delta 1) and says so, instead of reporting a bare DIFFERS.
+  // Two MARKED renders of one picture are still byte-identical, at any tile size, because the lattice
+  // is anchored to the picture rather than to the tiling.
   const MARK_ON = (() => {
-    try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('mark') || ''); }
-    catch (_) { return false; }
+    try { return !/^(0|off|no)$/i.test(new URLSearchParams(location.search).get('mark') || ''); }
+    catch (_) { return true; }
   })();
   const RESUME_ON = (() => {
     try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('resume') || ''); }

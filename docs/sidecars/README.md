@@ -25,6 +25,12 @@ audit needs and identifies nobody. Every figure in the tables below is read out 
 except the **device** column, which is a label from [`docs/devices.md`](../devices.md), because a sidecar
 names hardware class and deliberately not a machine.
 
+**EVERY SIDECAR BELOW ALSO PREDATES POSITIONAL MARKING**, which went on by default on 2026-10-16, so
+none of them carries `marked` or `markedCells` and none of the masters behind them carries a tile
+address. Re-rendering any of these pictures today produces a file that differs from the one measured
+here — one pixel in 1,821, one level of blue, sharing the same `inputs`. `?mark=0` reproduces the
+unmarked bytes. See [`docs/positional-marks.md`](../positional-marks.md).
+
 **EVERY SIDECAR BELOW PREDATES THE MATERIAL KEY, so none of them can say what it is made of.** A slab
 carries stone, wood and glass at once unless one is exported alone, so `family` is the STONE family and
 is present whatever was drawn: a wood master reports `family: "carrara"`, and its `marks` / `lines` /

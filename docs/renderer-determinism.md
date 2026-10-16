@@ -139,6 +139,13 @@ at tile 148 they are 16.5 apart. Statistics taken in a quiet region say nothing 
 
 ## What this does not cover
 
+**Positional marks are not in any figure here.** Every master measured
+below was rendered before marking existed. Marking alters one pixel in 1,821 by one level of blue, so a
+marked and an unmarked render of one picture differ in bytes while sharing a signature — see
+[`positional-marks.md`](positional-marks.md), which gives the cost and the shape of that difference.
+It does not affect anything concluded here: marks are identical between two renders of one picture, at
+any tile size, so every comparison in this file holds when both sides are marked.
+
 Same slab, one size, one tile geometry. Nothing here says what happens at other widths, with other
 families, or with effects this slab does not use — `Hero_Psyker` has no drusy and no back light. The
 rounding drift could plausibly be larger where a filter chain is longer.

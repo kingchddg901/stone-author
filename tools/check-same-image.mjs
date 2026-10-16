@@ -42,6 +42,13 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { inflateSync, deflateSync } from 'zlib';
 import { locateMeta } from './lib/find-meta.mjs';
+import { loadMark, onMark } from './lib/mark.mjs';
+
+// THE MARK READER, OPTIONAL BY DESIGN. Positional marks are a property of the pictures this tool
+// compares, not of this tool, so failing to lift them must never fail a comparison. If the app moves
+// out from under it MK stays null, nothing below consults it, and every verdict is what it was.
+let MK = null;
+try { MK = loadMark(); } catch (_) { MK = null; }
 
 const CHUNK = 8 << 20;
 const NL = String.fromCharCode(10);
@@ -199,7 +206,7 @@ function comparePixels(pa, pb) {
     const grab = (fd, o, l) => { const b = Buffer.alloc(l); readSync(fd, b, 0, l, o); return b; };
     const open = S.comp === 1 ? (b => b) : (b => inflateSync(b));
     const Srow = S.tw * S.spp, Lrow = L.tw * L.spp;
-    let diff = 0, bytes = 0, firstTile = -1, worst = 0;
+    let diff = 0, bytes = 0, firstTile = -1, worst = 0, diffBytes = 0, markShaped = 0;
     for (let lr = 0; lr < Lrows; lr++) {
       for (let lc = 0; lc < Lcols; lc++) {
         const li = lr * Lcols + lc;
@@ -220,15 +227,46 @@ function comparePixels(pa, pb) {
             const so = r * Srow, lo = (qy * S.tw + r) * Lrow + qx * Srow;
             if (lb.compare(sb, so, so + validW, lo, lo + validW) !== 0) {
               bad = true;
-              for (let k = 0; k < validW; k++) { const d = Math.abs(lb[lo + k] - sb[so + k]); if (d > worst) worst = d; }
+              const ay = y0 + r;
+              for (let k = 0; k < validW; k++) {
+                const d = Math.abs(lb[lo + k] - sb[so + k]);
+                if (!d) continue;
+                diffBytes++;
+                if (d > worst) worst = d;
+                // IS THIS BYTE SHAPED LIKE A MARK? Blue, on a cell's bottom row, inside the marked
+                // span, and moved by exactly one. All four together, or it is an ordinary difference.
+                if (MK && d === 1 && k % S.spp === 2 && onMark(MK, x0 + ((k / S.spp) | 0), ay)) markShaped++;
+              }
             }
           }
         }
         if (bad) { diff++; if (firstTile < 0) firstTile = li; }
       }
     }
-    return { diff, tiles: L.offs.length, bytes, firstTile, worst, ratio, sTile: S.tw, lTile: L.tw };
+    return { diff, tiles: L.offs.length, bytes, firstTile, worst, ratio, sTile: S.tw, lTile: L.tw,
+             diffBytes, markShaped };
   } catch (e) { return { error: 'inflating: ' + e.message }; } finally { closeSync(fs_); closeSync(fl); }
+}
+
+// WHAT A MASTER SAYS ABOUT ITSELF. Reads its first tile and asks the app's own markRead what is there.
+// null means no mark this build understands: an unmarked master, or another scheme entirely. Said apart
+// from 'moved', because treating absence as misplacement would condemn every master rendered before
+// marking existed - which is all of docs/sidecars.
+function markState(path) {
+  if (!MK) return null;
+  try {
+    const T = tileIndex(path);
+    if (!T || !T.offs.length) return null;
+    const fd = openSync(path, 'r');
+    try {
+      const b = Buffer.alloc(T.cnts[0]);
+      readSync(fd, b, 0, T.cnts[0], T.offs[0]);
+      const px = T.comp === 1 ? b : inflateSync(b);
+      for (const c of MK.markRead(px, T.tw, 0, 0))
+        if (c.present && c.got.ver === MK.MARK_VER) return c.got;
+    } finally { closeSync(fd); }
+  } catch (_) { /* a master this cannot unpack simply has nothing to say */ }
+  return null;
 }
 
 function describe(path) {
@@ -317,6 +355,26 @@ function run(paths, quiet) {
       console.log('    DIFFERS  ' + baseName(f.path) + '   ' + px.diff + ' of ' + px.tiles +
         ' tiles differ after inflation, first at tile ' + px.firstTile +
         (px.worst ? ', worst byte delta ' + px.worst : ''));
+      // THE MARKED-AGAINST-UNMARKED PAIR, NAMED. Marking is on by default, so every comparison
+      // against a master rendered before it lands here - and a bare DIFFERS makes that look like a
+      // determinism failure when it is an era boundary. It stays a FAILURE: the files do differ, and
+      // a gate that forgave it would forgive a real one. It just says which it is.
+      if (px.diffBytes > 0 && px.markShaped === px.diffBytes) {
+        const a = markState(ref.path), b = markState(f.path);
+        console.log('             every differing byte is blue, on a cell mark row, and moved by one.');
+        if (!a !== !b) {
+          const m = a ? ref : f, u = a ? f : ref;
+          console.log('             ' + baseName(m.path) + ' carries positional marks (picture ' +
+                      (a || b).sig + '); ' + baseName(u.path) + ' carries none.');
+          console.log('             The same picture either side of the day marking went on. Render');
+          console.log('             with ?mark=0 to reproduce the unmarked one.');
+        } else if (a && b && a.sig !== b.sig) {
+          console.log('             both carry marks, but they name different pictures: ' +
+                      a.sig + ' and ' + b.sig + '.');
+        } else {
+          console.log('             both sides agree on marking, so the picture itself differs.');
+        }
+      }
       failures++;
     }
     console.log('');
@@ -491,6 +549,45 @@ function selftest() {
      //    order is a different picture.
     const t128b = bigTiff('t128swap.tif', pic, W, H, 128, 6, 2, 0, [0, 3]);
     check('a transposed tile directory is NOT identical', run([t128, t128b], true), 1);
+
+    // 14-19. THE MARKED-AGAINST-UNMARKED PAIR. Marking is on by default, so every comparison with a
+    //        master rendered before that lands here, and a bare DIFFERS reads as a determinism failure
+    //        when it is an era boundary. These need a picture at least one CELL tall: every case above
+    //        is 192 px and cannot hold a mark row at all, so none of them could ever exercise this -
+    //        'one pixel moved' passing with no mark line proved nothing until now.
+    if (!MK) check('the mark functions could be lifted from the app', false, true);
+    else {
+      const C = MK.MARK_CELL, span = MK.MARK_BITS * MK.MARK_COPIES;
+      const cell = Buffer.alloc(C * C * 4);
+      for (let i = 0; i < cell.length; i++) cell[i] = (i * 31 + (i >> 7) * 17) & 0xff;
+      const marked = Buffer.from(cell);
+      // THE PREMISE, ASSERTED BEFORE ANYTHING LEANS ON IT. A stamp that marked nothing would make
+      // every case below pass by comparing a picture with itself.
+      check('the fixture really is stamped', MK.markStamp(marked, C, 0, 0, C, C, 0xdeadbeef), 1);
+      check('and the stamp really changed bytes', !marked.equals(cell), true);
+      const plain = bigTiff('m-plain.tif', cell, C, C, C, 6, 1);
+      const say = paths => {
+        const lines = [], real = console.log;
+        console.log = (...a) => lines.push(a.map(String).join(' '));
+        let r; try { r = run(paths, true); } finally { console.log = real; }
+        return { r, out: lines.join(NL) };
+      };
+      const pair = say([plain, bigTiff('m-stamped.tif', marked, C, C, C, 6, 2)]);
+      check('a marked master differs from its unmarked twin', pair.r, 1);
+      check('and the pair is named, not left as a bare DIFFERS',
+            /carries positional marks/.test(pair.out) && /carries none/.test(pair.out), true);
+
+      // THE ABLATIONS. Each moves ONE blue byte by one level and differs from a real mark in exactly
+      // one respect - the row, the span, the channel. If any is called a mark then the detection is
+      // matching on 'small' rather than on shape, which would let a real one-level defect hide behind
+      // the explanation. A detection that cannot say no is not a detection.
+      const bend = at => { const b = Buffer.from(cell); b[at] = b[at] === 255 ? 254 : b[at] + 1; return b; };
+      const px = (x, y, ch) => (y * C + x) * 4 + ch;
+      const said = (name, img) => check(name, /positional marks/.test(say([plain, bigTiff(name, img, C, C, C, 6, 2)]).out), false);
+      said('ABLATION one blue level OFF the mark row is not a mark', bend(px(C - 1, C - 2, 2)));
+      said('ABLATION one blue level PAST the span is not a mark', bend(px(C - 1 - span, C - 1, 2)));
+      said('ABLATION one RED level inside the span is not a mark', bend(px(C - 1, C - 1, 0)));
+    }
   } finally { rmSync(dir, { recursive: true, force: true }); }
   console.log(NL + pass + ' passed, ' + fail + ' failed');
   return fail ? 1 : 0;

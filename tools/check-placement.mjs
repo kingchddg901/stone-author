@@ -16,33 +16,11 @@
 // Samples 40 tiles by default, which is seconds; --all reads every one, which on a 262,144 master is
 // 163,840 inflations and some minutes. A sample is evidence and the whole file is proof, and the
 // difference matters here: a transposition is TWO tiles out of thousands.
-import { openSync, readSync, closeSync, readFileSync } from 'fs';
+import { openSync, readSync, closeSync } from 'fs';
+import { loadMark } from './lib/mark.mjs';
 import { inflateSync } from 'zlib';
 
-const APP = readFileSync(new URL('../app/stone-author.html', import.meta.url), 'utf8');
-function liftFn(name) {
-  const needle = 'function ' + name + '(';
-  const hits = [];
-  for (let k = APP.indexOf(needle); k >= 0; k = APP.indexOf(needle, k + 1)) hits.push(k);
-  if (!hits.length) throw new Error('cannot find ' + name + ' - this tool is stale');
-  if (hits.length > 1) throw new Error(name + ' is defined ' + hits.length + ' times');
-  let i = APP.indexOf('{', hits[0]), d = 0;
-  for (;; i++) { if (APP[i] === '{') d++; else if (APP[i] === '}' && --d === 0) break; }
-  return APP.slice(hits[0], i + 1);
-}
-// EVERY MARK_ constant, not just the first line. The magic word is on its own line and a lifter that
-// took one produced a ReferenceError at the first stamp - the same shape as the declarator bug in
-// check-worker-core, where reading one name off a line hid the rest.
-const CONST = (APP.match(/^\s*const MARK_[^\n]*$/gm) || [])
-  // NOT the URL flag. A line declaring MARK_ON opens an IIFE, so "every const MARK_ line" swept in an
-  // unbalanced fragment and new Function died on end-of-input. Too broad, in the same way the
-  // declarator scan in check-worker-core was too narrow - a pattern that nearly matches the right
-  // thing is the one that costs an hour.
-  .filter(l => l.indexOf("=>") < 0).join("\n");
-if (!CONST) throw new Error("cannot find the MARK_ constants - this file is stale");
-const { markRead, MARK_VER } = new Function(
-  CONST + '\n' + ['markUnpack', 'markRead'].map(liftFn).join('\n') +
-  '; return { markRead, MARK_VER };')();
+const { markRead, MARK_VER } = loadMark();
 
 const args = process.argv.slice(2);
 const path = args.find(a => !a.startsWith('--'));

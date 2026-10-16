@@ -83,3 +83,7 @@ jobs:
         run: node tools/check-scope.mjs
       - name: The worker core carries every name it reaches for
         run: node tools/check-worker-core.mjs
+      - name: A tile carries its address, and a moved one is caught
+        run: node tools/probe-mark.mjs
+      - name: Two masters of one picture are the same picture, and a marked one says so
+        run: node tools/check-same-image.mjs --selftest
