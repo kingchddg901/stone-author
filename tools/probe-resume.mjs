@@ -37,7 +37,8 @@ function liftFn(name) {
   return SRC.slice(hits[0], i + 1);
 }
 const NAMES = ['resumeSig', 'resumeRow', 'resumeScan', 'resumeState',
-               'resumeCheckCount', 'resumeSample', 'resumeVerify'];
+               'resumeCheckCount', 'resumeSample', 'resumeVerify',
+               'mulberry32'];                 // the app's own PRNG: the sampler seeds from the signature
 const BODY = NAMES.map(liftFn).join('\n');
 const APP = new Function(BODY + '; return {' + NAMES.join(',') + '};')();
 const { resumeSig, resumeRow, resumeScan, resumeState,
@@ -205,13 +206,46 @@ const ALL = [...Array(RENDERS).keys()];
   // WHICH ONES. First and last always - the last is nearest whatever stopped the render, the first
   // catches a systematic placement error a middle sample sails past.
   const rows = ALL.map(rowFor);
-  const three = resumeSample(rows, 3);
+  const three = resumeSample(rows, 3, 12345);
   ok('the sample holds the first and the last written',
      three.includes(rows[0].n) && three.includes(rows[rows.length - 1].n), JSON.stringify(three));
   ok('the sample is the size asked for', three.length === 3, String(three.length));
   ok('asking for more than exists returns all of them',
-     resumeSample(rows, 99).length === rows.length);
-  ok('an empty record samples nothing', resumeSample([], 5).length === 0);
+     resumeSample(rows, 99, 1).length === rows.length);
+  ok('an empty record samples nothing', resumeSample([], 5, 1).length === 0);
+
+  // THE ALIASING CASE, which is why this is seeded rather than evenly spread. Rows are render tiles in
+  // index order, so a stride sharing a factor with the grid WIDTH samples a single column of the picture
+  // and calls the rest checked. An even spread over 64 rows of an 8-wide grid does exactly that; this
+  // asserts the sample reaches across the picture instead.
+  // Swept rather than shown once, because the hazard is INTERMITTENT and that is what makes it nasty:
+  // it bites only when the stride shares a factor with the width, and the count comes from a TIME
+  // BUDGET, so which counts a device asks for depends on how fast it renders. A slow tablet can land on
+  // an aliasing count, sample one column, and report the picture checked. The first version of this case
+  // used want=8, where an even spread reaches all 8 columns - a demonstration that demonstrated nothing.
+  const wide = [...Array(64).keys()].map(n => ({ n, pieces: [] }));
+  const cols = s => new Set(s.map(v => v % 8)).size;
+  const evenSpread = (n, want) => { const p = new Set([0, n - 1]);
+    for (let k = 0; k < Math.max(0, want - 2); k++) p.add(Math.round((k + 1) * (n - 1) / (want - 1)));
+    return [...p]; };
+  let worstEven = 9, worstSeed = 9, atEven = 0;
+  for (let want = 4; want <= 20; want++) {
+    const e = cols(evenSpread(64, want)); if (e < worstEven) { worstEven = e; atEven = want; }
+    const s = cols(resumeSample(wide, want, 0xC0FFEE + want)); if (s < worstSeed) worstSeed = s;
+  }
+  console.log('        (over counts 4-20: even spread reaches as few as ' + worstEven +
+              ' of 8 columns at want=' + atEven + '; seeded never falls below ' + worstSeed + ')');
+  ok('seeded sampling beats an even spread at its worst count', worstSeed > worstEven,
+     'seeded worst ' + worstSeed + ', even worst ' + worstEven);
+  ok('a known aliasing count is not confined to two columns',
+     cols(resumeSample(wide, 9, 0xC0FFEE)) >= 4,
+     'reached ' + cols(resumeSample(wide, 9, 0xC0FFEE)) + ' of 8');
+
+  // REPRODUCIBLE, which is the only thing the even spread was buying. Same file, same sample, every run.
+  ok('the same seed gives the same sample',
+     JSON.stringify(resumeSample(wide, 8, 42)) === JSON.stringify(resumeSample(wide, 8, 42)));
+  ok('a different seed gives a different sample',
+     JSON.stringify(resumeSample(wide, 8, 42)) !== JSON.stringify(resumeSample(wide, 8, 43)));
 
   // THE VERDICT. Compared compressed, which is what the file stores and what a re-render already has.
   const B = (i, ...b) => ({ i, bytes: Uint8Array.from(b) });

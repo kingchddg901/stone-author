@@ -1732,7 +1732,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.90';
+  const BUILD = '2026.10.16.91';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9483,17 +9483,30 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return Math.max(1, Math.min(cap, Math.floor(budgetMs / med)));
   }
 
-  // WHICH ONES. The first and the last written always, then an even spread between them. The last
-  // matters most - it is the one nearest whatever stopped the render - and the first catches a
-  // systematic placement error that a sample from the middle would sail past. Even rather than random
-  // so that a failure can be reproduced by rerunning the same check.
-  function resumeSample(rows, want) {
+  // WHICH ONES. The first and the last written always - the last is nearest whatever stopped the
+  // render, the first catches a systematic placement error a middle sample sails past - and the rest
+  // SEEDED PSEUDORANDOM rather than evenly spread.
+  //
+  // An even spread was the first version and it had the bug this file has already made once tonight, in
+  // an autocorrelation: a stride over a ROW-MAJOR array can land on a COLUMN. Rows are render tiles in
+  // index order, so a stride sharing a factor with the grid width samples one column of the picture and
+  // reports the rest as checked. The seed comes from the job signature, so the same file always samples
+  // the same way and a failure reproduces by rerunning - reproducibility was the only thing the even
+  // spread was buying, and a seed buys it without the aliasing.
+  //
+  // SAMPLING IS EVIDENCE, NOT PROOF, and the arithmetic should be in front of whoever reads this: a
+  // difference present in 1% of tiles survives 16 samples 85% of the time and 100 samples 37% of the
+  // time. The one real instance measured - two UV masters sharing renderSig 95ef95fe - differed in
+  // 160 of 160 tiles, which one sample catches with certainty; but nothing says the next one will be
+  // global. A pass here means the tiles looked at agree, never that the picture is identical.
+  function resumeSample(rows, want, seed) {
     const n = rows.length;
     if (!n) return [];
     if (want >= n) return rows.map(r => r.n);
     const pick = new Set([0, n - 1]);
-    const extra = Math.max(0, want - pick.size);
-    for (let k = 0; k < extra; k++) pick.add(Math.round((k + 1) * (n - 1) / (extra + 1)));
+    const rnd = mulberry32((seed >>> 0) || 1);
+    let guard = 0;
+    while (pick.size < want && guard++ < want * 64) pick.add(Math.floor(rnd() * n));
     return [...pick].sort((a, b) => a - b).map(i => rows[i].n);
   }
 
