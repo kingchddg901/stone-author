@@ -39,6 +39,7 @@ const hook = `
     // a record in the app's own format rather than a copy of it, which is the whole point.
     resumeRow, resumeScan, resumeOffer,
     resumeAsk, resumeKind, resumeDiscard,
+    storedTilePixels, markSigNow, resumeVerify,
     tilePainted,                                 // the lost-canvas guard, so it can be shown to bite
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
     render: () => { size(); build(); stoneReady = false; draw(); },
