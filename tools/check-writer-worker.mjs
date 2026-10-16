@@ -60,7 +60,27 @@ function freeNames(src) {
                   .replace(/'(?:\\.|[^'\\])*'/g, "''")
                   .replace(/"(?:\\.|[^"\\])*"/g, '""');
   const declared = new Set();
-  for (const m of bare.matchAll(/\b(?:let|const|var|function)\s+([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
+  // EVERY DECLARATOR ON THE LINE, not just the first. `let h = null, rec = null, recAt = 0;` declares
+  // three, and reading one of them reported the other two as names the worker reaches for and has not
+  // got. check-worker-core.mjs carries this same note after WOOD_IN was missed exactly this way - the
+  // difference being that there it HID a real leak, and here it invented one. A gate that cries wolf is
+  // on its way to being ignored, which costs the same in the end.
+  for (const m of bare.matchAll(/\b(?:let|const|var)\s+([^;\n]*)/g)) {
+    let depth = 0, name = '', expect = true;
+    for (const ch of m[1]) {
+      if ('([{'.includes(ch)) { depth++; continue; }
+      if (')]}'.includes(ch)) { depth--; continue; }
+      if (depth !== 0) continue;
+      if (ch === ',') { if (name) { declared.add(name); name = ''; } expect = true; continue; }
+      if (!expect) continue;
+      if (/[A-Za-z_$]/.test(ch) && !name) { name = ch; continue; }
+      if (name && /[\w$]/.test(ch)) { name += ch; continue; }
+      if (name) { declared.add(name); name = ''; }
+      if (ch !== ' ') expect = false;
+    }
+    if (name) declared.add(name);
+  }
+  for (const m of bare.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
   for (const m of bare.matchAll(/\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g)) declared.add(m[1]);   // (e) =>
   for (const m of bare.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
   for (const m of bare.matchAll(/\{\s*([A-Za-z_$][\w$]*)\s*\}\s*=/g)) declared.add(m[1]);
