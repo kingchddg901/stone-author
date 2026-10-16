@@ -19,6 +19,14 @@
 // it was written to support. So a stored-byte mismatch is now a QUESTION: the tiles are inflated and the
 // pixels compared, and only a pixel difference is a difference.
 //
+// AND IT MAPS ONE TILING ONTO ANOTHER, because the tile size is the planner's business and not the
+// picture's. One slab is tiled whatever each device can afford - 512 on a desktop, 1024 on a 2 GB
+// tablet, 4096 where the texture limit allows - so a fleet rendering ONE picture produces masters at
+// several tile sizes, and refusing to compare those refuses most of the fleet. Where the sizes divide,
+// the larger tile IS a block of the smaller: a 1024 tile is a 2x2 of 512s, a 4096 tile an 8x8. Padding
+// is excluded by location - a tile is always full size, two tilings pad different regions, and
+// comparing that would report a difference the picture does not have.
+//
 //   node tools/check-same-image.mjs a.tif b.tif c.tif ...
 //   node tools/check-same-image.mjs --selftest
 //
@@ -130,8 +138,12 @@ function tileIndex(path) {
     }
     const offs = tags[324], cnts = tags[325];
     if (!offs || !cnts || !offs.length || offs.length !== cnts.length) return null;
+    // W, H and the sample count come too, because a cross-tiling comparison needs the grid and the
+    // row stride, and the picture edge needs to be known so padding can be left out of it.
     return { offs, cnts, comp: (tags[259] && tags[259][0]) || 1,
-             tw: tags[322] && tags[322][0], th: tags[323] && tags[323][0] };
+             tw: tags[322] && tags[322][0], th: tags[323] && tags[323][0],
+             W: tags[256] && tags[256][0], H: tags[257] && tags[257][0],
+             spp: (tags[277] && tags[277][0]) || 4 };
   } catch (e) { return null; } finally { closeSync(fd); }
 }
 
@@ -144,26 +156,59 @@ function comparePixels(pa, pb) {
   if (!A || !B) return { error: 'no readable tile index in ' + baseName(!A ? pa : pb) };
   if (A.comp !== B.comp) return { error: 'packed differently - codec ' + A.comp + ' against ' + B.comp };
   if (A.comp !== 1 && !INFLATE.has(A.comp)) return { error: 'codec ' + A.comp + ' is not one this can unpack' };
-  if (A.offs.length !== B.offs.length)
-    return { error: 'a different number of tiles - ' + A.offs.length + ' against ' + B.offs.length };
-  if (A.tw !== B.tw || A.th !== B.th)
-    return { error: 'a different tile shape - ' + A.tw + 'x' + A.th + ' against ' + B.tw + 'x' + B.th };
-  const fa = openSync(pa, 'r'), fb = openSync(pb, 'r');
+  if (A.W !== B.W || A.H !== B.H)
+    return { error: 'a different picture size - ' + A.W + 'x' + A.H + ' against ' + B.W + 'x' + B.H };
+  if (A.spp !== B.spp) return { error: 'a different sample count - ' + A.spp + ' against ' + B.spp };
+  if (A.tw !== A.th || B.tw !== B.th) return { error: 'non-square tiles are not mapped' };
+  // THE TILE SIZE IS THE PLANNER'S BUSINESS, NOT THE PICTURE'S. One slab is tiled whatever each device
+  // can afford - 512 on a desktop, 1024 on a 2 GB tablet, 4096 where the texture limit allows - so
+  // refusing to compare two tilings refuses most of a real fleet. Where the sizes divide, the larger
+  // tile IS a block of the smaller: a 1024 tile is a 2x2 of 512s, a 4096 tile an 8x8. Small first, so
+  // the mapping only ever runs one way, and ratio 1 falls through the same loop as the equal case.
+  const small = A.tw <= B.tw, S = small ? A : B, L = small ? B : A;
+  const ps = small ? pa : pb, pl = small ? pb : pa;
+  const ratio = L.tw / S.tw;
+  if (!Number.isInteger(ratio))
+    return { error: 'tile sizes ' + S.tw + ' and ' + L.tw + ' do not divide' };
+  const Scols = Math.ceil(S.W / S.tw), Srows = Math.ceil(S.H / S.tw);
+  const Lcols = Math.ceil(L.W / L.tw), Lrows = Math.ceil(L.H / L.tw);
+  if (S.offs.length !== Scols * Srows || L.offs.length !== Lcols * Lrows)
+    return { error: 'the tile count does not match the grid the header describes' };
+  const fs_ = openSync(ps, 'r'), fl = openSync(pl, 'r');
   try {
     const grab = (fd, o, l) => { const b = Buffer.alloc(l); readSync(fd, b, 0, l, o); return b; };
-    const open = A.comp === 1 ? (b => b) : (b => inflateSync(b));
+    const open = S.comp === 1 ? (b => b) : (b => inflateSync(b));
+    const Srow = S.tw * S.spp, Lrow = L.tw * L.spp;
     let diff = 0, bytes = 0, firstTile = -1, worst = 0;
-    for (let i = 0; i < A.offs.length; i++) {
-      const a = open(grab(fa, A.offs[i], A.cnts[i])), b = open(grab(fb, B.offs[i], B.cnts[i]));
-      bytes += a.length;
-      if (a.length === b.length && a.equals(b)) continue;
-      diff++;
-      if (firstTile < 0) firstTile = i;
-      if (a.length === b.length)
-        for (let k = 0; k < a.length; k++) { const d = Math.abs(a[k] - b[k]); if (d > worst) worst = d; }
+    for (let lr = 0; lr < Lrows; lr++) {
+      for (let lc = 0; lc < Lcols; lc++) {
+        const li = lr * Lcols + lc;
+        const lb = open(grab(fl, L.offs[li], L.cnts[li]));
+        let bad = false;
+        for (let qy = 0; qy < ratio; qy++) for (let qx = 0; qx < ratio; qx++) {
+          const sr = lr * ratio + qy, sc = lc * ratio + qx;
+          if (sr >= Srows || sc >= Scols) continue;
+          // PADDING IS NOT THE PICTURE. A TIFF tile is always full size, so the right and bottom edges
+          // carry padding - and two tilings pad DIFFERENT regions, which would read as a difference the
+          // picture does not have. Only bytes inside W x H are compared.
+          const x0 = sc * S.tw, y0 = sr * S.tw;
+          const validW = Math.min(S.tw, S.W - x0) * S.spp, validR = Math.min(S.tw, S.H - y0);
+          if (validW <= 0 || validR <= 0) continue;
+          const si = sr * Scols + sc, sb = open(grab(fs_, S.offs[si], S.cnts[si]));
+          bytes += validW * validR;
+          for (let r = 0; r < validR; r++) {
+            const so = r * Srow, lo = (qy * S.tw + r) * Lrow + qx * Srow;
+            if (lb.compare(sb, so, so + validW, lo, lo + validW) !== 0) {
+              bad = true;
+              for (let k = 0; k < validW; k++) { const d = Math.abs(lb[lo + k] - sb[so + k]); if (d > worst) worst = d; }
+            }
+          }
+        }
+        if (bad) { diff++; if (firstTile < 0) firstTile = li; }
+      }
     }
-    return { diff, tiles: A.offs.length, bytes, firstTile, worst };
-  } catch (e) { return { error: 'inflating: ' + e.message }; } finally { closeSync(fa); closeSync(fb); }
+    return { diff, tiles: L.offs.length, bytes, firstTile, worst, ratio, sTile: S.tw, lTile: L.tw };
+  } catch (e) { return { error: 'inflating: ' + e.message }; } finally { closeSync(fs_); closeSync(fl); }
 }
 
 function describe(path) {
@@ -289,7 +334,22 @@ function selftest() {
   // files this tool is pointed at.
   const u64 = v => { const b = Buffer.alloc(8); b.writeUInt32LE(v % 4294967296, 0);
                      b.writeUInt32LE(Math.floor(v / 4294967296), 4); return b; };
-  const bigTiff = (name, tiles, level, i) => {
+  // Cuts its own tiles from a whole image, because the TILING is the thing under test: the same pixels
+  // have to be expressible at two tile sizes, and a TIFF tile is always FULL SIZE with the edge padded.
+  // `padByte` fills that padding, so a case can make two tilings disagree in padding alone and require
+  // the comparison to ignore it.
+  const SPP = 4;
+  const bigTiff = (name, img, W, H, TS, level, i, padByte = 0) => {
+    const cols = Math.ceil(W / TS), rows = Math.ceil(H / TS), tiles = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const tl = Buffer.alloc(TS * TS * SPP, padByte);
+      for (let y = 0; y < TS; y++) {
+        const iy = r * TS + y; if (iy >= H) break;
+        const x0 = c * TS, w = Math.max(0, Math.min(TS, W - x0)) * SPP;
+        if (w > 0) img.copy(tl, y * TS * SPP, (iy * W + x0) * SPP, (iy * W + x0) * SPP + w);
+      }
+      tiles.push(tl);
+    }
     const p = join(dir, name), comp = tiles.map(t => deflateSync(t, { level })), n = comp.length;
     let off = 16; const offs = [];
     for (const c of comp) { offs.push(off); off += c.length; }
@@ -303,9 +363,16 @@ function selftest() {
       b.writeUInt16LE(tag, 0); b.writeUInt16LE(ty, 2); u64(count).copy(b, 4); val.copy(b, 12);
       return b;
     };
-    const tags = [ent(256, 4, 1, u64(256)), ent(257, 4, 1, u64(256)), ent(259, 3, 1, short1(8)),
-                  ent(322, 4, 1, u64(128)), ent(323, 4, 1, u64(128)),
-                  ent(324, 16, n, u64(offsAt)), ent(325, 16, n, u64(cntsAt))];
+    // A SINGLE-TILE IMAGE PUTS ITS ARRAYS INLINE. A BigTIFF entry carries 8 bytes of value, so one
+    // LONG8 IS the value and only two or more are stored out of line behind an offset. Writing the
+    // offset form for n = 1 made the reader take the array's address as the tile's address - which the
+    // four-tile cases above could never have shown, because they are always out of line.
+    const offsVal = n === 1 ? u64(offs[0]) : u64(offsAt);
+    const cntsVal = n === 1 ? u64(comp[0].length) : u64(cntsAt);
+    const tags = [ent(256, 4, 1, u64(W)), ent(257, 4, 1, u64(H)), ent(259, 3, 1, short1(8)),
+                  ent(277, 3, 1, short1(SPP)),
+                  ent(322, 4, 1, u64(TS)), ent(323, 4, 1, u64(TS)),
+                  ent(324, 16, n, offsVal), ent(325, 16, n, cntsVal)];
     writeFileSync(p, Buffer.concat([head, ...comp, Buffer.concat(offs.map(u64)),
       Buffer.concat(comp.map(c => u64(c.length))),
       Buffer.concat([u64(tags.length), ...tags, u64(0)]), Buffer.from(meta(i), 'latin1')]));
@@ -350,10 +417,13 @@ function selftest() {
     //      This is the shape of the real failure - a desktop master and an iPhone master of one picture,
     //      13% apart in stored bytes and identical across all 163,840 tiles - which this tool reported
     //      as a different picture until it learned to inflate.
-    const tile = n => { const b = Buffer.alloc(8192);
-      for (let i = 0; i < b.length; i++) b[i] = (i * 7 + (i >> 5) * 13 + n) & 0xff; return b; };
-    const pix = [tile(0), tile(1), tile(2), tile(3)];
-    const lo = bigTiff('lo.tif', pix, 1, 1), hi = bigTiff('hi.tif', pix, 9, 2);
+    // H is deliberately NOT a multiple of 128: at tile 128 the bottom row is half padding, and at tile
+    // 256 the padding is a different shape again. Every cross-tiling case below therefore runs over an
+    // edge where the two files pad differently, which is exactly where a naive mapping goes wrong.
+    const W = 256, H = 192;
+    const pic = Buffer.alloc(W * H * 4);
+    for (let i = 0; i < pic.length; i++) pic[i] = (i * 7 + (i >> 5) * 13) & 0xff;
+    const lo = bigTiff('lo.tif', pic, W, H, 128, 1, 1), hi = bigTiff('hi.tif', pic, W, H, 128, 9, 2);
     // THE TEST'S OWN ABLATION. If the two levels happened to pack to the same bytes, the next case would
     // pass through stage ONE and prove nothing about stage two. Assert the premise before leaning on it.
     check('the two levels really do pack to different sizes', statSync(lo).size !== statSync(hi).size, true);
@@ -361,10 +431,24 @@ function selftest() {
 
     // ...and the ablation that stops "always identical" from passing: one byte of one tile moved, still
     // at two different levels, so the only route to a verdict is through the inflated comparison.
-    const bent = pix.map(b => Buffer.from(b));
-    bent[2][4000] = (bent[2][4000] + 1) & 0xff;
+    const bent = Buffer.from(pic); bent[4000] = (bent[4000] + 1) & 0xff;
     check('one pixel moved, still different levels',
-      run([lo, bigTiff('hibent.tif', bent, 9, 2)], true), 1);
+      run([lo, bigTiff('hibent.tif', bent, W, H, 128, 9, 2)], true), 1);
+
+    // 10-12. CROSS-TILING. One slab is tiled whatever each device can afford - 512 on a desktop, 1024
+    //        on a 2 GB tablet, 4096 where the texture limit allows - so the same picture arrives at two
+    //        tile sizes, and the comparison refused that outright until it learned to map one onto the
+    //        other. A 256 tile is a 2x2 block of 128s, the way a 1024 is a 2x2 of 512s.
+    const t128 = bigTiff('t128.tif', pic, W, H, 128, 6, 1);
+    const t256 = bigTiff('t256.tif', pic, W, H, 256, 6, 2);
+    check('same pixels, 128-tiled against 256-tiled', run([t128, t256], true), 0);
+    check('one pixel moved, across two tilings',
+      run([t128, bigTiff('t256bent.tif', bent, W, H, 256, 6, 2)], true), 1);
+    // AND THE ONE THAT PROVES THE CLIP. Both files pad, and they pad DIFFERENT regions. Fill one side's
+    // padding with 0xFF and the picture is still the same picture. If the mapping compared padding this
+    // reads DIFFERS, and the cross-tiling verdict above would be worth nothing.
+    check('padding differs, picture does not',
+      run([t128, bigTiff('t256pad.tif', pic, W, H, 256, 6, 2, 0xFF)], true), 0);
   } finally { rmSync(dir, { recursive: true, force: true }); }
   console.log(NL + pass + ' passed, ' + fail + ' failed');
   return fail ? 1 : 0;
