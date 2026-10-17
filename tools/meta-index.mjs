@@ -33,13 +33,22 @@ if (!targets.length) {
   process.exit(1);
 }
 
-const MASTER = /^stone-.*[.](tif|tiff|png|zip)$/i;
-function walk(p, into) {
+// BY EXTENSION, NEVER BY SLAB NAME. This pattern was `^stone-.*` from when every master was called
+// stone-something, but the prefix is the SLAB NAME and that is free text: `regression test-`, `glass-`,
+// `iPhone wood test-`, `Hero_Psyker-`. Harvesting a folder of 82 masters archived 16 of them and said
+// nothing, because a file that never enters the list cannot be reported as skipped. A file with no
+// block is still skipped safely below, so the filter costs nothing by being wide.
+const MASTER = /[.](tif|tiff|png|zip)$/i;
+function walk(p, into, explicit) {
   if (statSync(p).isDirectory()) {
-    for (const n of readdirSync(p)) if (MASTER.test(n)) walk(join(p, n), into);
+    // AND INTO EVERY SUBDIRECTORY. The filter used to be tested against directory names too, and no
+    // directory is called `stone-*.tif`, so a folder of masters was never entered - silently, for the
+    // same reason. The filter belongs on files.
+    for (const n of readdirSync(p)) walk(join(p, n), into, false);
     return into;
   }
-  into.push(p);
+  // A path named on the command line is taken as meant, whatever it is called.
+  if (explicit || MASTER.test(basename(p))) into.push(p);
   return into;
 }
 
@@ -55,6 +64,18 @@ function row(path, m) {
     build: or(m.build),                     // absent on every master before 2026.09.27.23
     inputs: or(m.inputs),                   // the picture signature: same value = same picture and light
     slab: or(m.slab),
+    // WHAT IT IS MADE OF, and null when the build cannot say. The block has carried `material` since
+    // 2026.10.15.83 and this row dropped it, so an index of 90 masters could not answer "one set per
+    // material" - the question the archive exists to answer. null means CANNOT SAY and never stone:
+    // `family` is the stone vocabulary and is present on a wood slab too, which is how a wood master
+    // was once read as marble. See docs/sidecars/README.md.
+    material: or(m.material),
+    family: or(m.family),
+    // THE ERA FLAG. Marking went on by default 2026-10-16, and a marked master is not byte-comparable
+    // with an unmarked one of the same picture. Without this the index cannot say whether two rows may
+    // be compared at all - which is exactly what a compression ladder needs to know.
+    marked: or(m.marked),
+    markedCells: or(m.markedCells),
     w, h,
     gigapixels: w && h ? +((w * h) / 1e9).toFixed(3) : null,
     spectrum: or(m.spectrum),
@@ -189,7 +210,7 @@ function buildDevices(rows, known) {
 }
 
 const files = [];
-for (const t of targets) walk(t, files);
+for (const t of targets) walk(t, files, true);
 const rows = [], skipped = [], blocks = new Map();
 for (const f of files) {
   let m = null;

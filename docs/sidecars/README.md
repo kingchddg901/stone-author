@@ -1,5 +1,13 @@
 # Master sidecars — the fleet, and the size ladder
 
+> **`archive/` is a separate thing.** This file curates twenty-one sidecars chosen as evidence for
+> four specific claims. `archive/` is the bulk harvest instead — every master on the authoring
+> machine, 90 of them standing for 78.1 GB of pixels in 14.3 MB of JSON, so the masters themselves can
+> be deleted without losing what they measured. Its `index.json` is the only place the **on-disk file
+> size** is recorded (`bytes`); a sidecar carries the master's own block verbatim, and the block's
+> `bytes` counts image data only — 3.9 MB short of the file on one 262,144 master. Use the index for
+> anything about compression, and the sidecars for anything about the render.
+
 The metadata extract (a **sidecar**) from a master: what it was, what made it, and how long each tile
 took. **Twenty-one masters, twenty-one sidecars**, in four sets that are evidence for four different things.
 

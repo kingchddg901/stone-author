@@ -1,0 +1,107 @@
+{
+  "tool": "stone-author",
+  "at": "2026-10-11T20:12:52.401Z",
+  "build": "2026.10.11.29",
+  "slab": "glass",
+  "marks": 13,
+  "lines": 0,
+  "family": "carrara",
+  "cracks": 0,
+  "specks": 0,
+  "drusy": 0,
+  "seams": 0,
+  "spectrum": 0,
+  "dpr": 1,
+  "cores": 12,
+  "mem": 16,
+  "dev": {
+    "v": 3,
+    "sealed": true,
+    "kid": "3d577f37",
+    "iv": "A2mYIFZmUc/4lewu",
+    "ct": "h115z6FrHHMUPGCYImpfvSRoI1TGkH1FhYqzkB/2TToxEVGuG6qeP0hPPtoqGWM4j58kggUadwaZUJZMA+8kDK6xK42q5Ks0o9pO6O+aJUZjuPBRpcTDgfz1GArlyVOR0GV9bDUFAhqZq7NqS+b3cYmw9f0/JzgEo3qreYQREXyhHE6JrnId3k9KmTfcvrXC8ffrFj6bwVf/ANRnpy6BDLrqkgAMMJ5VaxNw9ZhYXcY="
+  },
+  "arch": "x86/64",
+  "engine": "win-chrome",
+  "state": "4903bb96",
+  "inputs": "2c1563e3",
+  "G": {
+    "subsurface": 0,
+    "specular": 0,
+    "specMetal": 0,
+    "lightAngle": 135,
+    "lightTemp": 0,
+    "lightX": 0.5,
+    "lightY": 0.3125,
+    "spotR": 0.25,
+    "speckGroups": 1,
+    "speckSubs": 1,
+    "cloudScale": 1,
+    "cloudStrength": 0.5,
+    "warp": 0,
+    "warpDepth": 0.6,
+    "cloudX": 0,
+    "cloudY": 0,
+    "warpMask": [],
+    "bandStrength": 0,
+    "bandFreq": 6,
+    "bandAngle": 0,
+    "bandWave": 0.4,
+    "brecStrength": 0,
+    "brecClasts": 24,
+    "brecSeam": 1,
+    "drusyDensity": 0,
+    "drusySize": 1,
+    "drusyBright": 1,
+    "drusyGroups": 1,
+    "drusySubs": 1,
+    "backlight": 0,
+    "lens": 0,
+    "lensPitch": 10,
+    "lensType": "fresnel"
+  },
+  "scope": "render",
+  "tiled": true,
+  "w": 2048,
+  "h": 1280,
+  "tile": 2048,
+  "render": 2048,
+  "tiles": 1,
+  "renders": 1,
+  "bleed": 4,
+  "sigma": 0,
+  "windows": 0,
+  "bloomDraw": true,
+  "glowAuto": true,
+  "light": {
+    "mean": 175.85,
+    "lit40": 100,
+    "every": 100
+  },
+  "maxTexture": 16384,
+  "plan": {
+    "budgetMB": 12885,
+    "memShare": 6,
+    "mem": 16,
+    "tried": [
+      "2048/2056=84MB:calibrated 143.7 vs 143.7 in 2409ms, est 2s",
+      "1024/1032=71MB:calibrated 146.0 vs 146.0 in 723ms, est 3s",
+      "chose 2048: 84MB is under half the 12885MB ceiling, take the speed",
+      "store 2048 x1"
+    ]
+  },
+  "toDisk": true,
+  "bytes": 1236294,
+  "ms": {
+    "render": 3330,
+    "total": 7393
+  },
+  "perTile": {
+    "ms": [
+      3329
+    ],
+    "bytes": [
+      1236294
+    ]
+  }
+}
