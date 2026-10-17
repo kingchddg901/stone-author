@@ -151,6 +151,10 @@
   #bigdlg .note, #resumedlg .note { max-width: none; margin-bottom: 12px; white-space: pre-line; }
   button.warn { border-color: var(--warn); color: var(--warn); }
   .note b { color: var(--text); font-weight: 500; }
+  /* The carry check speaks in two strengths, and only through --warn: a second alarm colour would
+     be a new token earned by one message. Weight carries the difference instead. */
+  .note.warn { color: var(--warn); }
+  .note.bad { color: var(--warn); font-weight: 600; }
   .layers { display: grid; gap: 5px; width: 100%; }
   .lay { display: grid; grid-template-columns: 16px 20px 26px minmax(52px, 1fr) 26px 26px minmax(56px, 92px) 3ch 18px;
          align-items: center; gap: 6px; padding: 0 4px; }
@@ -530,6 +534,7 @@
         <button type="button" data-addop="roll" data-i18n="op.add-roll">+ Roll</button>
         <button type="button" data-addop="stir" data-i18n="op.add-stir">+ Stir</button>
       </div>
+      <div id="ops-carry" class="note" hidden></div>
       <div class="sl"><label for="glass-cords"><span data-i18n="sl.glass-cords">Canes</span> <output id="glass-cordsV"></output></label><input id="glass-cords" type="range" min="0" max="1" step="0.01"></div>
       <div class="sl"><label for="glass-cordN"><span data-i18n="sl.glass-cordN">Cane colours</span> <output id="glass-cordNV"></output></label><input id="glass-cordN" type="range" min="2" max="6" step="1"></div>
       <div class="sl"><label for="glass-cordScale"><span data-i18n="sl.glass-cordScale">Cane count</span> <output id="glass-cordScaleV"></output></label><input id="glass-cordScale" type="range" min="0.3" max="30" step="0.1"></div>
@@ -1109,6 +1114,10 @@ window.SA_I18N = (() => {
   "a11y.op-up": "Move earlier",
   "a11y.op-down": "Move later",
   "a11y.op-remove": "Remove",
+  "glass.carry-busy": "Checking what this size can carry…",
+  "glass.carry-ok": "At {px}px this patch renders the same as a 4× check.",
+  "glass.carry-soft": "At {px}px some of this chain is finer than a pixel — a 4× check of this patch agrees only {pc}%. Edges are being sampled, not drawn.",
+  "glass.carry-bad": "At {px}px most of this patch is not in the glass — a 4× check agrees {pc}%. What you are seeing is largely the sample grid. Render larger, or ease the last stretch.",
   "mould.cells": "Cells",
   "mould.blobs": "Blobs",
   "sl.glass-blobJit": "Blob scatter",
@@ -1771,7 +1780,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.130';
+  const BUILD = '2026.10.17.131';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -10993,6 +11002,91 @@ self.onmessage = async (e) => {
       row.append(mv);
       host.append(row);
     });
+    carryLater();   // the list just changed, so what it costs to render just changed too
+  }
+
+  // CAN THE CHOSEN EXPORT SIZE CARRY THIS CHAIN? Measured, never derived, because no arithmetic over
+  // the op list can answer it. A product of the per-op scales reports one real chain EXPANDING the
+  // gather (0.15 across, 0.31 down) while that same chain renders at correlation 0.074 against a
+  // supersampled reference: the horseshoe is AREA-PRESERVING, and its fineness is fold-on-fold, which
+  // no per-op factor sees. So this renders one small patch at the chosen size, the same patch at four
+  // times it, averages the second back down and correlates them.
+  //
+  // That answers the authoring question directly - does the next size up show something this one does
+  // not - and needs no model of the map at all. It is also why the wording reports what was measured
+  // instead of pronouncing a slab safe.
+  //
+  // ONE PATCH, low and left, because cumulative stretch lands there first. A chain that aliases only
+  // somewhere else will not be caught, and the quiet message says "this patch" for that reason.
+  const CARRY_AT = [0.2, 0.8], CARRY_PX = 128, CARRY_UP = 4, CARRY_SOFT = 0.95, CARRY_BAD = 0.5;
+  let carryRun = 0, carryTimer = null;
+
+  // The same physical area at either size: at CARRY_UP x the width, the patch is CARRY_UP x the pixels.
+  function carryPatch(W, px) {
+    // From coatReach, never a constant: the bleed is the coat's own reach at this size, and it differs
+    // between the two renders this check makes because their sizes differ.
+    const bleed = coatReach(W / COAT_REF);
+    const across = Math.max(1, Math.floor(W / px)), down = Math.max(1, Math.floor(Math.round(W * H) / px));
+    const tx = Math.min(across - 1, Math.floor(CARRY_AT[0] * across));
+    const ty = Math.min(down - 1, Math.floor(CARRY_AT[1] * down));
+    const c = renderOneTile(W, tx * px, ty * px, px, px, bleed);
+    return c.getContext('2d').getImageData(bleed, bleed, px, px).data;
+  }
+
+  // Pearson over RGB, with the larger patch box-averaged to the smaller one's grid first.
+  function carryCorr(lo, hi, px, f) {
+    const n = px * px * 3, A = new Float64Array(n), B = new Float64Array(n);
+    const W2 = px * f;
+    for (let y = 0, o = 0; y < px; y++) for (let x = 0; x < px; x++) for (let c = 0; c < 3; c++, o++) {
+      A[o] = lo[((y * px) + x) * 4 + c];
+      let s = 0;
+      for (let dy = 0; dy < f; dy++) for (let dx = 0; dx < f; dx++) s += hi[(((y * f + dy) * W2) + (x * f + dx)) * 4 + c];
+      B[o] = s / (f * f);
+    }
+    let ma = 0, mb = 0;
+    for (let i = 0; i < n; i++) { ma += A[i]; mb += B[i]; }
+    ma /= n; mb /= n;
+    let sa = 0, sb = 0, cv = 0;
+    for (let i = 0; i < n; i++) { const d1 = A[i] - ma, d2 = B[i] - mb; sa += d1 * d1; sb += d2 * d2; cv += d1 * d2; }
+    // A patch with no variation at either size agrees trivially; say so rather than dividing by zero.
+    return (sa < 1e-9 || sb < 1e-9) ? 1 : cv / Math.sqrt(sa * sb);
+  }
+
+  async function carryCheck() {
+    const el = document.getElementById('ops-carry'); if (!el) return;
+    const sel = document.getElementById('expres'), W = sel ? +sel.value : 0;
+    // Not glass, no size, or an export already using the machine: say nothing rather than guess.
+    if (currentMaterial() !== 'glass' || exporting || !(W > 0)) { el.hidden = true; return; }
+    const mine = ++carryRun;
+    el.hidden = false; el.className = 'note'; el.textContent = TR('glass.carry-busy');
+    try {
+      await breathe();
+      const lo = carryPatch(W, CARRY_PX);
+      if (mine !== carryRun) return;                       // a later edit owns the panel now
+      await breathe();
+      const hi = carryPatch(W * CARRY_UP, CARRY_PX * CARRY_UP);
+      if (mine !== carryRun) return;
+      const r = carryCorr(lo, hi, CARRY_PX, CARRY_UP);
+      const px = (+W).toLocaleString(), pc = (100 * Math.max(0, r)).toFixed(0);
+      if (r < CARRY_BAD) { el.className = 'note bad'; el.textContent = TR('glass.carry-bad', { px, pc }); }
+      else if (r < CARRY_SOFT) { el.className = 'note warn'; el.textContent = TR('glass.carry-soft', { px, pc }); }
+      else { el.className = 'note'; el.textContent = TR('glass.carry-ok', { px }); }
+    } catch (e) {
+      // A size this device cannot allocate is not a finding about the glass.
+      if (mine === carryRun) el.hidden = true;
+    }
+  }
+
+  // Debounced, because the check costs two renders and a slider emits on every pixel of travel.
+  function carryLater() {
+    clearTimeout(carryTimer);
+    carryTimer = setTimeout(() => { carryCheck(); }, 600);
+  }
+  // The size decides the answer as much as the chain does, so changing it re-asks. Wired here rather
+  // than in the export panel because this is the only thing that cares.
+  {
+    const rs = document.getElementById('expres');
+    if (rs) rs.addEventListener('change', carryLater);
   }
   // THE COMPARTMENTS. Same row shape as the ops list because it is the same kind of thing: an
   // ordered list whose order is the content. w and l are in units of the cell W and L, so changing

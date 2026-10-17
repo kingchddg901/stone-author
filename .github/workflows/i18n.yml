@@ -79,6 +79,8 @@ jobs:
         run: node tools/probe-gate.mjs
       - name: The export clock measures the render, not the person reading the dialog
         run: node tools/check-export-clock.mjs
+      - name: The carry check measures only for glass, only when idle, only once the hand stops
+        run: node tools/check-carry.mjs
       - name: Two masters of one picture are the same picture, and a marked one says so
         run: node tools/check-same-image.mjs --selftest
       - name: The directory lands after the tile data, whatever order the tiles arrived in
