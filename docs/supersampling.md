@@ -19,6 +19,21 @@ so every row is the same physical area. `corr` is against the 1024-samples-per-p
 | 256 | 4,194,304 | 0.992 | 0.999 |
 | 1024 | 8,388,608 | 1.000 | 1.000 |
 
+And the same test on **wood**, on the same slab and two independent tiles — one the busiest the scout
+could find, one the exact tile where glass is worst:
+
+| samples/px | wood, busiest tile | wood, tile (14,31) |
+|---|---|---|
+| 1 | **0.9999** | **0.9998** |
+| 16 | 1.0000 | — |
+| 256 | 1.0000 | 1.0000 |
+
+Wood's contrast moves 0.04% across a 256-fold change in sampling, and on the second tile the ratio is
+1.000 to three places. **Wood needs nothing.** It has no op chain — no `woodUnform`, no ops list — so
+no stretch-and-fold, and its finest feature is the growth ring: `rings: 3200` on a 13.1 trunk puts ring
+spacing near 11 px at 262,144, comfortably above the grid.
+
+
 Two regions of one slab, one render, opposite answers:
 
 | | contrast at 1 spp | contrast converged | overstated by |
@@ -120,8 +135,10 @@ makes no assumption about the map.
   `perTile`.
 - **It is slower in exactly the renders that are already slowest**, because stretch accumulates
   toward the bottom of the slab and that is also where the tiles are densest.
-- **Only glass is scoped here.** Stone hit the quantisation floor at 1,048,576 in the same test, so
-  it has a finite smallest feature and gains nothing from this. Wood has not been measured.
+- **Only glass needs this, and that is now measured rather than assumed.** Stone hit the quantisation
+  floor at 1,048,576, so it has a finite smallest feature. Wood renders at correlation 0.9999 at one
+  sample per pixel. Both have a smallest feature; glass has a horseshoe instead, and that is the whole
+  difference.
 
 ## Staging
 
