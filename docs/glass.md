@@ -137,6 +137,14 @@ time the path curved. Measured on a *curving* pass: across spreads the bite 0.25
 
 ## Open
 
+- **The field aliases at one sample per pixel, and in places it aliases completely.** The op
+  chain is a stretch-and-fold, so the ribbon boundaries go below every pixel; the field holds a
+  label, so nothing can filter it where it is sampled. Measured on one slab: a flow band renders
+  at correlation 0.849 against a 1024-sample reference, and a speckle band renders at **0.084**
+  while reporting 3.7x the true contrast — a picture that is not in the glass. Neither the folds
+  nor the label is a defect, and together they guarantee it. See
+  [`supersampling.md`](supersampling.md).
+
 - **Stretch along a drawn pass** — needs the inverse map from path coordinates back to world. A
   drawn pass presses; it does not stretch, and that is why it is its own op rather than a `roll`.
 - **Refraction** — nothing behind the sheet yet, so nothing is refracted through it and the slope

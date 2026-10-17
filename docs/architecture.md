@@ -113,6 +113,8 @@ between machines), [`device-seal.md`](device-seal.md) (what a master records abo
 it seals), [`positional-marks.md`](positional-marks.md) (how every tile carries its own address),
 [`image-pyramid.md`](image-pyramid.md) (scoped, not built: why nothing can open a master),
 [`image-dna.md`](image-dna.md) (scoped, not built: a fragment that can rebuild the picture),
+[`supersampling.md`](supersampling.md) (scoped, not built: why a glass render at one sample per
+pixel shows what is not there),
 [`self-hosting.md`](self-hosting.md) (serving it yourself, and the sizes that unlocks), [`emitter-bloom.md`](emitter-bloom.md) (drawing the glow instead of blurring for it — a scope,
 not a build), [`i18n.md`](i18n.md) (translating the studio), `stone-generator.md` (the
 Python/panel generator), and this file. Design notes, **not yet implemented**:
