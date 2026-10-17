@@ -1771,7 +1771,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.127';
+  const BUILD = '2026.10.17.128';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -12940,8 +12940,14 @@ self.onmessage = async (e) => {
       // showSaveFilePicker would answer it on Chrome and Edge and nowhere else, so the choice was one
       // behaviour that works everywhere against three that differ by engine. The person can see their
       // downloads folder. Ask them, and delete nothing until they say it arrived.
+      // LOCKED BEFORE THE CONFIRM, which blocks on a person rather than on work. The 1,048,576 master
+      // read 351:29 on screen against 300.5 min in its own metadata - 51 minutes of a dialog waiting to
+      // be dismissed, counted as render time. The other three done-render sites read the clock straight
+      // after a NON-blocking save, so this was the only one that could drift, and the file was right
+      // the whole time because ms.total is captured up with the rest of the metadata.
+      const msDone = Date.now() - expT0;
       await resumeConfirmSaved(blob.size);
-      expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1);
+      expStat(TR('exp.done-render', { px: W, t: expElapsed(msDone) }), 1);
       hint(TR('hint.exported-render', { px: W }));
     } catch (e) {
       expStat(TR('hint.export-failed-msg', { err: errWhere(e) }), -1);

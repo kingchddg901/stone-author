@@ -165,6 +165,16 @@ tail cut at every byte of its last row, and a crash at every row index replaying
 layout - with three ablations, because a comparison that cannot go red has proved nothing. Removing one
 line from `resumeState` turns it red with the exact number, which is how that was checked.
 
+**The save confirm waits for a person, and the clock must not.** The confirm exists because
+`download()` returns the moment a click is dispatched — a cancelled Save As, a full volume and a
+finished download are indistinguishable from inside the page, so nothing is deleted until someone says
+the file arrived. That makes it the one blocking step in an export, and the 1,048,576 master found what
+it cost: **351:29** on screen against **300.5 min** in the file's own metadata, fifty-one minutes of an
+unattended dialog counted as render time. The TIFF was honest throughout — `ms.total` is captured up
+with the rest of the metadata, before the save — so only the number on screen was wrong, which is the
+only number anybody reads. The elapsed is locked before the confirm now, and
+`tools/check-export-clock.mjs` goes red if a done message ever reads the clock after a dialog again.
+
 **The identity is `renderSig`, and that is what the record stores.** Confirmed rather than assumed: the
 master's own `inputs` field IS `renderSig()` (`app/stone-author.html:9246`), so the signature a sidecar
 publishes and the signature a resume matches on are the same value.

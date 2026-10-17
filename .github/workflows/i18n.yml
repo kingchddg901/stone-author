@@ -77,6 +77,8 @@ jobs:
         run: node tools/probe-reduce.mjs
       - name: The mark's entry gate is wide enough for the one field that defeats the read
         run: node tools/probe-gate.mjs
+      - name: The export clock measures the render, not the person reading the dialog
+        run: node tools/check-export-clock.mjs
       - name: Two masters of one picture are the same picture, and a marked one says so
         run: node tools/check-same-image.mjs --selftest
       - name: The directory lands after the tile data, whatever order the tiles arrived in
