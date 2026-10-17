@@ -78,6 +78,7 @@
   .op-sub input { width: 100%; min-width: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
   .op-count { align-self: end; font-size: 10px; color: var(--dim); white-space: nowrap; padding-bottom: 2px; }
   .op-count.bad { color: var(--warn); }
+  .ss-pick { font-size: 11px; vertical-align: baseline; max-width: 100%; }
   .op .mv { display: flex; gap: 2px; }
   .op .mv button { padding: 1px 5px; line-height: 1.1; }
   .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-inline-end: 2px; }
@@ -1129,6 +1130,10 @@ window.SA_I18N = (() => {
   "op.moons-used": "{n} of {of}",
   "op.f.cy": "down",
   "op.f.d": "axis°",
+  "glass.ss-pick": "Samples per pixel",
+  "glass.ss-off": "one sample",
+  "glass.ss-opt": "{n}×{n}, up to {x}× the time",
+  "glass.ss-on": "{n}×{n} sampling is on, at up to {x}× the render time.",
   "glass.carry-busy": "Checking what this size can carry…",
   "glass.carry-ok": "At {px}px this patch is inside the chaos limit.",
   "glass.carry-soft": "At {px}px this chain is near the chaos limit — a 4× check of this patch agrees only {pc}%. Edges are being sampled, not drawn.",
@@ -1795,7 +1800,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.136';
+  const BUILD = '2026.10.17.137';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6886,6 +6891,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const fv = [0, 0], melt = [0, 0], gth = [0, 0, 0], lay = [0, -1, 0, 1];
     const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));
     const img = g2d.createImageData(B.bw, band), px = img.data;
+    // SAMPLES PER PIXEL. The glass field holds a LABEL and cannot be filtered where it is sampled, so
+    // the only honest way to show a fold finer than the grid is to look more than once and average the
+    // COLOUR after the lookup - which is what a sensor does over its own area, and leaves the material
+    // rule untouched: nothing mixes in the field, only in the pixel.
+    //
+    // ONE SAMPLE IS EXACTLY TODAY. The offset (k + 0.5)/N - 0.5 is 0 when N is 1, adding 0.0 changes no
+    // double, and the average divides by 1. Byte-identical rather than close, which matters here more
+    // than most places: a label field turns a last-place coordinate change into a 130-level pixel.
+    const SS = Math.max(1, Math.min(4, (GLASS.ss | 0) || 1)), SSN = 1 / (SS * SS);
+    const SSO = []; for (let k = 0; k < SS; k++) SSO.push((k + 0.5) / SS - 0.5);
     for (let by = B.y0; by < B.y1; by += band) {
       const rows = Math.min(band, B.y1 - by);
       let o = 0;
@@ -6893,7 +6908,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         const dy = by + y + 0.5, dx0 = B.x0 + 0.5;
         let su = B.iv.a * dx0 + B.iv.c * dy + B.iv.e, sv = B.iv.b * dx0 + B.iv.d * dy + B.iv.f;
         for (let x = 0; x < B.bw; x++, o += 4, su += B.iv.a, sv += B.iv.b) {
-          const cu = su < 0 ? 0 : su > 1 ? 1 : su, cvv = sv < 0 ? 0 : sv > H ? H : sv;
+          let accR = 0, accG = 0, accB = 0;
+          for (let jy = 0; jy < SS; jy++) for (let jx = 0; jx < SS; jx++) {
+          // The sub-position in DEVICE space, carried into slab space by the same inverse affine the
+          // pixel centre came through, so a sample is a sample wherever the pane was cut.
+          const ssu = su + B.iv.a * SSO[jx] + B.iv.c * SSO[jy];
+          const ssv = sv + B.iv.b * SSO[jx] + B.iv.d * SSO[jy];
+          const cu = ssu < 0 ? 0 : ssu > 1 ? 1 : ssu, cvv = ssv < 0 ? 0 : ssv > H ? H : ssv;
           // WHERE THIS PANE WAS CUT FROM. The pane is a window onto the formed object, exactly as a
           // board is a plane through a log - which is why Pane across and Pane down change the
           // character of the sheet and not merely the crop.
@@ -6953,9 +6974,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           }
           const r = LBR * Math.exp(-ar * T) * m, g = LBG * Math.exp(-ag * T) * m,
                 b = LBB * Math.exp(-ab * T) * m;
-          px[o] = r > 255 ? 255 : r;
-          px[o + 1] = g > 255 ? 255 : g;
-          px[o + 2] = b > 255 ? 255 : b;
+          accR += r; accG += g; accB += b;
+          }
+          const vr = accR * SSN, vg = accG * SSN, vb = accB * SSN;
+          px[o] = vr > 255 ? 255 : vr;
+          px[o + 1] = vg > 255 ? 255 : vg;
+          px[o + 2] = vb > 255 ? 255 : vb;
           px[o + 3] = 255;
         }
       }
@@ -11151,6 +11175,10 @@ self.onmessage = async (e) => {
   let carryRun = 0, carryTimer = null;
 
   // The same physical area at either size: at CARRY_UP x the width, the patch is CARRY_UP x the pixels.
+  // ALWAYS AT ONE SAMPLE, whatever the slab is set to. The chaos limit is a property of the chain and
+  // the size - how much of the field is finer than a pixel - and supersampling does not change that,
+  // it pays to carry it. Measuring through the current setting would make the warning answer a
+  // different question each time it ran, and would cost sixteen renders at 4x4.
   function carryPatch(W, px) {
     // From coatReach, never a constant: the bleed is the coat's own reach at this size, and it differs
     // between the two renders this check makes because their sizes differ.
@@ -11158,8 +11186,11 @@ self.onmessage = async (e) => {
     const across = Math.max(1, Math.floor(W / px)), down = Math.max(1, Math.floor(Math.round(W * H) / px));
     const tx = Math.min(across - 1, Math.floor(CARRY_AT[0] * across));
     const ty = Math.min(down - 1, Math.floor(CARRY_AT[1] * down));
-    const c = renderOneTile(W, tx * px, ty * px, px, px, bleed);
-    return c.getContext('2d').getImageData(bleed, bleed, px, px).data;
+    const keep = GLASS.ss; GLASS.ss = 1;
+    try {
+      const c = renderOneTile(W, tx * px, ty * px, px, px, bleed);
+      return c.getContext('2d').getImageData(bleed, bleed, px, px).data;
+    } finally { GLASS.ss = keep; }
   }
 
   // Pearson over RGB, with the larger patch box-averaged to the smaller one's grid first.
@@ -11200,6 +11231,25 @@ self.onmessage = async (e) => {
       if (r < CARRY_BAD) { el.className = 'note bad'; el.textContent = TR('glass.carry-bad', { px, pc }); }
       else if (r < CARRY_SOFT) { el.className = 'note warn'; el.textContent = TR('glass.carry-soft', { px, pc }); }
       else { el.className = 'note'; el.textContent = TR('glass.carry-ok', { px }); }
+      // WHAT IS BEING PAID, and the offer to pay it. The toll is stated whether or not the chain is
+      // over the limit, because somebody who turned it on should be told it is still running.
+      const n = Math.max(1, Math.min(4, (GLASS.ss | 0) || 1));
+      if (n > 1) el.append(' ' + TR('glass.ss-on', { n, x: n * n }));
+      if (r < CARRY_SOFT || n > 1) {
+        const pick = document.createElement('select');
+        pick.className = 'ss-pick';
+        pick.setAttribute('aria-label', TR('glass.ss-pick'));
+        for (const v of [1, 2, 4]) {
+          const o = document.createElement('option');
+          o.value = v; o.textContent = v === 1 ? TR('glass.ss-off') : TR('glass.ss-opt', { n: v, x: v * v });
+          if (v === n) o.selected = true;
+          pick.append(o);
+        }
+        // The cost lands on the render, so the picture must be redrawn before the number beside it
+        // can be believed - and the check reruns because the message now has a different tail.
+        pick.addEventListener('change', () => { GLASS.ss = +pick.value; redraw(true); carryLater(); });
+        el.append(' ', pick);
+      }
     } catch (e) {
       // A size this device cannot allocate is not a finding about the glass.
       if (mine === carryRun) el.hidden = true;

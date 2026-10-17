@@ -116,6 +116,33 @@ ok('glassUnform is where it was', at > 0);
   ok('and it is marked when that count is zero', /'op-count' \+ \(used \? '' : ' bad'\)/.test(SRC));
 }
 
+// ---- one sample per pixel is the render that always was ----------------------------------------------
+// Supersampling averages the COLOUR after the label lookup, which is what a sensor does over its own
+// area and leaves the material's rule untouched - nothing mixes in the field, only in the pixel. At one
+// sample it has to vanish, and does: the offset (k + 0.5)/N - 0.5 is 0 at N = 1, adding 0.0 changes no
+// double, and the average divides by 1. Checked on a real slab at FNV 0x6d79a5ba on both builds.
+{
+  const g = SRC.slice(SRC.indexOf('function paintGlassContent('), SRC.indexOf('function paintWoodContent('));
+  ok('the sample grid is declared and clamped', /const SS = Math\.max\(1, Math\.min\(4, \(GLASS\.ss \| 0\) \|\| 1\)\)/.test(g));
+  ok('the offsets centre on the pixel, so one sample sits where it always sat',
+     /SSO\.push\(\(k \+ 0\.5\) \/ SS - 0\.5\)/.test(g));
+  ok('the average is a reciprocal fixed with the grid, not a divide per pixel', /SSN = 1 \/ \(SS \* SS\)/.test(g));
+  ok('the sub-position goes through the same inverse affine as the centre',
+     /const ssu = su \+ B\.iv\.a \* SSO\[jx\] \+ B\.iv\.c \* SSO\[jy\]/.test(g));
+  ok('colour is what is averaged, after the lookup', /accR \+= r; accG \+= g; accB \+= b;/.test(g));
+  // ABLATION: a grid that does not centre would move every pixel of every existing slab.
+  const broken = SRC.replace('(k + 0.5) / SS - 0.5', '(k + 1) / SS - 0.5');
+  ok('ablation: an off-centre grid is visible from here',
+     broken !== SRC && !/SSO\.push\(\(k \+ 0\.5\) \/ SS - 0\.5\)/.test(broken));
+}
+
+// ---- and the warning keeps asking the same question --------------------------------------------------
+{
+  const cp = SRC.slice(SRC.indexOf('function carryPatch('), SRC.indexOf('function carryCorr('));
+  ok('the chaos-limit check always measures at one sample', /GLASS\.ss = 1;/.test(cp));
+  ok('and puts the slab back afterwards', /finally \{ GLASS\.ss = keep; \}/.test(cp));
+}
+
 console.log('');
 if (fails) { console.error('check-op-origin: ' + fails + ' FAILED'); process.exit(1); }
 console.log('check-op-origin: an op without a centre is the op it always was, bit for bit, and one');

@@ -1442,6 +1442,30 @@
   "where": "The glass op list. \"across\"/\"down\" are the centre the op turns or spreads about; \"axis\" is the direction a roll stretches along.",
   "note": "Tiny field label, degrees. The degree sign is part of the string."
  },
+ "glass.ss-pick": {
+  "where": "Beside the chaos-limit note under the glass op list. Offered when the chain is past the limit, or whenever supersampling is already on.",
+  "note": "Label for the chooser. Supersampling means looking more than once per pixel and averaging."
+ },
+ "glass.ss-off": {
+  "where": "Beside the chaos-limit note under the glass op list. Offered when the chain is past the limit, or whenever supersampling is already on.",
+  "note": "The first option: one look per pixel, which is the default and costs nothing extra."
+ },
+ "glass.ss-opt": {
+  "where": "Beside the chaos-limit note under the glass op list. Offered when the chain is past the limit, or whenever supersampling is already on.",
+  "placeholders": {
+   "n": "The grid per pixel, 2 or 4 - so 2 means 2x2, four looks.",
+   "x": "How many times the render time, n squared."
+  },
+  "note": "Reads like \"4x4, 16x the time\"."
+ },
+ "glass.ss-on": {
+  "where": "Beside the chaos-limit note under the glass op list. Offered when the chain is past the limit, or whenever supersampling is already on.",
+  "placeholders": {
+   "n": "The grid per pixel currently set.",
+   "x": "How many times the render time, n squared."
+  },
+  "note": "Appended to the chaos-limit note so somebody who turned it on is told it is still running."
+ },
  "glass.carry-busy": {
   "note": "Shown for a second while two test renders run.",
   "where": "The glass op list, under the Spin/Blow/Roll/Stir buttons. Appears after the list changes."
