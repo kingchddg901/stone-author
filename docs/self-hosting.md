@@ -58,13 +58,18 @@ tiled path can produce one.
 
 ## What it actually costs
 
-Measured, not estimated, on a 16 GB twelve-core desktop:
+Measured on a 16 GB desktop, **6 cores / 12 threads** at 3.6 GHz. (A master records `cores` from
+`navigator.hardwareConcurrency`, which reports threads — see [`devices.md`](devices.md).)
 
 | width | pixels | tiles | time | file |
 |---|---|---|---|---|
 | 262,144 | 42.9 Gpx | 10,240 at 2048 | 22 min | 3.61 GB |
 | 524,288 | 171.8 Gpx | 10,240 at 4096 | 71 min | 9.92 GB |
-| 1,048,576 | 687.2 Gpx | 10,240 at 8192 | ~4.9 h | ~40 GB |
+
+**1,048,576 has not been completed.** 687.2 Gpx, 10,240 tiles at 8192. A run in progress is averaging
+1.73 s a tile, which would put it near five hours; the file size is unknown. Extrapolating the 0.0577
+bytes per pixel a 524,288 measured gives roughly 40 GB, but that rate has fallen at every doubling so
+far, so treat it as an upper bound rather than an estimate.
 
 Bytes per pixel **falls** as the width grows — 0.084 at 262,144, 0.0577 at 524,288 — because each tile
 covers less of the picture and compresses better.
