@@ -137,6 +137,19 @@ a different job and is discarded, not adapted.
   mean shipping partial masters around, which is a different feature and probably not worth it.
 - **A tile that was mid-write when the process died.** The manifest will not claim it, so it is
   re-rendered. This is the reason the manifest is flushed second.
+- **Losing power.** Not the process — the machine. `FileSystemSyncAccessHandle.flush()` pushes the
+  handle's buffer into the file, which is what makes a crashed tab, an OOM eviction or a closed window
+  recoverable. It is **not** an fsync, and the web platform exposes no way to ask for one, so the bytes
+  sit in the OS page cache until the OS chooses to write them down. A power cut takes whatever had not
+  been written, and that includes the record itself. Measured on 2026-10-17 during a brownout
+  mid-render: the resume offer was **absent**, not corrupt and not partial — which is the shape to
+  expect, since the directory metadata goes with the data.
+
+  This is a real limit and not a missing call: `flush()` is already issued after every tile and every
+  row. Nothing in the page can improve on it. What was wrong was the description — the writer worker's
+  own comment claimed `flush()` "makes the bytes durable" and offered that as the reason resume works,
+  which folded two failure classes into one word. **Resume survives the process dying; it does not
+  survive the machine dying.** Say which, because the difference is the whole feature.
 
 ## A related opportunity, which is not this feature
 
@@ -145,11 +158,31 @@ While measuring UV renders, the per-tile cost decomposed as roughly **10 ms of p
 `CompressionStream` does its work off the main thread — untested, and cheap to test — then overlapping
 compression of tile N with painting of tile N+1 would cost almost nothing and recover most of that time.
 
-The 262144 master gives this a sharper number from the other side. Its 2560 render tiles had a **median
-of 1,113 ms** and a mean of 2,225: 2560 × the median is 47.5 minutes inside a 94.9-minute render, so
-**half the wall clock was stalls**, with 747 tiles over twice the median and time-vs-bytes correlation of
-0.01 — tiff-meta's own signature for *the machine, not the slab*. The pool is not the cause; it ran its
-full eight workers and never shed. Whatever that time is, it is not painting and it is not the picture.
+**The 262144 reading below was wrong, and the way it was wrong is worth keeping.** It said: 2560 render
+tiles with a median of 1,113 ms against a mean of 2,225, so 2560 × the median is 47.5 minutes inside a
+94.9-minute render — *half the wall clock was stalls* — with 747 tiles over twice the median and a
+time-vs-bytes correlation of 0.01, tiff-meta's signature for the machine rather than the slab. It then
+concluded that the pool was not the cause, **because** it ran its full eight workers and never shed.
+
+That inference is backwards. A pool that ran eight wide and never shed is a *saturated* pool, and a
+saturated pool produces exactly this shape: `perTile.ms` is consumer-side wall, the consumer takes
+passes in order, so one consumption in eight carries the batch's entire paint and the other seven read
+as the write cost. The near-zero bytes correlation is what a bimodal artefact looks like, not evidence
+of a stalling machine.
+
+Measured on that master's own numbers, 2026-10-17: its slow passes fall at **0, 1, 9, 17** and then at
+gaps of **8** — later splitting into 3,5,3,5 and 1,2,5, every run still summing to eight. A period equal
+to the pool width, which is the pipeline and not the hardware. The same signature appears in two 65,535
+glass masters, and a trace of one with per-pass paint times recorded gave **93.7% utilisation, eight
+workers busy for 87% of all samples, and a wall clock within 7.6% of the pool's own floor.** The paint
+time per pass was flat to within 8%.
+
+So the time was painting, and it was the picture. What the figure actually measures is where the paint
+got attributed. `tools/pool-trace.mjs` answers this off a master now; `docs/final-render.md` rung 3 has
+the width consequence, which is the one lever the measurement did leave open.
+
+The overlap opportunity in the paragraph above still stands on its own evidence — 10 ms of painting
+against 1,300 to 3,300 ms of deflate is a UV-render measurement and nothing here touches it.
 
 This is worth knowing because it touches the same loop. It should not be bundled into the resumability
 work: one changes durability, the other changes scheduling, and mixing them would make a regression in

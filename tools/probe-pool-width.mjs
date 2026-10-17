@@ -11,9 +11,15 @@
 // poolWidthFor for a constant and requires case A to STOP biting - a probe that passes with the thing it
 // tests removed is testing nothing.
 //
-// Case C is the honest limit and is asserted as such: on a desktop both candidates clamp to the cap of
-// 8 workers, so this fix does NOT change what a 16 GB machine picks at 131072. What bit there was peak
+// Case C is the honest limit and is asserted as such: on a desktop both candidates clamp to the CORE
+// CAP, so this fix does NOT change what a 16 GB machine picks at 131072. What bit there was peak
 // MEMORY against free memory, which this does not address and which the budget, not the planner, owns.
+//
+// THE WIDTH CLAIMS NAME WHICH CONSTRAINT BINDS, not a number. Three can bind - the budget's room, the
+// core count, and POOL_MAX - and asserting the literal hid which one it was. It hid a false sentence
+// too: case A used to read "the budget holds eight 4096 tiles", and the budget holds TWENTY-FOUR. The
+// eight was the cap, and the prose had been describing the wrong mechanism since it was written. Found
+// when the cap moved to 10 on 2026-10-17, where only the numbers failed and every conclusion held.
 //
 //   node tools/probe-pool-width.mjs
 import { readFileSync } from 'fs';
@@ -48,6 +54,13 @@ function liftSlice(from, to) {
 }
 
 const POOL_WIDTH_SRC = liftFn('poolWidthFor');
+// ITS ONE DEPENDENCY, LIFTED TOO. poolWidthFor reads POOL_MAX, the ceiling on how many cores a render
+// may take, and a lifted function with a free variable throws ReferenceError at the first call - which
+// is a loud failure and so the safe kind. Lifted rather than restated: a second copy of the number here
+// would let the probe keep passing after the app's cap moved, which is the quiet kind.
+const POOL_MAX_SRC = liftSlice('const POOL_MAX = ', ';');
+const POOL_MAX = +(POOL_MAX_SRC.match(/(\d+)/) || [])[1];
+if (!(POOL_MAX >= 2)) throw new Error('cannot read POOL_MAX - probe is stale');
 // The whole choice, verbatim: safe / wallOf / fast / peakOf / roomy. Edited in the app, seen here.
 const CHOICE_SRC = liftSlice('const safe = ok.reduce(', 'const roomy = memKnown && peakOf(fast) <= MEM_EASY * budget;');
 
@@ -58,7 +71,8 @@ const tileNeed = (t, bleed, surfaces) => { const e = t + 2 * bleed; return e * e
 // Build the choice in a scope holding exactly what tiffPlan holds at that point.
 function choose(env, poolSrc) {
   const fn = new Function('ok', 'budget', 'budgetMB', 'bleed', 'MEM_EASY', 'navigator', 'EXP_FORCE_SEQ', 'corePaintsThis',
-    poolSrc + `
+    POOL_MAX_SRC + `
+     ` + poolSrc + `
      const tileMBof = t => Math.round((t + 2 * bleed) ** 2 * 4 / 1e6);
      const widthOf = t => poolWidthFor(budgetMB, tileMBof(t)) || 1;
      ` + CHOICE_SRC + `
@@ -87,21 +101,23 @@ console.log('\nthe ladder at 65536, both sizes dividing the grid cleanly');
 console.log(`  8192: ${LADDER_65536[0].passes} passes, est ${LADDER_65536[0].est}ms`);
 console.log(`  4096: ${LADDER_65536[1].passes} passes, est ${LADDER_65536[1].est}ms   <- the SLOWER one sequentially\n`);
 
-console.log('A  THE SCORING. 2 GB: the budget holds five 8192 tiles and eight 4096 ones');
+console.log('A  THE SCORING. 2 GB: room for five 8192 tiles and twenty-four 4096 ones, so the budget');
+console.log('   binds the big tile and the core cap (' + POOL_MAX + ') binds the small one');
 const A = choose({ ok: LADDER_65536, budget: budgetOf(2), gb: 2, cores: 12, pool: true }, POOL_WIDTH_SRC);
 claim('est/N makes 4096 the fast one although 8192 has the lower est', A.fast, 4096);
 claim('and it survives the peak gate, so that is the choice', A.ts, 4096);
-claim('knows it will run 8 wide there', A.width, 8);
+claim('and the cap is what binds the winner here, not the budget', A.width, POOL_MAX);
 
 console.log('\nB  the same device with no pool (a reality window, a back light, no Worker)');
 const B = choose({ ok: LADDER_65536, budget: budgetOf(2), gb: 2, cores: 12, pool: false }, POOL_WIDTH_SRC);
 claim('falls back to the sequential winner, exactly as before', B.ts, 8192);
 claim('width reported as 1', B.width, 1);
 
-console.log('\nC  16 GB desktop - deviceMemory caps at 8, both candidates clamp to the 8-worker cap');
+console.log('\nC  16 GB desktop - deviceMemory caps at 8, room is 23 and 96, so BOTH');
+console.log('   candidates clamp to the core cap of ' + POOL_MAX + ' - equal widths, nothing for est/N to reorder');
 const C = choose({ ok: LADDER_65536, budget: budgetOf(8), gb: 8, cores: 12, pool: true }, POOL_WIDTH_SRC);
 claim('still picks 8192: equal width cannot break the est ordering', C.ts, 8192);
-claim('THE LIMIT OF THIS FIX - it would not have changed the 131072 run', C.width, 8);
+claim('THE LIMIT OF THIS FIX - it would not have changed the 131072 run', C.width, POOL_MAX);
 
 console.log('\nD  two cores: width follows the core count, not only the budget');
 const D = choose({ ok: LADDER_65536, budget: budgetOf(2), gb: 2, cores: 2, pool: true }, POOL_WIDTH_SRC);

@@ -65,8 +65,32 @@ no coat scales at all, so it cannot go quietly blind.
    per-pass overhead, and that is the same tile the pool can run fewest of at once. It now scores
    `est / N`, and the headroom test weighs `N × tile` instead of one tile. Both ask `poolWidthFor`, the
    single function `tilePool` itself uses, so the planner cannot optimise for a width that never arrives.
-   Measured bite: at 65536 on a 2 GB device the budget holds five 8192 tiles and eight 4096 ones, so 8192
-   wins on `est` (16,800 ms against 19,200) and loses the wall clock. `tools/probe-pool-width.mjs`.
+   Measured bite: at 65536 on a 2 GB device the budget holds five 8192 tiles against twenty-four 4096
+   ones, so 8192 wins on `est` (16,800 ms against 19,200) and loses the wall clock. Three constraints can
+   bind the width — the budget's room, the core count and `POOL_MAX` — and the probe now asserts *which*,
+   because asserting the number hid the mechanism: this sentence read "eight 4096 ones" for as long as the
+   cap was eight, and the budget held twenty-four the whole time. `tools/probe-pool-width.mjs`.
+
+   **The width cap, raised from eight to ten on 2026-10-17.** A 65,535 glass master traced at **93.7%
+   utilisation**, eight workers busy for 87% of all samples, and a wall clock within **7.6%** of
+   `paint ÷ workers`. Scheduling had nothing left to give — the pool was already doing the job — so the
+   only quantity that could still move the clock was how many cores it may use, and neither cores (12)
+   nor memory (room for 192 tiles at a 4096 pass) was binding. `POOL_MAX` was. Ten and not twelve on
+   purpose: the machine stays usable, and the main thread still owes ~400 ms per pass to `getImageData`,
+   the light sample, deflate and the sink.
+
+   **It is not free throughput, and the same master says so.** The solo baseline pass painted in
+   **26.2 s**; the mean pass under eight-way load took **39.2 s** — 1.49× contention already, an
+   effective 5.36× of a nominal 8×. So the floor arithmetic that promises 20% at ten workers assumes a
+   constant pass cost that is demonstrably false. The shed logic is what makes raising the cap an
+   experiment rather than a gamble, and `tools/pool-trace.mjs` reads the result off the next master.
+
+   **And the paint is uniform, which closes a door.** Per-pass paint across that render varied by
+   p90/p10 = **1.08×**, standard deviation 6.6% of the mean, with picture-row means between 35.9 s and
+   40.5 s. Longest-Processing-Time scheduling, out-of-order consumption and a two-deep per-worker queue
+   were all scoped against the hope that pass costs varied; they do not, on this material. The earlier
+   reading that glass detail was top-heavy came from `perTile.ms`, which is consumer-side wall, and was
+   an artefact of the consumer's position in the pipeline.
 
    **The pool measures whether it is too wide, because nothing it can ask will tell it.** Every memory
    figure a browser offers describes the machine, not what is free on it: `navigator.deviceMemory` is total

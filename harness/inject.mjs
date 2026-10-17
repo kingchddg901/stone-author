@@ -42,6 +42,12 @@ const hook = `
     storedTilePixels, markSigNow, resumeVerify,
     masterBase, masterFiles, setMaterial: (m) => { MATERIAL = m; },
     tilePainted,                                 // the lost-canvas guard, so it can be shown to bite
+    // THE POOL ITSELF, because its instrumentation has no other way in. The four timestamps are
+    // written in exportTiff's loop and read off a finished master, so the only way to find out
+    // whether they POPULATE is to run a 14 minute render and look - which is a slow way to discover
+    // a typo. With this a gate can drive eight workers over a small picture and assert that an ack
+    // came back, that the busy counts move, and that each worker is identified.
+    tilePool, corePaintsThis, poolWidthFor,
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
     render: () => { size(); build(); stoneReady = false; draw(); },
     get G() { return G; }, get OVR_uv() { return OVR_uv; },

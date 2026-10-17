@@ -1803,7 +1803,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.138';
+  const BUILD = '2026.10.17.141';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4932,6 +4932,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const n in fns) s += `var ${n}=${fns[n].toString()};\n`;
     s += `self.onmessage=function(e){var d=e.data;\n`;
     s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
+    // THE ACK IS THE ONLY WAY TO TELL A QUEUE FROM A STALL. A bitmap arriving late can mean the
+    // worker painted for a minute or that it sat holding a message it had not been scheduled to
+    // read, and the completion time cannot distinguish them. Posted from the top of the handler,
+    // before a single pixel, so the gap from post to ack is scheduling and nothing else. It costs
+    // one empty message per tile - no transfer, no copy - and BOTH consumers of this core must
+    // ignore it or they will treat it as the tile.
+    s += `if(d.i!==undefined)self.postMessage({type:'ack',i:d.i});\n`;
     s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
     s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_DARK;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
@@ -4984,6 +4991,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (const w of pool) w.onerror = e => reject(new Error('render worker: ' + (e.message || 'threw')));
       const send = (w, t) => {
         w.onmessage = e => {
+          if (e.data.type === 'ack') return;              // the start notice; this path does not time
           fx.drawImage(e.data.bmp, e.data.tx0, e.data.ty0); e.data.bmp.close(); done++;
           if (next < tiles.length) send(w, tiles[next++]); else if (done === tiles.length) resolve();
         };
@@ -9916,8 +9924,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // Where OPFS is missing it collects in memory instead, which is exactly what the app did before.
   // Chrome (including Android), Firefox 111 and Safari 17 have it; the file picker reaches far fewer.
-  // THE WRITER WORKER. createSyncAccessHandle writes IN PLACE - no swap file, and flush() makes the
-  // bytes durable - which is the whole reason a render can ever be resumed. It is worker-only by
+  // THE WRITER WORKER. createSyncAccessHandle writes IN PLACE - no swap file, and flush() pushes the
+  // handle's buffer into the file, which is the whole reason a render can ever be resumed.
+  //
+  // IT IS NOT AN fsync, AND THAT IS NOT A DETAIL. flush() makes the bytes survive the SCRIPT or the
+  // PROCESS dying - a crashed tab, an OOM eviction, a closed window - which is the failure this
+  // feature exists for and the one it handles. It does not make them survive the MACHINE dying: the
+  // bytes are in the OS page cache, no web API can ask for them to reach the platter, and a power cut
+  // takes the record with everything else that was not yet written down. Measured 2026-10-17, a
+  // brownout mid-render: the resume offer was simply gone, not corrupt and not partial.
+  //
+  // This comment used to read "flush() makes the bytes durable", which covered both failure classes
+  // in one word and was the stated reason the feature works. There is no fix available here - the
+  // platform exposes no durability barrier - so the remedy is saying which crash it survives.
+  // docs/resumable-render.md carries the same distinction.
+  //
+  // It is worker-only by
   // specification, so the sink has to live off the main thread, and this is the smallest worker that
   // can own it. Written as a plain source string rather than through fn.toString(): it closes over
   // nothing, so it carries no free variables and check-worker-core has nothing to catch here.
@@ -12876,10 +12898,31 @@ self.onmessage = async (e) => {
   // blurs, so on a blurred slab the real footprint is a multiple of this and the pool over-subscribes.
   // Left alone deliberately - correcting it narrows the pool on every blurred slab, which is a different
   // change with its own measurement, not a rider on this one.
+  // HOW MANY CORES THE RENDER MAY TAKE. Raised from eight to ten on 2026-10-17, on measurement rather
+  // than taste: a 65,535 glass master traced at 93.7% utilisation with eight workers busy for 87% of
+  // all samples and the pool within 7.6% of its own floor, so width - not scheduling - was the only
+  // thing left that could move the wall clock. Neither cores nor memory was binding at eight; this
+  // literal was.
+  //
+  // TEN AND NOT TWELVE, deliberately, on a twelve-core box: the machine has to stay usable while a
+  // render runs for a quarter of an hour, and the main thread still owes ~400 ms per pass to
+  // getImageData, the light sample, deflate and the sink. Two cores are left for the person.
+  //
+  // DO NOT READ IT AS FREE THROUGHPUT. The same trace measured the solo baseline pass at 26.2 s and
+  // the mean pass under eight-way load at 39.2 s - 1.49x contention already, an effective 5.36x of a
+  // nominal 8x - so the floor arithmetic that says ten should be 20% faster assumes a constant pass
+  // cost that is already false. The pool measures and sheds if this is too wide, which is what makes
+  // raising it an experiment rather than a gamble.
+  //
+  // AND IT IS A CEILING, NOT A RESERVATION: hardwareConcurrency still clamps it, so a four-core
+  // machine takes all four and gets no headroom at all. Leaving two for the person everywhere would
+  // be `cores - 2`, which is a different policy with a real cost to small machines, and not this
+  // change.
+  const POOL_MAX = 10;
   function poolWidthFor(budgetMB, tileMB) {
     if (EXP_FORCE_SEQ || !corePaintsThis()) return 0;
     const room = Math.floor(budgetMB / Math.max(1, tileMB));
-    const n = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8, room));
+    const n = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, POOL_MAX, room));
     return n < 2 ? 0 : n;                                  // one worker is slower than no worker
   }
   async function tilePool(W, p) {
@@ -12904,7 +12947,11 @@ self.onmessage = async (e) => {
           w.onerror = e => rej(new Error('render worker: ' + (e.message || 'failed to start')));
           w.postMessage({ type: 'init', ...state, cl, bd, br }, [cl, bd, br].filter(Boolean));
         });
-        pool.push({ w, busy: false });
+        // AN IDENTITY THAT OUTLIVES THE ARRAY. Shedding splices this array, so a worker's position
+        // in it is not a name - index 3 before a shed and index 3 after are different workers. The
+        // id is what lets the trace say "worker 5 was slow on every pass it touched", which is a
+        // different fault from "pass 41 was slow".
+        pool.push({ w, busy: false, id: i });
       }
     } catch (e) { for (const q of pool) q.w.terminate(); URL.revokeObjectURL(url); throw e; }
     if (clB) clB.close(); if (bdB) bdB.close(); if (brB) brB.close();
@@ -12940,6 +12987,19 @@ self.onmessage = async (e) => {
       // are holding, and an idle worker holds its tile canvas exactly as a busy one does.
       if (pool.length > target) { const i = pool.indexOf(q); if (i >= 0) { q.w.terminate(); pool.splice(i, 1); } }
     }
+    // DISPATCHED, STARTED, FINISHED - the three the pool can see. The fourth, WRITTEN, belongs to
+    // whoever consumes the tile and is added there, because the pool hands back a canvas and has no
+    // idea what happens to it next. Absolute performance.now(), not deltas, so the consumer can
+    // place its own fourth stamp on the same clock; the deltas are taken once, at the end.
+    //
+    // WHY THIS EXISTS. perTile.ms is consumer-side wall - ask for a pass, have it written - and that
+    // single number cannot tell a saturated pool from an idle one. Eight workers given eight tiles
+    // at once all finish together, so one consumption in eight carries the whole batch's render and
+    // the other seven read as the write cost. The log then shows a 40-second "stall" every eighth
+    // tile on a pool that was 100% busy throughout. It shows the SAME shape on a pool that fell
+    // idle. Only the busy count during the gap separates them, and nothing was recording it.
+    const trace = new Map();                               // idx -> {d,s,f}; the consumer adds w
+    const TRACE_KEEP = 512;                                // a consumer that never reads must not leak
     const start = (idx) => {
       if (idx >= p.renders || inflight.has(idx)) return;
       if (busyCount() >= target) return;
@@ -12947,9 +13007,29 @@ self.onmessage = async (e) => {
       if (!q) return;
       q.busy = true;
       const t0 = performance.now();
+      if (trace.size >= TRACE_KEEP) trace.delete(trace.keys().next().value);
+      // bD is taken AFTER this worker is marked busy, so it is the number of workers painting from
+      // this instant - the answer to "was the pool full when it took this one on". bF is taken
+      // BEFORE poolSettle frees the worker, for the same reason in reverse: the count while this
+      // pass was still being painted. Off-by-one in either direction turns a full pipeline into a
+      // seven-eighths one and back.
+      const tr = { d: t0, s: 0, f: 0, k: q.id, bD: busyCount(), bS: 0, bF: 0 };
+      trace.set(idx, tr);
       const gx = idx % p.rAcross, gy = (idx / p.rAcross) | 0;
       inflight.set(idx, new Promise((res, rej) => {
-        q.w.onmessage = e => { poolSettle(q, performance.now() - t0); res(e.data.bmp); };
+        q.w.onmessage = e => {
+          // THE ACK NEVER SETTLES THE TILE. It carries no bitmap, so resolving on it would hand the
+          // consumer undefined and the real bitmap would leak - and the index guard means an ack
+          // that somehow belongs to another pass cannot be mistaken for this one's.
+          if (e.data.type === 'ack') {
+            const r = trace.get(e.data.i);
+            if (r && !r.s) { r.s = performance.now(); r.bS = busyCount(); }
+            return;
+          }
+          tr.f = performance.now(); tr.bF = busyCount();
+          poolSettle(q, tr.f - t0);
+          res(e.data.bmp);
+        };
         q.w.onerror = e => { q.busy = false; rej(new Error('render worker: ' + (e.message || 'threw'))); };
         q.w.postMessage({ i: idx, tx0: gx * p.ts, ty0: gy * p.ts, tileW: p.ts, tileH: p.ts, keepBleed: true,
                           ew: p.ts + 2 * p.bleed, eh: p.ts + 2 * p.bleed, ex0: gx * p.ts - p.bleed,
@@ -12960,6 +13040,9 @@ self.onmessage = async (e) => {
       get workers() { return target; },                    // the width that RAN, which shedding may have cut
       planned: n,
       get shed() { return shedLog; },
+      get busy() { return busyCount(); },                  // sampled on a timer: the one witness to idleness
+      get target() { return target; },
+      stamp(idx) { const r = trace.get(idx); if (r) trace.delete(idx); return r; },   // read once, then gone
       async tile(idx) {
         start(idx);
         for (let k = 1; k < n; k++) start(idx + k);        // keep the rest of the pool fed
@@ -13063,12 +13146,71 @@ self.onmessage = async (e) => {
       // Written BEFORE the first tile, so a device that never comes back has still left a record.
       if (!forcedTile()) markAttempt(p.ts, W);
       const tileMs = [], tileBytes = [];
+      // THE FOURTH STAMP AND THE ONE WITNESS. perTile.ms above is consumer-side wall and cannot tell a
+      // saturated pool from an idle one: eight workers handed eight tiles finish together, so one
+      // consumption in eight carries the batch's whole render and the other seven read as the write
+      // cost. A 36-second spike every eighth pass is what that looks like, and it looks identical
+      // whether the other seven workers were painting or sitting still.
+      //
+      // So three deltas per pass, from the pool's own stamps, plus a BUSY COUNT sampled on a timer:
+      //   q  posted -> the worker acknowledged      scheduling - but at EITHER end. The ack is posted
+      //        before the worker paints a pixel and stamped when THIS thread receives it, so a large q
+      //        means the worker was not scheduled OR that this thread was not listening. Both are
+      //        worth knowing and the figure does not say which; read it with w, which is this thread's
+      //        own cost. Measured idle, q runs 1-3 ms.
+      //   r  acknowledged -> the bitmap came back   the paint itself, which is the only real work.
+      //   dw acknowledged -> handed over       DWELL: finished, but the in-order consumer had not
+      //                                          reached it, so it still held a window slot.
+      //   w  handed over -> written             deflate and the sink, on this thread.
+      // q + r + w does NOT sum to ms: the wait for a pass the pool had not reached yet is in neither,
+      // and that difference IS the question.
+      //
+      // THE PER-TRANSITION COUNTS ARE THE WITNESS, NOT THE TIMER. A 250 ms tick cannot see a 5 ms
+      // paint: measured on this pool at a 4096 stone pass, the sampler reported zero workers busy in
+      // 201 of 204 samples while bF said eight. The series is still carried - it is the only thing
+      // that can show a gap with no transitions in it at all - but a verdict taken from it alone is
+      // wrong in exactly the regime a cheaper paint moves this renderer towards.
+      // i is the pass index, and the tile's COORDINATES are i % rAcross and i / rAcross - already
+      // derivable from what the master records, so they are not stored a second time here. One fact,
+      // one copy; the reader prints them.
+      // trD ANCHORS EVERYTHING ELSE. The three deltas describe a pass's own shape but place it nowhere,
+      // so without an absolute the busy series and the passes are two records that cannot be laid over
+      // each other - and laying them over each other is the entire measurement. One number per pass,
+      // milliseconds from the sampler's own epoch, and then s = d+q, f = d+q+r, written = f+w.
+      const trI = [], trD = [], trQ = [], trR = [], trDw = [], trW = [], trK = [], trBD = [], trBS = [], trBF = [];
+      const TRACE_ROWS = 4096;                             // 40,960 passes would be a megabyte of JSON
+      // A UNIFORM SERIES AT AN UNKNOWN LENGTH. The render's duration is not known when sampling starts,
+      // so a fixed interval either runs out or wastes the budget. Instead: sample at a fixed tick, and
+      // when the array fills, throw away every other sample and double the stated interval. The series
+      // stays uniform, starts at the same instant, and is bounded whatever the render costs - a 14
+      // minute render lands at 250 ms, a six hour one at 4 s, and neither needs to be guessed in advance.
+      const PT_TICK = 250;
+      const PT = { t0: 0, ms: PT_TICK, every: 1, tick: 0, v: [] };
+      let ptTimer = 0;
+      const poolTick = (v) => {
+        if (PT.tick++ % PT.every) return;
+        PT.v.push(v);
+        if (PT.v.length >= TRACE_ROWS) {
+          for (let i = 0, j = 0; j < PT.v.length; i++, j += 2) PT.v[i] = PT.v[j];
+          PT.v.length = PT.v.length >> 1; PT.every *= 2; PT.ms *= 2;
+        }
+      };
       // The pool paints ahead where the core reproduces this picture exactly; null everywhere else,
       // and the loop below is then the loop it always was.
       // THE POOL PAINTS SLABS. Its core is the slab painter serialised, so a floor would come back as
     // the material it was cut from - silently, which is the failure mode that costs hours. Off for
     // floors until the core knows about pieces.
     pool = layTiles ? null : await tilePool(W, p);
+      // SELF-TERMINATING on the pool going null, which every path does - the success path at the
+      // metadata and the finally on any throw. A timer that outlives the render would sample a getter
+      // on a closed pool for as long as the tab lived.
+      if (pool) {
+        PT.t0 = performance.now();
+        ptTimer = setInterval(() => {
+          if (!pool) { clearInterval(ptTimer); ptTimer = 0; return; }
+          poolTick(pool.busy);
+        }, PT_TICK);
+      }
       // HOW MUCH LIGHT THE MASTER ACTUALLY CARRIES. A lost bloom leaves a file that is whole, correctly
       // sized, fully drawn, correctly signed and half as bright — the only symptom is the brightness
       // itself, and until now reading it meant decoding 10.7 GB after the fact. The pixels are already in
@@ -13106,13 +13248,14 @@ self.onmessage = async (e) => {
         // ground before drawing anything, so a real pixel is opaque whatever colour it ends up. A tile
         // with nothing opaque in it was never drawn on. Three rows are enough because this failure is
         // whole-canvas: the backing is there or it is not.
-        let c = null;
+        let c = null, tCons = 0;
         for (let attempt = 1; ; attempt++) {
           // THE RETRY IS ALWAYS ON THIS THREAD. A worker that handed back an unallocated backing is
           // in no state to be asked again, and the point of the retry is to get the tile, not to
           // find out whose fault it was. First attempt uses the pool when there is one.
           c = (pool && attempt === 1) ? await pool.tile(n)
                                       : (layTiles ? renderFloorTile : renderOneTile)(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
+          tCons = performance.now();          // HANDED OVER. Not the same instant as finished - see below.
           if (tilePainted(c)) break;
           c.width = 1; c.height = 1;                       // hand the failed allocation back first
           if (attempt >= 2) { forgetTile(W); throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders })); }
@@ -13141,6 +13284,26 @@ self.onmessage = async (e) => {
         c.width = 1; c.height = 1;                         // only now: every quarter has been read
         const msT = Math.round(performance.now() - tTile);
         tileMs.push(msT); tileBytes.push(tb);
+        // READ ONCE, then gone from the pool's map - and only up to the row cap, so a 40,960-pass
+        // master keeps its busy series without carrying 160,000 numbers of per-pass detail.
+        if (pool && trI.length < TRACE_ROWS) {
+          const st = pool.stamp(n);
+          if (st && st.f) {
+            trI.push(n); trD.push(Math.round(st.d - PT.t0));
+            trQ.push(Math.round(st.s ? st.s - st.d : -1));   // -1: no ack came, which is itself a finding
+            trR.push(Math.round(st.s ? st.f - st.s : st.f - st.d));
+            // DWELL AND WRITE ARE TWO DIFFERENT FACTS and one number cannot carry both. A pass is
+            // FINISHED when the bitmap arrives and HANDED OVER when the in-order consumer gets round
+            // to it, and between those two instants the tile sits in `inflight` occupying a window
+            // slot that `start` then refuses to reuse - which is the stall itself, not a symptom of
+            // it. Measured live on this pool at a 4096 stone pass: paint 0-5 ms, a synthetic 500 ms
+            // write, and the dwell settled at 4,096 ms - eight writes exactly, to within 0.4%. One
+            // conflated figure read as "the write took four seconds", which is not what happened.
+            trDw.push(Math.round(tCons - st.f));
+            trW.push(Math.round(performance.now() - tCons));
+            trK.push(st.k); trBD.push(st.bD); trBS.push(st.bS); trBF.push(st.bF);
+          }
+        }
         await sink.row(n, msT, tb, litSum - lit0, litUp - litUp0, litN - litN0);
       }
       // Read BEFORE the close, because the close nulls it. This field spent its whole life unable to
@@ -13230,6 +13393,14 @@ self.onmessage = async (e) => {
         // not is the machine stalling. Two arrays of 40 numbers, under a kilobyte, and the next
         // anomaly gets read off the file instead of re-measured.
         perTile: { ms: tileMs, bytes: tileBytes },
+        // THE FOUR TIMESTAMPS, absent when nothing was pooled. `busy` is a uniform series at `tick`
+        // milliseconds from `t0`; the three per-pass arrays are indexed by `i` rather than positional,
+        // so a resumed render carries only the passes it actually painted and cannot silently
+        // misalign with perTile above. `rows` says whether the cap truncated it.
+        trace: poolRan ? { t0: Math.round(PT.t0), tick: PT.ms, busy: PT.v, target: poolRan.n,
+                           i: trI, d: trD, q: trQ, r: trR, dw: trDw, w: trW,
+                           k: trK, bD: trBD, bS: trBS, bF: trBF,
+                           rows: trI.length, capped: trI.length >= TRACE_ROWS || undefined } : undefined,
       }));
       const runtime = typeof claude !== 'undefined' && !!claude.use;
       const d = runtime ? await claude.use('downloads') : null;

@@ -179,13 +179,29 @@ if (!/const fast = ok\.reduce\(\(a, b\) => \(wallOf\(b\) < wallOf\(a\) \? b : a\
 // and it rewards the big tile for amortising per-pass overhead. That is the same tile the pool can run
 // fewest of at once, so the sequential winner and the real winner come apart exactly where the device is
 // tight: at 65536 on 2 GB, 8192 wins on est (16800ms against 19200ms) and loses the wall clock, because
-// the budget holds five of it and eight of the other. tools/probe-pool-width.mjs is that case.
+// the budget holds five of it and twenty-four of the other, where the core cap then binds the smaller.
+// (This said "eight of the other" for as long as the cap WAS eight; the budget held twenty-four
+// throughout, so the sentence had been naming the wrong mechanism. Third copy of that slip, found when
+// the cap moved - the other two were in probe-pool-width.mjs and docs/final-render.md.)
+// tools/probe-pool-width.mjs is that case.
 if (!/const wallOf = c => c\.est \/ widthOf\(c\.ts\)/.test(plan))
   fail.push('the fast candidate is scored on the sequential total, which can only ever prefer the tile the pool runs fewest of');
 // ONE ANSWER FOR BOTH HALVES. A planner that predicts a width tilePool does not deliver has moved the
 // defect, not fixed it, and nothing else here would notice: both sides would be internally consistent.
-if ((app.match(/Math\.min\(navigator\.hardwareConcurrency \|\| 4, 8/g) || []).length !== 1)
-  fail.push('the pool width is computed in more than one place, so the planner can optimise for a width the pool will not run');
+// ZERO AND TWO NEED DIFFERENT HUNTS, so they are not one message. This read `!== 1` against a pattern
+// ending in the literal `, 8`, and when the cap became POOL_MAX on 2026-10-17 the count went to zero -
+// reported as "computed in more than one place", which sends the reader looking for a duplicate that
+// does not exist. The anchor is the named constant now, so moving the cap's VALUE cannot trip this and
+// moving the cap's HOME says so plainly.
+{
+  const sites = (app.match(/Math\.min\(navigator\.hardwareConcurrency \|\| 4, POOL_MAX/g) || []).length;
+  if (sites === 0)
+    fail.push('poolWidthFor no longer clamps to POOL_MAX - the width cap moved, and this check lost its subject');
+  else if (sites > 1)
+    fail.push('the pool width is computed in more than one place, so the planner can optimise for a width the pool will not run');
+  if (!/const POOL_MAX = \d+;/.test(app))
+    fail.push('POOL_MAX is not a declared constant, so the cap cannot be read by the probe that asserts which constraint binds');
+}
 if (!/const n = poolWidthFor\(p\.budgetMB, p\.tileMB\)/.test(app))
   fail.push('tilePool no longer asks poolWidthFor, so the width the planner chose against is not the width it gets');
 if (!/const tileMBof = t => Math\.round\(\(t \+ 2 \* bleed\) \*\* 2 \* 4 \/ 1e6\)/.test(plan) || !/tileMB: tileMBof\(ts\)/.test(plan))

@@ -97,3 +97,7 @@ jobs:
         run: node tools/probe-pool-shed.mjs
       - name: The pool picks a width the device can actually carry
         run: node tools/probe-pool-width.mjs
+      - name: The four render stamps sit on the right side of their flags
+        run: node tools/check-pool-trace.mjs
+      - name: A saturated pool and a starved one are told apart, from one completion log
+        run: node tools/probe-pool-trace.mjs
