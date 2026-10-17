@@ -143,6 +143,24 @@ ok('glassUnform is where it was', at > 0);
   ok('and puts the slab back afterwards', /finally \{ GLASS\.ss = keep; \}/.test(cp));
 }
 
+// ---- where a new moon goes, said rather than inferred --------------------------------------------------
+// Moons are appended and a range is a window on that list, so the only stir that CAN take the next one
+// is the one whose window has no end. Measured on the shipped build: a stir at (0,0) or (5,0) or (1,12)
+// picks up a newly drawn moon; one at (1,3) or (1,11) does not. The tick says which, and ticking one
+// pins the others - without that, ticking a 1-3 stir would widen it to 1-13 and swallow 4-12 on the way.
+{
+  const d = SRC.slice(SRC.indexOf('function drawOps()'), SRC.indexOf('function drawCells()'));
+  ok('a stir row offers the tick', /op-tick/.test(d) && /TR\('op\.takes-new'\)/.test(d));
+  ok('ticked means the window has no end', /cb\.checked = !\(\+op\.to > 0\)/.test(d));
+  ok('ticking one pins every other open stir where it stands',
+     /for \(const other of ops\)[\s\S]{0,140}?other\.k === 'stir'[\s\S]{0,60}?other\.to = tot;/.test(d));
+  ok('and unticking pins this one', /\} else op\.to = tot;/.test(d));
+  // ABLATION: without the pinning pass two stirs could be open at once, and a new moon would join both.
+  const broken = d.replace(/for \(const other of ops\)[\s\S]{0,200}?other\.to = tot;/, '');
+  ok('ablation: dropping the pinning pass is visible from here',
+     broken !== d && !/for \(const other of ops\)/.test(broken));
+}
+
 console.log('');
 if (fails) { console.error('check-op-origin: ' + fails + ' FAILED'); process.exit(1); }
 console.log('check-op-origin: an op without a centre is the op it always was, bit for bit, and one');

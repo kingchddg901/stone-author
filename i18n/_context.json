@@ -1426,6 +1426,10 @@
   "where": "The glass op list, under a Stir row. A stir drags the sheet through the moons drawn with the Moon tool; the range says which of them this one uses.",
   "note": "Tiny field label, the end of the range. Inclusive."
  },
+ "op.takes-new": {
+  "where": "A tick in the glass op list, on a Stir row beside its moon range.",
+  "note": "Means: moons drawn from now on join THIS stir. Only one stir can be ticked at a time. Very short - about 50px."
+ },
  "op.moons-used": {
   "where": "The glass op list, under a Stir row. A stir drags the sheet through the moons drawn with the Moon tool; the range says which of them this one uses.",
   "placeholders": {
