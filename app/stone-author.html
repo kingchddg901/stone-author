@@ -1771,7 +1771,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.126';
+  const BUILD = '2026.10.16.127';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -10691,7 +10691,30 @@ self.onmessage = async (e) => {
   }
   // setTimeout, NOT requestAnimationFrame: rAF stops firing when the window is backgrounded, and an
   // export that deadlocks because you looked at something else is worse than one you cannot watch.
-  const breathe = () => new Promise(r => setTimeout(r, 0));
+  // YIELD WITHOUT A TIMER. setTimeout is precisely what a browser throttles in a hidden tab - clamped
+  // to once a second, and to once a MINUTE after five minutes hidden - and breathe() is awaited once
+  // per render tile. So a backgrounded render does not merely slow: at 10,240 tiles a one-second clamp
+  // adds an hour and a one-minute clamp adds a week.
+  //
+  // MEASURED 2026-10-16 in a genuinely hidden tab, eight yields a round:
+  //
+  //     hidden    setTimeout(0)   mean 233 ms, worst 375      MessageChannel  0.022 ms
+  //     visible   setTimeout(0)   1.8 ms                      MessageChannel  0.012 ms
+  //
+  // A channel message is a TASK, not a timer, so nothing clamps it; it is also ~100x quicker awake,
+  // because setTimeout(0) is floored at 4 ms once nested. A task boundary still lets the browser paint,
+  // and with over a second of work between yields a frame is always due by the time one arrives - which
+  // is the property that makes this safe to swap in, rather than merely faster.
+  //
+  // The 32-second tile in the first 1,048,576 attempt was a backgrounding, not a stall. Worth noting
+  // that the lost-canvas guard below describes 'a ~60 second stall', and sixty seconds is exactly what
+  // intensive throttling clamps a timer to - so some of those may have been this all along.
+  const breathe = (() => {
+    const ch = new MessageChannel(), waiting = [];
+    ch.port1.onmessage = () => { const r = waiting.shift(); if (r) r(); };
+    ch.port1.start();
+    return () => new Promise(r => { waiting.push(r); ch.port2.postMessage(0); });
+  })();
 
   // The full kit is 8 full-size images plus 6 small ones, and expIdT builds two of the big ones in a
   // single pass, so two full-size canvases alive at once is a FLOOR for it: 1.28 GiB at 16384, before a

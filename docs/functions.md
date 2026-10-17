@@ -854,7 +854,7 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
   Takes the encoded bytes rather than rendering them, so the encode happens once. *(10612)*
 - `exportAll(W)` — assemble `render.png`, `masks/{base,major,minor,micro,web}.png`,
   `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, and
-  `slab.ora` into one zip and hand it to the viewer. *(10751)*
+  `slab.ora` into one zip and hand it to the viewer. *(10774)*
 
 ## Large renders — what a canvas can hold, and what to do past it
 
@@ -887,10 +887,10 @@ it reports the size asked for and leaves the far end unwritten. See
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
   family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(9295)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(11528)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(11551)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(11553)*
+  actually on offer, not a probe's answer to a different question. *(11576)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(11626)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(12933)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(11649)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(12956)*
