@@ -102,3 +102,41 @@ See [`image-pyramid.md`](image-pyramid.md).
 The repository's own readers never decode the picture at all: `tools/tiff-meta.mjs` reads what a master
 says about itself, and `tools/check-placement.mjs` proves every tile sits where it claims. Both work at
 any size, on a file nothing can display.
+
+## Why you probably shouldn't
+
+Two things people expect to stop them, which do not.
+
+**Not memory.** The renderer never holds the finished picture. It works in bounded tiles, compresses
+each one and writes it straight to disk, so a 687-gigapixel render has the same working set as a small
+one. **Not a GPU either.** Five machines have each produced a 65,535 × 40,959 master in both lights,
+from a 2019 budget tablet with 2 GB upward. Ordinary hardware is the design target.
+
+The problems are elsewhere.
+
+**Storage.** A 1,048,576 master is projected at around 40 GB, and that is an upper bound rather than an
+estimate. The working copy lives in browser-managed storage and saving it makes a second one, so the
+figure that matters is roughly double. Browser quota and free disk are both real limits, and both
+refuse *after* the render rather than before it.
+
+**Time.** Hours, not minutes. Resume makes an interruption recoverable; it does not make 687 billion
+pixels less work. The same picture is 2.75 TB of uncompressed pixels before a byte of deflate.
+
+**Viewing.** Rendering it does not mean anything can open it. GIMP budgeted **443 GB** of working space
+for a 262,144 on a 16 GB machine. Conventional editors will refuse the dimensions, demand absurd
+scratch space, or spend a very long time discovering they cannot.
+
+**What more pixels actually buy.** Not nothing — and this is the one most people get backwards. The
+field is procedural and has no resolution of its own, so a larger render keeps *finding* structure
+rather than magnifying what it already had; how much it finds depends on the slab. The limit is not
+that detail runs out. It is that nothing can take delivery of it: 65,535 is already 683 DPI across
+eight feet, past what any print or screen can receive.
+
+**The original brief.** This started as one sentence — *"I want a better background for my Home
+Assistant card."* If you are weighing up two and three-quarter terabytes of uncompressed pixels in
+pursuit of that, you have travelled some distance from the requirement.
+
+None of these is a reason to stop. They are good reasons to know why you are doing it, which is the
+whole of what the rung is asking.
+
+The renderer will attempt the job. Whether you should have started it is a separate question.
