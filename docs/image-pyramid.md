@@ -26,8 +26,11 @@ Seven levels take a 262,144 master down to 2,048 wide:
 | extra pixels | 14.3 Gpx — **33.3%** of the base, the ¼ + ¹⁄₁₆ + … series |
 | extra bytes | ~1.20 GB on a 3.61 GB master, so ~4.82 GB |
 
-A third is the ceiling, not the expectation: overviews are smoother than the picture they come from
-and deflate better, so the real figure will be under it.
+**A third is the ceiling on PIXELS, and the bytes are worse.** Measured by retrofitting a 65,535 master
+on 2026-10-16: it came out **66.1% larger**, not 33%. Level 1 alone carried 43% of the base's bytes for
+a quarter of its pixels - about 1.7x the bytes per pixel. Reducing fine stone texture concentrates it
+rather than smoothing it, so deflate does worse on an overview than on the picture it came from. This
+document said the opposite until it was measured.
 
 ## Build it as a post-pass, not inline
 

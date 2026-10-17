@@ -252,6 +252,24 @@ function comparePixels(pa, pb) {
 // null means no mark this build understands: an unmarked master, or another scheme entirely. Said apart
 // from 'moved', because treating absence as misplacement would condemn every master rendered before
 // marking existed - which is all of docs/sidecars.
+// HOW MANY DIRECTORIES. One is a plain master; more means overview levels, which change the stored
+// size without changing a pixel of the base.
+function pages(path) {
+  try {
+    const fd = openSync(path, 'r');
+    try {
+      const h = Buffer.alloc(16); readSync(fd, h, 0, 16, 0);
+      let at = h.readUInt32LE(8) + h.readUInt32LE(12) * 4294967296, n = 0;
+      while (at && n < 64) {
+        const c = Buffer.alloc(8); readSync(fd, c, 0, 8, at);
+        const ents = c.readUInt32LE(0) + c.readUInt32LE(4) * 4294967296;
+        const nx = Buffer.alloc(8); readSync(fd, nx, 0, 8, at + 8 + ents * 20);
+        at = nx.readUInt32LE(0) + nx.readUInt32LE(4) * 4294967296; n++;
+      }
+      return n;
+    } finally { closeSync(fd); }
+  } catch (_) { return 1; }
+}
 function markState(path) {
   if (!MK) return null;
   try {
@@ -347,9 +365,15 @@ function run(paths, quiet) {
       if (px.diff === 0) {
         console.log('    IDENTICAL  ' + baseName(f.path) + '   ' + px.tiles + ' tiles, ' +
           (px.bytes / 1073741824).toFixed(2) + ' GiB of pixels, byte for byte after inflation');
+        // WHY IT IS BIGGER, SAID CORRECTLY. This read 'that is the compressor' whatever the cause, and
+        // since 2026-10-16 a master can carry overview levels: a retrofitted 65,535 came out 66.1%
+        // larger with its base byte-identical, and this line blamed deflate for pixels it had never
+        // seen. The directory count is what tells the two apart.
+        const bigWhy = pages(f.path) > pages(ref.path) ? 'that is the overview levels, not the compressor'
+                     : pages(ref.path) > pages(f.path) ? 'the OTHER master carries overview levels'
+                     : 'that is the compressor, not the picture';
         console.log('               stored image region differs by ' + (f.imageLen - ref.imageLen) +
-          ' bytes (' + (100 * (f.imageLen / ref.imageLen - 1)).toFixed(1) +
-          '%) - that is the compressor, not the picture');
+          ' bytes (' + (100 * (f.imageLen / ref.imageLen - 1)).toFixed(1) + '%) - ' + bigWhy);
         continue;
       }
       console.log('    DIFFERS  ' + baseName(f.path) + '   ' + px.diff + ' of ' + px.tiles +

@@ -1771,7 +1771,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.16.125';
+  const BUILD = '2026.10.16.126';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1883,8 +1883,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let tierLarge = false, tierExtreme = false, tierOnce = false, tierWhy = false, fmtChosen = false;
   // LOCAL ONLY, AND MEANT LITERALLY. The rung above Unreasonable is not offered by the published site
   // at all - not greyed, not warned about, absent. 524,288 is 171.8 Gpx and 1,048,576 is 687.2, which
-  // at the measured 0.084 bytes per pixel is about 14 GB and 58 GB of file, and at the four-times-per
-  // -doubling the warning already states, roughly 90 minutes and six hours. Those are not numbers to
+  // at the rate each size actually measured - 0.084 bytes per pixel at 262,144 but only 0.054 at
+  // 524,288, because a tile covers less picture of its own as the width grows - is about 9 GB and
+  // perhaps 25 to 37, and at the four-times-per-doubling the warning already states, roughly 90
+  // minutes and six hours. Those are not numbers to
   // put one tickbox away from a stranger on a phone. They are fine to put in front of somebody running
   // the thing off their own disk, who already knows what it costs.
   //
