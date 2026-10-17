@@ -1418,6 +1418,22 @@
   "where": "The glass op list. \"across\"/\"down\" are the centre the op turns or spreads about; \"axis\" is the direction a roll stretches along.",
   "note": "Tiny field label under an op row. Abbreviate freely - the column is about 40px."
  },
+ "op.f.from": {
+  "where": "The glass op list, under a Stir row. A stir drags the sheet through the moons drawn with the Moon tool; the range says which of them this one uses.",
+  "note": "Tiny field label, about 55px. \"moons\" is the Moon tool’s marks, not the sky."
+ },
+ "op.f.to": {
+  "where": "The glass op list, under a Stir row. A stir drags the sheet through the moons drawn with the Moon tool; the range says which of them this one uses.",
+  "note": "Tiny field label, the end of the range. Inclusive."
+ },
+ "op.moons-used": {
+  "where": "The glass op list, under a Stir row. A stir drags the sheet through the moons drawn with the Moon tool; the range says which of them this one uses.",
+  "placeholders": {
+   "n": "How many moons this stir’s range actually covers.",
+   "of": "How many moons the slab has in all."
+  },
+  "note": "Reads like \"4 of 12\". Goes amber when n is zero, which means the stir drags nothing."
+ },
  "op.f.cy": {
   "where": "The glass op list. \"across\"/\"down\" are the centre the op turns or spreads about; \"axis\" is the direction a roll stretches along.",
   "note": "Tiny field label under an op row. Abbreviate freely."

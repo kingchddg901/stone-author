@@ -76,6 +76,8 @@
   .op-sub { display: flex; gap: 5px; margin: -2px 0 2px 3em; }
   .op-sub label { flex: 1; min-width: 0; font-size: 10px; color: var(--dim); display: grid; gap: 1px; }
   .op-sub input { width: 100%; min-width: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .op-count { align-self: end; font-size: 10px; color: var(--dim); white-space: nowrap; padding-bottom: 2px; }
+  .op-count.bad { color: var(--warn); }
   .op .mv { display: flex; gap: 2px; }
   .op .mv button { padding: 1px 5px; line-height: 1.1; }
   .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-inline-end: 2px; }
@@ -1122,12 +1124,15 @@ window.SA_I18N = (() => {
   "a11y.op-remove": "Remove",
   "a11y.op-copy": "Copy this op, varied",
   "op.f.cx": "across",
+  "op.f.from": "moons from",
+  "op.f.to": "to",
+  "op.moons-used": "{n} of {of}",
   "op.f.cy": "down",
   "op.f.d": "axis°",
   "glass.carry-busy": "Checking what this size can carry…",
-  "glass.carry-ok": "At {px}px this patch renders the same as a 4× check.",
-  "glass.carry-soft": "At {px}px some of this chain is finer than a pixel — a 4× check of this patch agrees only {pc}%. Edges are being sampled, not drawn.",
-  "glass.carry-bad": "At {px}px most of this patch is not in the glass — a 4× check agrees {pc}%. What you are seeing is largely the sample grid. Render larger, or ease the last stretch.",
+  "glass.carry-ok": "At {px}px this patch is inside the chaos limit.",
+  "glass.carry-soft": "At {px}px this chain is near the chaos limit — a 4× check of this patch agrees only {pc}%. Edges are being sampled, not drawn.",
+  "glass.carry-bad": "At {px}px this chain is past the chaos limit — a 4× check agrees {pc}%. What you are seeing is largely the sample grid. Render larger, give the stirs narrower moon ranges, or ease the folding.",
   "mould.cells": "Cells",
   "mould.blobs": "Blobs",
   "sl.glass-blobJit": "Blob scatter",
@@ -1790,7 +1795,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.135';
+  const BUILD = '2026.10.17.136';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6603,11 +6608,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
             }
           }
         }
-      } else if (k === 'stir' && F.S) {
-        const cu = (x - F.PX) * 12 / SLAB_FT + 0.5;
-        const cvv = ((y - F.PY) * 12 / SLAB_FT + 0.5 * F.H);
-        glassUnwarp(F.S, cu, cvv, out);
-        x += out[0] * SLAB_FT / 12; y += out[1] * SLAB_FT / 12;
+      } else if (k === 'stir') {
+        // ITS OWN FIELD, or the one every moon is in. An op with no range keys to '0:0', which is the
+        // lattice this function always read, so a slab written before ranges existed drags exactly as
+        // it did - checked by byte-identity on a real slab rather than by a tolerance, because a glass
+        // field holds a LABEL and a coordinate moving in the last place can change a pixel by 130.
+        const S = F.SG ? F.SG[F.SKEY(op)] : F.S;
+        if (S) {
+          const cu = (x - F.PX) * 12 / SLAB_FT + 0.5;
+          const cvv = ((y - F.PY) * 12 / SLAB_FT + 0.5 * F.H);
+          glassUnwarp(S, cu, cvv, out);
+          x += out[0] * SLAB_FT / 12; y += out[1] * SLAB_FT / 12;
+        }
       }
     }
     out[0] = x; out[1] = y; out[2] = press;
@@ -6800,7 +6812,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // that had not been formed yet.
     const moons = marks.filter(m => m.kind === 'moon');
     _wmask = gatherMasks();                                      // the protected islands, as the warp reads them
-    F.S = glassWarp(H, moons); F.H = H;                          // the stir is an OP now, not a pre-pass
+    // ONE FIELD PER DISTINCT RANGE, not one field for every stir. Every stir used to read the same
+    // lattice, so three stirs dragged the sheet through one displacement three times - and that is the
+    // only op in the list that is expensive: measured at 2048, three stirs read 0.9604 against a
+    // four-times-larger reference where none read 0.9981, and a fourth fell to 0.6573. A quarter of
+    // the moons alone reads 0.9922 to 0.9993, so splitting them buys variety and spends less.
+    //
+    // KEYED BY THE RANGE so two stirs asking for the same moons share one lattice rather than building
+    // it twice; '0:0' is every moon, which is what an op with no range asks for and therefore what
+    // every slab written before this gets.
+    F.SKEY = o => ((+o.from || 0) + ':' + (+o.to || 0));
+    const moonsFor = o => {
+      const a = Math.max(1, +o.from || 1), b = +o.to > 0 ? +o.to : moons.length;
+      return (a === 1 && b >= moons.length) ? moons : moons.slice(a - 1, b);
+    };
+    F.SG = {};
+    F.SG['0:0'] = glassWarp(H, moons);
+    for (const o of OPS) if (o && o.k === 'stir') {
+      const key = F.SKEY(o);
+      if (!(key in F.SG)) F.SG[key] = glassWarp(H, moonsFor(o));
+    }
+    F.S = F.SG['0:0']; F.H = H;                                  // the stir is an OP now, not a pre-pass
     // WHERE EACH ROLLER TOUCHED DOWN: the leading edge of this pane along that roll's own
     // direction, so stamp one lands where the pass began. Exact for a roll that is the last thing
     // done to the sheet; a roll with further ops after it is measured in the pane's frame rather
@@ -10999,6 +11031,9 @@ self.onmessage = async (e) => {
     spin: [['cx', -2, 2, 0.02], ['cy', -2, 2, 0.02]],
     blow: [['cx', -2, 2, 0.02], ['cy', -2, 2, 0.02]],
     roll: [['d', 0, 180, 1]],
+    // WHICH MOONS THIS ONE DRAGS, 1-based and inclusive. Both zero is every moon, which is what a
+    // slab written before ranges existed asks for.
+    stir: [['from', 0, 99, 1], ['to', 0, 99, 1]],
   };
 
   // A COPY THAT IS NOT A DUPLICATE. Copying an op verbatim adds a row that does nothing - spin then
@@ -11010,6 +11045,14 @@ self.onmessage = async (e) => {
   function variedCopy(op, at) {
     const o = Object.assign({}, op);
     const w = ph => snakeWave(at, ph) / 1.45;
+    // A STIR HAS NO MAGNITUDE, so its copy varies the only thing it has: it takes the NEXT block of
+    // moons the same width as this one. Copy a stir set to 1-4 and you get 5-8, which is the whole
+    // point of ranges - three different drags instead of one drag three times.
+    if (o.k === 'stir') {
+      const a = Math.max(1, +o.from || 1), b = +o.to > 0 ? +o.to : 0;
+      if (b >= a) { const wid = b - a + 1; o.from = a + wid; o.to = b + wid; }
+      return o;
+    }
     if (o.a != null) o.a = +(o.a * (1 + VAR_A * w(0))).toFixed(3);
     if (OP_EXTRA[o.k]) for (const [f] of OP_EXTRA[o.k]) {
       if (f === 'd') o.d = Math.round((((+o.d || 0) + 90 * w(5.1)) % 180 + 180) % 180);
@@ -11072,6 +11115,18 @@ self.onmessage = async (e) => {
           fi.setAttribute('aria-label', TR('op.f.' + f));
           fi.addEventListener('input', () => { op[f] = +fi.value; redraw(true); carryLater(); });
           lab.append(fi); sub.append(lab);
+        }
+        // HOW MANY THAT ACTUALLY IS. A range naming no moons is a stir that does nothing, and a drawn
+        // mark that does nothing is the shape of a bug nobody finds - so the count is on screen, and
+        // it goes red at zero rather than being left to be noticed.
+        if (op.k === 'stir') {
+          const tot = marks.reduce((n, m) => n + (m.kind === 'moon' ? 1 : 0), 0);
+          const a = Math.max(1, +op.from || 1), b = +op.to > 0 ? +op.to : tot;
+          const used = Math.max(0, Math.min(tot, b) - a + 1);
+          const sp = document.createElement('span');
+          sp.className = 'op-count' + (used ? '' : ' bad');
+          sp.textContent = TR('op.moons-used', { n: used, of: tot });
+          sub.append(sp);
         }
         host.append(sub);
       }

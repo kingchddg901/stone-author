@@ -88,6 +88,34 @@ ok('glassUnform is where it was', at > 0);
   ok('and that wave is the three-term one, not a single sine', !!sw);
 }
 
+// ---- a stir without a range is the stir it always was ------------------------------------------------
+// Every stir used to read one lattice built from every moon. Ranges give each its own, and the key
+// '0:0' is what an op with no range asks for - so a slab written before ranges renders byte-identically,
+// which was checked on a real one at FNV 0x375c1a38 before this gate existed.
+{
+  const asm = SRC.slice(SRC.indexOf("F.SG = {};"), SRC.indexOf("F.S = F.SG['0:0']") + 60);
+  ok('the every-moon field is built unconditionally', /F\.SG\['0:0'\] = glassWarp\(H, moons\);/.test(asm));
+  ok('and it is what F.S still points at', /F\.S = F\.SG\['0:0'\]/.test(asm));
+  ok('a range keys to from:to, so two stirs wanting the same moons share one lattice',
+     /F\.SKEY = o => \(\(\+o\.from \|\| 0\) \+ ':' \+ \(\+o\.to \|\| 0\)\)/.test(SRC));
+  ok('a field is built once per distinct range, not once per stir', /if \(!\(key in F\.SG\)\)/.test(asm));
+
+  const br = SRC.slice(SRC.indexOf("} else if (k === 'stir')"), SRC.indexOf("out[0] = x; out[1] = y"));
+  ok('the op reads its own field', /F\.SG\[F\.SKEY\(op\)\]/.test(br));
+  ok('and a missing one is skipped rather than thrown', /if \(S\) \{/.test(br));
+
+  // ABLATION: drop the fallback and the backward-compatible case stops existing.
+  const broken = SRC.replace("F.SG['0:0'] = glassWarp(H, moons);", '');
+  ok('ablation: without the every-moon field the default has nothing to point at',
+     broken !== SRC && !/F\.SG\['0:0'\] = glassWarp/.test(broken));
+}
+
+// ---- the author can see when a range drags nothing ---------------------------------------------------
+{
+  ok('the count of moons a range covers is shown', SRC.includes("TR('op.moons-used'"));
+  ok('and it is marked when that count is zero', /'op-count' \+ \(used \? '' : ' bad'\)/.test(SRC));
+}
+
 console.log('');
 if (fails) { console.error('check-op-origin: ' + fails + ' FAILED'); process.exit(1); }
 console.log('check-op-origin: an op without a centre is the op it always was, bit for bit, and one');
