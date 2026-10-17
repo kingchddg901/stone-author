@@ -71,20 +71,38 @@ function offenders(src) {
   ok('and the done messages still exist', SRC.split(DONE).length - 1 >= 2,
      (SRC.split(DONE).length - 1) + ' done message(s)');
   ok('the clock expression is still spelled the way this scan reads it', SRC.includes(CLOCK));
-  ok('and the TIFF path still captures it BEFORE the confirm',
-     /const msDone = Date\.now\(\) - expT0;\s*\n\s*await resumeConfirmSaved\(/.test(SRC));
+  // The SPAN between capturing the elapsed and handing control to the person. Matched on structure,
+  // not on exact whitespace: an earlier version pinned the literal line break and went red the moment a
+  // trailing comment was added to a line it was not even testing.
+  const span = SRC.match(/const msDone = Date\.now\(\) - expT0;([\s\S]{0,300}?)await resumeConfirmSaved\(/);
+  ok('the TIFF path captures the elapsed BEFORE the confirm', !!span);
+  // THE TWIN. Capturing the elapsed fixed the message and left the ticking clock beside it still
+  // counting the dialog - one corrected line next to an uncorrected one, which reads as agreement and
+  // is not. A 75.9 s live test showed "Saved the render - 1024px - 0:00" against a clock reading 1:16.
+  ok('and freezes the ticking clock at the same instant', !!span && /expFreeze\(msDone\)/.test(span[1]),
+     span ? 'span holds ' + span[1].trim().split(String.fromCharCode(10)).length + ' line(s)' : 'no span');
+  ok('and expFreeze can repaint, or that figure would never reach the screen',
+     /const expFreeze = \(ms\) =>/.test(SRC) && /expElapsed\(ms\)/.test(SRC));
 }
 
 // ---- ABLATION - put the defect back and require red --------------------------------------------------
 // Without this, the pass above is a scan that has never been shown able to fail.
 {
-  const broken = SRC.replace(
-    /const msDone = Date\.now\(\) - expT0;\s*\n(\s*)await resumeConfirmSaved\(blob\.size\);\s*\n\s*expStat\(TR\('exp\.done-render', \{ px: W, t: expElapsed\(msDone\) \}\), 1\);/,
-    "$1await resumeConfirmSaved(blob.size);\n$1expStat(TR('exp.done-render', { px: W, t: expElapsed(Date.now() - expT0) }), 1);");
+  // Remove the capture and the freeze, and put the inline read back - the state this file describes.
+  // `.` already stops at a line end, so none of these need a literal newline - which is the third
+  // thing in this file to break on an escape passing through a generator.
+  const broken = SRC
+    .replace(/\s*const msDone = Date\.now\(\) - expT0;/, '')
+    .replace(/\s*expFreeze\(msDone\);.*/, '')
+    .replace('expElapsed(msDone)', 'expElapsed(Date.now() - expT0)');
   ok('the ablation actually changed the source', broken !== SRC);
   const bad = offenders(broken);
-  ok('and putting the defect back goes RED', bad.length === 1,
-     bad.length ? bad[0].call + ' at line ' + bad[0].line : 'STILL CLEAN - this check cannot see the bug');
+  // At the REAL site. It once went red on the resumeDialog false positive instead, which looked
+  // identical from the exit code and proved nothing.
+  ok('and putting the defect back goes RED at the real site',
+     bad.length === 1 && bad[0].call === 'resumeConfirmSaved(',
+     bad.length ? bad.map(b => b.call + ' at line ' + b.line).join(', ')
+                : 'STILL CLEAN - this check cannot see the bug');
 }
 
 // ---- the other three sites are clean for a REASON, not by luck ---------------------------------------

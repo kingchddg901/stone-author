@@ -1771,7 +1771,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.128';
+  const BUILD = '2026.10.17.129';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -10659,7 +10659,16 @@ self.onmessage = async (e) => {
   // Measured on a phone at 16384: the kit's fourteen images "rendered" in the time render-only took for
   // one, while its encode ran 97 s longer than render-only's. Reading one pixel back synchronises.
   const flushCanvas = c => { try { c.getContext('2d').getImageData(c.width - 1, c.height - 1, 1, 1); } catch (_) {} };
-  const expFreeze = () => { clearInterval(expTick); expTick = null; };   // leave the line and its time on screen
+  // Stops the tick, and with an argument also REPAINTS the clock to that figure. The argument exists
+  // because the tick is wall time and the last place it ran may not be where the work ended: the TIFF
+  // path hands control to the save-confirm, which waits for a person. Freezing without repainting left
+  // the message reading 0:00 beside a clock reading 1:16 - one line corrected and its neighbour still
+  // counting the dialog, which is worse than both being wrong together.
+  const expFreeze = (ms) => {
+    clearInterval(expTick); expTick = null;                        // leave the line and its time on screen
+    if (ms === undefined) return;
+    const c = document.getElementById('expclock'); if (c) c.textContent = expElapsed(ms);
+  };
   // ...but the NEXT export must start from zero. expStat only starts the clock when expT0 is unset, and
   // freezing deliberately leaves the finished time on screen -- so without this the second export of a
   // session counts up from the first one's start. Invisible to any test that reloads between runs.
@@ -12946,6 +12955,7 @@ self.onmessage = async (e) => {
       // after a NON-blocking save, so this was the only one that could drift, and the file was right
       // the whole time because ms.total is captured up with the rest of the metadata.
       const msDone = Date.now() - expT0;
+      expFreeze(msDone);                     // and stop the ticking clock HERE, where the work stopped
       await resumeConfirmSaved(blob.size);
       expStat(TR('exp.done-render', { px: W, t: expElapsed(msDone) }), 1);
       hint(TR('hint.exported-render', { px: W }));

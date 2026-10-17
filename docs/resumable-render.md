@@ -172,8 +172,11 @@ the file arrived. That makes it the one blocking step in an export, and the 1,04
 it cost: **351:29** on screen against **300.5 min** in the file's own metadata, fifty-one minutes of an
 unattended dialog counted as render time. The TIFF was honest throughout — `ms.total` is captured up
 with the rest of the metadata, before the save — so only the number on screen was wrong, which is the
-only number anybody reads. The elapsed is locked before the confirm now, and
-`tools/check-export-clock.mjs` goes red if a done message ever reads the clock after a dialog again.
+only number anybody reads. The elapsed is locked before the confirm now — and so is the ticking
+clock beside it, which is the half that was missed first time: a live 1024 render with the confirm
+held 75.9 s read **Saved the render — 1024px — 0:00** next to a clock still showing **1:16**. One
+corrected line beside an uncorrected one reads as agreement and is not.
+`tools/check-export-clock.mjs` goes red if either half ever drifts again.
 
 **The identity is `renderSig`, and that is what the record stores.** Confirmed rather than assumed: the
 master's own `inputs` field IS `renderSig()` (`app/stone-author.html:9246`), so the signature a sidecar
