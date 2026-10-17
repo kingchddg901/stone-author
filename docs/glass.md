@@ -67,6 +67,14 @@ thing that makes it a budget rather than a scale factor.
 **Every operation resets thickness to 2×**, deliberately, so there is no running total threaded
 through the op list. Tracking it would be a second state machine earning nothing visible.
 
+**That last sentence is false, and the cost is measured.** Without the running total nothing tells the
+fold chain that the glass has run out of material to subdivide with, so the ribbons halve for ever and
+the field has no smallest feature. A band of one slab renders at correlation **0.084** against a
+1024-samples-per-pixel reference — a different picture, not a coarser one. The missing floor is
+scoped in [`filament-floor.md`](filament-floor.md), and it resolves by PINCH-OFF to the dominant
+neighbour, never by blending: a filament too thin to hold beads and parts, and the colour beside it
+closes over the gap.
+
 ## RIBBONS ARE OBLONGS, NOT RECTANGLES — the one that cost the most
 
 Every straight edge in the field traced back to the source being a box. **Equidistant between two
@@ -143,7 +151,7 @@ time the path curved. Measured on a *curving* pass: across spreads the bite 0.25
   at correlation 0.849 against a 1024-sample reference, and a speckle band renders at **0.084**
   while reporting 3.7x the true contrast — a picture that is not in the glass. Neither the folds
   nor the label is a defect, and together they guarantee it. See
-  [`supersampling.md`](supersampling.md).
+  [`filament-floor.md`](filament-floor.md).
 
 - **Stretch along a drawn pass** — needs the inverse map from path coordinates back to world. A
   drawn pass presses; it does not stretch, and that is why it is its own op rather than a `roll`.
