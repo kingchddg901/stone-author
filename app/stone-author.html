@@ -66,10 +66,13 @@
      the way the list reads, and the amount sits beside the name it belongs to. */
   .ops { display: grid; gap: 4px; margin: 2px 0 6px; }
   .ops:empty::after { content: attr(data-empty); color: var(--dim); font-size: 11px; font-style: italic; }
-  .op { display: grid; grid-template-columns: 4.4em 1fr 3em auto; gap: 6px; align-items: center; }
+  /* 3em, not 4.4: the names are four characters and the panel is under 200px, so the slack in this
+     column was the only place a typed value could come from. */
+  .op { display: grid; grid-template-columns: 3em 1fr 3em auto; gap: 5px; align-items: center; }
   .op > b { font-weight: 500; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
   .op > output { font-variant-numeric: tabular-nums; font-size: 11px; text-align: end; color: var(--dim); }
   .op input[type=range] { width: 100%; min-width: 0; }
+  .op input[type=number] { width: 100%; min-width: 4.5em; font-variant-numeric: tabular-nums; }
   .op .mv { display: flex; gap: 2px; }
   .op .mv button { padding: 1px 5px; line-height: 1.1; }
   .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-inline-end: 2px; }
@@ -1780,7 +1783,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.132';
+  const BUILD = '2026.10.17.134';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -10977,15 +10980,19 @@ self.onmessage = async (e) => {
       const nm = document.createElement('b'); nm.textContent = TR('op.' + op.k); row.append(nm);
       const R = OP_RANGE[op.k];
       if (R) {
-        const sl = document.createElement('input'); sl.type = 'range';
-        sl.min = R[0]; sl.max = R[1]; sl.step = R[2]; sl.value = op.a == null ? R[3] : op.a;
-        sl.setAttribute('aria-label', TR('op.' + op.k));
-        const ov = document.createElement('output'); ov.textContent = (+sl.value).toFixed(2);
-        // carryLater, because the MAGNITUDE is what decides this: the reference chain reads 0.987 at
-        // roll 2.0 and 0.074 at 2.5. drawOps only reruns on add, remove and reorder, so without this
-        // a drag leaves the last answer on screen - a stale number being worse than none.
-        sl.addEventListener('input', () => { op.a = +sl.value; ov.textContent = (+sl.value).toFixed(2); redraw(true); carryLater(); });
-        row.append(sl, ov);
+        // A NUMBER, NOT A SLIDER. The cliff this list falls off is narrow - the reference chain reads
+        // 0.987 at roll 2.00 and 0.074 at 2.50 - and a track this wide cannot be aimed at 2.10. Typed,
+        // so a value can be stated outright, and stepped, so it can be walked. The same control the
+        // compartment list already uses, which is why it needs no new idiom and no new CSS column.
+        const n = document.createElement('input'); n.type = 'number';
+        n.min = R[0]; n.max = R[1]; n.step = R[2]; n.value = op.a == null ? R[3] : op.a;
+        n.style.gridColumn = 'span 2';                      // the track's column plus the readout's
+        n.setAttribute('aria-label', TR('op.' + op.k));
+        // carryLater, because the MAGNITUDE is what decides this. drawOps reruns only on add, remove
+        // and reorder, so without this a change leaves the last answer on screen - a stale number
+        // being worse than none.
+        n.addEventListener('input', () => { op.a = +n.value; redraw(true); carryLater(); });
+        row.append(n);
       } else {
         // Neither a stir nor a press has an amount of its own: both are drawn, so their settings
         // live on the mark that was drawn and not on a slider in the list.

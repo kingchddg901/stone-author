@@ -47,7 +47,7 @@ ok('and all three refusals share one guard, so none can be added without the oth
 // exactly what decides it: the reference chain reads 0.987 at roll 2.0 and 0.074 at 2.5. A stale
 // number is worse than no number, and this is the assertion that was missing when that shipped.
 {
-  const opSl = SRC.match(/sl\.addEventListener\('input', \(\) => \{ op\.a = .*\}\);/);
+  const opSl = SRC.match(/addEventListener\('input', \(\) => \{ op\.a = .*\}\);/);
   ok('the op MAGNITUDE slider retriggers the check', !!opSl && /carryLater\(\)/.test(opSl[0]));
   const glSl = SRC.match(/el\.addEventListener\('input', \(\) => \{ GLASS\[k\] = .*\}\);/);
   ok('and so do the glass parameter sliders', !!glSl && /carryLater\(\)/.test(glSl[0]));
