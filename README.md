@@ -288,6 +288,13 @@ result with `tools/tiff-meta.mjs`. Three engines agree to within 0.3% under that
 are not meant to agree and do not — Blink 45.03, Gecko 46.25, WebKit 71.40. Steps, expected figures and the
 ways an attempt can fail for the wrong reason are in [`docs/reproduce.md`](docs/reproduce.md).
 
+**Bigger than the site offers.** The published app stops at 262,144 px. The rung above it unlocks
+524,288 and 1,048,576 and is offered only when the app is served from a local machine — not greyed
+out, absent. That is a line rather than a gate: several hours and tens of gigabytes is a reasonable
+thing to do on your own disk and not something to put one tickbox from a stranger on a phone. Clone
+the repository, run `python tools/serve-studio.py`, and the same file behaves differently because the
+check is on where it was served from. See [`docs/self-hosting.md`](docs/self-hosting.md).
+
 **Licence.** [CC0 1.0 Universal](LICENSE) — public domain. To the extent possible under law, Chris King
 has waived all copyright and related rights to `stone-author`, including the gallery slabs and renders.
 **No attribution required** — use it, fork it, print it, sell it. The vendored `token-theme-kit` is CC0
