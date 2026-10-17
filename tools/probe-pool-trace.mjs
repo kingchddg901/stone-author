@@ -195,7 +195,8 @@ ok('the three verdicts are genuinely different strings',
   const same = cmp(A, JSON.parse(JSON.stringify(A)), 'cmp-a.json', 'cmp-a2.json');
   ok('the control passes when the solo pass agrees', /the machine was in the same state/.test(same),
      (same.split('\n').find(l => /within/.test(l)) || '').trim());
-  ok('and identical inputs report no throughput change', /width \+0%  ->  throughput \+0\.0%/.test(same));
+  ok('and identical inputs report no width effect', /SO THE WIDTH IS WORTH  \+0\.0%/.test(same));
+
 
   // 2. A machine that drifted. Same picture, same width, but the solo pass cost half as much - which is
   //    what a thermal state or a background job looks like. The tool must refuse to call it a result.
@@ -215,30 +216,40 @@ ok('the three verdicts are genuinely different strings',
   ok('a different pass plan is called out before any figure is read',
      /DIFFERENT PASS PLAN/.test(pout));
 
-  // 4. THE ANSWER IT IS FOR. Ten workers whose extra width went entirely to contention: width +25% and
-  //    every pass proportionally slower, so throughput is flat. The tool has to say that, because the
-  //    floor arithmetic alone would promise 20%.
-  const wide = JSON.parse(JSON.stringify(A));
-  wide.workers = 10; wide.trace.target = 10;
-  wide.trace.k = wide.trace.k.map(v => v % 10);
-  wide.trace.r = wide.trace.r.map((v, x) => x === 0 ? v : Math.round(v * 10 / 8));   // solo unchanged
-  const wout = cmp(A, wide, 'cmp-a5.json', 'cmp-wide.json');
-  ok('ten workers at proportional contention report a flat throughput',
-     /width \+25%  ->  throughput \+0\.0%/.test(wout),
-     (wout.split('\n').find(l => /width \+/.test(l)) || '').trim());
-  ok('           and say where the width went', /went to contention, not work/.test(wout));
-  ok('           while the solo control still passes, so it is a real comparison',
-     /the machine was in the same state/.test(wout));
+  // 4. THE CONFOUND, BUILT ON PURPOSE. The question "did more workers help" is a ratio of ratios: wall
+  //    clock divided by that run's OWN solo pass, because the machine is never in the same state twice.
+  //    A real afternoon produced three readings of one change - -10.7% with no control, a refusal at 16%
+  //    apart, and -0.3% once clean - and the raw wall clock pointed the wrong way in two of them.
+  //
+  //    The worlds above cannot test this: they share a completion log by construction, so they share a
+  //    wall clock, and a metric that reads wall/solo must see nothing. These two are built to differ.
+  const widthCase = (W, wallMin, soloSec, name) => {
+    const m = JSON.parse(JSON.stringify(A));
+    m.workers = W; m.trace.target = W; m.trace.k = m.trace.k.map(v => v % W);
+    const want = wallMin * 60000, have = m.perTile.ms.reduce((a, b) => a + b, 0);
+    m.perTile.ms = m.perTile.ms.map(v => Math.round(v * want / have));   // scale the wall clock
+    m.trace.r = m.trace.r.slice(); m.trace.r[0] = Math.round(soloSec * 1000);
+    return write(m, name);
+  };
+  const run2 = (a, b) => execFileSync(process.execPath, ['tools/pool-compare.mjs', a, b], { encoding: 'utf8' });
 
-  // ABLATION on 4: the same width rise WITHOUT the contention must read as a genuine gain, or the
-  // message above is just something the tool always says.
-  const real = JSON.parse(JSON.stringify(A));
-  real.workers = 10; real.trace.target = 10; real.trace.k = real.trace.k.map(v => v % 10);
-  const rout = cmp(A, real, 'cmp-a6.json', 'cmp-real.json');
-  ok('ablation: width without added contention reads as a real +25%',
-     /width \+25%  ->  throughput \+25\.0%/.test(rout),
-     (rout.split('\n').find(l => /width \+/.test(l)) || '').trim());
-  ok('           and is NOT accused of spending it on contention', !/went to contention, not work/.test(rout));
+  // 4a. SAME MACHINE (solo identical), B finishes a fifth sooner. That IS the width, and must read so.
+  const realOut = run2(widthCase(8, 100, 20, 'w-8-100-20.json'), widthCase(10, 80, 20, 'w-10-80-20.json'));
+  ok('a genuine width gain is reported as one', /SO THE WIDTH IS WORTH  \+25\.0%/.test(realOut),
+     (realOut.split('\n').find(l => /WIDTH IS WORTH/.test(l)) || '').trim());
+  ok('           and the machine is credited with nothing', /of which the machine   \+0\.0%/.test(realOut));
+
+  // 4b. THE TRAP. Identical wall clocks to 4a - so an identical RAW reading of +25% - but the solo pass
+  //     says the machine was a fifth faster. The width is then worth nothing, and that is the whole
+  //     reason the control exists.
+  const fakeOut = run2(widthCase(8, 100, 20, 'w-8-100-20b.json'), widthCase(10, 80, 16, 'w-10-80-16.json'));
+  ok('ablation: the SAME raw gain on a faster machine is worth nothing',
+     /SO THE WIDTH IS WORTH  \+0\.0%/.test(fakeOut),
+     (fakeOut.split('\n').find(l => /WIDTH IS WORTH/.test(l)) || '').trim());
+  ok('           the raw wall clock reads identically in both cases, which is the point',
+     /raw wall clock         \+25\.0%/.test(realOut) && /raw wall clock         \+25\.0%/.test(fakeOut));
+  ok('           and it says the machine took the credit', /of which the machine   \+25\.0%/.test(fakeOut));
+  ok('           calling it noise rather than a result', /made no difference at all/.test(fakeOut));
 }
 
 console.log('');

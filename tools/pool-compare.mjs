@@ -117,13 +117,27 @@ lane('contention vs solo', A.contention.toFixed(2) + 'x', B.contention.toFixed(2
 lane('effective speedup', A.effective.toFixed(2) + 'x', B.effective.toFixed(2) + 'x',
      'of a nominal ' + A.W + 'x / ' + B.W + 'x');
 {
-  // The honest figure: a core earns its place only if effective speedup rose by more than the width did
-  // not. Printed as the ratio, because "20% faster" was the arithmetic that assumed no contention.
-  const gain = B.effective / A.effective - 1;
+  // THE ANSWER, WHICH IS A RATIO OF RATIOS. The raw wall clock cannot say whether a width change paid,
+  // because the machine is never in exactly the same state twice: measured here at 4.7% between two
+  // runs fifteen minutes apart. So divide each run's wall clock by its OWN solo pass - the same work on
+  // one worker, in that run, on that machine - and what remains is the width and nothing else.
+  //
+  // It took three readings to get this right. The first pair had no control and said -10.7%; the second
+  // had a control that REFUSED it at 16% apart; only the third was clean. Each time the raw wall clock
+  // pointed somewhere the normalised figure did not.
+  const nA = A.wall / A.solo, nB = B.wall / B.solo;         // wall measured in that run's own solo passes
+  const gain = nA / nB - 1;                                 // B faster than A => positive
   const nominal = B.W / A.W - 1;
-  console.log('     width +' + (100 * nominal).toFixed(0) + '%  ->  throughput ' +
-              (gain >= 0 ? '+' : '') + (100 * gain).toFixed(1) + '%' +
-              (gain < nominal * 0.5 ? '   <- most of the added width went to contention, not work' : ''));
+  // NEGATIVE ZERO IS A DIRECTION THAT IS NOT THERE. A residual of -4e-7 formats as "-0.0%", which
+  // reads as a small loss; anything under half the printed precision is flattened to zero first.
+  const sign = v => { const p = 100 * v, q = Math.abs(p) < 0.05 ? 0 : p; return (q >= 0 ? '+' : '') + q.toFixed(1) + '%'; };
+  console.log('     raw wall clock         ' + sign(A.wall / B.wall - 1) + '  going ' + A.W + ' -> ' + B.W + ' workers');
+  console.log('     of which the machine   ' + sign(A.solo / B.solo - 1) + '  (the solo pass differed by that much)');
+  console.log('     SO THE WIDTH IS WORTH  ' + sign(gain) + '  for ' + sign(nominal) + ' more workers');
+  if (Math.abs(gain) < 0.02)
+    console.log('     -> within measurement noise: the width made no difference at all.');
+  else if (gain < nominal * 0.5 && nominal > 0)
+    console.log('     -> most of the added width went to contention, not work.');
 }
 
 console.log('');

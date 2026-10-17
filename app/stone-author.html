@@ -1803,7 +1803,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.141';
+  const BUILD = '2026.10.17.142';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -12918,7 +12918,7 @@ self.onmessage = async (e) => {
   // machine takes all four and gets no headroom at all. Leaving two for the person everywhere would
   // be `cores - 2`, which is a different policy with a real cost to small machines, and not this
   // change.
-  const POOL_MAX = 10;
+  const POOL_MAX = 8;
   function poolWidthFor(budgetMB, tileMB) {
     if (EXP_FORCE_SEQ || !corePaintsThis()) return 0;
     const room = Math.floor(budgetMB / Math.max(1, tileMB));
