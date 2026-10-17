@@ -27,7 +27,14 @@ The 96 bits are three words: a **magic** `0x5A4D4B31`, the **address** packed wi
 **picture key** — `renderSig`, the same value the master publishes as `inputs`. Reading requires the
 magic *and* two of the three copies agreeing. An earlier design used a 4-bit version as its tell and
 matched noise one time in sixteen; copy-agreement alone was then defeated by a real master whose blue
-low bits ran periodic (`0x1111`). A 32-bit magic is what survived both.
+low bits ran periodic (`0x1111`).
+
+Both of those were missing the **address range check**, and `tools/probe-gate.mjs` measures that to be
+the stage which actually rejects: 1 in 26,214, with a 3-bit gate behind it admitting nothing at all on
+four real renders. So the width is not what makes the read sound, and this paragraph should not be read
+as "a narrow gate is unsafe". What the width buys is the one case that defeats all three stages at any
+width — a field whose period equals the 96-bit record stride — which it moves from one in 209,715 to
+one in 112,589,990,684,262.
 
 Because the lattice belongs to the picture, a **512-tiled and a 4096-tiled render of one slab carry
 identical marks at identical absolute pixels**. Cross-tiling byte-identity survives marking, which is

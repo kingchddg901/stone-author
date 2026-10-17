@@ -1,6 +1,7 @@
 # Image DNA
 
-Status: **scoped, not built.**
+Status: **scoped, not built.** The wire format below is settled and the gate width is
+measured; no bit of it is written yet.
 
 Every cell of a marked master already carries its own address and the key of the picture it belongs to.
 Image DNA is the next question: carry **the slab itself** — so a fragment of the picture holds the
@@ -114,6 +115,79 @@ slab rounded to whole pixels is a different picture from the one on disk, and by
 existing masters would break. Two ways out, the first better: **quantise at authoring time**, so the
 saved slab *is* the quantised one and what is encoded is exactly what renders; or keep 24-bit
 coordinates for sixteenfold sub-pixel at 1,048,576, which is what the table above already costs.
+
+## The wire format
+
+Right-to-left from the cell's right edge, which is already how `markStamp` walks. The genome is a
+**strict suffix** of the mark that ships today, so nothing that reads marks now needs teaching:
+
+```
+[magic 32][address+version 32][picture key 32][dnaVer 8][fragment 20][of 20][chunk 1024]
+|<-------------- the 96 bits that already ship -------->||<------------ new ----------->|
+```
+
+**No separators anywhere.** `dnaVer` selects the schema and the schema fixes every field width behind
+it, so a delimiter has nothing left to disambiguate; and the cell's own address already says which
+fragment this is, so the lattice supplies the framing between fragments. A reader that stops after 96
+bits still decodes the address correctly — the same append-only property that made the pyramid
+retrofit possible.
+
+| | |
+|---|---|
+| record | 1,168 bits, three copies = 3,504 px |
+| span | the bottom **seven** rows of the cell, where the mark alone needs one |
+| cost | 1.34% of pixels written, about 215 MB of growth on a 3.61 GB master |
+
+The chunk size is the one free parameter, and it buys crop size with file size:
+
+| chunk | cells to rebuild | smallest crop | file growth |
+|---|---|---|---|
+| 288 | 757 | 14,336 px | 2.2% |
+| **1024** | **213** | **7,680 px** | **6.0%** |
+| 2048 | 107 | 5,632 px | 11.2% |
+
+288 reuses the existing span exactly, but a third of it is header and it needs a crop larger than most
+whole renders. 2048 doubles the file cost to halve a crop that is already small.
+
+### Why the gate stays 32 bits wide
+
+`tools/probe-gate.mjs`, and the answer is **not** that a narrow gate is unsafe. Measured, it is not:
+
+| | 3-bit gate | 32-bit magic |
+|---|---|---|
+| four real renders, 1.6 M positions each | 204k-448k pass the gate, up to 427 reach 2-of-3 agreement, **0** pass the range check | 0 at every stage |
+| random periodic fields, every period to 96 | 4.07 M reach agreement, **0** survive | 0 |
+
+The **address range check is the stage that rejects** — `ver` plus `cx < across` plus `cy < down` is 1
+in 26,214 — and the original design that failed had the weak gate and copy-agreement with no range
+check at all. That missing stage was the defect, not the width.
+
+What the width buys is the one case that defeats all three stages, which it does at **every** gate
+width: a field whose period equals the record stride repeats the record exactly, so the copies agree
+for free. Three things must then coincide - periodicity at the stride, the gate pattern present, and an
+in-range address behind it — and the gate is the only term the format controls:
+
+| gate | one periodic field in | each corrupting |
+|---|---|---|
+| 3-bit | 209,715 | ~3,579 reads |
+| 32-bit | 112,589,990,684,262 | ~2,497 reads |
+
+The failure is catastrophic rather than graceful: one qualifying field misreads thousands of cells, not
+one. Against that, the narrow gate has a genuine advantage worth recording — its 67-bit record stride
+is **prime**, so only periods 1 and 67 expose it, where the 32-bit gate's stride of 96 has twelve such
+periods. Width wins on the gate term while losing on the stride term, and the gate term is larger by
+nine orders of magnitude.
+
+The whole saving was going to be 29 bits of 1,168 — **2.5%** — because the genome chunk dominates the
+record. Gate width stopped mattering to size the moment a payload rode behind it.
+
+### A genuine record reads twice
+
+`markRead` accepts `agree >= 2`, so a real record is *also* detectable one stride late, where its
+second and third copies are the only two in the window. `markRead` never meets this because it reads
+one fixed cell-aligned position. **A DNA reader recovering from an arbitrary crop has to scan**, so it
+does: prefer `agree == MARK_COPIES`, or de-duplicate by alignment. Measured at two alignments per
+planted record, at every gate width.
 
 ## Staging
 
