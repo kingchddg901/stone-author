@@ -64,7 +64,7 @@ states the fiction, and closes on the same pair with nothing added.
 | `raw-hero-daylight.png` | `stone-32768-day-win-chrome-1001-025803.tif` | warped (666 marks) | daylight | pure render — 40.1 s, 285 MB. **32,768 × 20,480**, the only one not cut at 65535 |
 | `raw-hero-psyker.png` | `stone-65535-uv-win-chrome-1001-025637.tif` | warped (666 marks) | −1 | pure render — 1.6 min, 780 MB, 40 passes of 8192, blur-free |
 
-All four `raw-*` masters were cut on 2026-10-01 on one 12-core desktop under Blink, on the same build, so
+All four `raw-*` masters were cut on 2026-10-01 on one desktop (6 cores / 12 threads) under Blink, on the same build, so
 the 2×2 varies only the two things it means to vary: the slab and the light. The pair they replaced
 (`raw-daylight.png`, `raw-uv.png`) came off two different masters from different weeks.
 

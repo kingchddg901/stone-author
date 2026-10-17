@@ -185,7 +185,7 @@ An earlier draft of this paragraph said there was **no instrumented figure for r
 quoted ≈1.4 M px/sec from a stopwatch that included the download notification appearing — arithmetic on a
 guess, disowned by its author. There is now a measured ladder, from the app's own finish line, one width
 after another on the same slab (666 marks · 70 vein lines · 232 cracks · 8,050 specks), scope **Just the
-render**, Chrome 152 on a 12-core Windows desktop:
+render**, Chrome 152 on a Windows desktop, 6 cores / 12 threads:
 
 | width | pixels | time | throughput | path |
 |---|---|---|---|---|
@@ -311,7 +311,7 @@ Gecko and WebKit do not implement it, and Blink builds disagree — the CI Chrom
 desktop one reports 16.
 
 **What is known about anyone else's machine: almost nothing, and one number decides much of it.** The
-Extreme tier has been completed on exactly one machine — 16 GB, 12 cores, Windows — across four browsers.
+Extreme tier has been completed on exactly one machine — 16 GB, 6 cores / 12 threads, Windows — across four browsers.
 The [engine gate](gallery.md#three-engines-one-job) proves the path itself works in Blink, Gecko and
 WebKit, but at 2048 with a forced band height: not at 65535, and not under memory pressure. And
 `stripPlan`'s budget is reduced by `navigator.deviceMemory`, which is a **Chromium-only API**. Measured in

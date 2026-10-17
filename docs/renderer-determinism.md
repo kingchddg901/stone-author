@@ -95,7 +95,7 @@ still inside the band that was confirmed invisible by eye. The verdict rests on 
 the one place it was looked at.
 
 **Which masters.** The x86 side is Chrome on the Windows workstation, the only x86 Blink master in the set
-(12 cores, dpr 1). The ARM side is Chrome on a Galaxy S23 (8 cores, dpr 2). Identify a master by the
+(12 threads, dpr 1). The ARM side is Chrome on a Galaxy S23 (8 cores, dpr 2). Identify a master by the
 `cores` and `dpr` in its own metadata, never by the platform word in its filename: `engineTag()` reports
 the UA platform, and Chrome in desktop-site mode sends `X11; Linux x86_64` from an Android phone — so the
 ARM masters here are named `linux-chrome`, and the token that is false is `x86_64`, not `Linux`.
