@@ -99,6 +99,44 @@ fix a rendering problem; it is a property of glass that happens to sit where the
 are. Below the matching size the output is honest but coarse, which is the correct behaviour for a
 picture too small to hold the detail.
 
+## How pathological a slab has to be
+
+Truncating the op list, and then varying only the last op, at the same tile and the same sizes:
+
+| chain | corr at 1 spp | contrast overstated |
+|---|---|---|
+| first 4 ops | 1.0000 | 1.00 |
+| first 6 ops | 1.0000 | 1.00 |
+| first 7 ops | 0.9994 | 1.00 |
+| **all 8** | **0.0738** | **3.69** |
+
+**It is one operation.** Seven ops render perfectly at one sample per pixel; the eighth — `roll`
+with `a: 2.5` — takes the same tile to 0.074. Not gradual accumulation, a single anisotropic stretch
+tipping an already-fine field past the grid all at once. And it is the magnitude, not the op:
+
+| `roll a` | corr | overstated |
+|---|---|---|
+| 1.5 | 0.9996 | 1.00 |
+| 2.0 | 0.9873 | 1.01 |
+| 2.2 | 0.6618 | 1.66 |
+| 2.5 | 0.0738 | 3.69 |
+
+A **25% increase** in one op's stretch moves it from 0.987 to 0.074. The knee is near `a = 2.1` for
+this chain at 262,144, and that sharpness is the horseshoe: stretch multiplies, so the crossing is
+exponential rather than linear.
+
+Two things follow. **The defect lives in a narrow corner** — a chain has to be both long and finish
+with a hard stretch to reach it, so an ordinary slab never aliases and the floor would never
+activate on one. That is what makes the floor's thin margin tolerable: it is only ever consulted
+where the field has already gone past what the render can carry.
+
+**And it is knowable before anything is rendered.** Cumulative stretch is a property of the op list
+and the render size, not of the pixels, so the studio can say *this chain is finer than — can
+carry* the moment the op is added — for the price of the same two finite differences, and without
+rendering at all. A warning at authoring time is cheaper than any correction at render time, and it
+tells the author the one thing a floor cannot: that the picture they are composing has detail the
+output will never hold.
+
 ## The gate: protect the bands
 
 The floor and supersampling act the same way on the picture — both remove what is below the scale
