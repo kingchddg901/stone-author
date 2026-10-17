@@ -115,6 +115,22 @@ function offenders(src) {
      n + ' inline, plus expClock which ticks and must stay inline');
 }
 
+// ---- the freeze must SURVIVE the next status update --------------------------------------------------
+// THIS FILE WAS GREEN WHILE THE BUG WAS LIVE. Freezing before the dialog is not enough: expStat ends by
+// repainting the clock from the live elapsed, so the figure came back one line after it was set. The
+// clock held 0:00 correctly through a 9.7 s confirm and then read 0:10 the instant the done message
+// landed. No shape check found that - a live render with the confirm deliberately held did - so what is
+// assertable is the guard that makes it impossible, not the behaviour itself.
+{
+  const captures = 'const wasTicking = !!expTick;';
+  const guard = /if \(wasTicking \|\| expTick\) expClock\(\);/;
+  ok('expStat records whether the clock was ticking on the way in', SRC.includes(captures));
+  ok('and repaints only a clock that was running', guard.test(SRC));
+  // Ablation on the predicate itself, since the scan at the top of this file cannot reach this one.
+  const un = SRC.replace(guard, 'expClock();');
+  ok('ablation: dropping that guard is visible from here', un !== SRC && !guard.test(un));
+}
+
 console.log('');
 if (fails) { console.error('check-export-clock: ' + fails + ' FAILED'); process.exit(1); }
 console.log('check-export-clock: the displayed elapsed measures the render, not the person reading');

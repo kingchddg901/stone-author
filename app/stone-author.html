@@ -1771,7 +1771,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.129';
+  const BUILD = '2026.10.17.130';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -10690,13 +10690,20 @@ self.onmessage = async (e) => {
     const w = document.getElementById('expprog'); if (!w) return;
     w.hidden = msg == null;
     if (msg == null) { expT0 = 0; clearInterval(expTick); expTick = null; expClock(); return; }
+    // WAS IT TICKING ON THE WAY IN? A frozen clock holds a figure that is deliberately NOT the live
+    // elapsed - the TIFF path freezes it before the save-confirm, which waits on a person - so the
+    // repaint at the tail must not resurrect it. Measured: the clock held 0:00 correctly through a
+    // 9.7 s dialog and then jumped to 0:10 on the very next expStat, one line after the freeze.
+    const wasTicking = !!expTick;
     if (!expT0) { expT0 = Date.now(); expTick = setInterval(expClock, 500); }   // the clock is the proof of life
     const bad = frac < 0, bar = document.getElementById('expbar'), s = document.getElementById('expstat');
     if (bad) { clearInterval(expTick); expTick = null; }   // stop the clock where it died; leave it showing
     bar.hidden = bad; bar.classList.toggle('busy', frac === null);
     s.textContent = msg; s.classList.toggle('bad', bad);
     if (!bad && frac != null) document.getElementById('expfill').style.width = Math.round(100 * Math.min(1, Math.max(0, frac))) + '%';
-    expClock();
+    // A clock that was already frozen keeps what it was frozen to. One that was running gets repainted,
+    // including on the error path, where that is what pins the time of death rather than a stale tick.
+    if (wasTicking || expTick) expClock();
   }
   // setTimeout, NOT requestAnimationFrame: rAF stops firing when the window is backgrounded, and an
   // export that deadlocks because you looked at something else is worse than one you cannot watch.
