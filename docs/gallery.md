@@ -48,6 +48,34 @@ spectrum the distortion it was always carrying is exposed. Committed PNGs live i
 **1600 × 1000** (the slab keeps its 8×5 ratio). Each slab re-loads into Material Author (Load → the
 `.json`) and re-renders at any size.
 
+### `slabs/disco-glass-fits.json` and `slabs/disco-glass-needs-supersampling.json` — one picture, two tunings
+
+A matched pair, and the reason to keep them together is that nothing about them LOOKS different. Same
+picture, same thirteen moons, both glass. One is tuned until a single sample per pixel is faithful; the
+other is tuned until it is not, and carries `ss: 4` to pay for that.
+
+Measured against a four-times-larger reference, both forced to one sample so the number reports the
+CHAIN's demand rather than its remedy:
+
+| | 16,384 | 65,535 |
+|---|---|---|
+| `disco-glass-fits` | **1.0000** | 0.9937 |
+| `disco-glass-needs-supersampling` | **0.7416** | 0.9827 |
+
+**The second one is not broken, it is sized wrong.** At 65,535 it reads 0.9827 and needs nothing; its
+problem was never the chain alone but the chain at 16,384. That is the whole point of the pair: the
+chaos limit is a property of a chain AND a size, and the same slab crosses it by being rendered
+smaller.
+
+What closed the gap in the first one is legible in the diff, and it is the free lever rather than the
+paid one: stirs two and three pulled back from moons 1-12 to 1-11, stir four given only the newly drawn
+moon 13 instead of 10-12, and a final `blow 0.8` to spread what was left. No supersampling and no
+larger render — narrower drags and one spreading op.
+
+Neither carries a device seal, so neither says anything about the machine that authored it. See
+[`filament-floor.md`](filament-floor.md) for why glass does this at all and
+[`stir-fields.md`](stir-fields.md) for why narrowing a stir is free.
+
 ### The four master downsamples — in `img/`, but not harness output
 
 `gallery/img/` also carries four images the harness does **not** render and `reference.json` does **not**
