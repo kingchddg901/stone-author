@@ -887,10 +887,10 @@ it reports the size asked for and leaves the far end unwritten. See
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
   family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(9304)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(11661)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(11664)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(11686)*
+  actually on offer, not a probe's answer to a different question. *(11689)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(11759)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(13073)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(11762)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(13076)*

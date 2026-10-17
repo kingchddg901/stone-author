@@ -42,6 +42,19 @@ ok('it refuses without a size', /!\(W > 0\)/.test(body));
 ok('and all three refusals share one guard, so none can be added without the others',
    /if \(currentMaterial\(\)[^\n]*exporting[^\n]*W > 0\)/.test(body));
 
+// EVERY WAY THE FIELD CHANGES HAS TO REACH IT. drawOps reruns only on add, remove and reorder, so
+// hanging the check there alone left a slider drag showing the PREVIOUS answer - and the magnitude is
+// exactly what decides it: the reference chain reads 0.987 at roll 2.0 and 0.074 at 2.5. A stale
+// number is worse than no number, and this is the assertion that was missing when that shipped.
+{
+  const opSl = SRC.match(/sl\.addEventListener\('input', \(\) => \{ op\.a = .*\}\);/);
+  ok('the op MAGNITUDE slider retriggers the check', !!opSl && /carryLater\(\)/.test(opSl[0]));
+  const glSl = SRC.match(/el\.addEventListener\('input', \(\) => \{ GLASS\[k\] = .*\}\);/);
+  ok('and so do the glass parameter sliders', !!glSl && /carryLater\(\)/.test(glSl[0]));
+  const dOps = SRC.slice(SRC.indexOf('function drawOps()'), SRC.indexOf('function drawOps()') + 1800);
+  ok('as does the list itself, on add, remove and reorder', /carryLater\(\);/.test(dOps));
+}
+
 {
   const d = SRC.match(/function carryLater\(\)[\s\S]{0,220}?setTimeout\(([\s\S]{0,60}?),\s*(\d+)\s*\)/);
   ok('a slider does not fire it on every pixel - it is debounced', !!d, d ? d[2] + ' ms' : 'no debounce');
