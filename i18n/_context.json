@@ -1410,6 +1410,22 @@
   ],
   "where": "accessible name: remove this operation from the list"
  },
+ "a11y.op-copy": {
+  "where": "Button in the glass op list, beside the up/down/remove arrows.",
+  "note": "Adds a copy of the op with its amount and centre nudged, so the copy is a different map rather than a repeat."
+ },
+ "op.f.cx": {
+  "where": "The glass op list. \"across\"/\"down\" are the centre the op turns or spreads about; \"axis\" is the direction a roll stretches along.",
+  "note": "Tiny field label under an op row. Abbreviate freely - the column is about 40px."
+ },
+ "op.f.cy": {
+  "where": "The glass op list. \"across\"/\"down\" are the centre the op turns or spreads about; \"axis\" is the direction a roll stretches along.",
+  "note": "Tiny field label under an op row. Abbreviate freely."
+ },
+ "op.f.d": {
+  "where": "The glass op list. \"across\"/\"down\" are the centre the op turns or spreads about; \"axis\" is the direction a roll stretches along.",
+  "note": "Tiny field label, degrees. The degree sign is part of the string."
+ },
  "glass.carry-busy": {
   "note": "Shown for a second while two test renders run.",
   "where": "The glass op list, under the Spin/Blow/Roll/Stir buttons. Appears after the list changes."
