@@ -145,6 +145,11 @@ time the path curved. Measured on a *curving* pass: across spreads the bite 0.25
 
 ## Open
 
+- **Every stir applies the same field.** `glassWarp` sums all twelve of the reference slab's moons
+  into one lattice and all three stirs read it, so a chain with three stirs drags the sheet through
+  one displacement three times. Each stir costs about a third of the remaining headroom and a fourth
+  falls off a cliff (0.9604 to 0.6573), while a quarter of the moons alone measures 0.992-0.999 — so
+  splitting them would buy variety and spend less. See [`stir-fields.md`](stir-fields.md).
 - **The field aliases at one sample per pixel, and in places it aliases completely.** The op
   chain is a stretch-and-fold, so the ribbon boundaries go below every pixel; the field holds a
   label, so nothing can filter it where it is sampled. Measured on one slab: a flow band renders
