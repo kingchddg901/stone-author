@@ -121,6 +121,31 @@ Called at `(ox, oy)`, `(ox+ε, oy)` and `(ox, oy+ε)` — the third and second a
 gradient** `gu, gv`, used only for shading. So two of the three calls exist to light the surface, not
 to measure it.
 
+**Measured, 1024 tile, 5 reps interleaved, reference drift −2.2%:**
+
+| | |
+|---|---|
+| baseline | 1,398 ms |
+| + the two gradient calls | 1,788 ms → **they cost 390 ms** |
+| + one extra base call | 1,587 ms → **one `formT` costs 189 ms** |
+
+The two cross-check: 2 × 189 = 378 against 390 measured, 3.2% apart. All three calls are **40.6%** of
+that tile; the gradient pair alone is **27.9%**. Scaled per-pixel to a 4096 tile — it is pure
+per-pixel work — the gradient is about **6.2 s of a 16.9 s tile, 36.5%**, or roughly three minutes of
+an 8:18 master.
+
+**An analytic gradient is available and would collapse three calls into one.** `vnoise` interpolates
+with a smoothstep, `sx = tx²(3−2tx)`, whose derivative `6tx(1−tx)` is closed-form — and value and
+both partials share the *same four corner hashes*, which are the expensive part. Twelve hashes
+instead of thirty-six.
+
+It is **not bit-exact**: a closed-form gradient and a finite difference at ε = 0.004 are close, not
+equal, so no existing master would reproduce. Note where it lands, though — the gradient feeds only
+`sl` in the shading multiplier below. It never touches a coordinate and never touches the ribbon
+label, so it shifts shading by a fraction of a level rather than moving anything across a boundary.
+That is a different class of change from the spin identity in §2, which moves coordinates and would
+jump pixels by up to 130 levels.
+
 ---
 
 ## 5. What is in the melt — `glassMelt`
