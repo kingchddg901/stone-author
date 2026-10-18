@@ -1803,7 +1803,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.146';
+  const BUILD = '2026.10.17.147';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4944,11 +4944,31 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // the glass comes back unformed, which is a silent wrong picture rather than a throw.
     s += `var OPK={spin:1,blow:2,roll:3,press:4,stir:5};\n`;
     s += `var _wkF=new Float64Array(1),_wkI=new Int32Array(_wkF.buffer);\n`;
+    // DECLARED, not assigned into existence. The init handler creates these four, but an assignment
+    // with no `var` makes an implicit global - which works in sloppy mode and would stop working the
+    // day this source is evaluated as a module or under 'use strict'. Declaring them also lets
+    // check-worker-core SEE them: it reads declarations, and it was right to keep reporting spC and
+    // mmC as unresolved while they only ever existed as bare assignments.
+    s += `var ssC,lensC,spC,mmC;
+`;
     s += `var ensureClouds=()=>__cl,ensureBands=()=>__bd,ensureBreccia=()=>__br;\n`;
+    // EVERY SCRATCH CANVAS applyCoat TOUCHES, declared here or the worker throws on the branch that
+    // reaches it. ssC and lensC were here; spC (the specular pass) and mmC (the metal mask) were not,
+    // and both appear in applyCoat's serialised body.
+    //
+    // THE TRIGGER IS A METAL LAYER, not the specular slider - checked rather than assumed, because
+    // the first guess was wrong. applyCoat's `pass` returns early when there is no mask, and the mask
+    // exists only when MM does, and MM is mmC, set in the metal branch. A specular render with no
+    // metal layer takes the unmasked path and never touches either canvas, which is why a pooled
+    // render at specular 0.6 came back fine on the build without this fix. Every slab written so far
+    // takes that branch; the first one with a metal layer rendered through the pool would not.
+    //
+    // check-worker-core had been listing both as unresolved the whole time. What was missing was
+    // anything that read the list.
     s += `var document={createElement:()=>new OffscreenCanvas(1,1)};\n`;
     for (const n in fns) s += `var ${n}=${fns[n].toString()};\n`;
     s += `self.onmessage=function(e){var d=e.data;\n`;
-    s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
+    s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
     // THE ACK IS THE ONLY WAY TO TELL A QUEUE FROM A STALL. A bitmap arriving late can mean the
     // worker painted for a minute or that it sat holding a message it had not been scheduled to
     // read, and the completion time cannot distinguish them. Posted from the top of the handler,

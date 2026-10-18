@@ -75,8 +75,6 @@ const DECLARED = {
   BLOOM_DRAW:  'unreviewed - HIGHEST RISK of this group. applyCoat reads it inside the uvMode branch (gated), but fxOn, paintSpecksLayer and paintVeinLayer read it on their glow branches, which are not',
   glowPx:      'unreviewed - with BLOOM_DRAW, and harder: it is set per tile from the blur scale, so it cannot be emitted as a constant',
   UV_LIFT:     'unreviewed - applyCoat, uvMode branch only, so gated with blurDraw',
-  mmC:         'unreviewed - applyCoat, the metal-mask canvas; reached when a slab has a metal layer',
-  spC:         'unreviewed - applyCoat, the specular canvas; reached when gloss is above zero',
   crossOn:     'unreviewed - emit, the crossfade branch',
   crossA:      'unreviewed - emit, same branch',
   crossB:      'unreviewed - emit, same branch',
