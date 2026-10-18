@@ -53,6 +53,12 @@ const hook = `
     get G() { return G; }, get OVR_uv() { return OVR_uv; },
     get marks() { return marks; }, set marks(v) { marks = v; },
     get layers() { return layers; },
+    // THE DERIVED GEOMETRY AND THE LIGHT, read-only. A UV comparison that finds two identical
+    // tiles has proved nothing if the lines it was comparing were never built - deserialize
+    // restores MARKS, build() turns them into lines, and the light resets to daylight on load.
+    // Without these a blank render and a correct one are the same observation.
+    get geo() { return geo; },
+    get light() { return { uvMode, lightSpectrum, spotOn, crossOn, spotR: G.spotR, lightX: G.lightX, lightY: G.lightY }; },
   };
 `;
 const idx = s.lastIndexOf('})();');

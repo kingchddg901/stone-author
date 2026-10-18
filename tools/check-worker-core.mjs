@@ -33,7 +33,29 @@ const fnsAt = SRC.indexOf('const fns = {');
 if (fnsAt < 0) { console.error('could not find the worker core function list'); process.exit(2); }
 const listed = [...new Set(SRC.slice(fnsAt + 13, SRC.indexOf('};', fnsAt))
   .split(/[,\s]+/).map(s => s.trim()).filter(s => /^[A-Za-z_$][\w$]*$/.test(s)))];
-const preamble = SRC.slice(SRC.indexOf('let s = `var H=', fnsAt), SRC.indexOf('self.onmessage', fnsAt));
+// A SECOND WAY IN, and it is not a loophole. A name declared BELOW renderCoreSrc cannot be written
+// into the literal above without opening a temporal dead zone, which check-bleed refuses by name -
+// glowLift is a const arrow some seven thousand lines further down. The app's answer is the one its
+// own comment describes: a hoisted function declaration, called from up there, resolving against the
+// live binding at call time. So `Object.assign(fns, glowFns())` carries whatever glowFns returns,
+// and this reads that function's body to find out what that is. Anything carried this way is as
+// carried as anything in the literal; missing it would report real names as unresolved forever.
+for (const m of SRC.matchAll(/Object\.assign\(fns, (\w+)\(\)\)/g)) {
+  const body = bodyOf(m[1]);
+  if (!body) continue;
+  const ret = body.match(/return \{([^}]*)\}/);
+  if (ret) for (const n of ret[1].split(/[,\s]+/).map(x => x.trim()).filter(x => /^[A-Za-z_$][\w$]*$/.test(x)))
+    if (!listed.includes(n)) listed.push(n);
+}
+let preamble = SRC.slice(SRC.indexOf('let s = `var H=', fnsAt), SRC.indexOf('self.onmessage', fnsAt));
+// AND THE PREAMBLE CAN BE BUILT IN PIECES, for the same dead-zone reason the fns list can. A line
+// that reads `s += glowPreamble();` emits declarations this scan would otherwise never see, and the
+// names in them would be reported unresolved for ever. Inline the called function's body before
+// scanning, so a `var` written there counts exactly as one written inline.
+for (const m of preamble.matchAll(/s \+= (\w+)\(\);/g)) {
+  const body = bodyOf(m[1]);
+  if (body) preamble += String.fromCharCode(10) + body;
+}
 const carried = new Set(listed);
 for (const m of preamble.matchAll(/var ([A-Za-z_$][\w$,]*)/g))
   for (const n of m[1].split(',')) if (n) carried.add(n);

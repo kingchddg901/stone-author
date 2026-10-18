@@ -70,3 +70,5 @@ jobs:
         run: node harness/floor.mjs
       - name: The signature that describes a render covers the light
         run: node harness/signature.mjs
+      - name: A pooled tile matches the sequential one under black light
+        run: node harness/uv-pool.mjs --ablate=all

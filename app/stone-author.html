@@ -1803,7 +1803,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.147';
+  const BUILD = '2026.10.18.149';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4899,6 +4899,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // is the whole point of it, and is also why the key has to travel with the function rather than
       // be stubbed out here.
       warpCacheKey,
+      // blurDraw and pyramidBlur are function declarations above this point, so they can be named
+      // here; the glow trio cannot, and arrives through glowFns() below.
+      blurDraw, pyramidBlur,
       // compileOps turns the op list into records the per-pixel walk can read without a string
       // compare or a coercion. OPK is the kind table it reads; both travel or the core throws on
       // its first glass pixel.
@@ -4917,6 +4920,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       fbm2, woodAtan2, groundCol, surfaceGloss, woodEye, woodStain, specRGB, drawLayerArtifacts,
       resample, smoothPath, handRoute, pathLen, segD, tangent, roughen, lineGeom, curvature, sinuate,
       vnoise, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
+    // THE GLOW TRIO ARRIVES SEPARATELY, and not for tidiness. liftCol is a function declaration and
+    // emitCross is declared up at the top, so both could be named in the literal above - glowLift is a
+    // const arrow seven thousand lines below it, and naming it there is a temporal dead zone that
+    // check-bleed refuses by name. glowFns() is hoisted, so it can be called from here and resolves
+    // against the live binding at call time. check-worker-core reads this line too.
+    Object.assign(fns, glowFns());
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
     s += `var WOOD=${JSON.stringify(WOOD)},LOG_FIT=${LOG_FIT};\n`;
     // THE UNITS THE WOOD SAMPLER MEASURES IN. Constants, not functions, which is exactly why they
@@ -4949,6 +4958,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // day this source is evaluated as a module or under 'use strict'. Declaring them also lets
     // check-worker-core SEE them: it reads declarations, and it was right to keep reporting spC and
     // mmC as unresolved while they only ever existed as bare assignments.
+    // UV_GROUND, because the worker was filling UV_DARK where renderOneTile fills UV_GROUND. The two
+    // differ by exactly rgb(10,10,14) - UV_DARK itself - and the coat then adds the same amount on
+    // top of both, so an empty pooled UV tile came back at rgb(29,29,41) against rgb(19,19,27).
+    //
+    // This is ONE of the two faults the !uvMode gate was hiding, and fixing it alone still left 95%
+    // of a lit tile wrong: see glowPx further down. Saying so here because the arithmetic above
+    // closes exactly, which made it look like the whole answer, and it was not.
+    s += `var UV_GROUND=${JSON.stringify(UV_GROUND)};
+`;
+    s += glowPreamble();                                     // BLOOM_DRAW, the glow knobs, UV_LIFT
+    s += `var liftCv=new OffscreenCanvas(1,1),PYR_W=[0.5,0.3,0.2],COAT_REF=1000;
+`;
+    s += `var liftMap=new Map(),liftCached=-1,glowKnob=null,glowPx=0;
+`;
+    s += `var crossOn=false,crossA=-1,crossB=0,crossT=0;
+`;
+    s += `var CAN_FILTER=(()=>{try{const c=new OffscreenCanvas(32,32),x=c.getContext('2d');`;
+    s += `if(!x||!('filter' in x))return false;x.fillStyle='#fff';x.fillRect(12,12,8,8);`;
+    s += `x.filter='blur(4px)';x.drawImage(c,0,0);x.filter='none';`;
+    s += `return x.getImageData(24,16,1,1).data[3]>=8;}catch(e){return false}})();
+`;
     s += `var ssC,lensC,spC,mmC;
 `;
     s += `var ensureClouds=()=>__cl,ensureBands=()=>__bd,ensureBreccia=()=>__br;\n`;
@@ -4976,8 +5006,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // one empty message per tile - no transfer, no copy - and BOTH consumers of this core must
     // ignore it or they will treat it as the tile.
     s += `if(d.i!==undefined)self.postMessage({type:'ack',i:d.i});\n`;
+    // THE GLOW RADIUS, which every main-thread render path sets on entry and this one did not.
+    // glowPx is declared 0 in the preamble above and was never written, so the worker took the
+    // other side of two branches at once: paintVeinLayer's `glowPx > 0` refused to draw the halo,
+    // and applyCoat's `!(BLOOM_DRAW && glowPx > 0)` then ran the two blur passes that exist only
+    // for an engine with no drawn halo. Daylight never noticed - both branches sit inside uvMode -
+    // so a pooled UV tile differed from the sequential one across 95% of its pixels, by up to 159
+    // levels, while every daylight tile stayed bit-exact. Same expression, same bs, as line 4810.
+    s += `glowPx=BLOOM_DRAW?16*d.bs:0;\n`;
     s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
-    s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_DARK;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
+    s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_GROUND;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
     s += `paintContent(false,false);\n`;
     s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:false,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
@@ -12550,6 +12588,20 @@ self.onmessage = async (e) => {
     : glowKnob !== null ? glowKnob
     : !CAN_FILTER ? WEBKIT_LIFT
     : GLOW_AUTO ? Math.max(0, Math.min(1, IS_GECKO ? glowPx * 0.000692 + 0.054 : glowPx * 0.00065 - 0.07)) : GLOW_SET;
+  // THE WORKER'S SHARE OF THE GLOW, BUILT WHERE THE GLOW IS LEGAL TO READ - the same device the PNG
+  // metadata uses just below, and for the same reason. renderCoreSrc sits ~7,600 lines above these
+  // constants, so it cannot name GLOW_SET or IS_GECKO or glowLift without opening a temporal dead
+  // zone, which check-bleed refuses on the bare identifier. A function declaration is hoisted, so
+  // renderCoreSrc can call these from up there and they resolve against the live values at call time.
+  //
+  // This is the alternative to relaxing that rule. The rule was written after two dead zones landed
+  // in one evening, and it is doing its job; the escape hatch is the one the comment below describes.
+  function glowFns() { return { liftCol, glowLift, emitCross }; }
+  function glowPreamble() {
+    return 'var BLOOM_DRAW=' + BLOOM_DRAW + ',GLOW_AUTO=' + GLOW_AUTO + ',GLOW_SET=' + GLOW_SET +
+           ',IS_GECKO=' + IS_GECKO + ',WEBKIT_LIFT=' + WEBKIT_LIFT + ';' + String.fromCharCode(10) +
+           'var GLOW_RAW=' + JSON.stringify(GLOW_RAW) + ',UV_LIFT=' + JSON.stringify(UV_LIFT) + ';' + String.fromCharCode(10);
+  }
   /* THE PNG PATHS' METADATA, BUILT WHERE THE GLOW IS LEGAL TO READ.
      The lift is a const arrow declared just above, so anything textually earlier than it is a temporal
      dead zone — check-bleed enforces that on the bare identifier, which means a PNG export up at line
@@ -13030,7 +13082,17 @@ self.onmessage = async (e) => {
   // SECTIONS - a whole slab each - and the worker is handed marks, geo, G and COL and nothing else.
   // Shipping eight slabs to eight workers to paint one branch is not the trade; refusing the pool is.
   // Silently dropping the scion would be worse than either: right size, right name, wrong tree.
-  const corePaintsThis = () => !uvMode && !layTiles && !(WOOD.graft > 0) && !(!layTiles && G.backlight > 0) &&
+  // UV IS NO LONGER REFUSED. The clause was not protecting against something the core cannot do - it
+  // was hiding two bugs, and a gate cannot find a bug in a branch that never runs:
+  //
+  //   the GROUND  - the worker filled UV_DARK where renderOneTile fills UV_GROUND, so an empty
+  //                 pooled tile came back brighter by exactly rgb(10,10,14), UV_DARK itself;
+  //   the GLOW    - glowPx was declared 0 in the worker and never written, so it drew no halo AND
+  //                 ran the blur passes that stand in for one. 95% of a lit tile, up to 159 levels.
+  //
+  // With both fixed and the emission path carried, the core paints the same UV tile the main thread
+  // does, bit for bit. harness/uv-pool.mjs holds the comparison and the ablation for each fault.
+  const corePaintsThis = () => !layTiles && !(WOOD.graft > 0) && !(!layTiles && G.backlight > 0) &&
     !gatherMasks().some(w => w.show != null) &&
     typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
   let EXP_FORCE_SEQ = false;                               // the differential test flips this
