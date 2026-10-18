@@ -6834,13 +6834,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // ribbon boundaries, so the key hashes the IEEE bits. A false MISS costs one rebuild; a false HIT
   // is a wrong picture, which is why nothing here is rounded or truncated.
   const _wkF = new Float64Array(1), _wkI = new Int32Array(_wkF.buffer);
-  // A PROPERTY, NOT A BINDING, AND THAT IS A MEASUREMENT. Written first as `let _warpMemo = null`,
-  // assigned from inside paintGlassContent. V8 context-allocates a module-scope binding that an inner
-  // function writes, and that deoptimised the whole painter: the SAME memo, the same output hash
-  // 1b55d053, cost 46,941 ms for a 4096 tile against 28,048 ms with no memo at all - a twenty-second
-  // regression on the thing the change existed to speed up. Held on a const object's property instead
-  // it reads 25,503 ms. One keyword, invisible to every correctness test, and only a timing harness
-  // on the real tile size would ever have shown it.
+  // A PROPERTY RATHER THAN A BINDING, AND NO LONGER FOR THE REASON FIRST RECORDED HERE.
+  //
+  // This said a `let _warpMemo` written from inside paintGlassContent context-allocates in V8 and
+  // deoptimised the painter, costing 46,941 ms against 25,503 for a 4096 tile. That was wrong. Both
+  // spellings measure the same on a fresh renderer - 15,912 / 15,703 / 16,760 for the binding against
+  // 15,648 for the property - and the 47 second readings were accumulated Chrome renderer state from
+  // repeated page loads in one benching session, not the keyword.
+  //
+  // THE REAL LESSON IS ABOUT THE INSTRUMENT. The same build, unchanged, measured 34,782 / 35,775 /
+  // 35,769 late in a session and 15,648 immediately after closing the tab and opening a fresh one.
+  // A bench with no control for its own degradation will attribute that to whatever was edited last.
+  // tools/bench-control.mjs exists so a session says whether its renderer is still trustworthy.
+  //
+  // The property form stays because it is already here and reads no worse, not because it is faster.
   const _WM = { m: null };
   function warpCacheKey(H, moons, OPS) {
     let h = 0x811c9dc5 >>> 0;

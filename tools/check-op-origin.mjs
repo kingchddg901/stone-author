@@ -200,19 +200,17 @@ ok('glassUnform is where it was', at > 0);
   ok('and hashes the IEEE bits rather than a decimal rendering', /_wkF\[0\] = \+v \|\| 0;/.test(key) &&
      /_wkI\[0\]/.test(key) && /_wkI\[1\]/.test(key));
 
-  // THE MEMO LIVES ON A PROPERTY, NOT IN A REBINDABLE BINDING, and that is a measurement rather than
-  // a style. Held as `let _warpMemo` - written from inside paintGlassContent - V8 context-allocates
-  // the binding and deoptimises the whole painter: the SAME memo, same output hash 1b55d053, took
-  // 46,941 ms for a 4096 tile against 25,503 ms on a const object's property, with the baseline at
-  // 28,048. A 20-second regression bought by one keyword, invisible to every correctness test.
-  ok('the memo is a property of a const, not a captured let', /const _WM = \{ m: null \}/.test(SRC));
-  ok('nothing rebinds it', !/\b_WM =/.test(SRC.replace(/const _WM = /g, '')));
-  // ABLATION: the obvious spelling is the slow one, so this has to be able to see it.
-  {
-    const asLet = SRC.replace('const _WM = { m: null };', 'let _warpMemo = null;');
-    ok('ablation: turning it back into a let is visible from here',
-       asLet !== SRC && !/const _WM = \{ m: null \}/.test(asLet));
-  }
+  // A STYLE RULE WITH NO MEASUREMENT BEHIND IT IS NOT A GATE. This asserted that the memo must live
+  // on a const object's property rather than in a `let`, on the strength of a 20-second difference
+  // that turned out to be the benching renderer degrading across page loads - both spellings measure
+  // the same on a fresh one. The assertion and its ablation are gone rather than rephrased: they
+  // could only ever have enforced a preference, and a claim that cannot fail for the reason it gives
+  // is worse than no claim.
+  //
+  // What is still worth asserting is that ONE memo exists and nothing rebinds it mid-render, which is
+  // a correctness property rather than a performance one.
+  ok('the memo has a single home', /const _WM = \{ m: null \}/.test(SRC));
+  ok('and nothing rebinds it', !SRC.replace('const _WM = ', '').includes('_WM ='));
   ok('and the worker carries its own, so no invalidation crosses the wire',
      /var marks=\[\],_wmask=null,_WM=\{m:null\};/.test(SRC));
 }
