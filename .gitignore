@@ -32,3 +32,6 @@ rosette.png
 
 # A stray on Windows: a redirect that names the reserved device creates a real file here.
 nul
+
+# scratch for one-off analysis runs; regenerate, never commit
+.tmp/
