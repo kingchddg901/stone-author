@@ -252,6 +252,78 @@ ok('the three verdicts are genuinely different strings',
   ok('           calling it noise rather than a result', /made no difference at all/.test(fakeOut));
 }
 
+// ---- THINNING A PERIOD-W SIGNAL, which is where the obvious answer is the wrong one --------------
+// A long render cannot carry a row per pass, so rows are thinned. Thin by keeping every Nth pass and
+// the stride beats against the period: one pass in W carries the batch's paint, so a stride that
+// shares a factor with W keeps only fast passes or only slow ones. The trace then shows a render with
+// no waits in it at all - clean, confident and false.
+//
+// Keeping RUNS of W consecutive passes cannot do that: any W consecutive passes span exactly one
+// period whatever the alignment. This measures both on a 10,240-pass render carrying the real
+// dispatch rule, and the numbers are the argument.
+{
+  const N = 10240, WW = 8, Tp = 34000, Dp = 400, CAP = 4096;
+  const disp = [], fn = [], wr = [], pm = [];
+  disp[0] = 0; fn[0] = Tp; wr[0] = Tp + Dp; pm.push(Math.round(wr[0]));
+  for (let n = 1; n < N; n++) {
+    disp[n] = n <= WW ? fn[0] : wr[n - WW];
+    fn[n] = disp[n] + Tp;
+    const prev = wr[n - 1];
+    wr[n] = Math.max(fn[n], prev) + Dp;
+    pm.push(Math.round(wr[n] - prev));
+  }
+  const med = [...pm].sort((a, b) => a - b)[N >> 1];
+  const isSpike = n => pm[n] > med * 3;
+  const trueRatio = pm.filter((_, n) => isSpike(n)).length / N;
+
+  // The stride each strategy settles on for the same row budget, by the same doubling.
+  const strideFor = (unit) => { let e = 1; while (Math.ceil(N / unit / e) * unit > CAP) e *= 2; return e; };
+  const runEvery = strideFor(WW), passEvery = strideFor(1);
+  const keptRun = [], keptPass = [];
+  for (let n = 0; n < N; n++) {
+    if (Math.floor(n / WW) % runEvery === 0) keptRun.push(n);
+    if (Math.floor(n / 1) % passEvery === 0) keptPass.push(n);
+  }
+  const ratio = a => a.filter(isSpike).length / a.length;
+
+  ok('the render carries a real period-' + WW + ' pattern to thin',
+     Math.abs(trueRatio - 1 / WW) < 0.01, (100 * trueRatio).toFixed(1) + '% of passes are waits');
+  ok('both strategies keep a comparable number of rows',
+     Math.abs(keptRun.length - keptPass.length) < CAP,
+     'runs ' + keptRun.length + ' (every ' + runEvery + '), per-pass ' + keptPass.length + ' (every ' + passEvery + ')');
+
+  // THE MEASUREMENT. Runs preserve the ratio; the stride annihilates it.
+  ok('runs preserve the wait ratio', Math.abs(ratio(keptRun) - trueRatio) < 0.01,
+     (100 * ratio(keptRun)).toFixed(1) + '% against a true ' + (100 * trueRatio).toFixed(1) + '%');
+  ok('ablation: thinning per pass ALIASES it away entirely', ratio(keptPass) < trueRatio / 50,
+     (100 * ratio(keptPass)).toFixed(2) + '% against a true ' + (100 * trueRatio).toFixed(1) +
+     '% - a ' + Math.round(trueRatio / Math.max(ratio(keptPass), 1e-9)) + 'x collapse, and nothing would say so');
+
+  // AND THE CONSEQUENCE, through the real reader rather than asserted.
+  const build = (kept, every, run, name) => {
+    const i = [], d = [], q = [], r = [], dw = [], w = [], k = [], bF = [];
+    for (const n of kept) {
+      i.push(n); d.push(Math.round(disp[n])); q.push(2); r.push(Tp);
+      dw.push(Math.max(0, Math.round(wr[n] - Dp - fn[n]))); w.push(Dp); k.push(n % WW); bF.push(WW);
+    }
+    return write({ tool: 'stone-author', build: 'probe', slab: name, material: 'glass',
+      w: 1048576, h: 655360, render: 8192, tile: 4096, tiles: N, renders: N, workers: WW,
+      ms: { render: wr[N - 1], total: wr[N - 1] }, perTile: { ms: pm, bytes: pm.map(() => 6e5) },
+      trace: { t0: 0, tick: 8000, busy: new Array(2000).fill(WW), target: WW,
+               i, d, q, r, dw, w, k, bD: bF, bS: bF, bF, rows: i.length, run, every,
+               capped: every > 1 || undefined } }, name + '.json');
+  };
+  const outRun = execFileSync(process.execPath, ['tools/pool-trace.mjs', build(keptRun, runEvery, WW, 'thin-run')], { encoding: 'utf8' });
+  const outPass = execFileSync(process.execPath, ['tools/pool-trace.mjs', build(keptPass, passEvery, 1, 'thin-pass')], { encoding: 'utf8' });
+  ok('the run-thinned trace still reaches the RIGHT verdict', /VERDICT: SATURATED/.test(outRun),
+     (outRun.match(/VERDICT: \w+/) || [''])[0]);
+  ok('and says it is a sample rather than the whole render', /kept as runs of 8 every /.test(outRun),
+     (outRun.split('\n').find(l => /rows: /.test(l)) || '').trim());
+  ok('ablation: the pass-thinned one has no waits left to read',
+     /NO VERDICT/.test(outPass), (outPass.split('\n').find(l => /NO VERDICT/.test(l)) || 'it reached one anyway').trim());
+  ok('           and says so instead of reporting a quiet pool', /cannot read a verdict from/.test(outPass));
+}
+
 console.log('');
 if (fails) { console.error('probe-pool-trace: ' + fails + ' FAILED'); process.exit(1); }
 console.log('probe-pool-trace: two worlds with one completion log, told apart by the paint intervals -');

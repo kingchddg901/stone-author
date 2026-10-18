@@ -107,6 +107,90 @@ const POOL = SRC.slice(SRC.indexOf('const start = (idx) => {'), SRC.indexOf('   
   ok('           and that ablation is otherwise sound, so the two tests are independent', uniform(B));
 }
 
+// ---- the rows are kept in RUNS, because the signal is period-W -----------------------------------
+// Everything this trace is read for is period-W: one pass in W carries the batch's paint and the rest
+// read as the write cost. Thin by keeping every Nth pass and you lock onto one phase and get a
+// constant - all spikes or none - and the result looks clean while being wrong, which is worse than
+// the old behaviour of simply stopping at the cap. A run of W CONSECUTIVE passes spans exactly one
+// period whatever its alignment, so it cannot be in phase with the pattern. probe-pool-trace shows
+// the aliasing happening.
+{
+  const dec = SRC.slice(SRC.indexOf('const TRACE_ROWS = 4096;'), SRC.indexOf('ptTimer = setInterval'));
+  ok('rows are kept by run, not by modulo on the pass index',
+     /Math\.floor\(n \/ TRACE_RUN\) % trEvery === 0/.test(SRC));
+  ok('the run length is the pool width, not a literal', /TRACE_RUN = Math\.max\(1, pool\.planned \|\| 1\)/.test(SRC));
+
+  // THE BUG THIS ALREADY CAUGHT ONCE. `pool` is assigned below the trace declarations, so reading it
+  // at the declaration yields a run of ONE - every Nth pass, the exact aliasing the run prevents.
+  const declAt = SRC.indexOf('let TRACE_RUN = 1, trEvery = 1;');
+  const setAt = SRC.indexOf('TRACE_RUN = Math.max(1, pool.planned || 1);');
+  const poolAt = SRC.indexOf('pool = layTiles ? null : await tilePool');
+  ok('TRACE_RUN is declared without reading the pool', declAt > 0);
+  ok('and set only AFTER the pool exists', poolAt > 0 && setAt > poolAt,
+     'pool@' + poolAt + ' set@' + setAt);
+
+  ok('thinning widens the stride and drops whole runs', /if \(Math\.floor\(trI\[x\] \/ TRACE_RUN\) % trEvery\) continue;/.test(dec));
+  ok('it fires when the rows fill', /if \(trI\.length >= TRACE_ROWS\) traceThin\(\);/.test(SRC));
+  ok('every parallel array is thinned together, or the rows misalign',
+     (dec.match(/trI\[w\] = trI\[x\]/g) || []).length === 1 &&
+     /trBF\[w\] = trBF\[x\]/.test(dec) && /trBF\.length = w/.test(dec));
+
+  // RUN ZERO HOLDS PASS 0, which is the solo baseline and the control for every two-render comparison.
+  // `0 % anything === 0`, so it survives every doubling - asserted because losing it silently would
+  // cost the control rather than resolution.
+  ok('run zero survives every stride, so pass 0 is never dropped', 0 % 8 === 0 && 0 % 4096 === 0);
+
+  // ABLATION: the naive spelling is one character shorter and silently destroys the signal, so this
+  // has to be able to see it. probe-pool-trace measures what it destroys.
+  {
+    const naive = SRC.replace('Math.floor(n / TRACE_RUN) % trEvery === 0', 'n % trEvery === 0');
+    ok('ablation: thinning by pass instead of by run is visible from here',
+       naive !== SRC && !/Math\.floor\(n \/ TRACE_RUN\) % trEvery === 0/.test(naive));
+  }
+
+  // AND THE THINNING IS RUN, NOT READ. Ten parallel arrays rewritten in place: miss one and the rows
+  // misalign, so pass 41's paint sits beside pass 97's worker id and every figure downstream is a
+  // quiet lie. A text match cannot see that; executing it can.
+  {
+    const fnSrc = SRC.match(/const traceThin = \(\) => \{[\s\S]*?\n      \};/);
+    ok('traceThin is extractable, so this runs the REAL one', !!fnSrc);
+    if (fnSrc) {
+      const RUN = 8, N = 4096 * 3;
+      const mk = () => Array.from({ length: N }, (_, x) => x);
+      const A = { trI: mk(), trD: mk(), trQ: mk(), trR: mk(), trDw: mk(),
+                  trW: mk(), trK: mk(), trBD: mk(), trBS: mk(), trBF: mk() };
+      const body = fnSrc[0].replace('const traceThin = () =>', 'return () =>').replace(/;$/, '');
+      const f = new Function('TRACE_RUN', 'ctx', 'st',
+        'const {trI,trD,trQ,trR,trDw,trW,trK,trBD,trBS,trBF} = ctx; let trEvery = st.e;' +
+        body.replace('trEvery *= 2;', 'trEvery = (st.e *= 2);'));
+      const st = { e: 1 };
+      f(RUN, A, st)();
+      const names = Object.keys(A);
+      ok('every array comes back the same length', new Set(names.map(k => A[k].length)).size === 1,
+         names.map(k => A[k].length)[0] + ' rows from ' + N);
+      ok('and they still agree row for row - no array was forgotten',
+         names.every(k => A[k].every((v, x) => v === A.trI[x])));
+      ok('it kept whole runs, not scattered passes',
+         A.trI.every(v => Math.floor(v / RUN) % st.e === 0), 'stride now ' + st.e);
+      ok('run zero survived, so pass 0 is still there', A.trI[0] === 0);
+      // ABLATION: drop one array from the rewrite and the agreement check has to catch it.
+      const broken = fnSrc[0].replace('trBS[w] = trBS[x];', '');
+      const g = new Function('TRACE_RUN', 'ctx', 'st',
+        'const {trI,trD,trQ,trR,trDw,trW,trK,trBD,trBS,trBF} = ctx; let trEvery = st.e;' +
+        broken.replace('const traceThin = () =>', 'return () =>').replace(/;$/, '').replace('trEvery *= 2;', 'trEvery = (st.e *= 2);'));
+      const B = { trI: mk(), trD: mk(), trQ: mk(), trR: mk(), trDw: mk(),
+                  trW: mk(), trK: mk(), trBD: mk(), trBS: mk(), trBF: mk() };
+      const st2 = { e: 1 };
+      g(RUN, B, st2)();
+      ok('ablation: forgetting one array misaligns it, and that is visible',
+         !Object.keys(B).every(k => B[k].every((v, x) => v === B.trI[x])));
+    }
+  }
+
+  ok('the block says what it is holding', /run: TRACE_RUN, every: trEvery/.test(SRC));
+  ok('and marks itself thinned rather than truncated', /capped: trEvery > 1 \|\| undefined/.test(SRC));
+}
+
 // ---- it must stop when the pool does ------------------------------------------------------------
 // A setInterval reading a getter on a closed pool runs for as long as the tab lives.
 {
@@ -137,7 +221,9 @@ const POOL = SRC.slice(SRC.indexOf('const start = (idx) => {'), SRC.indexOf('   
 // ---- absent means single-threaded, never "no stall" ---------------------------------------------
 {
   ok('the whole block is absent when nothing was pooled', /trace: poolRan \? \{/.test(SRC));
-  ok('it says so when the row cap truncated it', /capped: trI\.length >= TRACE_ROWS \|\| undefined/.test(SRC));
+  // The rows no longer stop at a cut, so "capped" now means THINNED - kept as runs at a stride - and
+  // is asserted where the run decimation is. Truncation was the old behaviour and is gone.
+  ok('nothing truncates the rows at a cut any more', !/trI\.length < TRACE_ROWS/.test(SRC));
   // FIVE STAMPS, NOT FOUR. Finished and handed-over are different events because the consumer takes
   // passes in order, and the gap between them is the tile sitting in `inflight` holding a window slot
   // that `start` then refuses to reuse - the stall itself. Conflated into one number it read as a

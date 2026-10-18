@@ -71,8 +71,11 @@ for (const f of files) {
   // written before the dwell/write split carries no `dw`, and a row that quietly reported `undefined`
   // as a number would make a saturated pool read as whatever the coarse tick happened to catch.
   const dw = t.dw || [], bF = t.bF || [];
+  // A MAP, NOT indexOf. The rows are sparse now - runs kept at a stride - and a linear scan per lookup
+  // is quadratic in the pass count on exactly the long renders this was widened for.
+  const at = new Map(); for (let x = 0; x < i.length; x++) at.set(i[x], x);
   const row = n => {
-    const x = i.indexOf(n);
+    const x = at.has(n) ? at.get(n) : -1;
     return x < 0 ? null : { d: d[x], q: q[x], r: r[x], w: w[x], k: k[x],
                             dw: dw.length ? dw[x] : undefined, bF: bF.length ? bF[x] : undefined };
   };
@@ -123,8 +126,33 @@ for (const f of files) {
                 secs(idleWarm * 1000) + ' idle worker-time) - the solo baseline pass, by design');
   }
 
+  // WHAT THE TRACE ACTUALLY COVERS, SAID OUT LOUD. The per-pass rows stop at the cap - 4,096 of a
+  // 1,048,576 master's 40,960 passes - so every figure below describes the OPENING of the render and
+  // not the whole of it. Said plainly, because a verdict computed from the first tenth and printed
+  // without qualification is the shape of every wrong reading in this investigation: the number is
+  // right, the thing it is a number ABOUT is not what the reader assumes.
+  // SPARSE IS NOT TRUNCATED, and the difference decides what the figures below are ABOUT. Rows are
+  // kept as runs of `run` consecutive passes at a stride of `every`, so a long render is sampled
+  // across its whole length rather than described up to a cut. Both the density and the SPAN are
+  // printed: a trace holding 40% of the passes spread evenly is a different thing from one holding
+  // the first 40%, and the earlier version could not tell them apart because it inferred coverage
+  // from the last index alone.
+  const partial = i.length > 0 && i.length < ms.length;
+  const thinned = (t.every || 1) > 1;
+  if (partial) {
+    const span = i[i.length - 1] - i[0] + 1;
+    const even = t.every > 1;
+    console.log('  rows: ' + i.length.toLocaleString('en-GB') + ' of ' + ms.length.toLocaleString('en-GB') +
+                ' passes (' + (100 * i.length / ms.length).toFixed(0) + '%)' +
+                (even ? ', kept as runs of ' + t.run + ' every ' + t.every : '') +
+                ', spanning passes ' + i[0] + '-' + i[i.length - 1]);
+    if (span < ms.length * 0.9)
+      console.log('     !! that span is only ' + (100 * span / ms.length).toFixed(0) +
+                  '% of the render, so the per-pass figures describe THAT window, not the whole run.');
+  }
+
   const slow = ms.map((v, n) => [n, v]).filter(([, v]) => v > med * 3).map(([n]) => n);
-  const shown = ROWS ? i.slice() : slow;
+  const shown = (ROWS ? i.slice() : slow).filter(n => at.has(n));
   if (shown.length) {
     console.log('');
     // `at fin` is the instant count (biased high); `mean` is the integrated occupancy over the wait,
@@ -148,7 +176,18 @@ for (const f of files) {
       // that cannot see a short paint. Measured on a live pool at a 4096 stone pass: the tick said
       // zero busy in 201 of 204 samples while bF said eight. The series is kept as the cross-check
       // below, because it is the only thing that can show a gap containing no transitions at all.
-      const occ = occupancy(t0, t1);
+      // WHICH RECORD CAN ANSWER DEPENDS ON HOW THE ROWS WERE KEPT, and getting this wrong is silent.
+      // The span integral is exact only when it can see EVERY pass overlapping the window. Once rows
+      // are thinned to runs the unrecorded passes are invisible to it, so it systematically
+      // under-counts and reads a saturated pool as PARTIAL - measured on a synthetic 10,240-pass
+      // render where every worker was busy throughout and the integral said 5.4 of 8.
+      //
+      // The busy series does not have that problem: it spans the whole render whatever the rows do.
+      // Its weakness is the opposite one - a tick cannot see a paint shorter than itself - and that
+      // does not bite here, because a render long enough to need thinning has passes measured in tens
+      // of seconds against a tick of at most a few. So: integral when the rows are dense, series when
+      // they are thinned, and the verdict says which it used.
+      const occ = thinned ? (b ? b.mean : null) : occupancy(t0, t1);
       if (n > W && occ !== null) { satN++; satSum += occ; }
       if (n > W && b) { serN++; serSum += b.mean; }
       console.log('  ' + pad(n, 5) + ' ' + pad((n % rAcross) + ',' + ((n / rAcross) | 0), 7) +
@@ -158,11 +197,25 @@ for (const f of files) {
                   pad(e.bF === undefined ? '-' : e.bF + '/' + W, 8) +
                   (occ === null ? '' : pad(occ.toFixed(1), 8)));
     }
+    // NO VERDICT IS A RESULT TOO, and it has to say so. A trace whose windows collapse - a resumed
+    // render where the previous passes are not in this record, a cap that landed inside the warm-up -
+    // leaves nothing to integrate, and printing the table with no line under it reads as "fine".
+    if (!satN) {
+      console.log('');
+      console.log('  NO VERDICT: ' + (shown.length ? shown.length + ' slow passes shown, but none of them had a' :
+                  'no slow passes in the retained window, so there is no') +
+                  ' measurable wait to integrate over.');
+      console.log('  That is not a quiet pool - it is a record this tool cannot read a verdict from.');
+    }
     if (satN && W) {
       const m = satSum / satN;
       console.log('');
       const pc = 100 * m / W;
-      console.log('  (steady state: ' + satN + ' waits after the first batch; the warm-up above is excluded)');
+      console.log('  (occupancy from ' + (thinned ? 'the ' + tick + ' ms busy series, because the rows are thinned' :
+                                                    'the paint intervals, which are complete here') + ')');
+      console.log('  (steady state: ' + satN + ' waits after the first batch; the warm-up above is excluded' +
+                  (partial ? '; from ' + i.length.toLocaleString('en-GB') + ' sampled passes of ' +
+                   ms.length.toLocaleString('en-GB') : '') + ')');
       // DISAGREEMENT MEANS THE TICK IS TOO COARSE, not that the pool changed its mind.
       if (serN) {
         const sm = serSum / serN;

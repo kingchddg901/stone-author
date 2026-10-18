@@ -1803,7 +1803,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.143';
+  const BUILD = '2026.10.17.144';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13239,6 +13239,40 @@ self.onmessage = async (e) => {
       // milliseconds from the sampler's own epoch, and then s = d+q, f = d+q+r, written = f+w.
       const trI = [], trD = [], trQ = [], trR = [], trDw = [], trW = [], trK = [], trBD = [], trBS = [], trBF = [];
       const TRACE_ROWS = 4096;                             // 40,960 passes would be a megabyte of JSON
+      // KEPT IN RUNS, NOT EVERY Nth PASS - and that is the whole design, not a detail.
+      //
+      // The cap used to keep the FIRST 4,096 passes and stop, so a 10,240-pass master described its
+      // opening 40% and said nothing about the rest; the opening is also the least representative
+      // part, holding the warm-up and the coldest the machine ever is.
+      //
+      // The obvious fix is to thin the rows the way the busy series does, keeping every Nth. That
+      // would DESTROY the signal. Everything read here is period-W: one pass in W carries the batch's
+      // paint and the other W-1 read as the write cost. Sample every Wth pass and you lock onto one
+      // phase and get a CONSTANT - all spikes or none, depending where you started - and the trace
+      // would look clean and be wrong, which is worse than having no trace.
+      //
+      // So the unit kept is a RUN of W consecutive passes. Any W consecutive passes span exactly one
+      // period whatever the alignment, so a run cannot be in phase with the pattern and cannot alias
+      // it. Runs are kept at a stride that doubles when the rows fill, the same halving the busy
+      // series uses, which spreads coverage across the whole render at a resolution set by its length.
+      // Run zero is always kept: it holds pass 0, which is the solo baseline and the control for every
+      // comparison between two renders.
+      // SET WHERE THE POOL IS, not here: `pool` is assigned below, so reading it at this line yields
+      // a run of ONE - every Nth pass, which is precisely the aliasing the run exists to prevent. The
+      // first draft of this did exactly that.
+      let TRACE_RUN = 1, trEvery = 1;
+      const traceThin = () => {
+        trEvery *= 2;
+        let w = 0;
+        for (let x = 0; x < trI.length; x++) {
+          if (Math.floor(trI[x] / TRACE_RUN) % trEvery) continue;
+          trI[w] = trI[x]; trD[w] = trD[x]; trQ[w] = trQ[x]; trR[w] = trR[x]; trDw[w] = trDw[x];
+          trW[w] = trW[x]; trK[w] = trK[x]; trBD[w] = trBD[x]; trBS[w] = trBS[x]; trBF[w] = trBF[x];
+          w++;
+        }
+        trI.length = trD.length = trQ.length = trR.length = trDw.length = w;
+        trW.length = trK.length = trBD.length = trBS.length = trBF.length = w;
+      };
       // A UNIFORM SERIES AT AN UNKNOWN LENGTH. The render's duration is not known when sampling starts,
       // so a fixed interval either runs out or wastes the budget. Instead: sample at a fixed tick, and
       // when the array fills, throw away every other sample and double the stated interval. The series
@@ -13265,6 +13299,7 @@ self.onmessage = async (e) => {
       // metadata and the finally on any throw. A timer that outlives the render would sample a getter
       // on a closed pool for as long as the tab lived.
       if (pool) {
+        TRACE_RUN = Math.max(1, pool.planned || 1);     // the width the runs are cut to
         PT.t0 = performance.now();
         ptTimer = setInterval(() => {
           if (!pool) { clearInterval(ptTimer); ptTimer = 0; return; }
@@ -13344,9 +13379,10 @@ self.onmessage = async (e) => {
         c.width = 1; c.height = 1;                         // only now: every quarter has been read
         const msT = Math.round(performance.now() - tTile);
         tileMs.push(msT); tileBytes.push(tb);
-        // READ ONCE, then gone from the pool's map - and only up to the row cap, so a 40,960-pass
-        // master keeps its busy series without carrying 160,000 numbers of per-pass detail.
-        if (pool && trI.length < TRACE_ROWS) {
+        // READ ONCE, then gone from the pool's map - and only for the runs this stride keeps, so a
+        // 40,960-pass master carries coverage of the WHOLE render rather than 160,000 numbers or a
+        // detailed account of its first tenth.
+        if (pool && Math.floor(n / TRACE_RUN) % trEvery === 0) {
           const st = pool.stamp(n);
           if (st && st.f) {
             trI.push(n); trD.push(Math.round(st.d - PT.t0));
@@ -13362,6 +13398,7 @@ self.onmessage = async (e) => {
             trDw.push(Math.round(tCons - st.f));
             trW.push(Math.round(performance.now() - tCons));
             trK.push(st.k); trBD.push(st.bD); trBS.push(st.bS); trBF.push(st.bF);
+            if (trI.length >= TRACE_ROWS) traceThin();   // widen the stride, drop every other run
           }
         }
         await sink.row(n, msT, tb, litSum - lit0, litUp - litUp0, litN - litN0);
@@ -13460,7 +13497,8 @@ self.onmessage = async (e) => {
         trace: poolRan ? { t0: Math.round(PT.t0), tick: PT.ms, busy: PT.v, target: poolRan.n,
                            i: trI, d: trD, q: trQ, r: trR, dw: trDw, w: trW,
                            k: trK, bD: trBD, bS: trBS, bF: trBF,
-                           rows: trI.length, capped: trI.length >= TRACE_ROWS || undefined } : undefined,
+                           rows: trI.length, run: TRACE_RUN, every: trEvery,
+                           capped: trEvery > 1 || undefined } : undefined,
       }));
       const runtime = typeof claude !== 'undefined' && !!claude.use;
       const d = runtime ? await claude.use('downloads') : null;
