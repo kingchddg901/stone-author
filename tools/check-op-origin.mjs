@@ -93,21 +93,61 @@ ok('glassUnform is where it was', at > 0);
 // '0:0' is what an op with no range asks for - so a slab written before ranges renders byte-identically,
 // which was checked on a real one at FNV 0x375c1a38 before this gate existed.
 {
-  const asm = SRC.slice(SRC.indexOf("F.SG = {};"), SRC.indexOf("F.S = F.SG['0:0']") + 60);
-  ok('the every-moon field is built unconditionally', /F\.SG\['0:0'\] = glassWarp\(H, moons\);/.test(asm));
+  const asm = SRC.slice(SRC.indexOf("const wkey = warpCacheKey("), SRC.indexOf("F.S = F.SG['0:0']") + 60);
+  ok('the every-moon field is built unconditionally', /SG\['0:0'\] = glassWarp\(H, moons\);/.test(asm));
   ok('and it is what F.S still points at', /F\.S = F\.SG\['0:0'\]/.test(asm));
   ok('a range keys to from:to, so two stirs wanting the same moons share one lattice',
      /F\.SKEY = o => \(\(\+o\.from \|\| 0\) \+ ':' \+ \(\+o\.to \|\| 0\)\)/.test(SRC));
-  ok('a field is built once per distinct range, not once per stir', /if \(!\(key in F\.SG\)\)/.test(asm));
+  ok('a field is built once per distinct range, not once per stir', /if \(!\(key in SG\)\)/.test(asm));
 
   const br = SRC.slice(SRC.indexOf("} else if (k === 'stir')"), SRC.indexOf("out[0] = x; out[1] = y"));
   ok('the op reads its own field', /F\.SG\[F\.SKEY\(op\)\]/.test(br));
   ok('and a missing one is skipped rather than thrown', /if \(S\) \{/.test(br));
 
   // ABLATION: drop the fallback and the backward-compatible case stops existing.
-  const broken = SRC.replace("F.SG['0:0'] = glassWarp(H, moons);", '');
+  const broken = SRC.replace("SG['0:0'] = glassWarp(H, moons);", '');
   ok('ablation: without the every-moon field the default has nothing to point at',
-     broken !== SRC && !/F\.SG\['0:0'\] = glassWarp/.test(broken));
+     broken !== SRC && !/SG\['0:0'\] = glassWarp/.test(broken));
+}
+
+// ---- the field is built once per RENDER, and the key is what makes that safe -------------------------
+// paintGlassContent is the per-tile painter, and it was building every lattice on every tile -
+// docs/stir-fields.md had required otherwise since it was written. Measured at a 256 px tile, where
+// almost nothing is painted: 1,542 ms before, 132 ms after.
+{
+  const key = SRC.slice(SRC.indexOf('function warpCacheKey('), SRC.indexOf('function paintGlassContent('));
+  ok('the memo is keyed, not flagged', key.length > 0 && /_WM\.m\.key !== wkey/.test(SRC));
+
+  // A FALSE MISS COSTS ONE REBUILD; A FALSE HIT IS A WRONG PICTURE. Each of these is something the
+  // field reads, so each must reach the key - and removing any one of them turns this red.
+  for (const [what, re] of [
+    ['the pane height',            /\bn\(H\)/],
+    ['the fbm ocean dials',        /n\(G\.warp\); n\(G\.cloudScale\); n\(G\.cloudX\); n\(G\.cloudY\)/],
+    ['the family seed',            /t\(fam\)/],
+    ['each moon reach + strength', /n\(P\.moonReach\); n\(P\.moonStrength\)/],
+    ['every drawn sample',         /n\(sm\[i\]\[0\]\); n\(sm\[i\]\[1\]\)/],
+    ['the mask list',              /const MK = _wmask \|\| \[\]/],
+    ['the ranges the ops ask for', /if \(o && o\.k === 'stir'\) \{ n\(\+o\.from \|\| 0\); n\(\+o\.to \|\| 0\); \}/],
+  ]) ok('the key covers ' + what, re.test(key));
+
+  ok('and hashes the IEEE bits rather than a decimal rendering', /_wkF\[0\] = \+v \|\| 0;/.test(key) &&
+     /_wkI\[0\]/.test(key) && /_wkI\[1\]/.test(key));
+
+  // THE MEMO LIVES ON A PROPERTY, NOT IN A REBINDABLE BINDING, and that is a measurement rather than
+  // a style. Held as `let _warpMemo` - written from inside paintGlassContent - V8 context-allocates
+  // the binding and deoptimises the whole painter: the SAME memo, same output hash 1b55d053, took
+  // 46,941 ms for a 4096 tile against 25,503 ms on a const object's property, with the baseline at
+  // 28,048. A 20-second regression bought by one keyword, invisible to every correctness test.
+  ok('the memo is a property of a const, not a captured let', /const _WM = \{ m: null \}/.test(SRC));
+  ok('nothing rebinds it', !/\b_WM =/.test(SRC.replace(/const _WM = /g, '')));
+  // ABLATION: the obvious spelling is the slow one, so this has to be able to see it.
+  {
+    const asLet = SRC.replace('const _WM = { m: null };', 'let _warpMemo = null;');
+    ok('ablation: turning it back into a let is visible from here',
+       asLet !== SRC && !/const _WM = \{ m: null \}/.test(asLet));
+  }
+  ok('and the worker carries its own, so no invalidation crosses the wire',
+     /var marks=\[\],_wmask=null,_WM=\{m:null\};/.test(SRC));
 }
 
 // ---- the author can see when a range drags nothing ---------------------------------------------------

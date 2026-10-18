@@ -1,6 +1,6 @@
 # Stir fields: which drag, and how many
 
-Status: **scoped, not built.**
+Status: **built.** Ranges shipped in 2026.10.17.136; the per-render field landed in .143.
 
 A glass slab has one stir field. Every `stir` in the op list applies it, so a chain with three stirs
 drags the sheet through the same displacement three times. Giving each stir a field of its own is the
@@ -99,6 +99,13 @@ can be added over it later as a way of *setting* the number rather than a differ
   a real slab rather than a tolerance.
 - **The field is built per render, not per tile.** It must stay that way or a 40,960-tile master pays
   for it 40,960 times, and cross-tiling byte-identity depends on every tile seeing the same lattice.
+  This was a requirement the code did not meet for as long as it was written down: `glassWarp` sat
+  inside `paintGlassContent`, which IS the per-tile painter, so the reference slab rebuilt four
+  lattices on every pass. Measured at a 256 px tile, where almost nothing is painted: **1,542 ms
+  before, 137 ms after**. Now memoised on a key covering everything the field reads, and gated in
+  `tools/check-op-origin.mjs` - including that the memo is held on a const object's PROPERTY rather
+  than a `let`, because a module-scope binding written from the painter context-allocates in V8 and
+  cost 20 seconds a tile with byte-identical output.
 - **Memory is k times one lattice.** Half a megabyte each is nothing at three; it is worth a cap
   before it is worth nothing at thirty.
 

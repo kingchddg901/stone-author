@@ -1803,7 +1803,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.142';
+  const BUILD = '2026.10.17.143';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4894,6 +4894,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // its first line - and so did a stone one, for want of the token itself.
       glassFlow, glassFormT, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
       glassCellSpread, glassUnform, glassLay, glassWarp, glassUnwarp, rollerBake, paintGlassContent,
+      // warpCacheKey decides whether the per-render warp fields can be reused. A worker's state is set
+      // once at init and never changes after, so its memo hits for every tile after the first - which
+      // is the whole point of it, and is also why the key has to travel with the function rather than
+      // be stubbed out here.
+      warpCacheKey,
       rollStamp, rollStampAt, rollerAt, rollerHand, rollerPath, moonDisp, warpMaskAt, gatherMasks,
       // surfaceGloss asks the fork how glossy the surface is on its own account, and applyCoat asks it
       // for EVERY material on every tile - so leaving it out did not break wood, it broke the pool.
@@ -4926,7 +4931,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // variable in a worker throws on read, so this core could paint NO material, not just not
     // glass. marks and _wmask travel for the same reason: the glass painter reads the mark list
     // for its moon and roller passes, and warpMaskAt caches into _wmask.
-    s += MATERIAL_DECL + `var marks=[],_wmask=null;\n`;
+    // _warpMemo and the two bit views warpCacheKey hashes through. Declared PER WORKER rather than
+    // shared: each context keeps its own memo and its own scratch, which is what makes the cache safe
+    // without any invalidation message ever crossing the wire - a worker's slab cannot change under it.
+    s += MATERIAL_DECL + `var marks=[],_wmask=null,_WM={m:null};\n`;
+    s += `var _wkF=new Float64Array(1),_wkI=new Int32Array(_wkF.buffer);\n`;
     s += `var ensureClouds=()=>__cl,ensureBands=()=>__bd,ensureBreccia=()=>__br;\n`;
     s += `var document={createElement:()=>new OffscreenCanvas(1,1)};\n`;
     for (const n in fns) s += `var ${n}=${fns[n].toString()};\n`;
@@ -6749,6 +6758,52 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     out[0] = -((S.u[k] * (1 - tx) + S.u[k + 1] * tx) * (1 - ty) + (S.u[k2] * (1 - tx) + S.u[k2 + 1] * tx) * ty);
     out[1] = -((S.v[k] * (1 - tx) + S.v[k + 1] * tx) * (1 - ty) + (S.v[k2] * (1 - tx) + S.v[k2 + 1] * tx) * ty);
   }
+  // ONE FIELD PER RENDER, NOT ONE PER TILE. docs/stir-fields.md states this as a requirement - "a
+  // 40,960-tile master pays for it 40,960 times" - and paintGlassContent, which IS the per-tile
+  // painter, was building every lattice on every tile. Measured on the reference slab at a 256 px
+  // tile, where almost nothing is painted: 1,705 ms, of which the paint is about 80. The slab asks
+  // for FOUR distinct ranges and each build resamples every moon's drawn path before it touches a
+  // grid cell.
+  //
+  // A FLAG WOULD NOT DO. The same function paints the live preview on the main thread, where the
+  // slab changes under it between frames, so the memo is keyed on exactly what the field reads: the
+  // pane height, the fbm ocean's four dials, the family seed, every moon's reach, strength and drawn
+  // samples, the mask list, and the set of ranges the op list asks for. Miss one and an edited slab
+  // renders with the previous slab's field - and because the field holds a LABEL rather than a
+  // value, that is not a small error, it is a different picture.
+  //
+  // EXACT BITS, NOT A DECIMAL RENDERING. The samples are doubles and a last-place change crosses
+  // ribbon boundaries, so the key hashes the IEEE bits. A false MISS costs one rebuild; a false HIT
+  // is a wrong picture, which is why nothing here is rounded or truncated.
+  const _wkF = new Float64Array(1), _wkI = new Int32Array(_wkF.buffer);
+  // A PROPERTY, NOT A BINDING, AND THAT IS A MEASUREMENT. Written first as `let _warpMemo = null`,
+  // assigned from inside paintGlassContent. V8 context-allocates a module-scope binding that an inner
+  // function writes, and that deoptimised the whole painter: the SAME memo, the same output hash
+  // 1b55d053, cost 46,941 ms for a 4096 tile against 28,048 ms with no memo at all - a twenty-second
+  // regression on the thing the change existed to speed up. Held on a const object's property instead
+  // it reads 25,503 ms. One keyword, invisible to every correctness test, and only a timing harness
+  // on the real tile size would ever have shown it.
+  const _WM = { m: null };
+  function warpCacheKey(H, moons, OPS) {
+    let h = 0x811c9dc5 >>> 0;
+    const n = (v) => { _wkF[0] = +v || 0; h = Math.imul(h ^ _wkI[0], 0x01000193) >>> 0; h = Math.imul(h ^ _wkI[1], 0x01000193) >>> 0; };
+    const t = (x) => { const q = String(x); for (let i = 0; i < q.length; i++) h = Math.imul(h ^ q.charCodeAt(i), 0x01000193) >>> 0; };
+    n(H); n(G.warp); n(G.cloudScale); n(G.cloudX); n(G.cloudY); t(fam);
+    n(moons.length);
+    for (const m of moons) {
+      const P = m.p || {};
+      n(P.moonReach); n(P.moonStrength);
+      const sm = m.samples || []; n(sm.length);
+      for (let i = 0; i < sm.length; i++) { n(sm[i][0]); n(sm[i][1]); }
+    }
+    const MK = _wmask || []; n(MK.length);
+    for (const k of MK) { n(k.x); n(k.y); n(k.r); n(k.feather); n(k.invert ? 1 : 0); n(k.show === null ? -1e300 : k.show); }
+    // THE RANGES ARE PART OF THE ANSWER, not just of the question: the memo holds a SET of lattices,
+    // and which ones exist is decided by the stirs in the list. Changing a stir's range alone must
+    // miss, or the new range reads a lattice that was never built.
+    for (const o of OPS) if (o && o.k === 'stir') { n(+o.from || 0); n(+o.to || 0); }
+    return h;
+  }
   function paintGlassContent(ident, angleView) {
     // Glass has no items and no fluorescent minerals, so like wood it says nothing in either
     // diagnostic rather than painting a flat colour into them and calling it data.
@@ -6842,12 +6897,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const a = Math.max(1, +o.from || 1), b = +o.to > 0 ? +o.to : moons.length;
       return (a === 1 && b >= moons.length) ? moons : moons.slice(a - 1, b);
     };
-    F.SG = {};
-    F.SG['0:0'] = glassWarp(H, moons);
-    for (const o of OPS) if (o && o.k === 'stir') {
-      const key = F.SKEY(o);
-      if (!(key in F.SG)) F.SG[key] = glassWarp(H, moonsFor(o));
-    }
+    const wkey = warpCacheKey(H, moons, OPS);
+    if (!_WM.m || _WM.m.key !== wkey) {
+      const SG = {};
+      SG['0:0'] = glassWarp(H, moons);
+      for (const o of OPS) if (o && o.k === 'stir') {
+        const key = F.SKEY(o);
+        if (!(key in SG)) SG[key] = glassWarp(H, moonsFor(o));
+      }
+      _WM.m = { key: wkey, SG };                             // read-only from here: glassUnwarp
+    }                                                            // only ever reads S.u and S.v
+    F.SG = _WM.m.SG;
     F.S = F.SG['0:0']; F.H = H;                                  // the stir is an OP now, not a pre-pass
     // WHERE EACH ROLLER TOUCHED DOWN: the leading edge of this pane along that roll's own
     // direction, so stamp one lands where the pass began. Exact for a roll that is the last thing
