@@ -50,6 +50,10 @@ for (const p of files) {
   const px = (j.w || 0) * (j.h || 0);
   rows.push({
     name, w: j.w, h: j.h, px, bytes, build: j.build || '?',
+    // WHAT WAS RENDERED, not just how big. Cost is a property of the slab before it is a property of
+    // the width, so a table without these invites exactly the mistake of reading one slab's measured
+    // time as what that width costs.
+    inputs: j.inputs || '?', material: j.material || '?', slab: j.slab || '?',
     spectrum: j.spectrum === 0 ? 'day' : j.spectrum === -1 ? 'uv' : 'spx' + j.spectrum,
     tiles: j.renders, tile: j.render,
     msRender: j.ms ? j.ms.render : 0, msSum: sum, perN: per.length,
@@ -71,13 +75,14 @@ const mins = ms => ms / 60000;
 const dur = ms => { const m = mins(ms); return m >= 90 ? (m / 60).toFixed(2) + ' h' : m.toFixed(1) + ' min'; };
 
 if (flag('csv')) {
-  console.log('file,width,height,pixels,bytes,bytes_per_pixel,tiles,tile_size,render_ms_sum,render_ms_field,resumed_tiles,build,light,mean,lit40');
+  console.log('file,width,height,pixels,bytes,bytes_per_pixel,tiles,tile_size,render_ms_sum,render_ms_field,resumed_tiles,build,light,mean,lit40,material,slab,inputs');
   for (const r of rows) console.log([JSON.stringify(r.name), r.w, r.h, r.px, r.bytes, r.bpp.toFixed(6),
-    r.tiles, r.tile, r.msSum, r.msRender, r.resumed, r.build, r.spectrum, r.mean, r.lit40].join(','));
+    r.tiles, r.tile, r.msSum, r.msRender, r.resumed, r.build, r.spectrum, r.mean, r.lit40,
+    JSON.stringify(r.material), JSON.stringify(r.slab), r.inputs].join(','));
   process.exit(0);
 }
 
-console.log('   width      pixels     tiles@size        render   (own clock)      file     B/px   light  build');
+console.log('   width      pixels     tiles@size        render   (own clock)      file     B/px   light  material  slab');
 let anyResumed = false;
 for (const r of rows) {
   if (r.resumed) anyResumed = true;
@@ -94,22 +99,64 @@ for (const r of rows) {
     + String(gb(r.bytes) + ' GB').padStart(11)
     + String(r.bpp.toFixed(4)).padStart(9)
     + String(r.spectrum).padStart(6)
-    + '  ' + r.build
+    + String(r.material).padStart(10)
+    + '  ' + (r.slab.length > 28 ? r.slab.slice(0, 27) + '…' : r.slab)
     + (r.resumed ? '  RESUMED ' + r.resumed + ' of ' + r.tiles : ''));
 }
 if (anyResumed)
   console.log('\nRESUMED rows: render time is the sum of the per-tile record, which spans every sitting.\n'
     + 'The bracketed figure is the master\'s own ms.render, which covers only the sitting that finished it.');
 
-// Bytes per pixel falls as a picture gets wider, because each tile covers less of it and compresses
-// better. Printed as a series rather than per row, because the TREND is the useful part - it is what
-// makes an extrapolation to an untried width an upper bound rather than a guess.
-const byW = rows.slice().sort((a, b) => a.w - b.w).filter((r, i, a) => !i || r.w !== a[i - 1].w);
-if (byW.length > 1) {
-  console.log('\nbytes per pixel by width: ' + byW.map(r => r.w + ' ' + r.bpp.toFixed(4)).join('   '));
+// BYTES PER PIXEL FALLS AS A PICTURE GETS WIDER - within ONE picture. Each tile covers less of the
+// slab and compresses better, and that trend is what makes an extrapolation to an untried width an
+// upper bound rather than a guess.
+//
+// It is only a trend within one picture, and the first version of this printed it across whatever was
+// given. On a folder holding several slabs that series read 2.6638 at 1024 and 0.0831 at 65,535 and
+// looked like a law, when it was a sorted list of unrelated pictures: a 65,535 in this very set ranges
+// from 0.0365 to 0.4384 bytes per pixel depending on the slab alone. The series is now grouped by the
+// `inputs` hash, which is the signature of the state that produced the picture, so a line is only ever
+// drawn through points that belong on one.
+const byInputs = new Map();
+for (const r of rows) { const k = r.inputs || '?'; byInputs.set(k, (byInputs.get(k) || []).concat(r)); }
+let drew = false;
+for (const [, set] of byInputs) {
+  const byW = set.slice().sort((a, b) => a.w - b.w).filter((r, i, a) => !i || r.w !== a[i - 1].w);
+  if (byW.length < 2) continue;
+  drew = true;
+  // The inputs hash is in the label because a slab NAME is not an identity: the same name edited
+  // between renders is a different picture, and two groups printed under one name read as a
+  // contradiction when they are simply two pictures.
+  console.log('\nbytes per pixel by width, ' + byW[0].material + ' "' + byW[0].slab + '" [' + byW[0].inputs + ']:');
+  console.log('  ' + byW.map(r => r.w + ' ' + r.bpp.toFixed(4)).join('   '));
   const f = byW[0], l = byW[byW.length - 1];
-  console.log('  ' + (l.bpp < f.bpp ? 'falling' : 'rising') + ' across this set, '
-    + (f.bpp / l.bpp).toFixed(2) + 'x from ' + f.w + ' to ' + l.w);
+  console.log('  ' + (l.bpp < f.bpp ? 'falling' : 'rising') + ' ' + (Math.max(f.bpp, l.bpp) / Math.min(f.bpp, l.bpp)).toFixed(2)
+    + 'x from ' + f.w + ' to ' + l.w);
+}
+if (!drew && rows.length > 1)
+  console.log('\nNo bytes-per-pixel trend drawn: no single picture in this set spans two widths.\n'
+    + 'That figure is a property of the picture, not the width - see the spread below.');
+
+// THE SPREAD AT ONE WIDTH, which is the number anyone sizing up a render actually needs. Cost is a
+// property of the SLAB far more than of the width: measured here, one 65,535 took 1.6 minutes and
+// another took 33.5. Printing the range stops a single measured number being read as what a width
+// costs. Time and size move in OPPOSITE directions - the 1.6 minute render is the largest file and
+// the 15.5 minute one among the smallest - so neither can be inferred from the other.
+const byWidth = new Map();
+for (const r of rows) byWidth.set(r.w, (byWidth.get(r.w) || []).concat(r));
+const spreads = [...byWidth.entries()].filter(([, v]) => new Set(v.map(r => r.inputs)).size > 1).sort((a, b) => a[0] - b[0]);
+if (spreads.length) {
+  console.log('\nSPREAD AT ONE WIDTH (different pictures, same pixel count):');
+  console.log('   width   pictures        render range            file range        B/px range');
+  for (const [w, v] of spreads) {
+    const t = v.map(r => r.msSum).sort((a, b) => a - b), b = v.map(r => r.bytes).sort((a, b) => a - b);
+    const pp = v.map(r => r.bpp).sort((a, b) => a - b);
+    console.log(String(w).padStart(8) + String(new Set(v.map(r => r.inputs)).size).padStart(11)
+      + String(dur(t[0]) + ' - ' + dur(t[t.length - 1])).padStart(22)
+      + String(gb(b[0]) + ' - ' + gb(b[b.length - 1]) + ' GB').padStart(22)
+      + String(pp[0].toFixed(4) + ' - ' + pp[pp.length - 1].toFixed(4)).padStart(18)
+      + (t[0] > 0 ? '   ' + (t[t.length - 1] / t[0]).toFixed(1) + 'x' : ''));
+  }
 }
 
 // IDENTICAL FILES ARE THE DETERMINISM EVIDENCE, so say when a set contains them rather than leaving it

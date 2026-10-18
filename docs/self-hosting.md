@@ -61,6 +61,13 @@ tiled path can produce one.
 Measured on a 16 GB desktop, **6 cores / 12 threads** at 3.6 GHz. (A master records `cores` from
 `navigator.hardwareConcurrency`, which reports threads — see [`devices.md`](devices.md).)
 
+**These are one slab's times, not a width's.** Every row below is the same stone picture, which is the
+only way the doubling behaves like a law. Cost is a property of what is being drawn far more than of
+how wide it is: across the masters on hand, twelve different pictures at 65,535 range from **1.6 to
+33.5 minutes — 21×** — and glass is the expensive end because it computes per pixel where stone draws
+strokes. File size runs the *other* way, so the quick one is the big file and neither predicts the
+other. Read a row as "this is possible", never as "this is what that width costs".
+
 | width | pixels | tiles | time | file |
 |---|---|---|---|---|
 | 262,144 | 42.9 Gpx | 10,240 at 2048 | 22 min | 3.61 GB |
