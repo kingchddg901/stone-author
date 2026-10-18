@@ -65,17 +65,36 @@ Measured on a 16 GB desktop, **6 cores / 12 threads** at 3.6 GHz. (A master reco
 |---|---|---|---|---|
 | 262,144 | 42.9 Gpx | 10,240 at 2048 | 22 min | 3.61 GB |
 | 524,288 | 171.8 Gpx | 10,240 at 4096 | 71 min | 9.92 GB |
+| 1,048,576 | 687.2 Gpx | 10,240 at 8192 | 5 h 10 min | 22.92 GB |
 
-**1,048,576 has not been completed.** 687.2 Gpx, 10,240 tiles at 8192. A run in progress is averaging
-1.73 s a tile, which would put it near five hours; the file size is unknown. Extrapolating the 0.0577
-bytes per pixel a 524,288 measured gives roughly 40 GB, but that rate has fallen at every doubling so
-far, so treat it as an upper bound rather than an estimate.
+**1,048,576 has been completed.** The whole ladder is measured; nothing in this table is projected.
 
-Bytes per pixel **falls** as the width grows — 0.084 at 262,144, 0.0577 at 524,288 — because each tile
-covers less of the picture and compresses better.
+None of it is kept by hand. Every master carries its own width, tiling, build, per-tile timings and
+light, and its byte count is on disk, so this table is re-derived from the files rather than
+maintained:
+
+```
+node tools/master-stats.mjs <dir-of-masters> --sort=w
+```
+
+If a row here ever disagrees with that command, the command is right.
+
+Two of those rows were rendered across more than one sitting, so their time is the **sum of the
+per-tile record**, not the `ms.render` the master carries — that field covers only the final sitting
+and reads 10.1 min for the 262,144 and 300.3 min for the 1,048,576. Anyone checking these numbers
+against a file will find that discrepancy and should know which figure is which.
+
+The estimate this table replaced is worth keeping as a note on method: it put the 1,048,576 "near five
+hours" from a running average of 1.73 s a tile, and the finished render averaged 1.82 s. It also put
+the file at "roughly 40 GB", called that an upper bound rather than an estimate because bytes per pixel
+had fallen at every doubling, and was right twice over — the rate fell again and the file came in at
+22.92 GB.
+
+Bytes per pixel **falls** as the width grows — 0.0842 at 262,144, 0.0577 at 524,288, 0.0334 at
+1,048,576 — because each tile covers less of the picture and compresses better.
 
 **Free disk is double the file at the moment of saving.** The master is written to origin-private
-storage first and then handed to the browser to save, so both exist at once. Budget ~80 GB for a
+storage first and then handed to the browser to save, so both exist at once. That is ~46 GB for a
 1,048,576.
 
 ## Things worth knowing before a long one
@@ -87,10 +106,11 @@ storage first and then handed to the browser to save, so both exist at once. Bud
 - **Storage is per origin.** `127.0.0.1:8777` and `127.0.0.1:8778` are different origins with separate
   scratch space, so serving on two ports gives you two genuinely independent renders at once. The same
   separation means a render started on one port cannot be resumed on the other.
-- **Nothing above 262,144 is known to work.** The tile addressing reaches to 8,388,608 px, so that is
-  not the limit; what has never been proven is whether a browser will hold tens of gigabytes of
-  origin-private storage, or hand back a file that size to save. Either can refuse, and it would refuse
-  *after* the render.
+- **The browser will hold it.** This used to read "nothing above 262,144 is known to work", and the
+  open question was whether a browser would keep tens of gigabytes of origin-private storage and then
+  hand a file that size back to save. It does: a 22.92 GB master was written and saved. The tile
+  addressing reaches to 8,388,608 px, so that is still not the limit either. What has *not* been tried
+  is the rung above, and quota and free disk both refuse *after* the render rather than before it.
 
 ## Looking at the result
 
@@ -114,10 +134,9 @@ from a 2019 budget tablet with 2 GB upward. Ordinary hardware is the design targ
 
 The problems are elsewhere.
 
-**Storage.** A 1,048,576 master is projected at around 40 GB, and that is an upper bound rather than an
-estimate. The working copy lives in browser-managed storage and saving it makes a second one, so the
-figure that matters is roughly double. Browser quota and free disk are both real limits, and both
-refuse *after* the render rather than before it.
+**Storage.** A 1,048,576 master measured 22.92 GB. The working copy lives in browser-managed storage
+and saving it makes a second one, so the figure that matters is roughly double — ~46 GB. Browser quota
+and free disk are both real limits, and both refuse *after* the render rather than before it.
 
 **Time.** Hours, not minutes. Resume makes an interruption recoverable; it does not make 687 billion
 pixels less work. The same picture is 2.75 TB of uncompressed pixels before a byte of deflate.
