@@ -131,9 +131,17 @@ lane('effective speedup', A.effective.toFixed(2) + 'x', B.effective.toFixed(2) +
   // NEGATIVE ZERO IS A DIRECTION THAT IS NOT THERE. A residual of -4e-7 formats as "-0.0%", which
   // reads as a small loss; anything under half the printed precision is flattened to zero first.
   const sign = v => { const p = 100 * v, q = Math.abs(p) < 0.05 ? 0 : p; return (q >= 0 ? '+' : '') + q.toFixed(1) + '%'; };
-  console.log('     raw wall clock         ' + sign(A.wall / B.wall - 1) + '  going ' + A.W + ' -> ' + B.W + ' workers');
+  // NAME THE VARIABLE THAT ACTUALLY MOVED. This said "THE WIDTH IS WORTH" whatever the two runs
+  // differed by, and printed "+9.8% for +0.0% more workers" on a pair where the width was identical
+  // and the BUILD was the thing under test. A figure attached to the wrong cause is the same defect
+  // as a figure with no control: the number is right and what it is a number about is not.
+  const sameW = A.W === B.W;
+  const what = sameW ? (A.build !== B.build ? 'the build ' + A.build + ' -> ' + B.build : 'the change')
+                     : A.W + ' -> ' + B.W + ' workers';
+  console.log('     raw wall clock         ' + sign(A.wall / B.wall - 1) + '  going ' + what);
   console.log('     of which the machine   ' + sign(A.solo / B.solo - 1) + '  (the solo pass differed by that much)');
-  console.log('     SO THE WIDTH IS WORTH  ' + sign(gain) + '  for ' + sign(nominal) + ' more workers');
+  console.log('     SO ' + (sameW ? 'THE CHANGE' : 'THE WIDTH ') + ' IS WORTH  ' + sign(gain) +
+              (sameW ? '  at the same width' : '  for ' + sign(nominal) + ' more workers'));
   if (Math.abs(gain) < 0.02)
     console.log('     -> within measurement noise: the width made no difference at all.');
   else if (gain < nominal * 0.5 && nominal > 0)

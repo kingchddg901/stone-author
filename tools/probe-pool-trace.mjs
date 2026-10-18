@@ -195,7 +195,7 @@ ok('the three verdicts are genuinely different strings',
   const same = cmp(A, JSON.parse(JSON.stringify(A)), 'cmp-a.json', 'cmp-a2.json');
   ok('the control passes when the solo pass agrees', /the machine was in the same state/.test(same),
      (same.split('\n').find(l => /within/.test(l)) || '').trim());
-  ok('and identical inputs report no width effect', /SO THE WIDTH IS WORTH  \+0\.0%/.test(same));
+  ok('and identical inputs report no width effect', /SO THE CHANGE IS WORTH  \+0\.0%/.test(same));
 
 
   // 2. A machine that drifted. Same picture, same width, but the solo pass cost half as much - which is
@@ -235,7 +235,7 @@ ok('the three verdicts are genuinely different strings',
 
   // 4a. SAME MACHINE (solo identical), B finishes a fifth sooner. That IS the width, and must read so.
   const realOut = run2(widthCase(8, 100, 20, 'w-8-100-20.json'), widthCase(10, 80, 20, 'w-10-80-20.json'));
-  ok('a genuine width gain is reported as one', /SO THE WIDTH IS WORTH  \+25\.0%/.test(realOut),
+  ok('a genuine width gain is reported as one', /SO THE WIDTH  IS WORTH  \+25\.0%/.test(realOut),
      (realOut.split('\n').find(l => /WIDTH IS WORTH/.test(l)) || '').trim());
   ok('           and the machine is credited with nothing', /of which the machine   \+0\.0%/.test(realOut));
 
@@ -244,12 +244,24 @@ ok('the three verdicts are genuinely different strings',
   //     reason the control exists.
   const fakeOut = run2(widthCase(8, 100, 20, 'w-8-100-20b.json'), widthCase(10, 80, 16, 'w-10-80-16.json'));
   ok('ablation: the SAME raw gain on a faster machine is worth nothing',
-     /SO THE WIDTH IS WORTH  \+0\.0%/.test(fakeOut),
+     /SO THE WIDTH  IS WORTH  \+0\.0%/.test(fakeOut),
      (fakeOut.split('\n').find(l => /WIDTH IS WORTH/.test(l)) || '').trim());
   ok('           the raw wall clock reads identically in both cases, which is the point',
      /raw wall clock         \+25\.0%/.test(realOut) && /raw wall clock         \+25\.0%/.test(fakeOut));
   ok('           and it says the machine took the credit', /of which the machine   \+25\.0%/.test(fakeOut));
   ok('           calling it noise rather than a result', /made no difference at all/.test(fakeOut));
+  // THE LABEL HAS TO NAME WHAT MOVED. It read "THE WIDTH IS WORTH" on a pair whose width was
+  // identical and whose BUILD was under test, printing "+9.8% for +0.0% more workers" - a correct
+  // number attached to the wrong cause, which is the same defect as a number with no control.
+  ok('a width comparison says so', /going 8 -> 10 workers/.test(realOut),
+     (realOut.split(String.fromCharCode(10)).find(l => /raw wall clock/.test(l)) || '').trim());
+  {
+    const sameWidth = JSON.parse(JSON.stringify(A)); sameWidth.build = 'probe-b';
+    const out = cmp(A, sameWidth, 'cmp-lblA.json', 'cmp-lblB.json');
+    ok('and an equal-width pair names the build instead', /going the build probe -> probe-b/.test(out),
+       (out.split(String.fromCharCode(10)).find(l => /raw wall clock/.test(l)) || '').trim());
+    ok('           and never claims the width did it', !/THE WIDTH/.test(out));
+  }
 }
 
 // ---- THINNING A PERIOD-W SIGNAL, which is where the obvious answer is the wrong one --------------
