@@ -25,7 +25,24 @@ class NoCache(http.server.SimpleHTTPRequestHandler):
 
 port = int(sys.argv[1]) if len(sys.argv) > 1 else 8777
 handler = functools.partial(NoCache, directory=str(ROOT))
-socketserver.TCPServer.allow_reuse_address = True
-with socketserver.TCPServer(("127.0.0.1", port), handler) as srv:
+
+# THREADED, BECAUSE ONE SILENT SOCKET USED TO STOP THE WHOLE SERVER. This ran on
+# socketserver.TCPServer, which handles exactly one connection at a time: it accepts a socket and
+# blocks reading the request line. Chrome opens speculative preconnect sockets that never send one,
+# so the server sat in that read while every real request queued behind it - the port still
+# listening, the process still alive, and nothing answering. It looks like a hang with no error
+# anywhere, and it cost a debugging detour mid-session.
+#
+# ThreadingHTTPServer gives each connection its own daemon thread, so a socket that says nothing
+# wastes a thread instead of the server. The timeout then reaps it rather than leaking one per
+# preconnect.
+class Serve(http.server.ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+    timeout = 10
+
+
+NoCache.timeout = 10                       # a connection that sends nothing is closed, not waited on
+with Serve(("127.0.0.1", port), handler) as srv:
     print(f"http://127.0.0.1:{port}/tools/stone-studio.html", flush=True)
     srv.serve_forever()
