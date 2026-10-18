@@ -112,11 +112,30 @@ function bodyOf(name) {
                       '\n  const ' + name + ' = ', '\n  let ' + name + ' = ']) {
     const i = SRC.indexOf(open);
     if (i < 0) continue;
-    let d = 0, began = false;
+    // AN EXPRESSION-BODIED ARROW HAS NO BRACES, and this used to scan straight past it looking for
+    // one - capturing every line until the next balanced brace pair anywhere below, comments and all.
+    // `glowLift` is `const glowLift = () => A ? B : C;` and the over-capture invented three names out
+    // of the prose beneath it: expMeta, redraw, and `negative`, which is not declared anywhere in the
+    // app at all. A gate that manufactures names is worse than one with a gap, because it teaches the
+    // reader to skim its output.
+    //
+    // So: track brackets of every kind, and for a `const`/`let` declaration end at the first `;` that
+    // is outside all of them. A braced body still ends where it always did.
+    let d = 0, began = false, par = 0, sq = 0;
     for (let k = i; k < SRC.length; k++) {
       const c = SRC[k];
-      if (c === '{') { d++; began = true; }
+      if (c === '(') par++;
+      else if (c === ')') par--;
+      else if (c === '[') sq++;
+      else if (c === ']') sq--;
+      else if (c === '{') { d++; began = true; }
       else if (c === '}') { d--; if (began && d === 0) return SRC.slice(i, k + 1); }
+      // A COMMA ENDS IT TOO, because these declarations come in groups: `const SLAB_FT = 8, FT_MM =
+      // 304.8;` and `let fam = 'carrara', tool = 'vein', view = 'stone';`. Stopping only at the
+      // semicolon made each name appear to reach its siblings - which is how the first draft of this
+      // fix reported `FT_MM <- SLAB_FT`. A comma inside brackets is an argument list, not a sibling,
+      // which is what the three counters are for.
+      else if ((c === ';' || c === ',') && !began && d === 0 && par === 0 && sq === 0) return SRC.slice(i, k + 1);
       else if (c === '\n' && d === 0 && began) return SRC.slice(i, k);
     }
   }

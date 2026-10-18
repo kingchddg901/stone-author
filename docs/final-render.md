@@ -103,6 +103,26 @@ no coat scales at all, so it cannot go quietly blind.
    memory it holds is the point — when the median of the last N exceeds 3× it. Floors at two, monotone
    downward. `tools/probe-pool-shed.mjs`.
 
+   **UV is refused for a measured reason, not an assumed one.** `corePaintsThis` has always had a
+   `!uvMode` clause, and the natural reading is that the serialised core cannot paint UV. It mostly
+   can: it already branches on `uvMode` in its own tile setup and already receives `uvMode` and
+   `lightSpectrum` at init. What it lacked was the emission path - `BLOOM_DRAW`, `glowPx`, `liftCol`,
+   the glow knobs, the crossfade state `emit` reads, and `blurDraw` with its pyramid fallback.
+
+   Carrying all of those was tried on 2026-10-18 and **the result does not match**. Measured on an
+   empty slab at a 256 tile: sequential returns uniform `rgb(19,19,27)`, which is `UV_DARK` exactly,
+   and the same tile through the pool returns uniform `rgb(29,29,41)` - about **1.52x on every
+   channel**, with no content in either, so the divergence is in the UV background and coat rather
+   than in anything drawn. A master must not depend on whether a pool ran, so the clause stays until
+   that lift is traced and the two agree byte for byte.
+
+   Two things are worth keeping from the attempt. The dependency closure is larger than the gate's
+   list suggests - eight named names pulled in twenty-one once followed - and carrying them trips
+   `check-bleed`, because `glowLift`, `IS_GECKO` and `WEBKIT_LIFT` are `const` declared far below
+   `renderCoreSrc`, a temporal dead zone the project enforces on the bare identifier. Any future
+   attempt needs those hoisted first, by the function-declaration route the glow comment already
+   describes.
+
    **The master says what ran.** `workers`, plus `poolPlanned` and `poolShed` when the pool narrowed
    itself. That field previously could not appear on any master: it was read after the success path had
    already closed the pool and nulled it, while its comment told the reader that absence meant
