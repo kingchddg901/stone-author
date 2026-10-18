@@ -198,8 +198,8 @@
   "where": "the warning shown, and confirmed, when Large render is switched on"
  },
  "big.warn-once": {
-  "terms": [],
-  "where": "the dialog shown when the one-off tick is set. Gives the MEASURED cost of both sizes it opens, that they are TIFF only, what it costs to open one afterwards (slowly, by paging, not never), and that the detail does not run out at any size - so the honest stopping point is what the output can show rather than what the field has left"
+  "terms": ["slab"],
+  "where": "the dialog shown when the one-off tick is set. The pixel arithmetic is exact and the MINUTES ARE A RANGE, deliberately: cost is set by the slab far more than by the width (glass computes every pixel, stone draws strokes), measured 1.6 to 33.5 minutes across twelve pictures at one size, with file size moving the opposite way. Also that they are TIFF only, what it costs to open one afterwards (slowly, by paging, not never), and that the detail does not run out at any size - so the honest stopping point is what the output can show rather than what the field has left"
  },
  "btn.cal-cancel": {
   "where": "button in the Calibrate the pen section, shown only while calibrating"
