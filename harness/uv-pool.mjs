@@ -31,10 +31,17 @@
 //     nothing emits         70         0     4.98    50   0 px        <- would also "pass"
 //     no geometry            0         -     1.99    51   0 px        <- would also "pass"
 //
-// Hence LIT_FLOOR at 20%: comfortably above the 4.98 an unlit tile gives and far below the 45 a real
-// one does. `uvVsDay` is kept as a check but does NOT discriminate - it reads 100% in all three rows,
-// because the ground and coat change with the light whether or not anything glows. Saying so here so
-// the next reader does not mistake it for the guard that saves this gate.
+// LIT_FLOOR IS THE WEAK ONE AND IT IS DELIBERATELY NOT THE ONLY ONE. build() seeds a fresh slab per
+// load, so how much of a tile is lit varies with the seed: this desktop produced 70 lines and 45%,
+// CI's first run produced 11 lines and 24.02%. A floor set at 20 would have had four points of
+// headroom on a number nothing controls, which is a gate that reds a correct render on an unlucky
+// seed. So the floor drops to 10 - still twice the worst vacuous reading - and MAXV_FLOOR carries
+// the real weight, because peak brightness does NOT vary with how much geometry a seed laid down:
+// an emitting line is drawn at full strength or it is not there at all, which is 255 against 50.
+//
+// `uvVsDay` is kept as a check but does NOT discriminate - it reads 100% in all three rows, because
+// the ground and coat change with the light whether or not anything glows. Saying so here so the
+// next reader does not mistake it for the guard that saves this gate.
 //
 //   node harness/inject.mjs && node harness/uv-pool.mjs
 //   node harness/inject.mjs && node harness/uv-pool.mjs --ablate=ground|glow|dark|nogeo|all
@@ -48,7 +55,8 @@ import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join, normalize } from 'path';
 
-const LIT_FLOOR = 20;                     // see the table above
+const LIT_FLOOR = 10;                     // see the table above: seed-dependent, so the weaker of the two
+const MAXV_FLOOR = 150;                   // 255 when anything emits, 50 when nothing does - seed-independent
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -107,7 +115,7 @@ const base = 'http://127.0.0.1:' + server.address().port;
 
 // The whole measurement, run inside the page. `vacuous` selects a vacuity ablation or nothing.
 async function measure(page, vacuous) {
-  return page.evaluate(async ({ vacuous, LIT_FLOOR }) => {
+  return page.evaluate(async ({ vacuous, LIT_FLOOR, MAXV_FLOOR }) => {
     const sa = window.__sa;
     // THE SLAB IS THE APP'S OWN. Authoring one here would mean a fixture that encodes this file's
     // idea of a slab rather than the engine's - and the first version of this comparison did exactly
@@ -163,11 +171,12 @@ async function measure(page, vacuous) {
     if (!lines.length) vac.push('no geometry was built');
     if (!emitting) vac.push('no line emitted under the UV light');
     if (uvStats.litPct < LIT_FLOOR) vac.push(`the UV tile is only ${uvStats.litPct}% lit, under the ${LIT_FLOOR}% floor - too dark to carry a difference`);
+    if (uvStats.maxV < MAXV_FLOOR) vac.push(`the UV tile peaks at ${uvStats.maxV}, under the ${MAXV_FLOOR} floor - nothing in it is actually glowing`);
     if (!cmp(uvSeq, daySeq).diffPx) vac.push('the UV tile equals the daylight tile - the light did nothing');
 
     return { tile: IDX, lines: lines.length, emitting, vac,
              uv: cmp(uvSeq, uvPool), day: cmp(daySeq, dayPool), uvStats, dayStats: stats(daySeq) };
-  }, { vacuous, LIT_FLOOR });
+  }, { vacuous, LIT_FLOOR, MAXV_FLOOR });
 }
 
 const browser = await chromium.launch();
@@ -191,7 +200,7 @@ for (const mode of modes) {
   if (anchorMissed) { fail.push(`${label}: the ablation anchor is gone from the source - nothing was ablated, so this run proves nothing. Anchor: ${anchorMissed}`); continue; }
   if (r.noPool) { fail.push(`${label}: the pool refused to start - nothing was compared`); continue; }
 
-  out.push(`${label}: tile ${r.tile}, ${r.lines} lines (${r.emitting} emitting), UV ${r.uvStats.litPct}% lit `
+  out.push(`${label}: tile ${r.tile}, ${r.lines} lines (${r.emitting} emitting), UV ${r.uvStats.litPct}% lit peak ${r.uvStats.maxV} `
     + `-> pooled-vs-sequential ${r.uv.diffPct}% maxErr ${r.uv.maxErr}; daylight ${r.day.diffPct}% maxErr ${r.day.maxErr}`
     + (r.vac.length ? `   [vacuous: ${r.vac.join('; ')}]` : ''));
 
