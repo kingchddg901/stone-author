@@ -91,7 +91,20 @@ console.log('  THE CONTROL - pass 0, painted alone on one worker in both runs');
 lane('solo baseline pass', secs(A.solo), secs(B.solo));
 {
   const d = Math.abs(A.solo - B.solo) / Math.min(A.solo, B.solo);
-  if (d > 0.1) {
+  // THE CONTROL ASSUMES THE SOLO PASS IS INVARIANT UNDER WHATEVER IS BEING TESTED, and that is true
+  // of a width change, or a scheduling change, or anything paid once per render - the warp-field memo
+  // among them, since pass 0 builds the field either way and its time did not move.
+  //
+  // It is NOT true of a change to the per-pixel walk. Pass 0 paints pixels like any other, so a change
+  // that makes pixels cheaper makes the control cheaper by the same factor - and then wall/solo shows
+  // nothing, while the raw clock shows everything. The tool cannot tell that apart from a faster
+  // machine, so when the builds differ AND the solo moved it says so instead of picking one.
+  if (A.build !== B.build && d > 0.05) {
+    console.log('     !! ' + (100 * d).toFixed(0) + '% apart, and the BUILDS differ - so the control cannot');
+    console.log('        separate a faster machine from a change that also made pass 0 cheaper.');
+    console.log('        Read the raw wall clock and the mean paint below; the normalised figure is a');
+    console.log('        LOWER bound here, not the answer.');
+  } else if (d > 0.1) {
     console.log('     !! ' + (100 * d).toFixed(0) + '% apart. The same work on one worker should not differ by that much,');
     console.log('        so the machine was not in the same state. Treat everything below as suspect:');
     console.log('        a thermal state, a background job or a different slab would all read as a result.');

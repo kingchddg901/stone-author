@@ -30,23 +30,27 @@ const body = at < 0 ? '' : SRC.slice(at, SRC.indexOf('\n  }', at));
 ok('glassUnform is where it was', at > 0);
 
 // ---- the default is what makes an old slab safe ------------------------------------------------------
+// The default moved into compileOps when the op list stopped being read once per pixel. Same rule,
+// one place earlier: an absent centre is the ORIGIN, and must never become NaN.
 {
-  const dec = body.match(/const ox = ([^,]+), oy = ([^;]+);/);
-  ok('the centre is read with a default', !!dec, dec ? dec[0] : 'no declaration');
+  const comp = SRC.slice(SRC.indexOf('function compileOps('), SRC.indexOf('function glassUnform('));
+  const dec = comp.match(/ox: ([^,]+), oy: ([^,]+),/);
+  ok('the centre is compiled with a default', !!dec, dec ? dec[0] : 'no declaration');
   if (dec) {
     ok('across falls back to zero, not NaN', /\|\|\s*0\s*$/.test(dec[1].trim()), dec[1].trim());
     ok('and so does down', /\|\|\s*0\s*$/.test(dec[2].trim()), dec[2].trim());
   }
+  ok('and the walk reads the compiled pair', /const ox = op\.ox, oy = op\.oy;/.test(body));
 }
 
 // ---- translate, transform, translate back ------------------------------------------------------------
 // With ox = oy = 0 each of these is the identity on its own, which is why the absent case is exact
 // rather than close. Checked numerically over 200,000 random points at zero deviation.
 {
-  const spin = body.slice(body.indexOf("if (k === 'spin')"), body.indexOf("} else if (k === 'blow')"));
+  const spin = body.slice(body.indexOf('if (k === 1)'), body.indexOf('} else if (k === 2)'));
   ok('spin measures its radius from the centre', /const px = x - ox, py = y - oy/.test(spin));
   ok('spin puts the point back around the centre', /x = ox \+ r \* Math\.cos\(th\); y = oy \+ r \* Math\.sin\(th\)/.test(spin));
-  const blow = body.slice(body.indexOf("} else if (k === 'blow')"), body.indexOf("} else if (k === 'roll')"));
+  const blow = body.slice(body.indexOf('} else if (k === 2)'), body.indexOf('} else if (k === 3)'));
   ok('blow spreads from the centre', /x = ox \+ \(x - ox\) \/ s; y = oy \+ \(y - oy\) \/ s/.test(blow));
 }
 
@@ -100,9 +104,72 @@ ok('glassUnform is where it was', at > 0);
      /F\.SKEY = o => \(\(\+o\.from \|\| 0\) \+ ':' \+ \(\+o\.to \|\| 0\)\)/.test(SRC));
   ok('a field is built once per distinct range, not once per stir', /if \(!\(key in SG\)\)/.test(asm));
 
-  const br = SRC.slice(SRC.indexOf("} else if (k === 'stir')"), SRC.indexOf("out[0] = x; out[1] = y"));
-  ok('the op reads its own field', /F\.SG\[F\.SKEY\(op\)\]/.test(br));
-  ok('and a missing one is skipped rather than thrown', /if \(S\) \{/.test(br));
+  // The lattice is resolved at COMPILE time now, which is most of why change 2 was worth doing:
+  // F.SKEY builds a string, and the walk was building one per pixel per stir.
+  const comp2 = SRC.slice(SRC.indexOf('function compileOps('), SRC.indexOf('function glassUnform('));
+  ok('the op resolves its own field, once',
+     /S: k === 5 \? \(F\.SG \? F\.SG\[F\.SKEY\(op\)\] : F\.S\) : null/.test(comp2));
+  const br = SRC.slice(SRC.indexOf('} else if (k === 5)'), SRC.indexOf('out[0] = x; out[1] = y'));
+  ok('and the walk just reads it', /const S = op\.S;/.test(br));
+  ok('a missing one is skipped rather than thrown', /if \(S\) \{/.test(br));
+  ok('no string key is built per pixel any more', !/F\.SKEY\(op\)/.test(body));
+
+  // ---- AND THE COMPILE MUST AGREE WITH THE WALK IT REPLACED, VALUE FOR VALUE ----------------------
+  // Moving an expression out of a loop is only safe if it is the SAME expression. The field holds a
+  // label, so a value that differs in the last place is a different picture, not a close one - and the
+  // ways to get this wrong are all tidying: Math.max for a ternary, a dropped `|| 0` that lets NaN
+  // through, a clamp applied in the wrong order. So compileOps is lifted and run, and each field is
+  // compared against the expression the per-pixel walk used to evaluate, over inputs that include the
+  // absent and the hostile.
+  {
+    const fn = SRC.match(/function compileOps\(F, OPS\) \{[\s\S]*?\n  \}/);
+    ok('compileOps is extractable, so this runs the REAL one', !!fn);
+    if (fn) {
+      const compile = new Function('OPK', 'return ' + fn[0])({ spin: 1, blow: 2, roll: 3, press: 4, stir: 5 });
+      const F = { RU0: [], ROLL: [], SG: null, S: null, SKEY: () => '0:0' };
+      const ops = [
+        { k: 'spin', a: 1.2197, cx: 0.5, cy: -0.3 },
+        { k: 'spin' },                                   // every field absent
+        { k: 'blow', a: 0.01 },                          // below the clamp
+        { k: 'blow', a: -3 },                            // negative
+        { k: 'blow', a: 'x' },                           // NaN through coercion
+        { k: 'roll', a: 1.84, d: 37 },
+        { k: 'roll', a: 2, d: 0 },                       // the no-rotation case
+        { k: 'press', face: 0, bite: 0 },
+        { k: 'press' },
+        { k: 'stir' },
+        { k: 'nonsense' },
+      ];
+      for (let i = 0; i < ops.length; i++) F.RU0.push(i * 0.5);
+      const got = compile(F, ops);
+      let bad = null;
+      for (let i = 0; i < ops.length && !bad; i++) {
+        const op = ops[i], c = got[i];
+        const dr = (+op.d || 0) * Math.PI / 180;         // exactly as glassUnform spelled it
+        const want = {
+          a: +op.a || 0,
+          s: +op.a > 0.05 ? +op.a : 0.05,
+          ox: +op.cx || 0, oy: +op.cy || 0,
+          rot: dr !== 0, cd: Math.cos(dr), sd: Math.sin(dr),
+          u0: (F.RU0 && F.RU0[i]) || 0,
+          face: Math.max(0.05, +op.face || 5) * 0.5,
+          bite: +op.bite || 1,
+        };
+        for (const key of Object.keys(want))
+          if (!Object.is(c[key], want[key])) bad = 'op ' + i + ' (' + op.k + ') ' + key + ': ' + c[key] + ' vs ' + want[key];
+      }
+      ok('every compiled value equals the expression it replaced', !bad, bad || ops.length + ' ops, all fields');
+      ok('an unknown kind compiles to zero and is skipped, not misread', got[10].k === 0);
+      ok('the original op travels for the stamp readers', got[0].raw === ops[0]);
+
+      // ABLATION: the tidy spelling. Math.max lets NaN through where the ternary does not.
+      const tidy = fn[0].replace('s: +op.a > 0.05 ? +op.a : 0.05,', 's: Math.max(0.05, +op.a),');
+      const c2 = new Function('OPK', 'return ' + tidy)({ spin: 1, blow: 2, roll: 3, press: 4, stir: 5 })(F, ops);
+      ok('ablation: tidying the clamp to Math.max is caught',
+         !Object.is(c2[4].s, +ops[4].a > 0.05 ? +ops[4].a : 0.05),
+         'NaN input gives ' + c2[4].s + ' instead of ' + (+ops[4].a > 0.05 ? +ops[4].a : 0.05));
+    }
+  }
 
   // ABLATION: drop the fallback and the backward-compatible case stops existing.
   const broken = SRC.replace("SG['0:0'] = glassWarp(H, moons);", '');

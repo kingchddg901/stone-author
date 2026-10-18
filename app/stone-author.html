@@ -1803,7 +1803,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.17.144';
+  const BUILD = '2026.10.17.145';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4899,6 +4899,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // is the whole point of it, and is also why the key has to travel with the function rather than
       // be stubbed out here.
       warpCacheKey,
+      // compileOps turns the op list into records the per-pixel walk can read without a string
+      // compare or a coercion. OPK is the kind table it reads; both travel or the core throws on
+      // its first glass pixel.
+      compileOps,
       rollStamp, rollStampAt, rollerAt, rollerHand, rollerPath, moonDisp, warpMaskAt, gatherMasks,
       // surfaceGloss asks the fork how glossy the surface is on its own account, and applyCoat asks it
       // for EVERY material on every tile - so leaving it out did not break wood, it broke the pool.
@@ -4935,6 +4939,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // shared: each context keeps its own memo and its own scratch, which is what makes the cache safe
     // without any invalidation message ever crossing the wire - a worker's slab cannot change under it.
     s += MATERIAL_DECL + `var marks=[],_wmask=null,_WM={m:null};\n`;
+    // OPK is the kind table compileOps reads. A const object at module scope here, so it has to be
+    // declared rather than carried as a function - and without it every op compiles to kind 0 and
+    // the glass comes back unformed, which is a silent wrong picture rather than a throw.
+    s += `var OPK={spin:1,blow:2,roll:3,press:4,stir:5};\n`;
     s += `var _wkF=new Float64Array(1),_wkI=new Int32Array(_wkF.buffer);\n`;
     s += `var ensureClouds=()=>__cl,ensureBands=()=>__bd,ensureBreccia=()=>__br;\n`;
     s += `var document={createElement:()=>new OffscreenCanvas(1,1)};\n`;
@@ -6578,9 +6586,60 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //   stir   the baked warp field - every moon pass and the whole-slab current. It is authored in
   //          SLAB coordinates, so it converts in and back out at its own place in the chain; a
   //          stir reached from far outside the slab clamps to the edge of that field.
+  // THE OP LIST, COMPILED ONCE PER TILE INSTEAD OF READ ONCE PER PIXEL.
+  //
+  // glassUnform walks every op for every pixel - sixteen ops across 16.7 million pixels is 267 million
+  // iterations - and each one was paying for work that cannot change between pixels:
+  //
+  //   * `op.k` compared against up to five STRINGS to pick the branch.
+  //   * `+op.cx || 0` and `+op.cy || 0` coerced for EVERY op, including the three kinds that ignore
+  //     a centre entirely.
+  //   * `(+op.d || 0) * Math.PI / 180`, then Math.cos and Math.sin of it - from an angle that is a
+  //     property of the op, recomputed per pixel. rollStamp recomputed the same three a second time.
+  //   * and the expensive one: a stir read `F.SG[F.SKEY(op)]`, and F.SKEY BUILDS A STRING. Four stirs
+  //     across 16.7 million pixels is 67 million string allocations and hash lookups to find a lattice
+  //     that was decided before the first pixel.
+  //
+  // Compiled, each op becomes one record of the same shape - a small integer kind, numbers already
+  // coerced and clamped, trig already taken, and the stir's lattice and the press's roller resolved to
+  // references. The inner loop then reads fields and never a string.
+  //
+  // EVERY VALUE IS SPELLED AS THE LOOP SPELLED IT, because the field holds a LABEL and a value that
+  // differs in the last place is a different picture rather than a close one. The ways to get this
+  // wrong are all tidying, and check-op-origin ablates the obvious one: `+op.a > 0.05 ? +op.a : 0.05`
+  // reads as `Math.max(0.05, +op.a)` until the input coerces to NaN, where the ternary's comparison
+  // is false and yields 0.05 while Math.max yields NaN - which then poisons every coordinate after
+  // it. Copied, not tidied, and the gate runs the compile against the expressions it replaced.
+  const OPK = { spin: 1, blow: 2, roll: 3, press: 4, stir: 5 };
+  function compileOps(F, OPS) {
+    const out = [];
+    for (let i = 0; i < OPS.length; i++) {
+      const op = OPS[i] || {};
+      const k = OPK[op.k] || 0;
+      const dr = (+op.d || 0) * Math.PI / 180;
+      const st = (op.st && op.st.length) ? op : null;          // rollStampAt wants the op itself
+      out.push({
+        k,
+        a: +op.a || 0,                                          // spin's angle, as the loop read it
+        s: +op.a > 0.05 ? +op.a : 0.05,                         // blow and roll's scale, same test
+        ox: +op.cx || 0, oy: +op.cy || 0,
+        rot: dr !== 0, cd: Math.cos(dr), sd: Math.sin(dr),
+        // THE ORIGINAL OP, carried because rollStampAt reads the stamp list off the op itself and
+        // must never be handed this record instead. `st` doubles as the has-stamps flag; `raw` is what
+        // gets passed. A press with no stamps made `op.st || op` fall through to the COMPILED record,
+        // which reads as an op with no stamps at all - caught before it was measured, not after.
+        st, raw: op, u0: (F.RU0 && F.RU0[i]) || 0,
+        B: (k === 4 && F.ROLL && op.ri >= 0) ? F.ROLL[op.ri] : null,
+        face: Math.max(0.05, +op.face || 5) * 0.5,
+        bite: +op.bite || 1,
+        S: k === 5 ? (F.SG ? F.SG[F.SKEY(op)] : F.S) : null,
+      });
+    }
+    return out;
+  }
   function glassUnform(x0, y0, F, out) {
     let x = x0, y = y0, press = 0;
-    const ops = F.OPS;
+    const ops = F.OPC;                                       // compiled once per tile; see compileOps
     for (let i = ops.length - 1; i >= 0; i--) {
       const op = ops[i], k = op.k;
       // EACH OP CAN NOW STAND SOMEWHERE OF ITS OWN. Two spins about one centre compose into a single
@@ -6591,54 +6650,53 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // ABSENT IS THE ORIGIN, and that is exact rather than close: translate, transform, translate back
       // with ox = oy = 0 returns the same doubles, so every slab written before this renders bit for bit
       // as it did. Checked over 200,000 random points at zero deviation before the field was added.
-      const ox = +op.cx || 0, oy = +op.cy || 0;
-      if (k === 'spin') {
+      const ox = op.ox, oy = op.oy;
+      if (k === 1) {                                           // spin
         const px = x - ox, py = y - oy, r = Math.sqrt(px * px + py * py);
-        if (r > 1e-9) { const th = woodAtan2(py, px) - (+op.a || 0) * r; x = ox + r * Math.cos(th); y = oy + r * Math.sin(th); }
-      } else if (k === 'blow') {
-        const s = +op.a > 0.05 ? +op.a : 0.05; x = ox + (x - ox) / s; y = oy + (y - oy) / s;
-      } else if (k === 'roll') {
+        if (r > 1e-9) { const th = woodAtan2(py, px) - op.a * r; x = ox + r * Math.cos(th); y = oy + r * Math.sin(th); }
+      } else if (k === 2) {                                    // blow
+        const s = op.s; x = ox + (x - ox) / s; y = oy + (y - oy) / s;
+      } else if (k === 3) {                                    // roll
         // The stamps are read BEFORE the roll is undone, because this is the frame the roll
         // produced and that is where they were pressed.
-        if (op.st && op.st.length) {
-          const h = rollStamp(x, y, op, F.RU0 ? F.RU0[i] : 0);
+        if (op.st) {
+          const h = rollStampAt(x * op.cd + y * op.sd - op.u0, -x * op.sd + y * op.cd, op.raw);
           if (h > press) press = h;
         }
-        const s = +op.a > 0.05 ? +op.a : 0.05;
-        const dr = (+op.d || 0) * Math.PI / 180;
-        if (dr) {                                              // roll along an axis of its own
-          const cd = Math.cos(dr), sd = Math.sin(dr);
+        const s = op.s;
+        if (op.rot) {                                              // roll along an axis of its own
+          const cd = op.cd, sd = op.sd;
           const a0 = x * cd + y * sd, c0 = -x * sd + y * cd;
           const a1 = a0 / s, c1 = c0 * s;
           x = a1 * cd - c1 * sd; y = a1 * sd + c1 * cd;
         } else { x /= s; y *= s; }
-      } else if (k === 'press' && F.ROLL) {
+      } else if (k === 4) {                                    // press
         // A DRAWN PASS. The roller's own coordinates: how far ALONG it, how far ACROSS. Outside
         // the face it simply did not touch, which is why a pass is a mark and not a mode.
-        const B = op.ri >= 0 ? F.ROLL[op.ri] : null;
+        const B = op.B;
         if (B) {
           const cu = (x - F.PX) * 12 / SLAB_FT + 0.5;
           const cvv = (y - F.PY) * 12 / SLAB_FT + 0.5 * F.H;
           rollerAt(B, cu, cvv, F.PV);
-          const sAt = F.PV[0], vAt = F.PV[1], half = Math.max(0.05, +op.face || 5) * 0.5;
+          const sAt = F.PV[0], vAt = F.PV[1], half = op.face;
           if (vAt > -half && vAt < half) {
             rollerHand(B, sAt, F.PH);
             // TILT TIPS ONE END DOWN, linear across the face. Clamped at zero because a lifted end
             // does not press at all - which is the right answer for a rigid cylinder leaned far
             // enough that only one end still touches.
-            let bite = (+op.bite || 1) * F.PH[0] * (1 + F.PH[1] * (vAt / half));
+            let bite = op.bite * F.PH[0] * (1 + F.PH[1] * (vAt / half));
             if (bite > 0) {
-              const h = rollStampAt(sAt, vAt, op);
+              const h = rollStampAt(sAt, vAt, op.raw);
               if (h > 0) { const q = h * (bite > 1 ? 1 : bite); if (q > press) press = q; }
             }
           }
         }
-      } else if (k === 'stir') {
+      } else if (k === 5) {                                    // stir
         // ITS OWN FIELD, or the one every moon is in. An op with no range keys to '0:0', which is the
         // lattice this function always read, so a slab written before ranges existed drags exactly as
         // it did - checked by byte-identity on a real slab rather than by a tolerance, because a glass
         // field holds a LABEL and a coordinate moving in the last place can change a pixel by 130.
-        const S = F.SG ? F.SG[F.SKEY(op)] : F.S;
+        const S = op.S;
         if (S) {
           const cu = (x - F.PX) * 12 / SLAB_FT + 0.5;
           const cvv = ((y - F.PY) * 12 / SLAB_FT + 0.5 * F.H);
@@ -6958,6 +7016,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // frame's index is the difference between drawing nothing and drawing somebody else's pass.
     for (const o of OPS) if (o && o.k === 'press' && !bound.has(o)) o.ri = -1;
     if (F.S && !OPS.some(o => o && o.k === 'stir')) OPS.push({ k: 'stir' });   // a drawn moon implies one
+    // LAST, because every reference it resolves - the stir lattices, the bound rollers, the roll
+    // origins - has to already exist, and because the line above can still add an op.
+    F.OPC = compileOps(F, OPS);
     const eps = 0.004;                                           // gradient step, in feet
     const fv = [0, 0], melt = [0, 0], gth = [0, 0, 0], lay = [0, -1, 0, 1];
     const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));
