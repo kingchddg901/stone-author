@@ -57,6 +57,7 @@ for (const p of files) {
     spectrum: j.spectrum === 0 ? 'day' : j.spectrum === -1 ? 'uv' : 'spx' + j.spectrum,
     tiles: j.renders, tile: j.render,
     msRender: j.ms ? j.ms.render : 0, msSum: sum, perN: per.length,
+    per, perBy: (j.perTile && j.perTile.bytes) || null,   // kept for --cost; absent on older masters
     resumed: j.resumedTiles || 0,
     bpp: px ? bytes / px : 0,
     mean: j.light ? j.light.mean : null, lit40: j.light ? j.light.lit40 : null,
@@ -168,3 +169,62 @@ const dups = [...bySize.values()].filter(v => v.length > 1);
 for (const d of dups)
   console.log('\n' + d.length + ' masters are byte-identical in size at this width:\n  ' + d.join('\n  ')
     + '\n  (equal size is not equal pixels - run tools/check-same-image.mjs to settle it)');
+
+// ---- --cost: WHERE DID THE TIME GO ----------------------------------------------------------------
+// A master stores two numbers per tile - how long the tile took and how many bytes it compressed to -
+// and that pair separates work that scales with PIXELS from work that scales with OUTPUT SIZE. Fit
+// ms = a + b x bytes: the intercept is everything that costs the same whatever the tile compressed to
+// (paint, the readback, deflating a buffer whose INPUT size is fixed), and the slope is what rides on
+// the output (the write).
+//
+// Measured on a 1,048,576: a = 1347 ms, so 76% of a five-hour render is the intercept, and dividing it
+// by the tile's pixel count gives about 20 ns per pixel - flat across 2048, 4096 and 8192 tiles, which
+// is how we know it is per-pixel work and not per-tile overhead.
+//
+// TWO HONEST LIMITS, printed rather than buried:
+//
+//   THE SPLIT IS NOT CLEAN. Busy tiles are both slower to paint AND bigger, so bytes correlates with
+//   paint time and the slope absorbs some of it. R2 says how much of the variance bytes explains at
+//   all; where it is low the a/b split is the shakiest part of this and the intercept is still the
+//   number to trust, because it rests on every tile rather than on the fit's direction.
+//
+//   A NARROW RENDER UNDER-READS. At a fixed tile size a smaller render packs more slab into each tile,
+//   so more of its cost is content: measured on ONE picture at 4096 tiles, the size-dependent share was
+//   56% at 65,535, 42% at 131,072 and 25% at 524,288, and the intercept read 264, 314 and 311 ms. The
+//   two wide ones agree to 1%; the narrow one is 16% low. It is not the same measurement more quietly.
+if (flag('cost')) {
+  const fits = [];
+  for (const r of rows) {
+    if (!r.perBy || !r.per || r.per.length !== r.perBy.length) {
+      console.log('\n' + r.name + ': no per-tile bytes - cannot split (older master)');
+      continue;
+    }
+    const n = r.per.length, add = a => a.reduce((x, y) => x + y, 0);
+    const mMs = add(r.per) / n, mBy = add(r.perBy) / n;
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < n; i++) { const dx = r.perBy[i] - mBy, dy = r.per[i] - mMs; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
+    const b = sxx ? sxy / sxx : 0, a = mMs - b * mBy, r2 = (sxx && syy) ? (sxy * sxy) / (sxx * syy) : 0;
+    const tot = add(r.per), fixed = a * n, nsPx = a * 1e6 / (r.tile * r.tile);
+    fits.push({ r, a, b, r2, nsPx, fixedPct: 100 * fixed / tot, tot });
+    console.log('\n' + r.name);
+    console.log('  ' + r.w + ' @ ' + r.tile + ' tiles, ' + n + ' of them, ' + dur(tot)
+      + (r.resumed ? '   RESUMED ' + r.resumed : ''));
+    console.log('  ms = ' + a.toFixed(0) + ' + ' + (b * 1e6).toFixed(1) + ' per MB out'
+      + '      R2 ' + r2.toFixed(3) + (r2 < 0.3 ? '  <- bytes explain little of the variance; trust the intercept, not the split' : ''));
+    console.log('  per-pixel ' + nsPx.toFixed(1) + ' ns      fixed ' + dur(fixed) + ' (' + (100 * fixed / tot).toFixed(0)
+      + '%)   size-dependent ' + dur(tot - fixed) + ' (' + (100 * (tot - fixed) / tot).toFixed(0) + '%)');
+  }
+  // THE COMPARISON IS ON ns/px, not on wall time. Two runs minutes apart on one machine can differ by
+  // far more than the effect being looked for - repeated page loads were measured inflating timings up
+  // to 2x - and a per-pixel figure stays honest when a whole run drifted slow.
+  if (fits.length > 1) {
+    console.log('\nPER-PIXEL COST, which is what survives a run that drifted slow:');
+    const srt = fits.slice().sort((x, y) => x.nsPx - y.nsPx);
+    for (const f of srt)
+      console.log('  ' + String(f.nsPx.toFixed(1) + ' ns').padStart(9) + '  @' + String(f.r.tile).padEnd(6)
+        + String(f.r.w).padStart(9) + '  ' + f.r.name);
+    const lo = srt[0], hi = srt[srt.length - 1];
+    if (lo !== hi) console.log('  spread ' + (100 * (hi.nsPx / lo.nsPx - 1)).toFixed(1) + '%, cheapest at tile '
+      + lo.r.tile + (lo.r.tile === hi.r.tile ? '  (same tile size: this is run-to-run, not tiling)' : ''));
+  }
+}
