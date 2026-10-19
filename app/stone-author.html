@@ -4944,6 +4944,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // check-bleed refuses by name. glowFns() is hoisted, so it can be called from here and resolves
     // against the live binding at call time. check-worker-core reads this line too.
     Object.assign(fns, glowFns());
+    // AND THE FINISHING TRIO, for the same dead-zone reason: storedTilePixels, the mark stamp, the
+    // deflate and the lost-canvas guard all live thousands of lines below this. With them the worker
+    // can cut, mark, sample and compress its own tile and hand back bytes instead of a bitmap.
+    Object.assign(fns, finishFns());
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
     s += `var WOOD=${JSON.stringify(WOOD)},LOG_FIT=${LOG_FIT};\n`;
     // THE UNITS THE WOOD SAMPLER MEASURES IN. Constants, not functions, which is exactly why they
@@ -4986,6 +4990,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `var UV_GROUND=${JSON.stringify(UV_GROUND)};
 `;
     s += glowPreamble();                                     // BLOOM_DRAW, the glow knobs, UV_LIFT
+    s += finishPreamble();                                   // the MARK_ constants markStamp reads
     s += `var liftCv=new OffscreenCanvas(1,1),PYR_W=[0.5,0.3,0.2],COAT_REF=1000;
 `;
     s += `var liftMap=new Map(),liftCached=-1,glowKnob=null,glowPx=0;
@@ -5015,7 +5020,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // anything that read the list.
     s += `var document={createElement:()=>new OffscreenCanvas(1,1)};\n`;
     for (const n in fns) s += `var ${n}=${fns[n].toString()};\n`;
-    s += `self.onmessage=function(e){var d=e.data;\n`;
+    // ASYNC because finish mode awaits deflateBytes. The bitmap path has no await in it, so its body
+    // still runs synchronously to completion exactly as before - an async function only yields at its
+    // first await, and that path never reaches one.
+    s += `self.onmessage=async function(e){var d=e.data;\n`;
     s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
     // THE ACK IS THE ONLY WAY TO TELL A QUEUE FROM A STALL. A bitmap arriving late can mean the
     // worker painted for a minute or that it sat holding a message it had not been scheduled to
@@ -5040,6 +5048,32 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // keepBleed: the export reads its quarters at [bleed + sx*store), so it wants the bled tile
     // exactly as renderOneTile returns it. Cropping here and re-offsetting there would be two
     // places to get the same arithmetic right.
+    // FINISH MODE. With d.fin the worker does what the consumer used to do for it: the k x k cut,
+    // the mark, the light sample and the deflate, handing back compressed bytes. ~2.7 MB crosses the
+    // wire instead of a 67 MB bitmap, and the per-pixel work runs eight-wide instead of in a queue.
+    //
+    // THE LOST-CANVAS GUARD COMES WITH IT. tilePainted reads the canvas, and in this mode the consumer
+    // never sees one - so the worker runs the same check on its own surface and reports the answer.
+    // A false `painted` makes the consumer fall back to its own renderOneTile, where the original
+    // guard still runs: the check moved, it did not go away, and the second line is untouched.
+    //
+    // The bitmap path stays exactly as it was, because renderTiledParallel is the other consumer of
+    // this core and wants a bitmap. One core, two answers, chosen by the caller.
+    s += `if(d.fin){\n`;
+    s += `  var okP=tilePainted(tc);\n`;
+    s += `  var parts=[],xfer=[],mk=0,lS=0,lU=0,lN=0;\n`;
+    s += `  if(okP){for(var sy=0;sy<d.k;sy++)for(var sx=0;sx<d.k;sx++){\n`;
+    s += `    var tx=d.gx*d.k+sx,ty=d.gy*d.k+sy;\n`;
+    s += `    if(tx>=d.across||ty>=d.down)continue;\n`;
+    s += `    var pr=storedTilePixels(tcx,{bleed:d.bleed,store:d.store},sx,sy,tx,ty,d.finalW,d.markSig);\n`;
+    s += `    var px=pr.px;mk+=pr.marked;\n`;
+    s += `    for(var q=0;q<px.length;q+=400){var l=(px[q]+px[q+1]+px[q+2])/3;lS+=l;if(l>40)lU++;lN++;}\n`;
+    s += `    var z=await deflateBytes(new Uint8Array(px.buffer,px.byteOffset,px.byteLength));\n`;
+    s += `    parts.push({idx:ty*d.across+tx,z:z});xfer.push(z.buffer);\n`;
+    s += `  }}\n`;
+    s += `  self.postMessage({i:d.i,fin:true,painted:okP,parts:parts,marked:mk,litSum:lS,litUp:lU,litN:lN},xfer);\n`;
+    s += `  return;\n`;
+    s += `}\n`;
     s += `var out=tc;if(!d.keepBleed){out=new OffscreenCanvas(d.tileW,d.tileH);out.getContext('2d').drawImage(tc,d.bleed,d.bleed,d.tileW,d.tileH,0,0,d.tileW,d.tileH);}\n`;
     s += `var bmp=out.transferToImageBitmap();self.postMessage({i:d.i,tx0:d.tx0,ty0:d.ty0,bmp:bmp},[bmp]);};`;
     return s;
@@ -12339,6 +12373,28 @@ self.onmessage = async (e) => {
       return false;
     } catch (_) { return false; }                          // a canvas that will not even read back is lost
   }
+  // WHAT A WORKER NEEDS TO FINISH ITS OWN TILE, built where those names are legal to read.
+  //
+  // The core used to hand back an ImageBitmap and the main thread did the rest for every tile: cut it
+  // into k x k stored tiles, read each one back with getImageData, stamp the mark, sample the light,
+  // deflate. Measured on a 131,072 at a 4096 tile, that is 306.7 ms of main-thread work per tile -
+  // 74.7 readback, 1.0 sample, 231.0 deflate - against 520 ms of wall per tile, and it is SERIAL
+  // while eight workers sit finished and queued behind it. The trace shows the queue directly: tiles
+  // hand over at 0.4, 240, 489, 732 ms, each waiting one consumer's turn longer than the last.
+  //
+  // Overlapping that behind the paint saves min(paint, serial), and paint spread over eight workers is
+  // ~35 ms - about 7%. Moving it INTO the workers divides it by eight instead. Different lever.
+  //
+  // Everything here is declared below renderCoreSrc, which sits ~7,400 lines above: naming any of it
+  // up there is a temporal dead zone. A function declaration is hoisted, so renderCoreSrc can call
+  // these and they resolve against the live values at call time - the same escape hatch glowFns uses,
+  // and check-worker-core reads both.
+  function finishFns() { return { storedTilePixels, markStamp, markPack, deflateBytes, tilePainted }; }
+  function finishPreamble() {
+    return 'var MARK_ON=' + MARK_ON + ',MARK_CELL=' + MARK_CELL + ',MARK_BITS=' + MARK_BITS +
+           ',MARK_COPIES=' + MARK_COPIES + ',MARK_VER=' + MARK_VER + ',MARK_MAGIC=' + MARK_MAGIC + ';' +
+           String.fromCharCode(10);
+  }
   // WHAT THIS DEVICE HAS ACTUALLY DONE. canvasFits asks what the browser will grant at this instant.
   // This records what the machine has already rendered with and finished. A tablet that produced a 65535
   // master at 4096 tiles in the morning has PROVEN 4096, and a refusal that evening is weaker evidence
@@ -13115,6 +13171,20 @@ self.onmessage = async (e) => {
     !gatherMasks().some(w => w.show != null) &&
     typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
   let EXP_FORCE_SEQ = false;                               // the differential test flips this
+  // ?finish=1 - LET EACH WORKER FINISH ITS OWN TILE instead of handing a bitmap back for this thread
+  // to cut, mark, sample and deflate. Measured on a 131,072 at a 4096 tile, that work is 306.7 ms of
+  // every 520 ms pass and it runs in a queue while eight workers sit idle holding finished tiles.
+  //
+  // OFF BY DEFAULT, and it stays off until a real master has been rendered both ways and compared.
+  // The output is byte-identical here - 48 stored tiles, full hashes, against a main-thread control,
+  // with a one-bit change to markSig proving the comparison can fail - but "identical in the harness"
+  // and "identical in a five-hour export that resumes" are different claims, and only the second one
+  // decides whether every master already on disk still reproduces. The flag is the way to find out
+  // without betting the default on it.
+  const FINISH_WORKER = (() => {
+    try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('finish') || ''); }
+    catch (_) { return false; }
+  })();
   // A POOL THAT PAINTS AHEAD. Tiles are consumed in order - the sink is indexed but the stats, the
   // timing and the blank-tile retry all read in sequence - so the win comes from having the next few
   // already in flight. Bounded by the plan's own memory arithmetic, because that budget was written
@@ -13257,12 +13327,20 @@ self.onmessage = async (e) => {
           }
           tr.f = performance.now(); tr.bF = busyCount();
           poolSettle(q, tr.f - t0);
-          res(e.data.bmp);
+          // In finish mode the pass IS the record - parts, counts and the painted flag - and there is
+          // no bitmap to hand over. One pool is in one mode for its whole life, set by p.fin.
+          res(e.data.fin ? e.data : e.data.bmp);
         };
         q.w.onerror = e => { q.busy = false; rej(new Error('render worker: ' + (e.message || 'threw'))); };
+        // p.fin asks the worker to finish its own tile - cut, mark, sample, deflate - and hand back
+        // bytes. The geometry it needs is the STORED grid, which is why k, store, across and down
+        // travel with the pass: the cut is addressed in stored tiles and the mark lattice is anchored
+        // to the picture, so neither may be re-derived from the render tile at the far end.
         q.w.postMessage({ i: idx, tx0: gx * p.ts, ty0: gy * p.ts, tileW: p.ts, tileH: p.ts, keepBleed: true,
                           ew: p.ts + 2 * p.bleed, eh: p.ts + 2 * p.bleed, ex0: gx * p.ts - p.bleed,
-                          ey0: gy * p.ts - p.bleed, bleed: p.bleed, bs, finalW, finalH });
+                          ey0: gy * p.ts - p.bleed, bleed: p.bleed, bs, finalW, finalH,
+                          fin: !!p.fin, gx, gy, k: p.k, store: p.store, across: p.across, down: p.down,
+                          markSig: p.markSig || 0 });
       }));
     };
     return {
@@ -13282,6 +13360,20 @@ self.onmessage = async (e) => {
         c.width = p.ts + 2 * p.bleed; c.height = p.ts + 2 * p.bleed;
         c.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
         return c;
+      },
+      // THE SAME DISPATCH, A DIFFERENT PAYLOAD. Finish mode hands back {painted, parts, marked,
+      // litSum, litUp, litN} and the consumer never touches a pixel - so there is no canvas here to
+      // build, and the 67 MB bitmap that used to cross the wire is ~2.7 MB of deflated bytes.
+      // Kept separate from tile() rather than folded into it, because a caller reaching for the
+      // wrong one should fail loudly rather than be handed something of the other shape.
+      async finish(idx) {
+        if (!p.fin) throw new Error('pool.finish on a pool that was not built with p.fin');
+        start(idx);
+        for (let k = 1; k < n; k++) start(idx + k);
+        const rec = await inflight.get(idx);
+        inflight.delete(idx);
+        for (let k = 1; k <= n; k++) start(idx + k);
+        return rec;
       },
       retire(idx) { const q = inflight.get(idx); inflight.delete(idx); if (q) q.then(b => b.close(), () => {}); },
       close() { for (const q of pool) q.w.terminate(); URL.revokeObjectURL(url);
@@ -13463,6 +13555,10 @@ self.onmessage = async (e) => {
       // THE POOL PAINTS SLABS. Its core is the slab painter serialised, so a floor would come back as
     // the material it was cut from - silently, which is the failure mode that costs hours. Off for
     // floors until the core knows about pieces.
+    // The mark key and the finish flag travel ON THE PLAN, because the pool hands both straight to
+    // every pass and neither may be re-derived at the far end: the signature is taken once for the
+    // whole render, and whether the worker finishes decides the shape of what it sends back.
+    p.markSig = markSig; p.fin = FINISH_WORKER;
     pool = layTiles ? null : await tilePool(W, p);
       // SELF-TERMINATING on the pool going null, which every path does - the success path at the
       // metadata and the finally on any throw. A timer that outlives the render would sample a getter
@@ -13512,20 +13608,44 @@ self.onmessage = async (e) => {
         // ground before drawing anything, so a real pixel is opaque whatever colour it ends up. A tile
         // with nothing opaque in it was never drawn on. Three rows are enough because this failure is
         // whole-canvas: the backing is there or it is not.
-        let c = null, tCons = 0;
+        let c = null, fin = null, tCons = 0;
         for (let attempt = 1; ; attempt++) {
           // THE RETRY IS ALWAYS ON THIS THREAD. A worker that handed back an unallocated backing is
           // in no state to be asked again, and the point of the retry is to get the tile, not to
           // find out whose fault it was. First attempt uses the pool when there is one.
-          c = (pool && attempt === 1) ? await pool.tile(n)
-                                      : (layTiles ? renderFloorTile : renderOneTile)(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
-          tCons = performance.now();          // HANDED OVER. Not the same instant as finished - see below.
-          if (tilePainted(c)) break;
-          c.width = 1; c.height = 1;                       // hand the failed allocation back first
+          //
+          // FINISH MODE TAKES THE SAME SHAPE. The worker hands back bytes and its own answer to the
+          // lost-canvas question, so the guard here reads a flag instead of a canvas - and a failure
+          // drops into exactly the branch below, where renderOneTile runs on this thread and the
+          // original tilePainted still examines a real surface. The second line never moved.
+          if (pool && attempt === 1 && p.fin) {
+            fin = await pool.finish(n);
+            tCons = performance.now();
+            if (fin.painted) break;
+            fin = null;                                    // fall through to the main-thread retry
+          } else {
+            c = (pool && attempt === 1) ? await pool.tile(n)
+                                        : (layTiles ? renderFloorTile : renderOneTile)(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
+            tCons = performance.now();        // HANDED OVER. Not the same instant as finished - see below.
+            if (tilePainted(c)) break;
+            c.width = 1; c.height = 1;                     // hand the failed allocation back first
+          }
           if (attempt >= 2) { forgetTile(W); throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders })); }
           expStat(TR('exp.tiles', { done: n + 1, total: p.renders, px: W }), 0.92 * n / p.renders);
           await breathe();                                 // a retry costs one tile; a hole costs the master
         }
+        if (fin) {
+          // THE WORKER ALREADY DID THIS. Its parts arrive in the same order this loop would have
+          // produced them and carry the same stored-tile index, so the sink sees exactly the sequence
+          // it always has. The counts are added here rather than there because they are the EXPORT's
+          // running totals, and the worker only knows about its own tile.
+          markedCells += fin.marked;
+          litSum += fin.litSum; litUp += fin.litUp; litN += fin.litN;
+          for (const part of fin.parts) {
+            const zl = part.z.length;                      // length first - see the note below
+            await sink.add(part.idx, part.z); bytes += zl; tb += zl;
+          }
+        } else {
         const cx = c.getContext('2d');
         for (let sy = 0; sy < p.k; sy++) for (let sx = 0; sx < p.k; sx++) {
           const tx = gx * p.k + sx, ty = gy * p.k + sy;
@@ -13546,6 +13666,7 @@ self.onmessage = async (e) => {
           await sink.add(ty * p.across + tx, z); bytes += zl; tb += zl;   // straight to disk under OPFS
         }
         c.width = 1; c.height = 1;                         // only now: every quarter has been read
+        }
         const msT = Math.round(performance.now() - tTile);
         tileMs.push(msT); tileBytes.push(tb);
         // READ ONCE, then gone from the pool's map - and only for the runs this stride keeps, so a
