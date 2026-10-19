@@ -139,6 +139,41 @@ tile plan, per-tile timings and light figure, and then deleted. 952 sidecars occ
 in this section re-derives from them, which is the only reason any of it can be stated at all — the
 pictures it describes no longer exist.
 
+### Eighteen days on — 2026-10-19
+
+| | |
+|---|---|
+| Renders | **855** |
+| Pixels | **3,221,720,850,845** |
+| | **2.93 × 2^40** |
+| 2 × 2^40 crossed | 2026-10-17T05:55:53.358Z, by a 1,048,576 — 143.0% → 205.5% in one render |
+
+The second tebipixel is attributable to a single master the way the first was, and more starkly: a
+1,048,576 × 655,360 render is 687.2 Gpx, 62.5% of a tebipixel on its own, so it crossed the line from
+well behind it.
+
+**The method is now [`tools/render-census.mjs`](tools/render-census.mjs) rather than a one-liner.** The
+figure above was first recomputed by a method that looked reasonable and was wrong twice over — keyed on
+`inputs` instead of `engine`, which collapses the same picture rendered on two browsers into one render
+and under-counts by about 8%, and reading one of the three evidence directories instead of all three.
+It disagreed with the published crossing date by a fortnight and nearly prompted a "correction" to the
+paragraph above. The published figure was right. So the census now **checks itself against it** before
+reporting anything current, and exits non-zero if it cannot reproduce 768 renders and 1,107,051,880,835
+pixels exactly. A number that can only be re-derived by remembering how it was derived is not a record.
+
+**Two gaps in this one, stated rather than smoothed over.**
+
+The evidence directories were not fed between 2026-10-01 and 2026-10-19. Forty-three masters rendered in
+that window existed only as files; they have since been harvested, which is why the ledger is current
+again, but nothing would have noticed if they had been deleted first.
+
+Forty-four were. A prune on 2026-10-19 removed masters from `Downloads` before harvesting them, against
+the discipline the paragraph above describes. The width census taken either side of that prune is exact,
+so **195,622,920,205 of the pixels in the total are a reconstruction** — 44 renders whose pixel count is
+certain and whose individual records are gone. The census reports that line separately rather than
+folding it in, because a reader is entitled to know how much of a figure rests on a record of one render
+and how much on an aggregate.
+
 **What is excluded, and why.** Seven renders at 16,384 recorded a light figure of exactly zero: the
 assembly canvas allocated, reported success and painted nothing, while every other field — identity,
 geometry counts, tile plan, a plausible 51-63 s duration — looked correct. They are kept as sidecars and
