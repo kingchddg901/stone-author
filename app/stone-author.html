@@ -1803,7 +1803,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.18.150';
+  const BUILD = '2026.10.19.151';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4512,9 +4512,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function coatRadius(bs, uv) {
     if (uv === undefined) uv = uvMode;
     let r = 0;
-    // The bleed is neighbour-sampling margin for a BLUR. Drawn glow reads no neighbours: a shape outside
-    // the canvas still casts its shadow into it (measured), so the whole picture is submitted to every
-    // tile and the canvas clips the result rather than the input. Hence zero, not shadowReach(glowPx).
+    // The bleed is neighbour-sampling margin for a BLUR, and the drawn glow gets NONE - which is a
+    // trade, not a fact about shadows. The claim that stood here was that drawn glow reads no
+    // neighbours, because a shape outside the canvas still casts its shadow into it. That much is
+    // true and was measured; it is simply not the same statement as "the result does not depend on
+    // the canvas size", and the second does not follow from the first.
+    //
+    // MEASURED 2026-10-19, one slab at 16,384 under black light, the same region rendered inside a
+    // 2048 tile and a 4096 tile. Pixels differing, by bleed: 4 -> 1.699%, 64 -> 0.553%, 256 -> 0.43%,
+    // 786 -> ZERO. The glow needs bleed, and the amount it needs is blurReach(glowPx), which is 786
+    // at that width. At 131,072 the same comparison moves 3.95% of the picture.
+    //
+    // SO WHY IS IT STILL ZERO. blurReach(glowPx) grows with the render: 787 px at 16,384, 3,146 at
+    // 65,535, 6,292 at 131,072. A 4096 tile with that last bleed is a 16,680 px canvas - 1,113 MB,
+    // past the 900 MB CANVAS_HARD_MAX - and a 1,048,576 would want 50,332 px of bleed. The correct
+    // value is unallocatable above 65,535, so the choice here is between this and no drawn glow.
+    //
+    // WHAT IT COSTS, since that is the part worth knowing rather than fearing: at 131,072, 3.95% of
+    // pixels differ, 95% of them by exactly one level and 99.3% by one or two. Of the 514,446 above
+    // ±16, every one sits on lit content and they are scattered, not clustered on tile joins - 6.63%
+    // fall within 64 px of a seam against 6.15% for a uniform scatter. It is ±1 on gradient contours,
+    // invisible at any viewing distance, and docs/renderer-determinism.md carries the numbers.
     if (uv && !BLOOM_DRAW) r = Math.max(r, 8 * bs, 3 * bs);                      // emission bloom
     else {
       if (G.subsurface > 0) r = Math.max(r, (2 + 3 * G.subsurface) * bs, (1 + 2 * G.subsurface) * bs);

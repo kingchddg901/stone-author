@@ -26,9 +26,38 @@ every tile contains drawn pixels.
 | --- | --- | --- |
 | same engine, eight app builds apart | **yes**, 160/160 tiles | none |
 | same engine, browser version + dpr + runtime all changed | **yes**, 148/148 comparable | none |
+| same engine and machine, same render tile size | **yes**, byte for byte | none |
+| same engine and machine, **different render tile size** | **no**, 632/640 tiles | **none found** |
 | Blink x86 vs Blink ARM | **no** | **none found** |
 | Gecko vs Blink or WebKit | **no** | **yes — a different picture** |
 | WebKit vs Blink | **no** | **not tested visually** |
+
+### The render tile size changes the picture
+
+Measured 19 October 2026, one slab under black light at 131,072 × 81,920, rendered twice at a forced
+4096 tile and twice at 8192, interleaved on one machine within twenty minutes. **Each pair is
+byte-identical to its partner**; across the pair, 632 of 640 stored tiles differ.
+
+The cause is the drawn glow. Each element casts its halo with `shadowBlur = glowPx` — 2,097 px at that
+width — and the tile bleed is **4 px**, because `coatRadius` grants drawn glow none. A shape outside the
+canvas does cast its shadow in, which is what that was argued from, but the result still depends on how
+big the canvas is. Reproduced in seconds at 16,384, where the same region rendered inside a 2048 tile
+and a 4096 tile differs on 1.699% of pixels at bleed 4, 0.553% at 64, 0.43% at 256 and **nothing at
+786** — which is exactly `blurReach(glowPx)`.
+
+It stays at 4 because the correct bleed is unallocatable. `blurReach(glowPx)` is 3,146 px at 65,535 and
+6,292 at 131,072, where a 4096 tile becomes a 16,680 px canvas at 1,113 MB — past the 900 MB hard cap.
+A 1,048,576 would want 50,332 px of bleed. Above 65,535 the choice is this or no drawn glow.
+
+**The cost is below the display.** Of the 3.95% of pixels that differ at 131,072, 95% move by exactly
+one level and 99.3% by one or two; two pixels in 4.19M exceeded ±2 in the 16,384 reproduction. The
+514,446 above ±16 all sit on lit content and are **scattered, not seam-clustered** — 6.63% land within
+64 px of a tile join against 6.15% for a uniform scatter, with a flat distance profile. There is no
+visible join, no grid, and no structural change; it is ±1 on the glow's own gradient contours.
+
+So a master is reproducible on one machine as long as the tile size is, and the tile size comes from a
+remembered `proven` value, the memory budget and a calibration — any of which can move. The resume
+already pins it (`tilePinned`) so a part-finished master cannot be stitched from two tilings.
 
 ### Farming across Blink is safe
 
