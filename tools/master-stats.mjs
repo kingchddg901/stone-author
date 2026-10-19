@@ -205,7 +205,7 @@ if (flag('cost')) {
     for (let i = 0; i < n; i++) { const dx = r.perBy[i] - mBy, dy = r.per[i] - mMs; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
     const b = sxx ? sxy / sxx : 0, a = mMs - b * mBy, r2 = (sxx && syy) ? (sxy * sxy) / (sxx * syy) : 0;
     const tot = add(r.per), fixed = a * n, nsPx = a * 1e6 / (r.tile * r.tile);
-    fits.push({ r, a, b, r2, nsPx, fixedPct: 100 * fixed / tot, tot });
+    fits.push({ r, a, b, r2, nsPx, whole: tot * 1e6 / r.px, fixedPct: 100 * fixed / tot, tot });
     console.log('\n' + r.name);
     console.log('  ' + r.w + ' @ ' + r.tile + ' tiles, ' + n + ' of them, ' + dur(tot)
       + (r.resumed ? '   RESUMED ' + r.resumed : ''));
@@ -214,17 +214,34 @@ if (flag('cost')) {
     console.log('  per-pixel ' + nsPx.toFixed(1) + ' ns      fixed ' + dur(fixed) + ' (' + (100 * fixed / tot).toFixed(0)
       + '%)   size-dependent ' + dur(tot - fixed) + ' (' + (100 * (tot - fixed) / tot).toFixed(0) + '%)');
   }
-  // THE COMPARISON IS ON ns/px, not on wall time. Two runs minutes apart on one machine can differ by
-  // far more than the effect being looked for - repeated page loads were measured inflating timings up
-  // to 2x - and a per-pixel figure stays honest when a whole run drifted slow.
+  // TWO PER-PIXEL FIGURES, AND ONLY ONE OF THEM COMPARES ACROSS TILE SIZES.
+  //
+  // WHOLE-RUN is the whole render's time over its pixels. No model, nothing fitted, so it compares
+  // anything against anything - and it is what a tiling A/B is actually asking.
+  //
+  // FIXED is the regression intercept over the tile's pixels - the per-pixel pipeline cost with the
+  // output-size part removed. It is the better figure for comparing runs AT ONE TILE SIZE, because it
+  // ignores a run whose picture happened to compress differently. Across tile sizes it LIES, and this
+  // tool shipped doing exactly that for a day: a 131,072 A/B read 17.1 ns at 4096 against 13.6 at 8192
+  // and announced 8192 the cheaper, while the wall clock said 4096 was 7.5% FASTER. The split moves
+  // with the tile - 55/45 fixed-to-size at 4096, 41/59 at 8192 - so more of the big tile's time lands
+  // in the slope, its intercept shrinks, and dividing that by four times the pixels flatters it.
+  // Whole-run is primary, fixed is shown beside it, and a set spanning tile sizes says so.
   if (fits.length > 1) {
-    console.log('\nPER-PIXEL COST, which is what survives a run that drifted slow:');
-    const srt = fits.slice().sort((x, y) => x.nsPx - y.nsPx);
+    const tiles = new Set(fits.map(f => f.r.tile));
+    console.log('\nPER-PIXEL COST   (whole-run = wall/pixels, no model; fixed = the pipeline component)');
+    const srt = fits.slice().sort((x, y) => x.whole - y.whole);
     for (const f of srt)
-      console.log('  ' + String(f.nsPx.toFixed(1) + ' ns').padStart(9) + '  @' + String(f.r.tile).padEnd(6)
-        + String(f.r.w).padStart(9) + '  ' + f.r.name);
+      console.log('  ' + String(f.whole.toFixed(1) + ' ns').padStart(10) + '  whole-run'
+        + String(f.nsPx.toFixed(1) + ' ns').padStart(11) + '  fixed'
+        + '   @' + String(f.r.tile).padEnd(6) + String(f.r.w).padStart(9) + '  ' + f.r.name);
     const lo = srt[0], hi = srt[srt.length - 1];
-    if (lo !== hi) console.log('  spread ' + (100 * (hi.nsPx / lo.nsPx - 1)).toFixed(1) + '%, cheapest at tile '
-      + lo.r.tile + (lo.r.tile === hi.r.tile ? '  (same tile size: this is run-to-run, not tiling)' : ''));
+    if (lo !== hi) {
+      console.log('  spread ' + (100 * (hi.whole / lo.whole - 1)).toFixed(1) + '% on whole-run, cheapest at tile ' + lo.r.tile
+        + (tiles.size === 1 ? '  (one tile size throughout: this spread is run-to-run, not tiling)' : ''));
+      if (tiles.size > 1)
+        console.log('  this set spans ' + tiles.size + ' tile sizes, so rank on WHOLE-RUN only - the fixed column is'
+          + ' not comparable\n  across them (its share of the total moves with the tile).');
+    }
   }
 }
