@@ -14,6 +14,20 @@
 //   5. memory-bound?              DRAM read+write bandwidth under load
 //   6. did it reach steady state  were temps and clocks still moving at the end - because a render
 //                                 that ends before plateau under-reports what a longer one costs
+//   7. was the GPU the ceiling    utilisation, clock and power against their own limits - and whether
+//                                 that utilisation is SUSTAINED or BURSTY, which are different answers
+//
+// QUESTION 7 EXISTS BECAUSE EVERY OTHER ANSWER CAME BACK NEGATIVE. A five-hour 687-gigapixel render
+// moved the CPU by 0.7 W and 1.4 C, asserted no throttling flag in 9,083 samples, and left four of six
+// cores under 12%. The remaining suspect was the GPU, since canvas 2D rasterises there and every
+// worker's OffscreenCanvas shares one GPU process - and it was WRONG: 33.8% mean utilisation, 1026 MHz
+// of a 2929 MHz peak, 17.9% of its power limit. Neither device was the ceiling. That is a finding
+// rather than a gap, but only because the log was read for it.
+//
+// THE MEAN IS THE TRAP. GPU utilisation averaged 33.8% while its median was 5% and its p95 was 99%:
+// flat out in short bursts, near idle between them. The mean alone reads as a third-loaded device with
+// headroom; what it actually shows is a device never asked for two things at once, which is the
+// signature of a pipeline bound by its hand-offs rather than by any stage. So this prints the spread.
 //
 // NOT ALIGNED TO THE RENDER TRACE BY TIMESTAMP. HWiNFO logs wall clock, the trace logs
 // performance.now() offsets, and reconciling those arithmetically is where alignment heuristics
@@ -197,6 +211,52 @@ console.log('  ' + '-'.repeat(74));
     console.log('      ' + label.padEnd(20) + fx(t[0], d) + ' -> ' + fx(t[1], d) + ' ' + unit +
                 '   ' + (drift >= 0 ? '+' : '') + drift.toFixed(1) + '%' +
                 (Math.abs(drift) > 3 ? '   <- STILL MOVING: this render did not reach steady state' : '   (settled)'));
+  }
+}
+
+// ---- 7. was the GPU the ceiling --------------------------------------------------------------------
+// Canvas 2D rasterises on the GPU and every worker's OffscreenCanvas shares one GPU process, so a pool
+// that shows an idle CPU has one obvious suspect left. Reported against the GPU's OWN limits - a clock
+// means nothing without the peak it could have reached - and with the spread beside the mean, because
+// a bursty device and a loaded one average the same and mean opposite things.
+{
+  const util = series('GPU Utilization'), d3d = series('GPU D3D Usage');
+  const clk = series('GPU Clock [MHz]'), tgp = series('Total Graphics Power');
+  const ppt = series('GPU PPT Limit [%]'), mc = series('GPU Memory Controller Utilization');
+  const comp = series('GPU Computing (Compute 0) Usage');
+  console.log('');
+  if (!util && !clk && !tgp) {
+    console.log('  7   no GPU sensors in this log - HWiNFO was not logging the graphics adapter');
+  } else {
+    const pct = (a, q) => { const v = inLoad(a).slice().sort((x, y) => x - y);
+                            return v.length ? v[Math.min(v.length - 1, Math.floor(v.length * q))] : null; };
+    if (util) lane(7, 'GPU utilisation (%)', fx(mean(preIdle(util)), 1), fx(mean(inLoad(util)), 1), fx(mean(postIdle(util)), 1),
+                   'p50 ' + fx(pct(util, 0.5), 0) + '  p95 ' + fx(pct(util, 0.95), 0) + '  peak ' + fx(Math.max(...inLoad(util)), 0));
+    if (d3d) lane(7, 'GPU D3D usage (%)', fx(mean(preIdle(d3d)), 1), fx(mean(inLoad(d3d)), 1), fx(mean(postIdle(d3d)), 1));
+    if (clk) { const pk = Math.max(...inLoad(clk)), ld = mean(inLoad(clk));
+      lane(7, 'GPU clock (MHz)', fx(mean(preIdle(clk)), 0), fx(ld, 0), fx(mean(postIdle(clk)), 0),
+           'peak ' + fx(pk, 0) + ' -> ran at ' + fx(100 * ld / (pk || 1), 0) + '% of it'); }
+    if (tgp) lane(7, 'graphics power (W)', fx(mean(preIdle(tgp)), 1), fx(mean(inLoad(tgp)), 1), fx(mean(postIdle(tgp)), 1),
+                  'peak ' + fx(Math.max(...inLoad(tgp)), 1));
+    if (ppt) lane(7, 'GPU PPT limit reached (%)', fx(mean(preIdle(ppt)), 0), fx(mean(inLoad(ppt)), 0), fx(mean(postIdle(ppt)), 0),
+                  'peak ' + fx(Math.max(...inLoad(ppt)), 0) + '%');
+    if (mc) lane(7, 'GPU memory controller (%)', fx(mean(preIdle(mc)), 1), fx(mean(inLoad(mc)), 1), fx(mean(postIdle(mc)), 1));
+    if (comp && inLoad(comp).length && Math.max(...inLoad(comp)) === 0)
+      console.log('      compute usage is zero throughout: all raster, no compute shaders');
+    // THE VERDICT IS ABOUT SHAPE, not level. A device averaging a third with a p95 near 100 is not a
+    // third-loaded device with headroom; it is one that is never asked for two things at once, which
+    // points at the hand-offs between stages rather than at any stage.
+    if (util) {
+      const m = mean(inLoad(util)), p95 = pct(util, 0.95);
+      const pk = clk ? Math.max(...inLoad(clk)) : 0, ldc = clk ? mean(inLoad(clk)) : 0;
+      console.log('      ' + ((m > 85 || (ppt && mean(inLoad(ppt)) > 90))
+        ? '-> the GPU WAS the ceiling: sustained utilisation with no headroom left'
+        : (p95 > 90 && m < 60)
+          ? '-> BURSTY, not saturated (mean ' + fx(m, 0) + '%, p95 ' + fx(p95, 0) + '%'
+            + (pk ? ', clock ' + fx(100 * ldc / pk, 0) + '% of peak' : '')
+            + '). Flat out in bursts, idle between them: the cost is in the hand-offs, not the work'
+          : '-> the GPU had headroom throughout and was not the limit'));
+    }
   }
 }
 console.log('');
