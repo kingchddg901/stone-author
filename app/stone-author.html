@@ -1803,7 +1803,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.19.153';
+  const BUILD = '2026.10.19.154';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13175,12 +13175,27 @@ self.onmessage = async (e) => {
   // to cut, mark, sample and deflate. Measured on a 131,072 at a 4096 tile, that work is 306.7 ms of
   // every 520 ms pass and it runs in a queue while eight workers sit idle holding finished tiles.
   //
-  // OFF BY DEFAULT, and it stays off until a real master has been rendered both ways and compared.
-  // The output is byte-identical here - 48 stored tiles, full hashes, against a main-thread control,
-  // with a one-bit change to markSig proving the comparison can fail - but "identical in the harness"
-  // and "identical in a five-hour export that resumes" are different claims, and only the second one
-  // decides whether every master already on disk still reproduces. The flag is the way to find out
-  // without betting the default on it.
+  // MEASURED AND REJECTED, 2026-10-19. Two 131,072 masters on one build, same forced 4096 tile, no
+  // shedding either side: 5.71 min without, 8.42 min with. FORTY-SEVEN PERCENT SLOWER. The files are
+  // byte-identical - check-same-image says so over all 1,721,992,864 image bytes - so the correctness
+  // half holds completely and only the speed half failed.
+  //
+  // THE SHAPE SAYS WHY, and it is the opposite of the reasoning that built this. Per-tile p50 went
+  // 466 -> 768 ms, a rise of 302 ms against the 306.7 ms of main-thread work this was meant to
+  // remove; the max barely moved, 1316 -> 1339. A near-uniform shift equal to the relocated work
+  // means the work was never on the critical path. The consumer's readback, mark, sample and deflate
+  // ran CONCURRENTLY with the pool painting ahead - the handover queue climbing 0.4, 240, 489, 732 ms
+  // was the pool working ahead, not jamming behind one thread - so taking that work off the main
+  // thread saved nothing, and putting it in front of each worker's next paint cost the full amount.
+  //
+  // The 3.5x the harness measured was an artifact of the harness: 40 passes with no sink and no
+  // sustained run, which removed the very overlap that made the old path fast.
+  //
+  // KEPT ANYWAY, off, because the capability is proven and the gate that proves it is worth running:
+  // harness/worker-finish.mjs asserts the two paths write the same bytes, which is a real invariant
+  // whichever one ships. If the overlap is ever revisited properly - the pool painting ahead is the
+  // thing to preserve, not defeat - this is the half that already works. Do not turn it on expecting
+  // a win; the number above is what it costs.
   const FINISH_WORKER = (() => {
     try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('finish') || ''); }
     catch (_) { return false; }
