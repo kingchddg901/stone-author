@@ -72,9 +72,12 @@ other. Read a row as "this is possible", never as "this is what that width costs
 |---|---|---|---|---|
 | 262,144 | 42.9 Gpx | 10,240 at 2048 | 22 min | 3.61 GB |
 | 524,288 | 171.8 Gpx | 10,240 at 4096 | 71 min | 9.92 GB |
-| 1,048,576 | 687.2 Gpx | 10,240 at 8192 | 5 h 10 min | 22.92 GB |
+| 1,048,576 | 687.2 Gpx | 10,240 at 8192 | 5 h 02 min | 22.93 GB |
 
-**1,048,576 has been completed.** The whole ladder is measured; nothing in this table is projected.
+**1,048,576 has been completed, in one sitting.** The whole ladder is measured; nothing in this table
+is projected. The top rung was first finished across an interruption and has since been rendered
+straight through — 301.5 min at 1.767 s a tile, with the master's own clock and the per-tile record
+agreeing to the second because there was only one sitting for them to disagree about.
 
 None of it is kept by hand. Every master carries its own width, tiling, build, per-tile timings and
 light, and its byte count is on disk, so this table is re-derived from the files rather than
@@ -86,16 +89,33 @@ node tools/master-stats.mjs <dir-of-masters> --sort=w
 
 If a row here ever disagrees with that command, the command is right.
 
-Two of those rows were rendered across more than one sitting, so their time is the **sum of the
-per-tile record**, not the `ms.render` the master carries — that field covers only the final sitting
-and reads 10.1 min for the 262,144 and 300.3 min for the 1,048,576. Anyone checking these numbers
-against a file will find that discrepancy and should know which figure is which.
+One of those rows — the 262,144 — was rendered across more than one sitting, so its time is the **sum
+of the per-tile record** rather than the `ms.render` the master carries. That field covers only the
+sitting that finished a master, and reads 10.1 min against the 22 it took. Anyone checking a row
+against a file will meet that discrepancy and should know which figure is which; `master-stats.mjs`
+flags a resumed row and prints both.
 
 The estimate this table replaced is worth keeping as a note on method: it put the 1,048,576 "near five
-hours" from a running average of 1.73 s a tile, and the finished render averaged 1.82 s. It also put
-the file at "roughly 40 GB", called that an upper bound rather than an estimate because bytes per pixel
-had fallen at every doubling, and was right twice over — the rate fell again and the file came in at
-22.92 GB.
+hours" from a running average of 1.73 s a tile, and the render averaged 1.767. It also put the file at
+"roughly 40 GB", called that an upper bound rather than an estimate because bytes per pixel had fallen
+at every doubling, and was right twice over — the rate fell again and the file came in at 22.93 GB.
+
+**Watching the percentage, though: an early projection reads LOW.** Per-tile cost is not flat across a
+render. Measured on three separate 10,240-tile renders, the first tenth runs 9.7–14.5% under the mean,
+the middle 30–60% runs 7–13% over, and the tail eases off again. The slab's busy region sits through
+the middle rows, so cost tracks content rather than progress — which is the same reason a width does
+not predict a time.
+
+Scaling the per-tile record up from the 9.5% mark would have under-read all three finishes, by 8.9%,
+11.6% and 13.3%. By halfway that is down to 3.6%, 0.7% and 3.0%, and the sign is no longer reliably
+negative. So treat an early number as a floor and wait for halfway if you want a figure.
+
+**Two clocks, and they do not agree.** The above is the per-tile record. The progress line in the app
+is wall clock, which carries the fixed startup the tiles do not — workers, the warp field, the cloud,
+band and breccia bitmaps — and that inflates the early rate in the opposite direction. On the clean
+1,048,576 the two cancelled to within 4.1% at the 9.5% mark, which is better than either basis manages
+alone and is luck rather than method. Do not correct one basis with a factor measured on the other;
+that was tried on this very render and made the answer worse than leaving it alone.
 
 Bytes per pixel **falls** as the width grows — 0.0842 at 262,144, 0.0577 at 524,288, 0.0334 at
 1,048,576 — because each tile covers less of the picture and compresses better.
