@@ -37,9 +37,30 @@ function liftFn(name) {
 const SETTLE = liftFn('poolSettle');
 // TWO THRESHOLDS NOW, because a worker that finishes its own tile does more and contends more.
 // Lifted rather than copied, so the probe cannot drift from the app it is testing.
-const M = SRC.match(/const SHED_AT = p\.fin \? (\d+) : (\d+)/);
+//
+// WHAT IS LIFTED IS THE EXPRESSION, NOT ITS SHAPE. The finish threshold scales with how
+// oversubscribed the machine is, and the first version of this parsed a floor and a slope out of
+// that line and rebuilt the formula here - which meant the probe held the app to a formula of its
+// own that merely resembled it. Measured: with the ratio ABLATED UPSIDE DOWN not one claim went
+// red, because the rebuilt formula was rescaled by the same parse and the bound became a
+// tautology; and the monotonicity claim had no red input at all. So the app's own expression is
+// evaluated here against a stubbed navigator. A wrong edit to its shape is now something these
+// claims can SEE rather than something that quietly stops them lifting.
+const M = SRC.match(/const SHED_AT = p\.fin \? ([^:]+?) : (\d+);/);
 if (!M) throw new Error('cannot find SHED_AT - probe is stale');
-const SHED_FIN = Number(M[1]), SHED_AT = Number(M[2]);
+const FIN_SRC = M[1].trim(), SHED_AT = Number(M[2]);
+const shedFin = (workers, cores) =>
+  new Function('n', 'navigator', 'return (' + FIN_SRC + ');')(workers, { hardwareConcurrency: cores });
+
+// The width the app would actually choose on a given machine, lifted the same way - because the
+// threshold's upper bound is a property of THIS, not of the expression above.
+const WIDTH = liftFn('poolWidthFor');
+const PMAX = Number((SRC.match(/const POOL_MAX = (\d+);/) || [])[1]);
+if (!PMAX) throw new Error('cannot find POOL_MAX - probe is stale');
+const widthOn = (cores, room) =>
+  new Function('navigator', 'POOL_MAX', 'EXP_FORCE_SEQ', 'corePaintsThis',
+    WIDTH + String.fromCharCode(10) + 'return poolWidthFor(' + room + ', 1);')(
+    { hardwareConcurrency: cores }, PMAX, false, () => true);
 
 // Rebuild the closure settle() lives in: the same names, the same initial values, fake workers.
 function makePool(n, settleSrc = SETTLE, shedAt = SHED_AT) {
@@ -66,7 +87,9 @@ const claim = (name, got, want) => {
   console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${name}${ok ? '' : `\n          got  ${JSON.stringify(got)}\n          want ${JSON.stringify(want)}`}`);
 };
 
-console.log(`\nSHED_AT = ${SHED_AT}x the solo tile\n`);
+console.log(String.fromCharCode(10) + 'shed thresholds: ' + SHED_AT + 'x the solo tile when the worker only paints,'
+  + String.fromCharCode(10) + '                 ' + shedFin(2, 4096).toFixed(2) + 'x - ' + shedFin(8, 8).toFixed(2)
+  + 'x when it finishes the tile too, by how oversubscribed the machine is' + String.fromCharCode(10));
 
 console.log('A  the ramp: the first tile paints alone and becomes the baseline');
 {
@@ -123,21 +146,58 @@ console.log(String.fromCharCode(10) + 'D2 shedding that makes things WORSE stops
   claim('and says so in the trail', s.shed.some(x => String(x).startsWith('held@')), true);
 }
 
-console.log(String.fromCharCode(10) + 'F  the finish path tolerates the contention it causes');
+console.log(String.fromCharCode(10) + 'F  the finish path tolerates the contention it causes - on EVERY machine in the fleet');
 {
-  // Eight workers each painting, reading back and deflating legitimately cost 3-4x a solo pass.
-  // Measured on a daylight 131,072: every shed fired at exactly 3x or 4x and four workers were gone
-  // before the rising-median guard stopped it. At the finish threshold that is ordinary load.
-  const P = makePool(8, SETTLE, SHED_FIN); P.settle(1000);
-  for (let i = 0; i < 40; i++) P.settle(4000);
-  claim('4x does not shed a worker that is merely contending', P.state().shed, []);
-  claim('and the pool stays at its planned width', P.state().target, 8);
-}
-{
-  // It must still catch a machine in trouble, which is the whole reason the mechanism exists.
-  const P = makePool(8, SETTLE, SHED_FIN); P.settle(1000);
-  for (let i = 0; i < 40; i++) P.settle(12000);
-  claim('12x still sheds', P.state().target < 8, true);
+  // A worker that paints its tile, reads it back and deflates it legitimately costs 3-4x a solo
+  // pass, so the finish threshold has to sit above that. HOW FAR above depends on the machine, and
+  // the thresholds below are not written here - they are the app's own expression, evaluated at the
+  // worker/core shapes actually recorded in .claude/master-meta.
+  //
+  // THE DESKTOP IS THE LEAST CONTENDED BOX IN THE FLEET, and it is the one every finish number was
+  // measured on: POOL_MAX caps it at 8 workers across 12 cores, while every handheld in the record
+  // runs one worker per core. A single flat threshold tuned there is tuned to the best case and
+  // sheds on everything else at ordinary load - which is the whole reason this scales.
+  const FLEET = [
+    ['win-chrome      8 workers / 12 cores', 8, 12],
+    ['android-chrome  8 workers /  8 cores', 8, 8],
+    ['ios-safari      4 workers /  4 cores', 4, 4],
+  ];
+  for (const [what, pool, hc] of FLEET) {
+    const at = shedFin(pool, hc), tag = what + ' -> ' + at.toFixed(2) + 'x';
+    const P = makePool(pool, SETTLE, at); P.settle(1000);
+    for (let i = 0; i < 40; i++) P.settle(4000);
+    claim(tag + ' : 4x is the work, not swapping - nothing shed', [P.state().shed, P.state().target], [[], pool]);
+    const Q = makePool(pool, SETTLE, at); Q.settle(1000);
+    for (let i = 0; i < 40; i++) Q.settle(12000);
+    claim(tag + ' : 12x is still trouble, and still sheds', Q.state().target < pool, true);
+  }
+
+  // PROPERTIES OF THE SHAPE. This is what evaluating the app's own line can be held to and a
+  // copied number cannot: each claim below goes red for a different wrong edit to it.
+  claim('a box running one worker per core tolerates MORE than one with cores to spare',
+    shedFin(4, 4) > shedFin(8, 12), true);
+  claim('it never drops to the plain-paint threshold, however many spare cores there are',
+    shedFin(2, 4096) > SHED_AT, true);
+  {
+    // There IS an upper bound, but it is not a property of that expression - it rests on
+    // poolWidthFor clamping the width to the core count, so workers/cores can never exceed one.
+    // Lifted and run across the widths it can actually return, rather than asserted. If that
+    // clamp ever goes, this is the claim that was resting on it.
+    const full = shedFin(8, 8), out = [];
+    for (let hc = 2; hc <= 64; hc++) for (const room of [2, 3, 8, 64, 4096]) {
+      const n = widthOn(hc, room);
+      if (!n) continue;                                  // refused the pool: no threshold to bound
+      if (n > hc) { out.push('width ' + n + ' on ' + hc + ' cores'); continue; }
+      const v = shedFin(n, hc);
+      if (!(v > SHED_AT && v <= full)) out.push(n + ' of ' + hc + ' -> ' + v);
+    }
+    claim('poolWidthFor never returns more workers than cores, so the threshold stays within ('
+      + SHED_AT + ', ' + full + ']', out, []);
+    // Two separate `|| 4` fallbacks, one in each lifted line. Change one and not the other and a
+    // browser that will not report its cores gets a width and a threshold that disagree.
+    claim('a browser that will not say how many cores it has still lands inside that bound',
+      [widthOn(undefined, 4096), shedFin(widthOn(undefined, 4096), undefined)], [PMAX / 2, full]);
+  }
 }
 
 console.log('\nE  a single slow tile is not contention');

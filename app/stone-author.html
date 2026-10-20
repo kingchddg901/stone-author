@@ -1810,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.161';
+  const BUILD = '2026.10.20.162';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13374,10 +13374,29 @@ self.onmessage = async (e) => {
     // 131,072 fired at exactly 3x or 4x, which is ordinary contention being mistaken for a machine
     // in trouble. It shed four workers before the rising-median guard caught it.
     //
-    // 5 sits on the boundary of the swapping range rather than below it, which is the cost of this:
-    // a small-memory device that really is swapping now needs to be worse than 5x before it narrows.
-    // The guard below is the second line there, and `held@Nx` in the trail is what to watch on one.
-    const SHED_AT = p.fin ? 5 : 3;
+    // But what those cost EACH OTHER depends on how OVERSUBSCRIBED the machine is, and that is not
+    // the same on every device:
+    //
+    //     win-chrome        hc 12, pool 8 (POOL_MAX)   0.67 workers per core   measured 3-4x
+    //     android-chrome    hc  8, pool 8              1.00
+    //     ios-safari        hc  4, pool 4              1.00
+    //     android-chrome    hc  4, pool 4              1.00   (the 2 GB tablet)
+    //
+    // poolWidthFor caps at hardwareConcurrency, so every device in the fleet runs one worker per
+    // core and only the desktop is held below that. A flat number calibrated on the desktop is
+    // calibrated on the LEAST contended machine there is, and would fire on ordinary load on all
+    // the others.
+    //
+    // So it scales: 3 is the paint-only floor, and the margin grows with workers-per-core. The
+    // desktop lands on 5 - the figure its own shed log argued for - and at it a daylight 131,072
+    // finishes in 90s against the 159s it took when it shed its way down to two, UV in 55s. A fully
+    // subscribed device gets 6. The cost is real: a small-memory device that genuinely IS swapping
+    // must now be worse than 5-6x before it narrows, and the rising-median guard below is the second
+    // line there - `held@Nx` in the trail is what to watch on one.
+    //
+    // ONE MACHINE'S MEASUREMENT AND AN ASSUMED SHAPE - the 3-4x is real, the linearity is not
+    // tested. poolShed records the ratio on every device, so a render on any handheld settles it.
+    const SHED_AT = p.fin ? 3 + 3 * (n / Math.max(1, navigator.hardwareConcurrency || 4)) : 3;
     let target = 1, base = 0;                              // ramp from one so the first tile is the baseline
     const recent = [], shedLog = [];
     let lastShedMed = 0, shedDone = false;   // the median that triggered the last shed, and the latch
