@@ -74,3 +74,5 @@ jobs:
         run: node harness/uv-pool.mjs --ablate=all
       - name: A worker that finishes its own tile writes the same bytes
         run: node harness/worker-finish.mjs --ablate=all
+      - name: A worker composites a reality window the same way the main thread does
+        run: node harness/window-pool.mjs --ablate=all

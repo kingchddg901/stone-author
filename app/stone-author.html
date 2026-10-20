@@ -1810,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.158';
+  const BUILD = '2026.10.20.159';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4603,9 +4603,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // `tile` is {ox, oy, fw, fh} when this render covers only PART of the finished slab — a strip. Without
   // it applyCoat computes every global gradient against the piece rather than the whole, and each piece
   // restarts them. Nothing needed it until the slab grew past what one canvas can hold.
+  // A DRAWING SURFACE, whichever side of the worker boundary this runs on. The window path is the
+  // last thing in the render that still assumed a DOM: renderSlabTo and compositeWindow each made a
+  // canvas with document.createElement, and `document` does not exist in a worker - which is the
+  // whole reason corePaintsThis refused the pool whenever a slab carried a window, and why every
+  // windowed render this project has ever made was single-threaded.
+  //
+  // An OffscreenCanvas and a DOM canvas give the same 2D context and the same pixels; the uv-pool
+  // gate proved that for the paint path and worker-finish proved it for the readback and deflate.
+  // A hoisted declaration, so renderCoreSrc can carry it by name from several thousand lines above.
+  function newSurface(w, h) {
+    if (typeof document !== 'undefined' && document.createElement) {
+      const c = document.createElement('canvas'); c.width = w; c.height = h; return c;
+    }
+    return new OffscreenCanvas(w, h);
+  }
   function renderSlabTo(w, h, tf, coatScale, spec, tile) {
     glowPx = (BLOOM_DRAW && !glowSuppress) ? 16 * coatScale : 0;
-    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const c = newSurface(w, h);
     const cx = c.getContext('2d'), svG = g2d, svS = lightSpectrum, svU = uvMode;
     lightSpectrum = spec; uvMode = spec !== 0;
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;
@@ -4628,7 +4643,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const R = rect || { x: 0, y: 0, w, h };
     const altTf = [tf[0], tf[1], tf[2], tf[3], tf[4] - R.x, tf[5] - R.y];
     const alt = renderSlabTo(R.w, R.h, altTf, coatScale, win.show, tile);
-    const tmp = document.createElement('canvas'); tmp.width = R.w; tmp.height = R.h;
+    const tmp = newSurface(R.w, R.h);
     const tc = tmp.getContext('2d'); tc.drawImage(alt, 0, 0);
     tc.globalCompositeOperation = 'destination-in';                    // keep only the feathered disc of the alt render
     const r0 = win.r * kr, r1 = Math.max(r0 + 1, (win.r + win.feather) * kr);
@@ -4888,6 +4903,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // file). Each worker runs on an OffscreenCanvas, renders whole tiles, and transfers ImageBitmaps back. The
   // cloud/band/breccia modulators are built once on the main thread and posted as bitmaps (ensure* is stubbed).
   function renderCoreSrc() {
+    // A NEWLINE THAT SURVIVES BEING WRITTEN. Escapes have been mangled through generators in this
+    // repo more than once - a backslash-n that became a literal backspace shipped green past six
+    // gates - so the window block below builds its line endings from a character code instead.
+    const NL = String.fromCharCode(10);
     // hexRGB/rgbHex/mixHexAt travel with them: emit blends between spectrum stops and cannot be serialised
     // without them.
     //
@@ -4955,6 +4974,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // deflate and the lost-canvas guard all live thousands of lines below this. With them the worker
     // can cut, mark, sample and compress its own tile and hand back bytes instead of a bitmap.
     Object.assign(fns, finishFns());
+    // AND THE WINDOW PATH. An island with Show through renders the slab again at its own light and
+    // feathers it in through the disc, and until now only the main thread could do it - so a slab
+    // carrying one was refused the pool entirely and rendered single-threaded, which on a 131,072
+    // is the difference between 51 seconds and four and a half minutes.
+    Object.assign(fns, windowFns());
     let s = `var H=${H},UV_DARK=${JSON.stringify(UV_DARK)},SPX_TOL=${SPX_TOL},STONE_BG=${JSON.stringify(STONE_BG)};\n`;
     s += `var WOOD=${JSON.stringify(WOOD)},LOG_FIT=${LOG_FIT};\n`;
     // THE UNITS THE WOOD SAMPLER MEASURES IN. Constants, not functions, which is exactly why they
@@ -4998,6 +5022,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
 `;
     s += glowPreamble();                                     // BLOOM_DRAW, the glow knobs, UV_LIFT
     s += finishPreamble();                                   // the MARK_ constants markStamp reads
+    s += windowPreamble();                                   // BLEED_MARGIN and the glow suppressor
     s += `var liftCv=new OffscreenCanvas(1,1),PYR_W=[0.5,0.3,0.2],COAT_REF=1000;
 `;
     s += `var liftMap=new Map(),liftCached=-1,glowKnob=null,glowPx=0;
@@ -5052,6 +5077,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
     s += `paintContent(false,false);\n`;
     s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:false,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
+    // THE WINDOWS, after the coat and only for tiles a disc actually reaches - the same order and
+    // the same skip test renderOneTile uses, because a window composites over a FINISHED tile and a
+    // tile the disc misses must not pay for one. Line for line the main thread's block; any
+    // divergence here is a windowed master that differs by which path drew it.
+    s += `var __W=gatherMasks();for(var wi=0;wi<__W.length;wi++){var win=__W[wi];if(win.show==null)continue;` + NL;
+    s += `var wx=win.x*d.finalW,wy=win.y*d.finalW,wr=(win.r+win.feather)*d.finalW;` + NL;
+    s += `if(wx+wr<d.ex0||wx-wr>d.ex0+d.ew||wy+wr<d.ey0||wy-wr>d.ey0+d.eh)continue;` + NL;
+    s += `var ab=Math.min(d.bleed,coatReachAt(d.bs,win.show));` + NL;
+    s += `var rx=Math.max(0,d.bleed-ab),ry=Math.max(0,d.bleed-ab);` + NL;
+    s += `var R={x:rx,y:ry,w:Math.min(d.ew-rx,d.tileW+2*ab),h:Math.min(d.eh-ry,d.tileH+2*ab)};` + NL;
+    s += `compositeWindow(tcx,win,d.ew,d.eh,[d.finalW,0,0,d.finalW,-d.ex0,-d.ey0],d.bs,wx-d.ex0,wy-d.ey0,d.finalW,` + NL;
+    s += `{ox:d.ex0+R.x,oy:d.ey0+R.y,fw:d.finalW,fh:d.finalH},R);}` + NL;
     // keepBleed: the export reads its quarters at [bleed + sx*store), so it wants the bled tile
     // exactly as renderOneTile returns it. Cropping here and re-offsetting there would be two
     // places to get the same arithmetic right.
@@ -12402,6 +12439,20 @@ self.onmessage = async (e) => {
            ',MARK_COPIES=' + MARK_COPIES + ',MARK_VER=' + MARK_VER + ',MARK_MAGIC=' + MARK_MAGIC + ';' +
            String.fromCharCode(10);
   }
+  // WHAT A WORKER NEEDS TO COMPOSITE A WINDOW, built where those names are legal to read. Same
+  // hoisting trick as glowFns and finishFns: renderCoreSrc sits thousands of lines above all of
+  // this, so it calls these and they resolve against the live values at call time.
+  //
+  // newSurface is the one that mattered. renderSlabTo and compositeWindow each made a canvas with
+  // document.createElement, which is why corePaintsThis refused the pool for any slab carrying a
+  // window - and why every windowed master this project has rendered was single-threaded.
+  function windowFns() {
+    return { renderSlabTo, compositeWindow, newSurface,
+             coatReachAt, coatReach, coatRadius, blurReach, shadowReach, maxAdjBlur, maxGlow };
+  }
+  function windowPreamble() {
+    return 'var BLEED_MARGIN=' + BLEED_MARGIN + ',glowSuppress=false;' + String.fromCharCode(10);
+  }
   // WHAT THIS DEVICE HAS ACTUALLY DONE. canvasFits asks what the browser will grant at this instant.
   // This records what the machine has already rendered with and finished. A tablet that produced a 65535
   // master at 4096 tiles in the morning has PROVEN 4096, and a refusal that evening is weaker evidence
@@ -13174,8 +13225,15 @@ self.onmessage = async (e) => {
   //
   // With both fixed and the emission path carried, the core paints the same UV tile the main thread
   // does, bit for bit. harness/uv-pool.mjs holds the comparison and the ablation for each fault.
+  // WINDOWS NO LONGER REFUSE THE POOL. The clause `!gatherMasks().some(w => w.show != null)` stood
+  // here because compositeWindow and renderSlabTo each built a canvas with document.createElement,
+  // which a worker has no `document` for. Both now go through newSurface and the worker's tile source
+  // composites its own windows, so the refusal has nothing left to protect.
+  //
+  // It was expensive while it lasted: every slab carrying an island with Show through rendered
+  // single-threaded, and on a 131,072 that is four and a half minutes against fifty-one seconds.
+  // harness/window-pool.mjs holds the proof that both paths write the same bytes.
   const corePaintsThis = () => !layTiles && !(WOOD.graft > 0) && !(!layTiles && G.backlight > 0) &&
-    !gatherMasks().some(w => w.show != null) &&
     typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
   // WHICH CLAUSE SAID NO, in the same order corePaintsThis evaluates them. A predicate that answers
   // only true or false is fine for the code and useless to a person: a render that silently never
@@ -13194,7 +13252,6 @@ self.onmessage = async (e) => {
     if (layTiles) return 'exp.pool.floor';
     if (WOOD.graft > 0) return 'exp.pool.graft';
     if (G.backlight > 0) return 'exp.pool.backlight';
-    if (gatherMasks().some(w => w.show != null)) return 'exp.pool.window';
     if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return 'exp.pool.noworkers';
     return null;
   }
