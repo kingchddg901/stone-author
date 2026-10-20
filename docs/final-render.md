@@ -66,7 +66,9 @@ no coat scales at all, so it cannot go quietly blind.
    `est / N`, and the headroom test weighs `N × tile` instead of one tile. Both ask `poolWidthFor`, the
    single function `tilePool` itself uses, so the planner cannot optimise for a width that never arrives.
    Measured bite: at 65536 on a 2 GB device the budget holds five 8192 tiles against twenty-four 4096
-   ones, so 8192 wins on `est` (16,800 ms against 19,200) and loses the wall clock. Three constraints can
+   ones, so 8192 wins on `est` (16,800 ms against 19,200) and loses the wall clock. That case is now a
+   test of the *scoring* rather than of a reachable plan — the probe feeds it a synthetic ladder, because
+   a rule enforced only by a list returns the first time somebody edits the list. Three constraints can
    bind the width — the budget's room, the core count and `POOL_MAX` — and the probe now asserts *which*,
    because asserting the number hid the mechanism: this sentence read "eight 4096 ones" for as long as the
    cap was eight, and the budget held twenty-four the whole time. `tools/probe-pool-width.mjs`.
@@ -98,7 +100,18 @@ no coat scales at all, so it cannot go quietly blind.
    `performance.memory` is the JS heap and canvas backing stores are not in it, and
    `measureUserAgentSpecificMemory` needs a cross-origin isolation a single file on Pages cannot set. An
    allocation probe agrees with the fiction, because **paging does not fail — it just takes longer**:
-   eight 8192 tiles allocated without a throw and then swapped for three hours. So the pool paints the
+   eight 8192 tiles allocated without a throw and then swapped for three hours.
+
+   **That size is no longer reachable, and the incident above cannot recur.** 8192 left the tile ladder
+   on 2026-10-20: across 713 masters on record there are none at it, across 137 plans where the planner
+   was free to choose it picked it never, and what it did instead was calibrate it 54 times for 2,202
+   seconds — the worst a 456-second allocation of an 874 MB tile on a 2 GB tablet. The largest tile is
+   now 4096, so eight workers hold 8 × 67.4 MB = **539 MB on any device, in any configuration**, against
+   the 2.15 GB that paged. `tools/probe-pool-width.mjs` asserts that ceiling and the footprint that
+   follows from it.
+
+   The mechanism below is retained and still fires — but every firing measured since has cost throughput
+   rather than saved it, and at 539 MB there is no memory for it to be relieving. So the pool paints the
    first tile alone, keeps that time as a baseline, and sheds a worker — terminated, not parked, since the
    memory it holds is the point — when the median of a **row** of tiles exceeds a threshold. Floors at two.
    `tools/probe-pool-shed.mjs`.

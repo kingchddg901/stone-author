@@ -1810,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.163';
+  const BUILD = '2026.10.20.164';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -12592,9 +12592,30 @@ self.onmessage = async (e) => {
   // THE FORCE, from either source. ?tile= is for a reproduction that must pin the plan; the Render
   // panel is for daily use. One reader so the two can never disagree, and the URL wins because a
   // reproduction has to be able to override whatever the machine remembers.
+  // THE TILE LADDER, AND 8192 IS NOT ON IT.
+  //
+  // It was, from the beginning, and it never once finished a render. Across 713 masters on record
+  // there are 164 at 512, 49 at 1024, 87 at 2048, 413 at 4096 and ZERO at 8192; across 137 plans
+  // where the planner was free to choose, it picked 8192 exactly never. What it did instead was
+  // CALIBRATE it - 54 times, for 2,202 seconds in total, the worst a single 456-second allocation of
+  // an 874 MB tile on a 2 GB tablet, to evaluate a candidate it was going to reject. A Gecko phone
+  // preparing that same candidate at a 24,576 render width locked the page outright, which is what
+  // tools/check-probe-budget.mjs exists to describe.
+  //
+  // `?tile=` was added as the way round it. Removing the size removes the reason for the workaround.
+  //
+  // AND IT BOUNDS THE POOL. Eight workers at 4096 hold 8 x 67.4 MB = 539 MB, plus well under a
+  // megabyte each of cloud, band and breccia bitmaps - call it 547 MB, on any device, in any
+  // configuration, because poolWidthFor takes min(cores, POOL_MAX, room). At 8192 the same eight
+  // would hold 2.15 GB, which is the three hours of paging the shed heuristic was built for. With
+  // that size gone the pool cannot reach a footprint worth shedding to relieve.
+  //
+  // ONE LIST, so the ceiling and the URL cap cannot drift from it: probe-pool-width asserts all three.
+  const TILE_LADDER = [512, 1024, 2048, 4096];
+  const TILE_MAX = TILE_LADDER[TILE_LADDER.length - 1];
   const forcedTile = () => TILE_FORCED || tilePick;
   const TILE_FORCED = (() => {
-    try { const v = +new URLSearchParams(location.search).get('tile'); return v >= 256 && v <= 8192 ? v : 0; }
+    try { const v = +new URLSearchParams(location.search).get('tile'); return v >= 256 && v <= TILE_MAX ? v : 0; }
     catch (_) { return 0; }
   })();
   // ?dim=off — CALIBRATE, REPORT, DO NOT VETO.
@@ -12864,7 +12885,7 @@ self.onmessage = async (e) => {
         const probeSurf = (probeWins ? 3 : 1) + (sigma > 0 ? 1 : 0);
         const probeCap = MEM_EASY * memBudget();
         const pass = [], tooBig = [];
-        for (const ts of [512, 1024, 2048, 4096, 8192]) {
+        for (const ts of TILE_LADDER) {
           if (ts > W) break;
           const side = ts + 2 * bleed;
           if (side * side * 4 * EXP_PEAK > probeCap) { tooBig.push(ts); continue; }
@@ -13037,7 +13058,7 @@ self.onmessage = async (e) => {
     const widthOf = t => poolWidthFor(budgetMB, tileMBof(t)) || 1;   // 0 (no pool) scores as sequential
     const proven = forcedTile() ? 0 : provenTile(W);
     const died = forcedTile() ? [] : diedAt(W);          // sizes this machine started and never came back from
-    let ts = Math.min(W, 8192);
+    let ts = Math.min(W, TILE_MAX);
     // WHY the plan chose what it chose. The outcome was recorded and the reasoning was not, so a tablet
     // that silently halved its tile after an OS update could not be explained without the device in hand.
     // There are exactly two gates and they mean different things: the BUDGET is arithmetic on

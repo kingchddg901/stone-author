@@ -38,6 +38,11 @@ Measured 19 October 2026, one slab under black light at 131,072 × 81,920, rende
 4096 tile and twice at 8192, interleaved on one machine within twenty minutes. **Each pair is
 byte-identical to its partner**; across the pair, 632 of 640 stored tiles differ.
 
+**The 8192 arm of this experiment can no longer be run.** That size left the tile ladder on 2026-10-20
+and `?tile=` will not accept it, so the pairing above is a record rather than a reproduction. The
+finding it carries — that a forced tile change moves the drawn glow and therefore the bytes — is
+unaffected: any two tile sizes still on the ladder show it.
+
 The cause is the drawn glow. Each element casts its halo with `shadowBlur = glowPx` — 2,097 px at that
 width — and the tile bleed is **4 px**, because `coatRadius` grants drawn glow none. A shape outside the
 canvas does cast its shadow in, which is what that was argued from, but the result still depends on how

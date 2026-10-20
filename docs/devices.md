@@ -116,7 +116,9 @@ machine: the figure everything else is calibrated against, **61.33**, was made h
 bloom at 65535 in 3.0 minutes.
 
 It is the only machine that reports its memory honestly — 16 GB installed, 16 GB reported — and the only
-one that takes an 8192 render tile, which is why its 40 passes are the fewest in the set. Its
+one that ever took an 8192 render tile, which is why its 40 passes are the fewest in the set — and why
+that figure is now historical: **8192 left the tile ladder on 2026-10-20** and the largest tile is 4096.
+Its
 `hardwareConcurrency` of 12 is threads, not cores.
 
 It also contributed almost no defects, and that is not a coincidence. It satisfies every assumption the

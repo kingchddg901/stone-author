@@ -145,5 +145,53 @@ claim("case A's SCORING reverts to 8192, so case A was testing the width", A2.fa
 // subject removed. Recorded rather than deleted - it is the reason the two halves are asserted apart.
 claim('its outcome does not, because the peak gate acts on its own', A2.ts, 4096);
 
+// 8192 IS NOT A TILE SIZE ANY MORE, and these are the three places that have to agree about it.
+//
+// It never finished a render: 713 masters on record, zero at 8192, and zero selections in 137 plans
+// where the planner was free to choose. What it cost was 2,202 s of calibration across 54 renders -
+// the worst a 456 s allocation of an 874 MB tile on a 2 GB tablet - to evaluate a candidate that was
+// always rejected. `?tile=` was added as the way round it.
+//
+// EVERYTHING ABOVE STAYS. Cases A to C still drive the SCORING with 8192 in a synthetic ladder,
+// because the scoring is what would have to be right if the size ever came back, and a rule enforced
+// only by a list is a rule that returns the first time somebody edits the list. These claims are the
+// list; those cases are the behaviour behind it.
+console.log('\nthe ban: 8192 is unreachable as a tile size');
+{
+  const ladder = JSON.parse(liftSlice('const TILE_LADDER = ', ';').replace('const TILE_LADDER = ', '').replace(';', ''));
+  claim('the ladder the probe walks tops out at 4096', Math.max(...ladder), 4096);
+  claim('and it is the ladder, not a literal, that the canvasFits probe iterates',
+    SRC.includes('for (const ts of TILE_LADDER) {'), true);
+  // THE CEILING AND THE URL CAP ARE DERIVED, not repeated. Three literals would drift and the drift
+  // would be silent - the planner would simply start a size the probe had never cleared.
+  claim('the planner starts at TILE_MAX rather than a number of its own',
+    SRC.includes('let ts = Math.min(W, TILE_MAX);'), true);
+  claim('and ?tile= cannot name a size the planner will not consider',
+    SRC.includes("v >= 256 && v <= TILE_MAX ? v : 0"), true);
+
+  // WHAT THE BAN BUYS, as arithmetic rather than as a claim about one machine: the pool's whole tile
+  // footprint. At 8192 eight workers hold 2.15 GB, which is the three hours of paging the shed
+  // heuristic was built for; at 4096 they hold a quarter of that on any device there is.
+  const bleed = 4, tileMB = t => Math.round((t + 2 * bleed) ** 2 * 4 / 1e6);
+  const PMAX = Number(liftSlice('const POOL_MAX = ', ';').replace(/\D/g, ''));
+  const peak = PMAX * tileMB(Math.max(...ladder));
+  claim('so the pool can never hold more than 550 MB of tiles (' + PMAX + ' x '
+    + tileMB(Math.max(...ladder)) + ' MB = ' + peak + ' MB)', peak <= 550, true);
+  claim('where the banned size would have allowed over 2 GB (' + PMAX + ' x ' + tileMB(8192) + ' MB)',
+    PMAX * tileMB(8192) > 2000, true);
+}
+{
+  // ABLATION: put it back on the ladder. Both the ceiling claim and the footprint bound must go red,
+  // because the bound is a CONSEQUENCE of the ladder and not an independent assertion about memory.
+  const back = [512, 1024, 2048, 4096, 8192];
+  const bleed = 4, tileMB = t => Math.round((t + 2 * bleed) ** 2 * 4 / 1e6);
+  const PMAX = Number(liftSlice('const POOL_MAX = ', ';').replace(/\D/g, ''));
+  const topOK = Math.max(...back) === 4096;
+  const peakOK = PMAX * tileMB(Math.max(...back)) <= 550;
+  claim('ablated: with 8192 back on the ladder the ceiling claim bites', topOK, false);
+  claim('ablated: and so does the footprint bound ('
+    + PMAX * tileMB(Math.max(...back)) + ' MB)', peakOK, false);
+}
+
 console.log(fails ? `\n${fails} FAILED\n` : '\nall claims hold\n');
 process.exit(fails ? 1 : 0);
