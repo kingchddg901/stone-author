@@ -100,8 +100,43 @@ no coat scales at all, so it cannot go quietly blind.
    allocation probe agrees with the fiction, because **paging does not fail — it just takes longer**:
    eight 8192 tiles allocated without a throw and then swapped for three hours. So the pool paints the
    first tile alone, keeps that time as a baseline, and sheds a worker — terminated, not parked, since the
-   memory it holds is the point — when the median of the last N exceeds 3× it. Floors at two, monotone
-   downward. `tools/probe-pool-shed.mjs`.
+   memory it holds is the point — when the median of a **row** of tiles exceeds a threshold. Floors at two.
+   `tools/probe-pool-shed.mjs`.
+
+   **The threshold is not one number.** A worker that finishes its own tile also reads it back and
+   deflates it, and eight of those at once legitimately cost 3–4× a solo pass — measured. So the finish
+   threshold is `3 + 3 × (workers / cores)`: 5.00 on a desktop that `POOL_MAX` caps at 8 workers across
+   12 cores, 6 on any device running one worker per core, and plain painting stays at 3. The desktop is
+   the *least* contended machine in the fleet, so a flat number calibrated there would fire on ordinary
+   load everywhere else. Above 10× nothing needs corroborating and a short window sheds at once.
+
+   **And the window is a row, because a reality window is a band.** A 262,144 carrying one disc shed five
+   times, 8 workers down to 3, every ratio between 5× and 7×, and ran its last three-quarters at 2.9
+   workers — 423.7 s where its own throughput says 346. Nothing in it was swapping. A disc covers a
+   contiguous column range, so eight *consecutive* tiles inside it were all expensive and an eight-tile
+   median read 6×; the same slab at 131,072 shed only twice, because a 15-tile-wide disc fills an
+   eight-tile window less often than a 29-tile-wide one does. **The size dependence was the bug, not the
+   threshold** — and a disc is the same share of a *row* at every image size, which is what makes the row
+   the one window it cannot carry. The window also no longer shrinks with the pool: it was
+   `max(2, target)`, so that render's last two sheds were decided on four samples and on three.
+
+   **Shedding is no longer monotone for the whole render.** It was, which is right for paging — memory
+   does not free up halfway through — and wrong for the only thing that actually fired. That 262,144
+   stopped at 3 rather than reaching the floor, which can only mean its median fell back under the
+   threshold on its own: the pressure released, visibly, in the trail, and the pool had no way to act on
+   it for the 28 rows that followed. So a row boundary now gives **one worker back**, and `poolShed`
+   records it as `+N@Mx`. Two things keep that from undoing a rescue. It is gated on the median being
+   down to *ordinary contention* (3–4×), not merely under the shed threshold — 4.9× against a 5.00×
+   threshold is not room. And a shed in the row a recovery landed in, or the next one, latches recovery
+   off for the rest of the render, so a long band cannot shed and recover in turn while paying a worker
+   start each time round.
+
+   **What that costs the smallest device in the fleet.** A pool that is genuinely paging shows a median
+   that stays elevated as workers leave — fewer tiles in flight is less memory, but it is still swapping
+   — so it can never clear the recovery gate. The Galaxy Tab A rescue described in
+   `docs/sidecars/README.md` is therefore intact, with one measured delay: at a 1024 tile a 262,144 row
+   is 256 tiles, and that tablet ran its first decile at 2.70 tiles/s, so its shed now waits about a
+   minute and a half longer. Out of six hours and five minutes.
 
    **UV is refused for a measured reason, not an assumed one.** `corePaintsThis` has always had a
    `!uvMode` clause, and the natural reading is that the serialised core cannot paint UV. It mostly
@@ -123,8 +158,10 @@ no coat scales at all, so it cannot go quietly blind.
    attempt needs those hoisted first, by the function-declaration route the glow comment already
    describes.
 
-   **The master says what ran.** `workers`, plus `poolPlanned` and `poolShed` when the pool narrowed
-   itself. That field previously could not appear on any master: it was read after the success path had
+   **The master says what ran.** `workers` is the width at the END, which recovery makes a different
+   number from the width that ran — so `poolMin` carries the low-water mark beside it, `poolPlanned`
+   the intended width, and `poolShed` every step in both directions. `trace.busy` is the honest
+   answer: a sampled series of how many workers were actually painting. That field previously could not appear on any master: it was read after the success path had
    already closed the pool and nulled it, while its comment told the reader that absence meant
    single-threaded — which made a render at 94% of twelve threads read as having painted on one.
 4. **Pluggable encoders (output layer). ✓ PNG encode parallelised.** The render produces **pixel buffers** (and, for layered output, per-layer buffers); encoding is a separate, pluggable stage. **Measured:** the export's cost is PNG compression, *not* the render — `toBlob` is ~1s per full-res file vs ~55ms to render it (~20×). So `encodePNGs(canvases)` renders every file on the main thread (fast) then encodes them **one-per-worker** via `OffscreenCanvas.convertToBlob` — the workers' real payoff, the *inverse* of the tile-render case (there each unit was cheap; here each is a ~1s encode). `exportAll` now batches all ~14 PNGs (main + `.ora`) through it. Verified byte-correct (zip + nested .ora `testzip` clean, PNG signatures valid). **Old export ≈ 15s of UI-freezing encode → 0.2–1.3s off-thread** (66× at 2048, 12× at 4096). Formats:

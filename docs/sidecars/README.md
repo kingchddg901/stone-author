@@ -197,8 +197,10 @@ a defect; this is the positive result, which is the harder one to get.
 
 - **The second WebKit run shed its own pool, and that is why it is the fastest of the three.** It planned
   four workers and recorded `poolShed ["3@6x","2@4x"]` — down to three when the median tile reached six
-  times the solo baseline, then to the floor of two at four times. `SHED_AT = 3` names that signature as
-  swapping rather than contention, and the numbers agree with it: the phone was **memory**-bound at four
+  times the solo baseline, then to the floor of two at four times. The threshold was a flat `SHED_AT = 3`
+  when this render was taken — it is now 3 for plain painting and `3 + 3 × (workers / cores)` when the
+  worker finishes its own tile, and the window it is measured over is a row rather than a pool-width;
+  see `docs/final-render.md`. At 3 it named that signature as swapping rather than contention, and the numbers agree with it: the phone was **memory**-bound at four
   workers, never CPU-bound. Narrowed to two it ran **32.26 min at 84.7 tiles/s**, three minutes faster
   than the same device at four, while throttling *harder* (−19.7% against −13.9%) and logging 8,895 slow
   tiles against 829. Those tiles cost 131.7 s and it still won by 168. Run #1, which never shed, is the
@@ -229,7 +231,10 @@ desktop manages. That is the whole result. Nothing here is a comparison; the pic
 cross-engine pair rendered and the tile size is not theirs either.
 
 - **It shed its pool too**, `poolShed ["3@3x","2@3x"]` — four to three to the floor of two, both steps at
-  exactly the `SHED_AT = 3` threshold, where the iPhone's fired at 6× and 4×. Two devices, two different
+  exactly the flat `SHED_AT = 3` threshold this render was taken under, where the iPhone's fired at 6×
+  and 4×. On the present code a row of 256 tiles would carry each of those decisions instead of a
+  pool-width of four, which delays this rescue by about 90 s of its six hours and cannot undo it — a
+  median that stays elevated as workers leave can never clear the recovery gate. Two devices, two different
   pressures, same mechanism, same floor.
 
 - **The −33% from first decile to last is the shed, not decay.** Decile 1 ran at 2.70 tiles/s before the

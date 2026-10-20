@@ -1,4 +1,4 @@
-// DOES THE POOL NOTICE IT IS TOO WIDE?
+// DOES THE POOL NOTICE IT IS TOO WIDE - AND NOTICE WHEN IT IS NOT ANY MORE?
 //
 // The width comes from memBudget(), which is navigator.deviceMemory x MEM_SHARE - the machine's TOTAL
 // memory, not what is free on it. Measured on a 16 GB desktop with roughly 2300 MB actually free, that
@@ -15,10 +15,19 @@
 // ramp-and-shed the pool held its planned width for all 640 tiles whatever the machine did. The ablation
 // neuters the contention comparison and requires C to stop shedding.
 //
+// AND WHAT A MEASURED 262,144 TAUGHT IT. That render shed five times, 8 workers down to 3, and ran its
+// last three-quarters at 2.9 - 423.7 s against the 346 s its own throughput says it should have taken.
+// Nothing in it was swapping. A reality window makes a band of tiles that legitimately cost 5-6x a
+// baseline taken on a tile the disc never touched, and the old 8-tile measurement window could be
+// filled entirely by that band - which is why the same slab at 131,072 lost 5 s and at 262,144 lost 78.
+// Cases G through L are that lesson: measure over a ROW so a band cannot carry the median, shed fast
+// anyway when the figure is past arguing with, and give a worker back when the pressure lifts.
+//
 //   node tools/probe-pool-shed.mjs
 import { readFileSync } from 'fs';
 
 const SRC = readFileSync(new URL('../app/stone-author.html', import.meta.url), 'utf8');
+const NL = String.fromCharCode(10);
 
 function liftFn(name) {
   // AMBIGUITY IS AN ERROR, not a tie to break by position. `settle` existed twice in this file and the
@@ -34,10 +43,25 @@ function liftFn(name) {
   for (;; i++) { if (SRC[i] === '{') d++; else if (SRC[i] === '}' && --d === 0) break; }
   return SRC.slice(hits[0], i + 1);
 }
-const SETTLE = liftFn('poolSettle');
-// TWO THRESHOLDS NOW, because a worker that finishes its own tile does more and contends more.
-// Lifted rather than copied, so the probe cannot drift from the app it is testing.
-//
+
+// THE WHOLE DECISION, NOT JUST THE FUNCTION. The thresholds, the latches and the counters are as much
+// the subject as poolSettle is, and a probe that lifted the function and then declared constants of its
+// own would be testing a pool of its own invention. So the lift runs from the first threshold to the end
+// of poolSettle, and the probe supplies only what a BROWSER would: n, the plan, the worker array and a
+// spawn. Everything that decides anything comes from the app.
+function liftRegion(from, fnName) {
+  const a = SRC.indexOf(from);
+  if (a < 0) throw new Error('cannot find `' + from + '` - probe is stale');
+  if (SRC.indexOf(from, a + 1) >= 0) throw new Error('`' + from + '` is ambiguous - lift is unsafe');
+  const needle = 'function ' + fnName + '(';
+  const b = SRC.indexOf(needle, a);
+  if (b < 0) throw new Error('cannot find ' + fnName + ' after `' + from + '` - probe is stale');
+  let i = SRC.indexOf('{', b), d = 0;
+  for (;; i++) { if (SRC[i] === '{') d++; else if (SRC[i] === '}' && --d === 0) break; }
+  return SRC.slice(a, i + 1);
+}
+const REGION = liftRegion('const SHED_AT = p.fin', 'poolSettle');
+
 // WHAT IS LIFTED IS THE EXPRESSION, NOT ITS SHAPE. The finish threshold scales with how
 // oversubscribed the machine is, and the first version of this parsed a floor and a slope out of
 // that line and rebuilt the formula here - which meant the probe held the app to a formula of its
@@ -59,62 +83,75 @@ const PMAX = Number((SRC.match(/const POOL_MAX = (\d+);/) || [])[1]);
 if (!PMAX) throw new Error('cannot find POOL_MAX - probe is stale');
 const widthOn = (cores, room) =>
   new Function('navigator', 'POOL_MAX', 'EXP_FORCE_SEQ', 'corePaintsThis',
-    WIDTH + String.fromCharCode(10) + 'return poolWidthFor(' + room + ', 1);')(
+    WIDTH + NL + 'return poolWidthFor(' + room + ', 1);')(
     { hardwareConcurrency: cores }, PMAX, false, () => true);
 
-// Rebuild the closure settle() lives in: the same names, the same initial values, fake workers.
-function makePool(n, settleSrc = SETTLE, shedAt = SHED_AT) {
-  return new Function('n', 'SHED_AT', `
-    let target = 1, base = 0;
-    const recent = [], shedLog = [];
-    // Mirrors the app: the median that triggered the last shed, and the latch that stops shedding
-    // once a shed has failed to help. Kept in step by hand, which is why case D exists - if the app
-    // gains more shed state and this does not, D is what notices.
-    let lastShedMed = 0, shedDone = false;
-    const killed = [];
-    const pool = []; for (let i = 0; i < n; i++) pool.push({ busy: true, w: { terminate() { killed.push(i); } } });
-    ${settleSrc}
+// Rebuild the closure the decision lives in: the same names, the same initial values, fake workers.
+// GROWING IS ASYNC in the app - a worker has to start and take its modulator bitmaps before it can be
+// handed a tile - so settle() flushes microtasks afterwards and every case awaits it. A probe that
+// stayed synchronous would see exactly one recovery and never a second, because the guard that stops
+// two spawns racing is cleared in a `finally`.
+const flush = async () => { for (let i = 0; i < 4; i++) await null; };
+function makePool(n, opts = {}) {
+  const across = opts.across != null ? opts.across : 8;
+  const cores = opts.cores != null ? opts.cores : 12;
+  const killed = [], pool = [];
+  for (let i = 0; i < n; i++) pool.push({ busy: true, w: { terminate() { killed.push(i); } } });
+  const api = new Function('n', 'p', 'pool', 'killed', 'navigator', 'spawnWorker',
+    (opts.region || REGION) + NL + `
     return {
       settle: ms => { const q = pool.find(x => x.busy) || pool[0]; q.busy = true; poolSettle(q, ms); },
-      state: () => ({ target, base, alive: pool.length, shed: shedLog.slice(), killed: killed.length }),
-    };`)(n, shedAt);
+      state: () => ({ target, base, alive: pool.length, shed: shedLog.slice(),
+                      killed: killed.length, shedAt: SHED_AT }),
+    };`)(n, { fin: !!opts.fin, rAcross: across }, pool, killed,
+         { hardwareConcurrency: cores },
+         () => Promise.resolve({ terminate() { killed.push(-1); } }));
+  return { settle: async ms => { api.settle(ms); await flush(); }, state: api.state, across };
 }
+
+// ONE ROW, THE SHAPE A DISC ACTUALLY MAKES: `hi` tiles at `mult` x the baseline, CONTIGUOUS, then the
+// rest of the row at 1x. Contiguity is the whole point - a disc covers a column range, so its
+// expensive tiles arrive together, which is exactly how they came to fill an 8-tile window.
+const feedRow = async (P, hi, mult, base = 1000) => {
+  for (let i = 0; i < P.across; i++) await P.settle(i < hi ? mult * base : base);
+};
+const plusses = P => P.state().shed.filter(x => String(x).startsWith('+'));
 
 let fails = 0;
 const claim = (name, got, want) => {
   const ok = JSON.stringify(got) === JSON.stringify(want);
   if (!ok) fails++;
-  console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${name}${ok ? '' : `\n          got  ${JSON.stringify(got)}\n          want ${JSON.stringify(want)}`}`);
+  console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${name}${ok ? '' : `${NL}          got  ${JSON.stringify(got)}${NL}          want ${JSON.stringify(want)}`}`);
 };
 
-console.log(String.fromCharCode(10) + 'shed thresholds: ' + SHED_AT + 'x the solo tile when the worker only paints,'
-  + String.fromCharCode(10) + '                 ' + shedFin(2, 4096).toFixed(2) + 'x - ' + shedFin(8, 8).toFixed(2)
-  + 'x when it finishes the tile too, by how oversubscribed the machine is' + String.fromCharCode(10));
+console.log(NL + 'shed thresholds: ' + SHED_AT + 'x the solo tile when the worker only paints,'
+  + NL + '                 ' + shedFin(2, 4096).toFixed(2) + 'x - ' + shedFin(8, 8).toFixed(2)
+  + 'x when it finishes the tile too, by how oversubscribed the machine is' + NL);
 
 console.log('A  the ramp: the first tile paints alone and becomes the baseline');
 {
   const P = makePool(8);
   claim('starts at one worker, so tile 0 is uncontended', P.state().target, 1);
-  P.settle(1000);
+  await P.settle(1000);
   const s = P.state();
   claim('that tile sets the baseline', s.base, 1000);
   claim('and the pool opens to its planned width', s.target, 8);
 }
 
-console.log('\nB  a machine with room: eight tiles at 1.2x the solo time');
+console.log(NL + 'B  a machine with room: tiles at 1.2x the solo time');
 {
-  const P = makePool(8); P.settle(1000);
-  for (let i = 0; i < 16; i++) P.settle(1200);
+  const P = makePool(8); await P.settle(1000);
+  for (let i = 0; i < 16; i++) await P.settle(1200);
   const s = P.state();
   claim('stays at full width', s.target, 8);
   claim('nothing shed', s.shed, []);
   claim('no worker terminated', s.killed, 0);
 }
 
-console.log('\nC  a machine that is swapping: tiles at 5x the solo time');
+console.log(NL + 'C  a machine that is swapping: tiles at 5x the solo time');
 {
-  const P = makePool(8); P.settle(1000);
-  for (let i = 0; i < 8; i++) P.settle(5000);
+  const P = makePool(8); await P.settle(1000);
+  for (let i = 0; i < 8; i++) await P.settle(5000);
   const s = P.state();
   claim('drops a worker', s.target, 7);
   claim('and says what it saw', s.shed, ['7@5x']);
@@ -122,31 +159,38 @@ console.log('\nC  a machine that is swapping: tiles at 5x the solo time');
   claim('the live pool shrinks with it', s.alive, 7);
 }
 
-console.log('\nD  it keeps shedding while the contention holds, and stops at two');
+console.log(NL + 'D  it keeps shedding while the contention holds, and stops at two');
 {
-  const P = makePool(8); P.settle(1000);
-  for (let i = 0; i < 200; i++) P.settle(10000);
+  const P = makePool(8); await P.settle(1000);
+  for (let i = 0; i < 200; i++) await P.settle(7000);
   const s = P.state();
   claim('floors at two - one worker is slower than no worker', s.target, 2);
   claim('six terminated, two alive', [s.killed, s.alive], [6, 2]);
 }
 
-console.log(String.fromCharCode(10) + 'D2 shedding that makes things WORSE stops, instead of running to two');
+console.log(NL + 'D2 shedding that makes things WORSE stops, instead of running to two');
 {
   // Measured on a daylight 131,072 finishing in-worker: 7@3x, 6@4x, 5@3x, 4@7x, 3@7x, 2@3x. It shed
   // six times, the ratio CLIMBED as workers left, and it arrived at two having taken 159 s where the
   // UV equivalent shed once and took 51. Workers that are contending are not workers that are
   // swapping, and taking them away cannot help - fewer tiles in flight is always less memory, so a
   // rising median while shedding means memory was never the problem.
-  const P = makePool(8); P.settle(1000);
-  for (let i = 0; i < 8; i++) P.settle(4000);     // 4x: over the threshold, so it sheds
-  for (let i = 0; i < 96; i++) P.settle(9000);    // and then WORSE as it narrows
+  const P = makePool(8); await P.settle(1000);
+  for (let i = 0; i < 8; i++) await P.settle(4000);     // 4x: over the threshold, so it sheds
+  for (let i = 0; i < 96; i++) await P.settle(9000);    // and then WORSE as it narrows
   const s = P.state();
   claim('it stops above the floor rather than running down to two', s.target > 2, true);
   claim('and says so in the trail', s.shed.some(x => String(x).startsWith('held@')), true);
 }
 
-console.log(String.fromCharCode(10) + 'F  the finish path tolerates the contention it causes - on EVERY machine in the fleet');
+console.log(NL + 'E  a single slow tile is not contention');
+{
+  const P = makePool(8); await P.settle(1000);
+  await P.settle(9000); for (let i = 0; i < 7; i++) await P.settle(1100);
+  claim('the median ignores the outlier, so nothing is shed', P.state().shed, []);
+}
+
+console.log(NL + 'F  the finish path tolerates the contention it causes - on EVERY machine in the fleet');
 {
   // A worker that paints its tile, reads it back and deflates it legitimately costs 3-4x a solo
   // pass, so the finish threshold has to sit above that. HOW FAR above depends on the machine, and
@@ -164,12 +208,13 @@ console.log(String.fromCharCode(10) + 'F  the finish path tolerates the contenti
   ];
   for (const [what, pool, hc] of FLEET) {
     const at = shedFin(pool, hc), tag = what + ' -> ' + at.toFixed(2) + 'x';
-    const P = makePool(pool, SETTLE, at); P.settle(1000);
-    for (let i = 0; i < 40; i++) P.settle(4000);
+    const P = makePool(pool, { fin: true, cores: hc }); await P.settle(1000);
+    claim(tag + ' : the running pool agrees with the lifted expression', P.state().shedAt, at);
+    for (let i = 0; i < 40; i++) await P.settle(4000);
     claim(tag + ' : 4x is the work, not swapping - nothing shed', [P.state().shed, P.state().target], [[], pool]);
-    const Q = makePool(pool, SETTLE, at); Q.settle(1000);
-    for (let i = 0; i < 40; i++) Q.settle(12000);
-    claim(tag + ' : 12x is still trouble, and still sheds', Q.state().target < pool, true);
+    const Q = makePool(pool, { fin: true, cores: hc }); await Q.settle(1000);
+    for (let i = 0; i < 40; i++) await Q.settle(9000);
+    claim(tag + ' : 9x is still trouble, and still sheds', Q.state().target < pool, true);
   }
 
   // PROPERTIES OF THE SHAPE. This is what evaluating the app's own line can be held to and a
@@ -200,23 +245,155 @@ console.log(String.fromCharCode(10) + 'F  the finish path tolerates the contenti
   }
 }
 
-console.log('\nE  a single slow tile is not contention');
+console.log(NL + 'G  the measurement window is a ROW, so a band of window tiles cannot carry the median');
 {
-  const P = makePool(8); P.settle(1000);
-  P.settle(9000); for (let i = 0; i < 7; i++) P.settle(1100);
-  claim('the median ignores the outlier, so nothing is shed', P.state().shed, []);
+  // THE DEFECT THIS IS FOR, measured. A reality window on a 262,144 shed five workers, 8 down to 3,
+  // every ratio between 5x and 7x, and nothing was swapping: a disc covers a contiguous column
+  // range, so 8 CONSECUTIVE tiles inside it were all expensive and an 8-tile median read 6x. The
+  // same slab at 131,072 shed twice, because a 15-tile-wide disc fills an 8-tile window less often
+  // than a 29-tile-wide one does. THE SIZE DEPENDENCE IS THE BUG, not the threshold - and a row is
+  // the unit that removes it, because a disc is the same share of a row at every image size.
+  for (const across of [32, 64]) {
+    const hi = Math.round(across * 0.46);                // the measured disc: 46% of a row, both sizes
+    const P = makePool(8, { across, fin: true, cores: 12 }); await P.settle(1000);
+    for (let r = 0; r < 6; r++) await feedRow(P, hi, 6);
+    claim('across ' + across + ': ' + hi + ' of ' + across + ' tiles at 6x is a disc, not a swap',
+      P.state().shed, []);
+  }
+  // WHERE THE FIRST SHED LANDS SAYS HOW BIG THE WINDOW IS - the whole fix, stated as a number. The
+  // first version of this claim compared the shed logs at across 32 and 64 and called them equal,
+  // which they were BEFORE the fix as well: on a synthetic band both sizes run to the floor, so the
+  // claim could not go red in either direction and proved nothing. The window's size can be measured
+  // directly instead. It used to be Math.max(2, target) and landed at tile 8 whatever the image was.
+  const firstShedAt = async (across) => {
+    const P = makePool(8, { across, fin: true, cores: 12 }); await P.settle(1000);
+    for (let i = 1; i <= across * 3; i++) { await P.settle(6000); if (P.state().shed.length) return i; }
+    return -1;
+  };
+  claim('the first shed waits for a full ROW of evidence, not a pool-width of it',
+    [await firstShedAt(16), await firstShedAt(64)], [16, 64]);
+
+  const Q = makePool(8, { across: 64, fin: true, cores: 12 }); await Q.settle(1000);
+  for (let r = 0; r < 3; r++) await feedRow(Q, 64, 6);
+  claim('a WHOLE row at 6x is not a disc, and still sheds', Q.state().target < 8, true);
 }
 
-console.log('\nablation: the contention comparison neutered');
+console.log(NL + 'H  pressure past arguing with does not wait for a row');
 {
-  const flat = SETTLE.replace(/med > SHED_AT \* base/, 'false');
-  if (flat === SETTLE) { console.log('  FAIL  could not find the comparison to ablate - probe is stale'); fails++; }
+  // Waiting a whole row for corroboration is the price of G, and on a 2 GB tablet a row of paging
+  // tiles is minutes. Dilution is only wanted where the figure is ambiguous; nothing needs a second
+  // opinion about 20x. So a short window survives for exactly that.
+  const P = makePool(8, { across: 64, fin: true, cores: 12 }); await P.settle(1000);
+  for (let i = 0; i < 8; i++) await P.settle(20000);
+  claim('20x sheds an eighth of a row in, without waiting for the row', P.state().target, 7);
+  claim('and that is the only shed so far', P.state().shed.length, 1);
+}
+
+console.log(NL + 'I  a worker comes back at the next row, one per row, never past the planned width');
+{
+  const P = makePool(8, { across: 16, fin: true, cores: 12 }); await P.settle(1000);
+  for (let i = 0; i < 16; i++) await P.settle(20000);
+  const low = P.state().target;
+  claim('it shed first', low < 8, true);
+  // THE MEASUREMENT WINDOW NO LONGER SHRINKS WITH THE POOL. It used to be Math.max(2, target), so at
+  // three workers the median was three samples - noisiest exactly where it was most fragile, and the
+  // 262,144's last two sheds were decided on four samples and three. One row in, one worker out, at
+  // any width, is what proves the cadence constant.
+  for (let k = 1; k <= 3; k++) {
+    await feedRow(P, 0, 1);
+    claim('quiet row ' + k + ' gives back exactly one worker', plusses(P).length, k);
+  }
+  for (let r = 0; r < 10; r++) await feedRow(P, 0, 1);
+  claim('it climbs back to the planned width and stops there', P.state().target, 8);
+  claim('and every step is in the trail', plusses(P).length, 8 - low);
+}
+
+console.log(NL + 'J  recovery is gated on EVIDENCE, not on the clock');
+{
+  // 4.5x is not shedding territory at a 5.00x threshold - but it is not room either. A clock that
+  // widened on elapsed rows alone would walk straight back into the pressure it had just escaped.
+  const P = makePool(8, { across: 16, fin: true, cores: 12 }); await P.settle(1000);
+  for (let i = 0; i < 16; i++) await P.settle(20000);
+  const low = P.state().target;
+  for (let r = 0; r < 10; r++) await feedRow(P, 16, 4.5);
+  claim('ten rows at 4.5x: nothing shed and nothing given back',
+    [P.state().target, plusses(P)], [low, []]);
+}
+
+console.log(NL + 'K  a shed right after a recovery holds the shed for good');
+{
+  const P = makePool(8, { across: 16, fin: true, cores: 12 }); await P.settle(1000);
+  for (let i = 0; i < 16; i++) await P.settle(20000);
+  const low = P.state().target;
+  await feedRow(P, 0, 1);
+  const mid = P.state().target;
+  claim('it recovered once', mid, low + 1);
+  for (let i = 0; i < 16; i++) await P.settle(20000);   // and the pressure is straight back
+  const plusBefore = plusses(P).length;
+  for (let r = 0; r < 10; r++) await feedRow(P, 0, 1);
+  claim('ten quiet rows afterwards add no further recovery', plusses(P).length, plusBefore);
+}
+
+console.log(NL + 'L  the tablet: pressure that never lifts is never recovered from');
+{
+  // A pool that is genuinely paging shows a median that stays elevated AS WORKERS LEAVE, because
+  // fewer tiles in flight is less memory but it is still swapping. That signature is what the
+  // recovery gate must be unable to satisfy - this is the case the whole mechanism exists for, and
+  // an un-shed must not be able to undo the rescue.
+  const P = makePool(4, { across: 16, fin: true, cores: 4 }); await P.settle(2000);
+  for (let r = 0; r < 20; r++) await feedRow(P, 16, 19, 2000);
+  const s = P.state();
+  claim('it sheds to the floor', s.target, 2);
+  claim('and never gives a worker back', plusses(P), []);
+}
+
+console.log(NL + 'ablation: the row comparison neutered');
+{
+  const flat = REGION.replace(/med > SHED_AT \* base/, 'false');
+  if (flat === REGION) { console.log('  FAIL  could not find the comparison to ablate - probe is stale'); fails++; }
   else {
-    const P = makePool(8, flat); P.settle(1000);
-    for (let i = 0; i < 200; i++) P.settle(10000);
-    claim('case C and D stop biting, so they were testing that comparison', P.state().target, 8);
+    const P = makePool(8, { region: flat }); await P.settle(1000);
+    for (let i = 0; i < 200; i++) await P.settle(5000);   // 5x: over SHED_AT, under the panic figure
+    claim('cases C, D and G stop biting, so they were testing that comparison', P.state().target, 8);
   }
 }
 
-console.log(fails ? `\n${fails} FAILED\n` : '\nall claims hold\n');
+console.log(NL + 'ablation: the recovery gate neutered');
+{
+  const loose = REGION.replace(/med <= CONTENTION \* base/, 'true');
+  if (loose === REGION) { console.log('  FAIL  could not find the recovery gate to ablate - probe is stale'); fails++; }
+  else {
+    const P = makePool(8, { region: loose, across: 16, fin: true, cores: 12 }); await P.settle(1000);
+    for (let i = 0; i < 16; i++) await P.settle(20000);
+    const low = P.state().target;
+    for (let r = 0; r < 4; r++) await feedRow(P, 16, 4.5);
+    claim('case J stops biting: it widens back into 4.5x', P.state().target > low, true);
+  }
+}
+
+console.log(NL + 'ablation: the panic window neutered');
+{
+  const slow = REGION.replace(/m >= PANIC \* base/, 'false');
+  if (slow === REGION) { console.log('  FAIL  could not find the panic test to ablate - probe is stale'); fails++; }
+  else {
+    const P = makePool(8, { region: slow, across: 64, fin: true, cores: 12 }); await P.settle(1000);
+    for (let i = 0; i < 8; i++) await P.settle(20000);
+    claim('case H stops biting: 20x now waits out a whole row before anything happens',
+      P.state().shed, []);
+  }
+}
+
+console.log(NL + 'ablation: recovery taken out of the else, so the clock alone widens');
+{
+  const always = REGION.replace('else if (med <= CONTENTION * base) grow(med);', 'if (true) grow(med);');
+  if (always === REGION) { console.log('  FAIL  could not find the recovery branch to ablate - probe is stale'); fails++; }
+  else {
+    const P = makePool(4, { region: always, across: 16, fin: true, cores: 4 }); await P.settle(2000);
+    for (let r = 0; r < 20; r++) await feedRow(P, 16, 19, 2000);
+    claim('case L stops biting: the tablet is handed workers back while it is still paging',
+      plusses(P).length > 0, true);
+  }
+}
+
+console.log(fails ? `${NL}${fails} FAILED${NL}` : NL + 'all claims hold' + NL);
 process.exit(fails ? 1 : 0);
