@@ -920,6 +920,13 @@ window.SA_I18N = (() => {
   "exp.err.side-cap": "This browser cannot make an image wider than {px} pixels, whatever the memory.",
   "exp.packing": "Packing the archive…",
   "exp.preparing": "Preparing…",
+  "exp.pool.forced": "forced sequential",
+  "exp.pool.floor": "a tiled floor",
+  "exp.pool.graft": "a wood graft",
+  "exp.pool.backlight": "the back light",
+  "exp.pool.window": "a reality window — an island with Show through on",
+  "exp.pool.noworkers": "no workers on this engine",
+  "exp.pool.narrow": "the width did not earn a second worker",
   "exp.prog": "Rendering {done} of {total} · {px}px",
   "exp.prog-tiles": "Image {img} of {imgs} · tile {done} of {total} · {px}px",
   "exp.saving": "Saving the file…",
@@ -1803,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.155';
+  const BUILD = '2026.10.20.156';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13170,6 +13177,27 @@ self.onmessage = async (e) => {
   const corePaintsThis = () => !layTiles && !(WOOD.graft > 0) && !(!layTiles && G.backlight > 0) &&
     !gatherMasks().some(w => w.show != null) &&
     typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
+  // WHICH CLAUSE SAID NO, in the same order corePaintsThis evaluates them. A predicate that answers
+  // only true or false is fine for the code and useless to a person: a render that silently never
+  // pooled is indistinguishable from one that did, and an entire evening was spent last night
+  // reasoning about a pool that was never created. The slab carried a reality window; nothing said so
+  // before the render, during it, or in the panel afterwards, and the only record was a `windows: 1`
+  // in the metadata of a master that took six minutes to produce.
+  //
+  // Kept beside the predicate deliberately, so a clause added to one and not the other is visible in
+  // a three-line diff rather than hidden behind agreement.
+  // RETURNS A KEY, not a sentence. Every one of these reaches the export panel, so every one is a
+  // user-facing string and belongs in a pack - and routing the key rather than the prose means the
+  // short reasons are translated too, not merely the two long enough to trip check-i18n.
+  function poolWhyNot() {
+    if (EXP_FORCE_SEQ) return 'exp.pool.forced';
+    if (layTiles) return 'exp.pool.floor';
+    if (WOOD.graft > 0) return 'exp.pool.graft';
+    if (G.backlight > 0) return 'exp.pool.backlight';
+    if (gatherMasks().some(w => w.show != null)) return 'exp.pool.window';
+    if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return 'exp.pool.noworkers';
+    return null;
+  }
   let EXP_FORCE_SEQ = false;                               // the differential test flips this
   // ?finish=1 - LET EACH WORKER FINISH ITS OWN TILE instead of handing a bitmap back for this thread
   // to cut, mark, sample and deflate. Measured on a 131,072 at a 4096 tile, that work is 306.7 ms of
@@ -13598,6 +13626,19 @@ self.onmessage = async (e) => {
     // whole render, and whether the worker finishes decides the shape of what it sends back.
     p.markSig = markSig; p.fin = FINISH_WORKER;
     pool = layTiles ? null : await tilePool(W, p);
+    // SAY WHETHER IT POOLED, in the trail and on the panel. Both, because they answer different
+    // questions: the trail travels in the master so a file can be read months later, and the status
+    // line is the only thing that answers it BEFORE six minutes have been spent. A width that was
+    // refused reports the clause that refused it; a width that pooled reports how wide.
+    {
+      const whyKey = pool ? null : (poolWhyNot() || 'exp.pool.narrow');
+      // The TRAIL takes the key, which is stable across languages and is what a master should carry;
+      // the PANEL takes the translation, which is what a person should read.
+      p.trail.push(pool ? 'pool ' + pool.workers + 'x' + p.ts : 'pool refused: ' + whyKey);
+      expStat(pool ? TR('exp.preparing') + '  ' + pool.workers + ' x ' + p.ts
+                   : TR('exp.preparing') + '  1 x ' + p.ts + '  (' + TR(whyKey) + ')', null);
+      await breathe();                                   // let the line paint before the first tile blocks
+    }
       // SELF-TERMINATING on the pool going null, which every path does - the success path at the
       // metadata and the finally on any throw. A timer that outlives the render would sample a getter
       // on a closed pool for as long as the tab lived.

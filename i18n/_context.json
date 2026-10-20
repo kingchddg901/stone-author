@@ -483,7 +483,34 @@
  "exp.preparing": {
   "where": "progress line under the File section buttons, while an export is running"
  },
- "exp.prog": {
+  "exp.pool.forced": {
+   "terms": [],
+   "where": "why the worker pool was refused: an internal switch the differential test flips"
+  },
+  "exp.pool.floor": {
+   "terms": [],
+   "where": "why the worker pool was refused: the render is a tiled floor, which the core cannot paint"
+  },
+  "exp.pool.graft": {
+   "terms": [],
+   "where": "why the worker pool was refused: a wood graft is set"
+  },
+  "exp.pool.backlight": {
+   "terms": [],
+   "where": "why the worker pool was refused: the back light forces the whole-image path"
+  },
+  "exp.pool.window": {
+   "terms": [],
+   "where": "why the worker pool was refused: the slab carries a reality window. Shown in the export panel BEFORE the render starts, because a render that silently never pooled is otherwise indistinguishable from one that did. \"Show through\" is the control name in the Mask tool and should match whatever that button is called in this language"
+  },
+  "exp.pool.noworkers": {
+   "terms": [],
+   "where": "why the worker pool was refused: this engine has no Worker or no OffscreenCanvas"
+  },
+  "exp.pool.narrow": {
+   "terms": [],
+   "where": "why the worker pool was refused: the memory budget left room for only one worker, and one worker is slower than none"
+  }, "exp.prog": {
   "placeholders": {
    "done": "which image is being rendered now, counting from 1",
    "px": "the export width in pixels, e.g. 16384",
