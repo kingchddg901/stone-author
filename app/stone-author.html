@@ -1803,7 +1803,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.19.154';
+  const BUILD = '2026.10.20.155';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13175,27 +13175,47 @@ self.onmessage = async (e) => {
   // to cut, mark, sample and deflate. Measured on a 131,072 at a 4096 tile, that work is 306.7 ms of
   // every 520 ms pass and it runs in a queue while eight workers sit idle holding finished tiles.
   //
-  // MEASURED AND REJECTED, 2026-10-19. Two 131,072 masters on one build, same forced 4096 tile, no
-  // shedding either side: 5.71 min without, 8.42 min with. FORTY-SEVEN PERCENT SLOWER. The files are
-  // byte-identical - check-same-image says so over all 1,721,992,864 image bytes - so the correctness
-  // half holds completely and only the speed half failed.
+  // UNMEASURED - and the measurement that claimed otherwise was void. This said "MEASURED AND
+  // REJECTED, 47% slower" on the strength of two 131,072 masters, 5.71 min against 8.42. Both were
+  // rendered from a slab carrying a REALITY WINDOW, and corePaintsThis refuses the pool outright when
+  // one is present:
   //
-  // THE SHAPE SAYS WHY, and it is the opposite of the reasoning that built this. Per-tile p50 went
-  // 466 -> 768 ms, a rise of 302 ms against the 306.7 ms of main-thread work this was meant to
-  // remove; the max barely moved, 1316 -> 1339. A near-uniform shift equal to the relocated work
-  // means the work was never on the critical path. The consumer's readback, mark, sample and deflate
-  // ran CONCURRENTLY with the pool painting ahead - the handover queue climbing 0.4, 240, 489, 732 ms
-  // was the pool working ahead, not jamming behind one thread - so taking that work off the main
-  // thread saved nothing, and putting it in front of each worker's next paint cost the full amount.
+  //     !gatherMasks().some(w => w.show != null)
   //
-  // The 3.5x the harness measured was an artifact of the harness: 40 passes with no sink and no
-  // sustained run, which removed the very overlap that made the old path fast.
+  // With no pool, `if (pool && attempt === 1 && p.fin)` never runs. Both arms fell through to
+  // renderOneTile on this thread and executed identical code, so the 2.7 minutes between them has no
+  // mechanism in this flag at all. It was then "confirmed" by a per-tile p50 shift of 302 ms sitting
+  // next to a 306.7 ms figure - a coincidence that fitted the story being told.
   //
-  // KEPT ANYWAY, off, because the capability is proven and the gate that proves it is worth running:
-  // harness/worker-finish.mjs asserts the two paths write the same bytes, which is a real invariant
-  // whichever one ships. If the overlap is ever revisited properly - the pool painting ahead is the
-  // thing to preserve, not defeat - this is the half that already works. Do not turn it on expecting
-  // a win; the number above is what it costs.
+  // THE 306.7 ms CAME FROM THE HARNESS, which calls render() on the app's DEFAULT slab. That slab has
+  // no window, so it gets a pool; the renders being reasoned about did not. One machine configuration
+  // was measured and a different one described. Eleven of eleven masters carrying windows=1 ran
+  // sequentially; the only two pooled masters on disk carry windows=0.
+  //
+  // WHAT IS STILL TRUE: the output is byte-identical, 48 stored tiles compared by full hash against a
+  // main-thread control, with a one-bit markSig change proving the comparison can fail. The
+  // correctness half holds. harness/worker-finish.mjs runs it on every CI pass and has a real pool,
+  // because it uses the default slab.
+  //
+  // AND THE POOL ITSELF IS WORTH NOTHING, which is what makes this the only lever left. Measured
+  // 2026-10-20, same slab and tiles, 40 passes at 32,768, two rounds interleaved, byte-identical
+  // output: pooled 13,093 ms, sequential 13,091 ms. A ratio of 1.000, with within-arm spread of 6.2%
+  // and 4.5% - larger than anything between them.
+  //
+  // The reason is in the split. The loop is ~327 ms a pass and ~306 of it is main-thread consumer
+  // work - 74.7 readback, 1.0 sample, 231.0 deflate - which is SERIAL whether or not a pool exists.
+  // Eight workers only parallelise the paint, and the paint hides underneath that entirely. A pool
+  // may run as far ahead as it likes; the render still proceeds at the consumer's pace.
+  //
+  // So 94% of a render is the work this flag moves, and no arrangement of workers touches it while
+  // the consumer keeps doing it. The harness figure - 3,847 ms against 13,453, 3.5x - compared
+  // pool+finish against pool+main-thread-consume, which is the right comparison and was never
+  // contradicted: last night's "refutation" ran on a slab where NEITHER arm pooled.
+  //
+  // STILL OFF, because that 3.5x excludes sink.add and the OPFS write stays serial either way, so the
+  // end-to-end number will be smaller and nobody has measured it. But it is the only lever with a
+  // path to better than a few percent, and it wants a pooled export to settle it - which means a slab
+  // without a reality window, since corePaintsThis refuses the pool whenever one is present.
   const FINISH_WORKER = (() => {
     try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('finish') || ''); }
     catch (_) { return false; }
