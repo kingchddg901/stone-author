@@ -43,6 +43,10 @@ function makePool(n, settleSrc = SETTLE) {
   return new Function('n', 'SHED_AT', `
     let target = 1, base = 0;
     const recent = [], shedLog = [];
+    // Mirrors the app: the median that triggered the last shed, and the latch that stops shedding
+    // once a shed has failed to help. Kept in step by hand, which is why case D exists - if the app
+    // gains more shed state and this does not, D is what notices.
+    let lastShedMed = 0, shedDone = false;
     const killed = [];
     const pool = []; for (let i = 0; i < n; i++) pool.push({ busy: true, w: { terminate() { killed.push(i); } } });
     ${settleSrc}
@@ -99,6 +103,21 @@ console.log('\nD  it keeps shedding while the contention holds, and stops at two
   const s = P.state();
   claim('floors at two - one worker is slower than no worker', s.target, 2);
   claim('six terminated, two alive', [s.killed, s.alive], [6, 2]);
+}
+
+console.log(String.fromCharCode(10) + 'D2 shedding that makes things WORSE stops, instead of running to two');
+{
+  // Measured on a daylight 131,072 finishing in-worker: 7@3x, 6@4x, 5@3x, 4@7x, 3@7x, 2@3x. It shed
+  // six times, the ratio CLIMBED as workers left, and it arrived at two having taken 159 s where the
+  // UV equivalent shed once and took 51. Workers that are contending are not workers that are
+  // swapping, and taking them away cannot help - fewer tiles in flight is always less memory, so a
+  // rising median while shedding means memory was never the problem.
+  const P = makePool(8); P.settle(1000);
+  for (let i = 0; i < 8; i++) P.settle(4000);     // 4x: over the threshold, so it sheds
+  for (let i = 0; i < 96; i++) P.settle(9000);    // and then WORSE as it narrows
+  const s = P.state();
+  claim('it stops above the floor rather than running down to two', s.target > 2, true);
+  claim('and says so in the trail', s.shed.some(x => String(x).startsWith('held@')), true);
 }
 
 console.log('\nE  a single slow tile is not contention');

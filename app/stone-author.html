@@ -1810,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.159';
+  const BUILD = '2026.10.20.160';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13369,6 +13369,7 @@ self.onmessage = async (e) => {
     const SHED_AT = 3;        // 8 workers sharing bandwidth cost each other well under 2x; swapping is 5-20x
     let target = 1, base = 0;                              // ramp from one so the first tile is the baseline
     const recent = [], shedLog = [];
+    let lastShedMed = 0, shedDone = false;   // the median that triggered the last shed, and the latch
     const busyCount = () => { let b = 0; for (const q of pool) if (q.busy) b++; return b; };
     function poolSettle(q, ms) {
       q.busy = false;
@@ -13377,9 +13378,29 @@ self.onmessage = async (e) => {
       if (recent.length >= Math.max(2, target)) {
         const med = recent.slice().sort((a, b) => a - b)[recent.length >> 1];
         recent.length = 0;
-        if (med > SHED_AT * base && target > 2) {
-          target--;
-          shedLog.push(target + '@' + Math.round(med / base) + 'x');    // what it dropped to, and on what
+        // SHEDDING HAS TO EARN THE NEXT ONE. The point of narrowing is to relieve swapping, and
+        // relief shows up as a LOWER median. If the median rose instead, whatever is slowing the
+        // passes was not memory pressure and taking another worker away cannot help - it only
+        // removes parallelism from a pool that was not the problem.
+        //
+        // Measured on a daylight 131,072 finishing in-worker: 7@3x, 6@4x, 5@3x, 4@7x, 3@7x, 2@3x.
+        // It shed six times, the ratio got WORSE on the way down, and it arrived at two workers
+        // having taken 159 s. The equivalent UV render shed once and finished in 51. Eight workers
+        // doing paint, readback and deflate at once legitimately run 3-4x a solo pass; that is
+        // contention worth paying for, not the 5-20x of a pool that is swapping.
+        // WORSE, not merely "no better". A pool that is genuinely swapping may need several sheds
+        // before it is under the ceiling, and a strict improve-or-stop rule would abandon the
+        // tablet case this whole mechanism was built for. What never happens while swapping is the
+        // median getting WORSE as workers leave - fewer tiles in flight is less memory, always.
+        // 1.2x of tolerance so ordinary jitter does not read as a trend.
+        if (med > SHED_AT * base && target > 2 && !shedDone) {
+          if (lastShedMed && med > 1.2 * lastShedMed) {
+            shedDone = true;                                            // shedding made it worse: stop
+            shedLog.push('held@' + Math.round(med / base) + 'x');
+          } else {
+            lastShedMed = med; target--;
+            shedLog.push(target + '@' + Math.round(med / base) + 'x');  // what it dropped to, and on what
+          }
         }
       }
       // Surplus workers are TERMINATED, not merely left idle: the point of shedding is the memory they
@@ -13525,6 +13546,15 @@ self.onmessage = async (e) => {
       // The key a marked tile carries: renderSig as a number, the same value the master publishes as
       // `inputs`. Taken once - it cannot change mid-render, and reading it per tile would invite it to.
       const markSig = markSigNow();
+      // THE LIGHT AND THE SIGNATURE, CAPTURED HERE FOR THE SAME REASON markSig is. expMeta reads
+      // `lightSpectrum` and `renderSig()` live, and it is called when the metadata is assembled -
+      // at the END, after six minutes of rendering. Touch the light meanwhile and the master records
+      // the new one over the old pixels.
+      //
+      // That is not hypothetical: a 131,072 written on 2026-10-20 carries spectrum -1 and the inputs
+      // hash of the UV picture while holding DAYLIGHT pixels, byte-identical to the daylight master
+      // rendered eight minutes earlier. The field the render census groups on, wrong, silently.
+      const atSpectrum = lightSpectrum, atInputs = renderSig();
       let markedCells = 0;
       const jobSig = resumeSig({ inputs: renderSig(), w: W, h: p.FH, ts: p.ts, store: p.store,
                                  bleed: p.bleed, across: p.across, down: p.down, renders: p.renders });
@@ -13838,6 +13868,10 @@ self.onmessage = async (e) => {
       expStat(TR('exp.saving'), 0.96); await breathe();
       await sealing;                                        // the device block, ready before the metadata is built
       const { blob } = await sink.finish(expMeta({
+        // Overrides, so what the file says it is matches what was painted rather than where the
+        // dials ended up. Everything else in expMeta describes the slab, which cannot change
+        // mid-render; these two can, and did.
+        spectrum: atSpectrum, inputs: atInputs,
         scope: 'render', tiled: true, w: W, h: p.FH, tile: p.store, render: p.ts,
         tiles: p.tiles, renders: p.renders, bleed: p.bleed, sigma: Math.round(p.sigma) || 0,
         windows: p.wins || 0,
