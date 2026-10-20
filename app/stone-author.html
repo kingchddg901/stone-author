@@ -1810,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.157';
+  const BUILD = '2026.10.20.158';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13203,50 +13203,30 @@ self.onmessage = async (e) => {
   // to cut, mark, sample and deflate. Measured on a 131,072 at a 4096 tile, that work is 306.7 ms of
   // every 520 ms pass and it runs in a queue while eight workers sit idle holding finished tiles.
   //
-  // UNMEASURED - and the measurement that claimed otherwise was void. This said "MEASURED AND
-  // REJECTED, 47% slower" on the strength of two 131,072 masters, 5.71 min against 8.42. Both were
-  // rendered from a slab carrying a REALITY WINDOW, and corePaintsThis refuses the pool outright when
-  // one is present:
+  // ?finish=0 - HAND A BITMAP BACK and let this thread cut, mark, sample and deflate it, which is
+  // what every render did before 2026-10-20. ON by default now, because it is worth 5.3x:
   //
-  //     !gatherMasks().some(w => w.show != null)
+  //   131,072 UV, forced 4096 tile, window deleted so the pool could run, same build, same slab
+  //     consumer finishes   271 s    consumer work p50 403 ms   dwell p50 2,921 ms   busy 0.99/2
+  //     worker finishes      51 s    consumer work p50   0 ms   dwell p50     0 ms   busy 7.22/7
+  //     bytes 1,345,490,888 either way, light 63.07/42.60 either way
   //
-  // With no pool, `if (pool && attempt === 1 && p.fin)` never runs. Both arms fell through to
-  // renderOneTile on this thread and executed identical code, so the 2.7 minutes between them has no
-  // mechanism in this flag at all. It was then "confirmed" by a per-tile p50 shift of 302 ms sitting
-  // next to a 306.7 ms figure - a coincidence that fitted the story being told.
+  // THE TWO HALVES ONLY PAY TOGETHER, which is why this was nearly abandoned twice. A pool on its
+  // own measured at ratio 1.000 - 13,093 ms against 13,091 - because the consumer's readback and
+  // deflate are serial however many workers paint. And this flag on its own did nothing, because
+  // without a pool there is no worker to finish in. Each was measured with the other half missing,
+  // each honestly read "worthless", and both readings were of a crippled configuration.
   //
-  // THE 306.7 ms CAME FROM THE HARNESS, which calls render() on the app's DEFAULT slab. That slab has
-  // no window, so it gets a pool; the renders being reasoned about did not. One machine configuration
-  // was measured and a different one described. Eleven of eleven masters carrying windows=1 ran
-  // sequentially; the only two pooled masters on disk carry windows=0.
+  // Together the consumer's work goes to zero, it routes compressed parts and touches no pixels, and
+  // seven workers run saturated. The bitmap that used to cross the wire was 67 MB at a 4096 tile;
+  // what crosses now is ~2.7 MB of deflated bytes.
   //
-  // WHAT IS STILL TRUE: the output is byte-identical, 48 stored tiles compared by full hash against a
-  // main-thread control, with a one-bit markSig change proving the comparison can fail. The
-  // correctness half holds. harness/worker-finish.mjs runs it on every CI pass and has a real pool,
-  // because it uses the default slab.
-  //
-  // AND THE POOL ITSELF IS WORTH NOTHING, which is what makes this the only lever left. Measured
-  // 2026-10-20, same slab and tiles, 40 passes at 32,768, two rounds interleaved, byte-identical
-  // output: pooled 13,093 ms, sequential 13,091 ms. A ratio of 1.000, with within-arm spread of 6.2%
-  // and 4.5% - larger than anything between them.
-  //
-  // The reason is in the split. The loop is ~327 ms a pass and ~306 of it is main-thread consumer
-  // work - 74.7 readback, 1.0 sample, 231.0 deflate - which is SERIAL whether or not a pool exists.
-  // Eight workers only parallelise the paint, and the paint hides underneath that entirely. A pool
-  // may run as far ahead as it likes; the render still proceeds at the consumer's pace.
-  //
-  // So 94% of a render is the work this flag moves, and no arrangement of workers touches it while
-  // the consumer keeps doing it. The harness figure - 3,847 ms against 13,453, 3.5x - compared
-  // pool+finish against pool+main-thread-consume, which is the right comparison and was never
-  // contradicted: last night's "refutation" ran on a slab where NEITHER arm pooled.
-  //
-  // STILL OFF, because that 3.5x excludes sink.add and the OPFS write stays serial either way, so the
-  // end-to-end number will be smaller and nobody has measured it. But it is the only lever with a
-  // path to better than a few percent, and it wants a pooled export to settle it - which means a slab
-  // without a reality window, since corePaintsThis refuses the pool whenever one is present.
+  // THE OUTPUT IS THE SAME FILE, which is the only reason this may be a default: byte-identical on a
+  // real 131,072 export, and byte-identical per stored tile in harness/worker-finish.mjs on every CI
+  // pass, with ablations that go red when the cut or the mark key moves.
   const FINISH_WORKER = (() => {
-    try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('finish') || ''); }
-    catch (_) { return false; }
+    try { return !/^(0|off|no)$/i.test(new URLSearchParams(location.search).get('finish') || ''); }
+    catch (_) { return true; }
   })();
   // A POOL THAT PAINTS AHEAD. Tiles are consumed in order - the sink is indexed but the stats, the
   // timing and the blank-tile retry all read in sequence - so the win comes from having the next few
@@ -13389,7 +13369,21 @@ self.onmessage = async (e) => {
             return;
           }
           tr.f = performance.now(); tr.bF = busyCount();
-          poolSettle(q, tr.f - t0);
+          // THE PAINT, not the wall. poolSettle sheds a worker when passes run several times the
+          // solo baseline, on the reasoning that a pool which is swapping costs 5-20x. But the figure
+          // it was handed is DISPATCH TO FINISH, which includes however long the pass sat queued
+          // behind a busy consumer - so consumer backpressure reads exactly like memory contention,
+          // and the pool answers it by shedding the workers that were never the problem.
+          //
+          // Measured on a 131,072 with the consumer doing its own readback and deflate: the pool shed
+          // from 8 to 2 and then averaged 0.99 busy workers. Effectively single-threaded, with a pool
+          // running, silently - `shed` only ever reaches the metadata.
+          //
+          // `s` is stamped by the worker's ack at the top of its handler, so f - s is paint and
+          // nothing else. Contention still shows there, because a swapping worker paints slowly; a
+          // blocked consumer does not, because it cannot reach into the worker and slow it down.
+          // Falls back to the old figure when no ack arrived, which is the only case it cannot tell.
+          poolSettle(q, tr.s ? tr.f - tr.s : tr.f - t0);
           // In finish mode the pass IS the record - parts, counts and the painted flag - and there is
           // no bitmap to hand over. One pool is in one mode for its whole life, set by p.fin.
           res(e.data.fin ? e.data : e.data.bmp);
