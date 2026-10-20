@@ -55,6 +55,10 @@ Android reports 8 unequal cores. `per worker` is throughput divided by mean occu
 | A7 Lite | Blink | 8 | 2048 | 8 | 7.81 | 12:37 | **3.5** | 0.5 |
 | Tab A 8.0 | Blink | 4 | 2048 | 4 | 3.90 | 20:54 | **2.1** | 0.5 |
 
+Those are all 65,535 renders. That matters for the two Gecko rows in particular — the Blink/Gecko gap
+narrows from 4.34× to 2.37× between 65,535 and 262,144 on this machine, so the table reads Gecko at the
+size where it looks worst. See *"Gecko is N times slower" is not one number* below.
+
 The iPhone is the finding in that table. It matches the S23 Ultra's total throughput with **half the
 workers** and lands within 11% of the desktop *per worker* — 14.8 against 16.5. The whole of its gap to
 the desktop is worker count, and that count is a Safari policy rather than a hardware limit.
@@ -106,6 +110,55 @@ trend to 655,360 passes puts the marginal cost near 60 ms.
 Whether it is true degradation or a longer render accumulating something — allocator pressure, GC, the
 heat of a 15-minute run — these four points cannot say, because duration and pass count move together
 across them. Separating the two needs a long render at a large tile, which nothing here provides.
+
+### "Gecko is N times slower" is not one number
+
+The figure depends on both the tile and the render size, and it moves by more than a factor of two
+across the range measured here. Two things set it.
+
+**The tile sets which cost you are measuring.** Fitting the Blink walk to `overhead + paint`, with the
+overhead taken from the marginals and the paint scaling with tile area, reproduces every measured point
+to within 2.6%:
+
+| tile | measured ms/pass | model | paint | overhead share |
+| --- | --- | --- | --- | --- |
+| 256 | 8.07 | 8.13 | 0.53 | **94%** |
+| 512 | 9.47 | 9.72 | 2.12 | 80% |
+| 1024 | 17.15 | 16.07 | 8.47 | 44% |
+| 2048 | 42.34 | 41.48 | 33.88 | 18% |
+| 4096 | 143.13 | 143.13 | 135.53 | **5%** |
+
+So a 256 tile is almost entirely machinery and a 4096 tile is almost entirely paint. And the two
+engines differ by *different* amounts on those two costs — **2.9× on overhead, 4.7× on paint** — so the
+gap you measure is a blend, and it walks between them as the tile grows:
+
+| tile | 256 | 512 | 1024 | 2048 | 4096 |
+| --- | --- | --- | --- | --- | --- |
+| Gecko ÷ Blink | 2.84× | 2.70× | 3.10× | 4.11× | **4.64×** |
+
+Gecko's own costs do not fit that model — its overhead is not a constant, so no single value describes
+it — but the blend explains why the same two engines read as 2.7× apart at one tile and 4.6× at another.
+
+**And the render size moves it again, in the other direction.** At a fixed 4096 tile, on the same slab,
+with shed runs excluded and Firefox at 158.0 throughout:
+
+| render | Blink ms/pass | Gecko ms/pass | gap | Blink Mpx/s | Gecko Mpx/s |
+| --- | --- | --- | --- | --- | --- |
+| 65,535 | 142.8 | 619.4 | **4.34×** | 117.5 | 27.1 |
+| 262,144 | 120.5 | 285.3 | **2.37×** | 139.2 | 58.8 |
+
+Gecko's cost per pass falls 0.599 then 0.769 across those two doublings while Blink's falls 0.844 over
+both together, so this is Gecko converging rather than Blink degrading. Where it settles is not known:
+two ratios are not a trend, and the 131,072 point has no clean comparator because the only Blink render
+at that size and tile shed four workers.
+
+The practical consequence is that **the fleet table above reads Gecko at its worst**. Those rows are
+65,535 renders, which is the smallest size here and the one where the paint ratio dominates most
+completely. The same engine on the same machine at 262,144 is within 2.4× of Blink rather than 4.3×.
+
+Gecko also runs a less saturated pool at every size — **6.16 to 6.64 mean busy against Blink's 7.08 to
+7.61** — which costs it about a tenth before any painting happens, and is a third difference again from
+the other two.
 
 ### What tiling does to the picture, and what it does not
 
