@@ -1810,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.156';
+  const BUILD = '2026.10.20.157';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13634,8 +13634,13 @@ self.onmessage = async (e) => {
       const whyKey = pool ? null : (poolWhyNot() || 'exp.pool.narrow');
       // The TRAIL takes the key, which is stable across languages and is what a master should carry;
       // the PANEL takes the translation, which is what a person should read.
-      p.trail.push(pool ? 'pool ' + pool.workers + 'x' + p.ts : 'pool refused: ' + whyKey);
-      expStat(pool ? TR('exp.preparing') + '  ' + pool.workers + ' x ' + p.ts
+      // PLANNED, not `workers`. The pool RAMPS FROM ONE deliberately - the first pass is painted solo
+      // so poolSettle has a baseline to judge contention against - so `workers` reads 1 at this
+      // instant and stays 1 until the first pass settles. Reporting it here published "pool 1x4096"
+      // on a render that went on to run seven wide, which is exactly the misreading this line exists
+      // to prevent. The width it ENDED at is already in the metadata as `pool.n` and `shed`.
+      p.trail.push(pool ? 'pool ' + pool.planned + 'x' + p.ts : 'pool refused: ' + whyKey);
+      expStat(pool ? TR('exp.preparing') + '  ' + pool.planned + ' x ' + p.ts
                    : TR('exp.preparing') + '  1 x ' + p.ts + '  (' + TR(whyKey) + ')', null);
       await breathe();                                   // let the line paint before the first tile blocks
     }
