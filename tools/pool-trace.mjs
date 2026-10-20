@@ -48,7 +48,14 @@ for (const f of files) {
   const tick = t.tick || 0;
 
   console.log('  ' + j.w.toLocaleString('en-GB') + ' px, ' + j.render + ' pass, ' + (j.renders || ms.length) +
-              ' passes, ' + W + ' workers' + (j.poolShed ? '  SHED ' + j.poolShed.join(' ') : ''));
+              ' passes, ' + W + ' workers'
+              // TWO VOCABULARIES, because the archive holds both. A master written before
+              // 2026-10-20 carries `poolShed`: workers actually taken away. One written after
+              // carries `poolStrain`: what the same measurement saw, with nothing acted on.
+              // Printing one as the other would read a record of loss as a record of load.
+              + (j.poolShed ? '  SHED ' + j.poolShed.join(' ') : '')
+              + (j.poolStrain ? '  STRAIN over ' + j.poolStrain.over + ', panic ' + j.poolStrain.panic
+                                + ', worst ' + j.poolStrain.max + 'x' : ''));
   console.log('  busy series: ' + busy.length + ' samples at ' + tick + ' ms = ' + secs(busy.length * tick) +
               (t.capped ? '   (per-pass rows capped at ' + t.rows + ')' : ''));
 

@@ -64,13 +64,20 @@ const POOL = SRC.slice(SRC.indexOf('const start = (idx) => {'), SRC.indexOf('   
 }
 
 // ---- a worker's name must survive the array it lives in -----------------------------------------
-// poolSettle splices the pool when it sheds, so a position is not an identity: index 3 before a shed
-// and index 3 after are different workers, and a trace keyed on position blames the wrong one.
+// The id was needed because poolSettle SPLICED the pool when it shed: index 3 before a shed and index 3
+// after were different workers, and a trace keyed on position blamed the wrong one. Nothing sheds any
+// more, so position is stable and the id is no longer load-bearing - but it is still what the trace
+// carries, because the archive holds 800 masters written while it was, and one reader has to serve both.
+//
+// SO THE CLAIM INVERTS. It used to assert that the splice was there; it now asserts that it is NOT, which
+// is the invariant that makes a position an identity in the first place. Re-add a splice without the
+// machinery that made it safe and this is what says so.
 {
   ok('the id is assigned at creation', /pool\.push\(\{ w, busy: false, id: i \}\)/.test(SRC));
   ok('the trace carries that id, not an array position', /k: q\.id/.test(POOL));
   const settle = SRC.slice(SRC.indexOf('function poolSettle('), SRC.indexOf('const start = (idx) =>'));
-  ok('shedding still splices, which is why the id is needed', /pool\.splice\(i, 1\)/.test(settle));
+  ok('NOTHING removes a worker mid-render any more', !/pool\.splice\(/.test(settle));
+  ok('and nothing terminates one either', !/terminate\(\)/.test(settle));
 }
 
 // ---- the series must stay uniform AND bounded, proved by running it -----------------------------

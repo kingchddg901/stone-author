@@ -1810,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.164';
+  const BUILD = '2026.10.20.165';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13387,168 +13387,68 @@ self.onmessage = async (e) => {
     // that is swapping costs several times it. Monotone downward only - a width that was too wide does
     // not become right later in the same render, and re-initialising a worker means re-posting every
     // modulator bitmap.
-    // HOW FAR OVER THE SOLO BASELINE IS STILL WORTH PAYING, and it depends on what a worker does.
+    // HOW FAR OVER THE SOLO BASELINE A PASS RAN - RECORDED, NEVER ACTED ON.
     //
-    // Painting only, eight workers sharing bandwidth cost each other well under 2x, so 3 left room
-    // and still caught swapping at 5-20x. Finishing in-worker adds the readback and the deflate, and
-    // eight of those at once legitimately cost 3-4x a solo pass - measured, every shed in a daylight
-    // 131,072 fired at exactly 3x or 4x, which is ordinary contention being mistaken for a machine
-    // in trouble. It shed four workers before the rising-median guard caught it.
+    // This measured, and then shed a worker when the figure got high enough. It no longer does, and the
+    // reason is that the figure cannot carry the decision. The comment that justified the threshold said
+    // the mechanism "still caught swapping at 5-20x". Across seventeen renders on five devices and three
+    // engines, every one of them at a pool footprint where paging was arithmetically impossible, the
+    // readings spanned 1x to 18x. The range it fired on is a SUBSET of the range it false-fires on, so no
+    // threshold placed on this axis separates the two, and every device converged on the same 10-14x
+    // cluster regardless of engine, content or hardware.
     //
-    // But what those cost EACH OTHER depends on how OVERSUBSCRIBED the machine is, and that is not
-    // the same on every device:
+    // WHAT IT COST, measured on the same machine two days apart: 27% on a 262,144 that shed 8 workers to
+    // 3, and 13% on a 1,048,576 that shed to 5. Of the seventeen, thirteen ended narrower than planned;
+    // the four that recovered paid between two and twelve worker terminate-and-respawn round trips to
+    // arrive back where they started - an iPhone's 262,144 did six.
     //
-    //     win-chrome        hc 12, pool 8 (POOL_MAX)   0.67 workers per core   measured 3-4x
-    //     android-chrome    hc  8, pool 8              1.00
-    //     ios-safari        hc  4, pool 4              1.00
-    //     android-chrome    hc  4, pool 4              1.00   (the 2 GB tablet)
+    // AND THE FOOTPRINT IT WAS DEFENDING IS NOW BOUNDED. With 8192 off the tile ladder the pool can hold
+    // at most POOL_MAX x tileMBof(4096) = 536 MB on any device in any configuration; every shed above
+    // happened between 32 MB and that ceiling. The three hours of paging this was built for happened at
+    // 8192, which no longer exists.
     //
-    // poolWidthFor caps at hardwareConcurrency, so every device in the fleet runs one worker per
-    // core and only the desktop is held below that. A flat number calibrated on the desktop is
-    // calibrated on the LEAST contended machine there is, and would fire on ordinary load on all
-    // the others.
+    // SO THE MEASUREMENT STAYS AND THE ACTION GOES. `poolStrain` records what the render saw, which is
+    // what a device genuinely in trouble would show up in - and unlike the old `poolShed`, reading it
+    // costs nobody any parallelism. If one ever does, the evidence will be in the file and the next
+    // mechanism can be aimed at whatever the real signal turns out to be rather than at a ratio.
     //
-    // So it scales: 3 is the paint-only floor, and the margin grows with workers-per-core. The
-    // desktop lands on 5 - the figure its own shed log argued for - and at it a daylight 131,072
-    // finishes in 90s against the 159s it took when it shed its way down to two, UV in 55s. A fully
-    // subscribed device gets 6. The cost is real: a small-memory device that genuinely IS swapping
-    // must now be worse than 5-6x before it narrows, and the rising-median guard below is the second
-    // line there - `held@Nx` in the trail is what to watch on one.
-    //
-    // ONE MACHINE'S MEASUREMENT AND AN ASSUMED SHAPE - the 3-4x is real, the linearity is not
-    // tested. poolShed records the ratio on every device, so a render on any handheld settles it.
-    const SHED_AT = p.fin ? 3 + 3 * (n / Math.max(1, navigator.hardwareConcurrency || 4)) : 3;
-    // AND WHAT A WORKING POOL COSTS, which is a different question from what a failing one costs. A
-    // recovery has to clear THIS, not merely fall under SHED_AT: a median of 4.9x against a 5.00x
-    // threshold is not room, it is nearly bad enough to shed, and widening into it only walks back
-    // out again. 3-4x is the measured cost of eight workers painting, reading back and deflating at
-    // once, so under it the pool is demonstrably working rather than merely not drowning.
-    const CONTENTION = p.fin ? 4 : 2;
-    // PAST ARGUING WITH. The row below buys evidence at the price of a row, and on a 2 GB tablet a
-    // row of paging tiles is minutes. Nothing needs a second opinion about 20x, so a short window
-    // survives for exactly the figures that are unambiguous.
-    const PANIC = 10;
-    // THE MEASUREMENT WINDOW IS A ROW, because a reality window is a BAND and a band can fill
-    // anything shorter. Measured: a 262,144 carrying one disc shed five times, 8 workers down to 3,
-    // every ratio between 5x and 7x, and ran its last three-quarters at 2.9 - 423.7 s where its own
-    // throughput says 346. Nothing in it was swapping. A disc covers a contiguous column range, so
-    // eight CONSECUTIVE tiles inside it were all expensive and an eight-tile median read 6x. The
-    // same slab at 131,072 shed only twice, because a 15-tile-wide disc fills an eight-tile window
-    // less often than a 29-tile-wide one does. THE SIZE DEPENDENCE WAS THE BUG, not the threshold -
-    // and a disc is the same share of a ROW at every image size, which is what makes the row the one
-    // window it cannot carry.
-    const ROW = Math.max(2, p.rAcross || 2);
-    // AND IT NO LONGER SHRINKS WITH THE POOL. This used to be Math.max(2, target), so at three
-    // workers the median was three samples - noisiest exactly where it was most fragile. That
-    // 262,144's last two sheds were decided on four samples and on three.
-    const SHORT = Math.max(2, n);
+    // `tools/probe-pool-shed.mjs` holds the arithmetic; git holds the mechanism that was here.
+    const STRAIN_AT = p.fin ? 3 + 3 * (n / Math.max(1, navigator.hardwareConcurrency || 4)) : 3;
+    const PANIC = 10;                                      // what used to shed without waiting for a row
+    const ROW = Math.max(2, p.rAcross || 2);               // one row of evidence
+    const SHORT = Math.max(2, n);                          // one pass of the pool, and CONSTANT
     let target = 1, base = 0;                              // ramp from one so the first tile is the baseline
-    const recent = [], shedLog = [];
-    let lastShedMed = 0, shedDone = false;                 // the median that triggered the last shed, and the latch
-    // A ROW IS ALSO THE RECOVERY CLOCK. Shedding used to be monotone downward for the whole render,
-    // which is right for paging - memory does not free up halfway through - and wrong for the only
-    // thing that actually fires: a band of expensive work that ENDS. That 262,144 stopped shedding at
-    // 3 instead of reaching the floor, which can only mean its median fell back under the threshold
-    // on its own. The pressure released, visibly, in the trail, and the pool had no way to act on it
-    // for the 28 rows that followed.
-    let rows = 0, grewAtRow = -9, growDone = false, growing = false, closed = false;
-    let nextId = n, lowTarget = n;
+    const recent = [];
+    // over  - row medians past the strain level, which is where a worker used to go
+    // panic - short-window medians past 10x, which used to go immediately
+    // max   - the worst ratio the render saw, rounded
+    const strain = { over: 0, panic: 0, max: 0 };
     const busyCount = () => { let b = 0; for (const q of pool) if (q.busy) b++; return b; };
     const medOf = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
-
-    function shed(med) {
-      if (target <= 2 || shedDone) return;                 // one worker is slower than no worker
-      // SHEDDING HAS TO EARN THE NEXT ONE. The point of narrowing is to relieve swapping, and relief
-      // shows up as a LOWER median. If the median rose instead, whatever is slowing the passes was
-      // not memory pressure and taking another worker away cannot help - it only removes parallelism
-      // from a pool that was not the problem.
-      //
-      // Measured on a daylight 131,072 finishing in-worker: 7@3x, 6@4x, 5@3x, 4@7x, 3@7x, 2@3x. It
-      // shed six times, the ratio got WORSE on the way down, and it arrived at two workers having
-      // taken 159 s. The equivalent UV render shed once and finished in 51.
-      //
-      // WORSE, not merely "no better". A pool that is genuinely swapping may need several sheds
-      // before it is under the ceiling, and a strict improve-or-stop rule would abandon the tablet
-      // case this whole mechanism was built for. What never happens while swapping is the median
-      // getting WORSE as workers leave - fewer tiles in flight is less memory, always. 1.2x of
-      // tolerance so ordinary jitter does not read as a trend.
-      if (lastShedMed && med > 1.2 * lastShedMed) {
-        shedDone = true;                                   // shedding made it worse: stop
-        shedLog.push('held@' + Math.round(med / base) + 'x');
-        return;
-      }
-      // STRIKE TWO. A shed in the row a recovery landed in, or in the one after it, says that
-      // recovery was wrong - whatever lifted has come straight back. Without this a long band would
-      // shed and recover in turn for the whole render, paying a worker start each time round.
-      if (rows - grewAtRow <= 1) growDone = true;
-      lastShedMed = med; target--;
-      if (target < lowTarget) lowTarget = target;
-      shedLog.push(target + '@' + Math.round(med / base) + 'x');  // what it dropped to, and on what
-    }
-
-    // A WORKER BACK, ONE PER ROW. target rises FIRST and the worker arrives afterwards: start() then
-    // finds nobody free and simply returns, and it is re-driven on every tile consumption, so an
-    // optimistic target cannot stall a render. Pushing before raising it would be the unsafe order -
-    // that leaves pool.length briefly above target, which is exactly the condition that terminates a
-    // worker, and the one it terminated would be the one just built.
-    function grow(med) {
-      if (growing || growDone || closed || target >= n) return;
-      growing = true;
-      target++;
-      grewAtRow = rows;
-      shedLog.push('+' + target + '@' + Math.round(med / base) + 'x');
-      spawnWorker().then(w => {
-        // A shed, or the end of the render, while the worker was starting. Either way it is not
-        // wanted now, and a worker nobody holds a reference to would hold its canvas for ever.
-        if (closed || target < pool.length + 1) { w.terminate(); return; }
-        pool.push({ w, busy: false, id: nextId++ });
-      }, () => { target--; shedLog.push('+failed'); })
-         .then(() => { growing = false; });
-    }
 
     function poolSettle(q, ms) {
       q.busy = false;
       if (!base) { base = Math.max(1, ms); target = n; return; }        // the solo tile: then open up
       recent.push(ms);
-      // THE SHORT WINDOW, for pressure that needs no corroborating. When a row is NARROWER than one
-      // pass of the pool - a 16,384 at a 4096 tile is four tiles across against eight workers - this
-      // never fires at all, because `recent` is cleared at the row before it ever reaches SHORT. That
-      // is not a gap: the short window exists only to avoid waiting out a LONG row, and a four-tile
-      // row already decides faster than the panic path would.
+      const note = m => { const r = Math.round(m / base); if (r > strain.max) strain.max = r; };
+      // THE SHORT WINDOW. One pass of the pool, never the pool's CURRENT width - that used to be
+      // Math.max(2, target) and shrank as workers left, so the last decisions of a narrowing render were
+      // taken on three or four samples.
       if (recent.length % SHORT === 0) {
         const m = medOf(recent.slice(-SHORT));
-        if (m >= PANIC * base) shed(m);
+        note(m);
+        if (m >= PANIC * base) strain.panic++;
       }
-      // THE ROW: one median per row, whatever the pool has shrunk to, and the row boundary is also
-      // the only place a worker is ever given back.
+      // THE ROW. A reality window is a BAND, and a band fills anything shorter than a row: a 262,144
+      // carrying one disc read 6x on an eight-tile median while a 256-tile median of the same tiles read
+      // 1x. Kept at a row for that reason even now that nothing acts on it, because a figure worth
+      // recording is one a band cannot manufacture.
       if (recent.length >= ROW) {
         const med = medOf(recent);
-        recent.length = 0; rows++;
-        if (med > SHED_AT * base) shed(med);
-        else if (med <= CONTENTION * base) grow(med);
+        recent.length = 0;
+        note(med);
+        if (med > STRAIN_AT * base) strain.over++;
       }
-      // Surplus workers are TERMINATED, not merely left idle: the point of shedding is the memory they
-      // are holding, and an idle worker holds its tile canvas exactly as a busy one does.
-      if (pool.length > target) { const i = pool.indexOf(q); if (i >= 0) { q.w.terminate(); pool.splice(i, 1); } }
-    }
-
-    // THE BROWSER HALF OF grow(), deliberately outside it so that every decision above can be driven
-    // against a stub and tested without a browser at all. A new worker needs the core, the state and
-    // its own copy of each modulator bitmap; the originals were closed after the init loop, so these
-    // are made from the ensure* caches again rather than held alive for a recovery that may never come.
-    async function spawnWorker() {
-      const w = new Worker(url);
-      const [cl, bd, br] = await Promise.all([
-        layVis('clouds') && G.cloudStrength > 0 ? createImageBitmap(ensureClouds()) : null,
-        layVis('bands') && G.bandStrength > 0 ? createImageBitmap(ensureBands()) : null,
-        layVis('breccia') && G.brecStrength > 0 ? createImageBitmap(ensureBreccia()) : null,
-      ]);
-      await new Promise((res, rej) => {
-        w.onmessage = e => { if (e.data.type === 'ready') res(); };
-        w.onerror = e => rej(new Error('render worker: ' + (e.message || 'failed to start')));
-        w.postMessage({ type: 'init', ...state, cl, bd, br }, [cl, bd, br].filter(Boolean));
-      });
-      return w;
     }
     // DISPATCHED, STARTED, FINISHED - the three the pool can see. The fourth, WRITTEN, belongs to
     // whoever consumes the tile and is added there, because the pool hands back a canvas and has no
@@ -13622,13 +13522,12 @@ self.onmessage = async (e) => {
       }));
     };
     return {
-      // THE WIDTH RIGHT NOW, which is not the width that RAN: it sheds down and recovers again,
-      // so this is a sample and not a summary. widthLow is the other end of the range, and
-      // trace.busy is the honest answer - a sampled series of how many were actually painting.
+      // THE WIDTH, which no longer moves once the ramp is over - nothing narrows the pool any more.
+      // trace.busy remains the honest account of how many were actually painting, since a worker can
+      // still be idle between dispatches.
       get workers() { return target; },
-      get widthLow() { return lowTarget; },
       planned: n,
-      get shed() { return shedLog; },
+      get strain() { return { ...strain }; },
       get busy() { return busyCount(); },                  // sampled on a timer: the one witness to idleness
       get target() { return target; },
       stamp(idx) { const r = trace.get(idx); if (r) trace.delete(idx); return r; },   // read once, then gone
@@ -13661,7 +13560,7 @@ self.onmessage = async (e) => {
         return rec;
       },
       retire(idx) { const q = inflight.get(idx); inflight.delete(idx); if (q) q.then(b => b.close(), () => {}); },
-      close() { closed = true; for (const q of pool) q.w.terminate(); URL.revokeObjectURL(url);
+      close() { for (const q of pool) q.w.terminate(); URL.revokeObjectURL(url);
                 for (const [, q] of inflight) q.then(b => b.close(), () => {}); inflight.clear(); },
     };
   }
@@ -14008,8 +13907,7 @@ self.onmessage = async (e) => {
       // Read BEFORE the close, because the close nulls it. This field spent its whole life unable to
       // appear: the metadata below asked `pool ? pool.workers : undefined` after this line had already
       // run, so every master said "painted on this thread" whatever had happened.
-      const poolRan = pool ? { n: pool.workers, planned: pool.planned, low: pool.widthLow,
-                               shed: pool.shed.slice() } : null;
+      const poolRan = pool ? { n: pool.workers, planned: pool.planned, strain: pool.strain } : null;
       if (pool) { pool.close(); pool = null; }
       proveTile(p.ts, W);                                  // settled: every render after this one matches it
       const msRender = Date.now() - tR;
@@ -14096,15 +13994,16 @@ self.onmessage = async (e) => {
         markedCells: markedCells || undefined,
         resumedTiles: sink.resumedTiles || undefined,
         resumeWhy: resumeWhy || undefined,            // why a prior render was refused, when one was
-        // absent = painted on this thread. `planned` and `shed` appear only when the pool narrowed
-        // itself mid-render, which is the machine saying the budget was too generous for it.
+        // absent = painted on this thread. The pool no longer narrows itself, so `workers` is the
+        // width throughout and `poolPlanned` can only differ from it if the two ever drift.
         workers: poolRan ? poolRan.n : undefined,
         poolPlanned: poolRan && poolRan.planned !== poolRan.n ? poolRan.planned : undefined,
-        // THE LOW-WATER MARK, because `workers` is where it ENDED and recovery makes those two
-        // different numbers. A render that shed to 3 and climbed back to 8 reports 8 and 3, and
-        // the `+N@Mx` entries in poolShed say when each one came back.
-        poolMin: poolRan && poolRan.low !== poolRan.n ? poolRan.low : undefined,
-        poolShed: poolRan && poolRan.shed.length ? poolRan.shed : undefined,
+        // HOW HARD THE RENDER FOUND IT, which is what the shed heuristic used to act on and now only
+        // records. `over` counts row medians past the strain level, `panic` short-window medians past
+        // 10x, `max` the worst ratio against the solo baseline. Absent means nothing crossed at all.
+        // A master written before 2026-10-20 carries `poolShed` instead, which is a record of workers
+        // actually taken away - a different fact, and not comparable to this one.
+        poolStrain: poolRan && (poolRan.strain.over || poolRan.strain.panic) ? poolRan.strain : undefined,
         ms: { render: msRender, total: Date.now() - expT0 },
         // Paired on purpose: time ALONE cannot say why a tile was slow. Against its own byte count it
         // can -- time that tracks bytes is the picture being dense, time that spikes where bytes did

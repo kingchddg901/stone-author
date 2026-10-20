@@ -94,7 +94,7 @@ jobs:
       - name: Tiles assemble into the picture they were cut from
         run: node tools/probe-assembly.mjs
       - name: The pool sheds workers under pressure and never below its floor
-        run: node tools/probe-pool-shed.mjs
+        run: node tools/probe-pool-strain.mjs
       - name: The pool picks a width the device can actually carry
         run: node tools/probe-pool-width.mjs
       - name: The four render stamps sit on the right side of their flags
