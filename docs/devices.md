@@ -32,6 +32,102 @@ Latest run per device and light, all on build `2026.09.27.25` or later — which
 Throughput is rendered pixels per second including the bleed margin, which is the fair comparison when
 devices choose different tile sizes.
 
+## On the current build
+
+The set above is the week of 2026-09-27. Everything below was measured on 2026-10-20, builds
+`2026.10.20.164` and `.165`, after the tiled path gained a worker pool, worker-side tile finishing, and
+a pool that no longer narrows itself. **One slab, one spectrum, `inputs 65724e44`** — so these rows
+compare to each other, not to the set above.
+
+### The fleet at 65,535 UV
+
+Each device at the tile it ran fastest. `hc` is `navigator.hardwareConcurrency`, which is **not a core
+count**: the desktop reports 12 for 6 cores with SMT, Safari clamps to 4 on a 6-core A16, and an 8-core
+Android reports 8 unequal cores. `per worker` is throughput divided by mean occupancy.
+
+| device | engine | hc | tile | pool | mean busy | time | Mpx/s | per worker |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| desktop | Blink | 12 | 4096 | 8 | 7.12 | 22.9 s | **117.5** | 16.5 |
+| iPhone 14 Pro | WebKit | 4 | 2048 | 4 | 3.78 | 48.0 s | **55.9** | 14.8 |
+| S23 Ultra | Blink | 8 | 2048 | 8 | 7.55 | 49.0 s | **54.8** | 7.2 |
+| desktop | Gecko | 12 | 4096 | 8 | 6.18 | 1:46 | **25.3** | 4.1 |
+| S23 Ultra | Gecko | 8 | 1024 | 8 | 2.29 | 12:10 | **3.7** | 1.6 |
+| A7 Lite | Blink | 8 | 2048 | 8 | 7.81 | 12:37 | **3.5** | 0.5 |
+| Tab A 8.0 | Blink | 4 | 2048 | 4 | 3.90 | 20:54 | **2.1** | 0.5 |
+
+The iPhone is the finding in that table. It matches the S23 Ultra's total throughput with **half the
+workers** and lands within 11% of the desktop *per worker* — 14.8 against 16.5. The whole of its gap to
+the desktop is worker count, and that count is a Safari policy rather than a hardware limit.
+
+The two weakest devices carry the other one. The A7 Lite ran at **7.81 of 8** and the Tab A 8.0 at
+**3.90 of 4** — the two best occupancy ratios in the fleet, better than the desktop's 7.12 of 8. Both
+shed and recovered under the previous build; neither narrows now. The Tab A is the device the shed
+heuristic was built for, and its own record in `docs/sidecars/README.md` has it shedding 4 → 2 and
+losing a third of its throughput to it.
+
+### The desktop tile walk
+
+The same image at five tile sizes on both engines, 160 passes to 40,960 — a 256× range. 256 is below
+the ladder and reachable only through `?tile=`, which exists for exactly this.
+
+| tile | passes | Blink | Gecko | Blink Mpx/s | Gecko Mpx/s | Blink bytes | Gecko bytes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 256 | 40,960 | 5:31 | 15:40 | 8.1 | 2.9 | 0.58 | 0.66 |
+| 512 | 10,240 | 97.0 s | 4:22 | 27.7 | 10.3 | 0.60 | 0.69 |
+| 1024 | 2,560 | 43.9 s | 2:16 | 61.2 | 19.7 | 0.66 | 0.74 |
+| 2048 | 640 | 27.1 s | 1:51 | 99.0 | 24.1 | 0.71 | 0.82 |
+| 4096 | 160 | 22.9 s | 1:46 | 117.5 | 25.3 | 0.78 | 0.96 |
+
+**The optimum tile is a property of the device, not of the renderer.** The desktop's is 4096 on both
+engines; the S23 Ultra's is 2048, where 4096 costs it 35% — a 4104² tile is 67 MB, past any phone's
+cache and against far less memory bandwidth. The planner picks correctly on each without being told.
+
+### Per-tile overhead, and an architectural difference between the engines
+
+The same pixels painted in 256× as many pieces. Each step doubles the passes; the figure is the cost of
+each *extra* tile.
+
+| step | Blink | Gecko |
+| --- | --- | --- |
+| 4096 → 2048 | 8.9 ms | 10.8 ms |
+| 2048 → 1024 | 8.7 ms | 12.9 ms |
+| 1024 → 512 | 6.9 ms | 16.4 ms |
+| 512 → 256 | 7.6 ms | 22.1 ms |
+
+**Blink's per-tile overhead is a constant. Gecko's is not.** Blink sits at 6.9–8.9 ms with no trend
+across the whole range; Gecko starts higher and roughly doubles, rising about 30% each time the tile
+count doubles.
+
+That is the difference between a cost you can price and one you cannot. On Blink a render is
+`paint + ~8 ms × passes`, and one measurement prices any configuration. On Gecko a tile count four
+doublings past where you measured will cost about twice what the linear model says — extrapolating that
+trend to 655,360 passes puts the marginal cost near 60 ms.
+
+Whether it is true degradation or a longer render accumulating something — allocator pressure, GC, the
+heat of a 15-minute run — these four points cannot say, because duration and pass count move together
+across them. Separating the two needs a long render at a large tile, which nothing here provides.
+
+### What tiling does to the picture, and what it does not
+
+`light.mean` across each engine's whole walk:
+
+| engine | 256 | 512 | 1024 | 2048 | 4096 |
+| --- | --- | --- | --- | --- | --- |
+| Blink | 61.51 | 61.49 | 61.49 | 61.50 | 61.50 |
+| Gecko | 62.87 | 62.87 | 62.87 | 62.87 | 62.87 |
+
+**Each engine holds its own constant to four significant figures across a 256× range in pass count**,
+and the two differ from each other by 1.38. Tiling does not touch the light; the engine does. The
+iPhone's 61.32 and the S23's 61.58 are each equally stable, and the iPhone's figure reproduces the
+`61.32 / 40.2%` in the set above — measured a month earlier, on the pre-pool architecture.
+
+The **bytes** do move, and monotonically: Blink 0.58 → 0.78 GB and Gecko 0.66 → 0.96 GB across the same
+walk, +34% and +45%. Same total light, up to 45% more data. So the tile size changes the *spatial
+detail* of the output and its compressibility, not its energy — the drawn halo is cut at every tile
+edge, and more edges means more cuts, but no light is lost. Three engines and four devices agree on the
+direction. `?tile=` therefore selects a slightly different picture as well as a speed, which is why a
+master records the tile it was written at.
+
 ## The same slab at a 512 tile
 
 Every device in the set rendered the published slab at a **forced 512 tile — 10,240 passes**, the most
