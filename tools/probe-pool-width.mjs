@@ -72,6 +72,10 @@ const tileNeed = (t, bleed, surfaces) => { const e = t + 2 * bleed; return e * e
 function choose(env, poolSrc) {
   const fn = new Function('ok', 'budget', 'budgetMB', 'bleed', 'MEM_EASY', 'navigator', 'EXP_FORCE_SEQ', 'corePaintsThis',
     POOL_MAX_SRC + `
+     // poolWidthFor reads the cap through poolCap(), which carries the ?pool= override in the app.
+     // The probe has no URL, so it returns the constant - these cases are about which of the three
+     // constraints binds, not about a diagnostic nobody sets by accident.
+     const poolCap = () => POOL_MAX;
      ` + poolSrc + `
      const tileMBof = t => Math.round((t + 2 * bleed) ** 2 * 4 / 1e6);
      const widthOf = t => poolWidthFor(budgetMB, tileMBof(t)) || 1;

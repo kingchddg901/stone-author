@@ -1810,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.165';
+  const BUILD = '2026.10.20.166';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13338,11 +13338,26 @@ self.onmessage = async (e) => {
   // machine takes all four and gets no headroom at all. Leaving two for the person everywhere would
   // be `cores - 2`, which is a different policy with a real cost to small machines, and not this
   // change.
+  // HOW MANY WORKERS AT MOST. Declared as a plain constant on purpose: check-bleed requires it, and
+  // probe-pool-width and probe-pool-strain both LIFT it to assert which of the three constraints binds
+  // and that POOL_MAX x tileMBof(4096) = 536 MB is the whole tile footprint the pool can reach.
   const POOL_MAX = 8;
+  // `?pool=N` IS THE USER OVERRIDING THAT BOUND, the same way ?tile=256 reaches below the ladder. Ten
+  // workers at a 4096 tile is 670 MB, past what the constant above otherwise guarantees - so it takes a
+  // deliberate URL, is offered nowhere in the panel, and lives HERE rather than in POOL_MAX itself so
+  // that the constant stays a number the gates can read. poolWidthFor still clamps to
+  // hardwareConcurrency, so it cannot ask for threads the browser says do not exist, and the master
+  // records the width that actually ran either way.
+  const poolCap = () => {
+    try {
+      const v = +new URLSearchParams(location.search).get('pool');
+      return v >= 2 && v <= 64 ? v : POOL_MAX;
+    } catch (_) { return POOL_MAX; }
+  };
   function poolWidthFor(budgetMB, tileMB) {
     if (EXP_FORCE_SEQ || !corePaintsThis()) return 0;
     const room = Math.floor(budgetMB / Math.max(1, tileMB));
-    const n = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, POOL_MAX, room));
+    const n = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, poolCap(), room));
     return n < 2 ? 0 : n;                                  // one worker is slower than no worker
   }
   async function tilePool(W, p) {

@@ -73,9 +73,9 @@ const PMAX = Number(liftSliceNum('const POOL_MAX = (\\d+);'));
 function liftSliceNum(re) { const m = SRC.match(new RegExp(re)); return m ? m[1] : null; }
 if (!PMAX) throw new Error('cannot find POOL_MAX - probe is stale');
 const widthOn = (cores, room) =>
-  new Function('navigator', 'POOL_MAX', 'EXP_FORCE_SEQ', 'corePaintsThis',
+  new Function('navigator', 'POOL_MAX', 'poolCap', 'EXP_FORCE_SEQ', 'corePaintsThis',
     WIDTH + NL + 'return poolWidthFor(' + room + ', 1);')(
-    { hardwareConcurrency: cores }, PMAX, false, () => true);
+    { hardwareConcurrency: cores }, PMAX, () => PMAX, false, () => true);
 
 // Rebuild the closure the measurement lives in: the same names, the same initial values, fake workers.
 function makePool(n, opts = {}) {

@@ -193,14 +193,23 @@ if (!/const wallOf = c => c\.est \/ widthOf\(c\.ts\)/.test(plan))
 // reported as "computed in more than one place", which sends the reader looking for a duplicate that
 // does not exist. The anchor is the named constant now, so moving the cap's VALUE cannot trip this and
 // moving the cap's HOME says so plainly.
+// THE CAP MOVED AGAIN on 2026-10-20, from POOL_MAX itself to poolCap(), which returns POOL_MAX unless
+// `?pool=N` says otherwise. This check fired on the move exactly as its comment above promised, which is
+// why the anchor is updated rather than loosened: the two properties it guards are that the width is
+// clamped in ONE place and that the cap is a constant the probes can read. A third is added, because the
+// indirection is new - poolCap must FALL BACK to POOL_MAX, or the constant is decorative and the 536 MB
+// footprint bound that probe-pool-strain asserts from it means nothing.
 {
-  const sites = (app.match(/Math\.min\(navigator\.hardwareConcurrency \|\| 4, POOL_MAX/g) || []).length;
+  const sites = (app.match(/Math\.min\(navigator\.hardwareConcurrency \|\| 4, poolCap\(\)/g) || []).length;
   if (sites === 0)
-    fail.push('poolWidthFor no longer clamps to POOL_MAX - the width cap moved, and this check lost its subject');
+    fail.push('poolWidthFor no longer clamps to poolCap() - the width cap moved, and this check lost its subject');
   else if (sites > 1)
     fail.push('the pool width is computed in more than one place, so the planner can optimise for a width the pool will not run');
   if (!/const POOL_MAX = \d+;/.test(app))
     fail.push('POOL_MAX is not a declared constant, so the cap cannot be read by the probe that asserts which constraint binds');
+  const cap = app.slice(app.indexOf('const poolCap = ()'), app.indexOf('function poolWidthFor'));
+  if (!/[^.\w]return POOL_MAX;/.test(cap))
+    fail.push('poolCap does not fall back to POOL_MAX, so the declared cap is decorative and the footprint bound rests on nothing');
 }
 if (!/const n = poolWidthFor\(p\.budgetMB, p\.tileMB\)/.test(app))
   fail.push('tilePool no longer asks poolWidthFor, so the width the planner chose against is not the width it gets');
