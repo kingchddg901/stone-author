@@ -1810,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.160';
+  const BUILD = '2026.10.20.161';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13366,7 +13366,18 @@ self.onmessage = async (e) => {
     // that is swapping costs several times it. Monotone downward only - a width that was too wide does
     // not become right later in the same render, and re-initialising a worker means re-posting every
     // modulator bitmap.
-    const SHED_AT = 3;        // 8 workers sharing bandwidth cost each other well under 2x; swapping is 5-20x
+    // HOW FAR OVER THE SOLO BASELINE IS STILL WORTH PAYING, and it depends on what a worker does.
+    //
+    // Painting only, eight workers sharing bandwidth cost each other well under 2x, so 3 left room
+    // and still caught swapping at 5-20x. Finishing in-worker adds the readback and the deflate, and
+    // eight of those at once legitimately cost 3-4x a solo pass - measured, every shed in a daylight
+    // 131,072 fired at exactly 3x or 4x, which is ordinary contention being mistaken for a machine
+    // in trouble. It shed four workers before the rising-median guard caught it.
+    //
+    // 5 sits on the boundary of the swapping range rather than below it, which is the cost of this:
+    // a small-memory device that really is swapping now needs to be worse than 5x before it narrows.
+    // The guard below is the second line there, and `held@Nx` in the trail is what to watch on one.
+    const SHED_AT = p.fin ? 5 : 3;
     let target = 1, base = 0;                              // ramp from one so the first tile is the baseline
     const recent = [], shedLog = [];
     let lastShedMed = 0, shedDone = false;   // the median that triggered the last shed, and the latch

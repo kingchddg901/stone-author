@@ -35,11 +35,14 @@ function liftFn(name) {
   return SRC.slice(hits[0], i + 1);
 }
 const SETTLE = liftFn('poolSettle');
-const SHED_AT = Number((SRC.match(/const SHED_AT = (\d+)/) || [])[1]);
-if (!SHED_AT) throw new Error('cannot find SHED_AT - probe is stale');
+// TWO THRESHOLDS NOW, because a worker that finishes its own tile does more and contends more.
+// Lifted rather than copied, so the probe cannot drift from the app it is testing.
+const M = SRC.match(/const SHED_AT = p\.fin \? (\d+) : (\d+)/);
+if (!M) throw new Error('cannot find SHED_AT - probe is stale');
+const SHED_FIN = Number(M[1]), SHED_AT = Number(M[2]);
 
 // Rebuild the closure settle() lives in: the same names, the same initial values, fake workers.
-function makePool(n, settleSrc = SETTLE) {
+function makePool(n, settleSrc = SETTLE, shedAt = SHED_AT) {
   return new Function('n', 'SHED_AT', `
     let target = 1, base = 0;
     const recent = [], shedLog = [];
@@ -53,7 +56,7 @@ function makePool(n, settleSrc = SETTLE) {
     return {
       settle: ms => { const q = pool.find(x => x.busy) || pool[0]; q.busy = true; poolSettle(q, ms); },
       state: () => ({ target, base, alive: pool.length, shed: shedLog.slice(), killed: killed.length }),
-    };`)(n, SHED_AT);
+    };`)(n, shedAt);
 }
 
 let fails = 0;
@@ -118,6 +121,23 @@ console.log(String.fromCharCode(10) + 'D2 shedding that makes things WORSE stops
   const s = P.state();
   claim('it stops above the floor rather than running down to two', s.target > 2, true);
   claim('and says so in the trail', s.shed.some(x => String(x).startsWith('held@')), true);
+}
+
+console.log(String.fromCharCode(10) + 'F  the finish path tolerates the contention it causes');
+{
+  // Eight workers each painting, reading back and deflating legitimately cost 3-4x a solo pass.
+  // Measured on a daylight 131,072: every shed fired at exactly 3x or 4x and four workers were gone
+  // before the rising-median guard stopped it. At the finish threshold that is ordinary load.
+  const P = makePool(8, SETTLE, SHED_FIN); P.settle(1000);
+  for (let i = 0; i < 40; i++) P.settle(4000);
+  claim('4x does not shed a worker that is merely contending', P.state().shed, []);
+  claim('and the pool stays at its planned width', P.state().target, 8);
+}
+{
+  // It must still catch a machine in trouble, which is the whole reason the mechanism exists.
+  const P = makePool(8, SETTLE, SHED_FIN); P.settle(1000);
+  for (let i = 0; i < 40; i++) P.settle(12000);
+  claim('12x still sheds', P.state().target < 8, true);
 }
 
 console.log('\nE  a single slow tile is not contention');
