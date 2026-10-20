@@ -53,7 +53,12 @@ const POOL = SRC.slice(SRC.indexOf('const start = (idx) => {'), SRC.indexOf('   
   const bD = POOL.indexOf('bD: busyCount()');
   ok('bD is read AFTER the worker is marked busy', flag > 0 && bD > flag, 'busy=true@' + flag + ' bD@' + bD);
   const bF = POOL.indexOf('tr.bF = busyCount()');
-  const settle = POOL.indexOf('poolSettle(q, tr.f - t0)');
+  // ANCHORED ON THE CALL, not on its argument. This matched 'poolSettle(q, tr.f - t0)' whole, so
+  // when the shed metric changed from dispatch-to-finish to paint alone the anchor vanished and the
+  // check reported FAIL with settle@-1 - an ordering assertion that was still perfectly true. A gate
+  // that cannot find the thing it checks must say THAT, not accuse the code.
+  const settle = POOL.indexOf('poolSettle(q,');
+  if (settle < 0) ok('the poolSettle call can be found at all', false, 'anchor gone - this check is stale, not the code');
   ok('bF is read BEFORE poolSettle frees the worker', bF > 0 && settle > bF, 'bF@' + bF + ' settle@' + settle);
   ok('the ack arm samples it too, so a starved thread is visible', /r\.bS = busyCount\(\)/.test(POOL));
 }
