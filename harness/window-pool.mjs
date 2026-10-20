@@ -122,18 +122,22 @@ for (const mode of modes) {
 
     // IS THERE A WINDOW IN THE PICTURE AT ALL? Rendered again with the island taken out: if that
     // changes nothing, the disc was never drawn and the comparison above compared nothing.
+    //
+    // DOWN THE SEQUENTIAL PATH, DELIBERATELY. The first version asked this through the pool, which is
+    // the path an ablation disables - so `skip`, whose whole job is to stop the worker compositing,
+    // made the picture look as though it had never held a window and the gate reported its own red as
+    // vacuous. A check on whether the subject exists must not run through the thing under test.
     const kept = sa.marks;
     sa.marks = kept.filter(m => !(m.kind === 'mask' && m.p && m.p.maskWin));
     sa.render();
-    const noWinPool = await sa.tilePool(W, { ...plan });
-    const C = []; for (let i = 0; i < N; i++) C.push(await noWinPool.tile(i).then(grab));
-    noWinPool.close();
+    const C = []; for (let i = 0; i < N; i++) { const gx = i % rAcross, gy = (i / rAcross) | 0;
+      C.push(grab(sa.renderOneTile(W, gx * ts, gy * ts, ts, ts, bleed))); }
     sa.marks = kept; sa.render(); sa.setSpx(0);
 
     return { tiles: N, windows: kept.filter(m => m.kind === 'mask' && m.p && m.p.maskWin).length,
              mismatches: A.filter((x, i) => x.h !== B[i].h).length,
-             windowChanges: A.filter((x, i) => x.h !== C[i].h).length,
-             litWith: Math.max(...A.map(x => x.lit)), litWithout: Math.max(...C.map(x => x.lit)) };
+             windowChanges: B.filter((x, i) => x.h !== C[i].h).length,
+             litWith: Math.max(...B.map(x => x.lit)), litWithout: Math.max(...C.map(x => x.lit)) };
   }, !!VACUOUS_AB[mode]);
   await page.close();
 
