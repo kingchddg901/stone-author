@@ -103,12 +103,50 @@ no coat scales at all, so it cannot go quietly blind.
    eight 8192 tiles allocated without a throw and then swapped for three hours.
 
    **That size is no longer reachable, and the incident above cannot recur.** 8192 left the tile ladder
-   on 2026-10-20: across 713 masters on record there are none at it, across 137 plans where the planner
-   was free to choose it picked it never, and what it did instead was calibrate it 54 times for 2,202
-   seconds — the worst a 456-second allocation of an 874 MB tile on a 2 GB tablet. The largest tile is
-   now 4096, so eight workers hold 8 × 67.4 MB = **539 MB on any device, in any configuration**, against
-   the 2.15 GB that paged. `tools/probe-pool-width.mjs` asserts that ceiling and the footprint that
-   follows from it.
+   on 2026-10-20 — but not for the reason first published here. The claim that it had never finished a
+   render counted `o.tile`, which is the *store* size; the pass is `o.render`, and an 8192 pass is stored
+   as 4096 ×2, so by store there are indeed none. Re-derived the same day from `plan.tried`, the
+   planner's own words: of 831 masters, 737 carry a plan and **182 raced free, of which ten landed on
+   8192 — six saying `chose 8192: 874MB is under half the 12885MB ceiling, take the speed` outright —
+   and all ten finished.** One is the largest master in the archive: a 1,048,576 of 22.9 GB over 10,240
+   passes, rendered the day before the size was dropped.
+
+   **And it is slower anyway — measured, not estimated.** A 2-to-6 worker sweep at 65,535 uv, same slab,
+   same light, one build, on 2026-10-20:
+
+   | pass | workers | footprint | mean busy | wall | Mpx/s | Mpx/worker-s |
+   | --- | --- | --- | --- | --- | --- | --- |
+   | 8192 | 2 | 538 MB | 1.96 | 56.7 s | 47.4 | **24.2** |
+   | 8192 | 3 | 807 MB | 2.90 | **45.1 s** | **59.5** | 20.5 |
+   | 8192 | 4 | 1076 MB | 3.59 | 50.9 s | 52.8 | 14.7 |
+   | 8192 | 5 | 1345 MB | 4.65 | 48.9 s | 54.9 | 11.8 |
+   | 8192 | 6 | 1614 MB | 5.43 | 52.8 s | 50.8 | 9.4 |
+   | **4096** | **8** | **539 MB** | 7.12 | **22.9 s** | **117.5** | 16.5 |
+
+   Per worker-second the big tile is the efficient one — 24.2 against 16.5, a 47% advantage, which is
+   exactly what a solo `calibrate` measures and exactly why the planner liked it. Then it collapses:
+   24.2, 20.5, 14.7, 11.8, 9.4 — monotonic, tracking **footprint and not worker count**, with the pool
+   90–98% busy and **0% idle** throughout. So it is memory bandwidth, not scheduling.
+
+   **The decisive pair is the last two rows.** 4096 × 8 holds 539 MB; 8192 × 2 holds 538 MB — the same
+   pressure to within a megabyte, and 117.5 Mpx/s against 47.4, because at that budget 4096 fits eight
+   workers and 8192 fits two. The scarce resource is footprint, not cores: at a fixed footprint you want
+   the most workers you can fit, so you want the smallest tile that still paints efficiently. 8192 spends
+   the whole budget on two of them.
+
+   Which makes **`est` the real defect** — calibrated on one solo tile and then divided by the pool width,
+   so it assumes the Nth worker is as cheap as the first. Right per worker-second, wrong per render. The
+   claim that stood here until the sweep, that 8192 was the faster choice on the desktop, was that
+   estimate repeated as though it were a measurement; every plan that chose 8192 was at 4 to 12 passes,
+   where there is barely a pool to contend.
+
+   It also cost the fleet calibration: 58 probes for 2,209 seconds, the worst a 456-second allocation of an 874 MB
+   tile on a 2 GB tablet, to evaluate a candidate that 48 of those 58 then rejected — and a Gecko phone
+   that locked outright preparing it at a 24,576 render width. The one argument here that is arithmetic
+   rather than census: the largest tile is now 4096, so eight workers hold 8 × 67.4 MB = **539 MB on any
+   device, in any configuration**, against the 2.15 GB that paged. `tools/probe-pool-width.mjs` asserts
+   that ceiling and the footprint that follows from it. `?tile=` no longer reaches 8192 either, because
+   the URL cap is `TILE_MAX` — so the desktop speed is gone rather than opt-in.
 
    **The mechanism that used to act on this is gone.** It measured how far over the solo baseline a pass
    ran and shed a worker when the figure got high enough. It no longer does, and the reason is that the

@@ -1810,7 +1810,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.166';
+  const BUILD = '2026.10.20.167';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9688,6 +9688,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // much is IN it, and without these a later reader cannot tell a slow machine from a busy picture.
     cracks: geo.web.length, specks: geo.specks.length, drusy: geo.drusy.length, seams: geo.styl.length,
     spectrum: lightSpectrum, dpr: dpr || 1, cores: navigator.hardwareConcurrency || null,
+    // HOW WIDE THE POOL RAN, ON EVERY MASTER. Zero means nothing was pooled - which for the whole-image
+    // and streamed paths is simply what those paths do, and for a tiled render means a clause refused it
+    // and `poolWhy` names which. Defaulted HERE rather than per path because the field being ABSENT had
+    // two causes that read identically: no pool ran, and a build too old to write it. All twenty-five
+    // renders at an 8192 pass read `workers: undefined`, and telling those two apart took four wrong
+    // turns and a per-build census of which other builds wrote the field at all. A present 0 cannot be
+    // mistaken for either. Masters written before 2026-10-20 omit it, and that is now the ONLY thing
+    // absence can mean.
+    workers: 0,
     // A CROSSFADE render never evaluates the light at `spectrum` above - that is just where the dial
     // was parked. This is what the light actually did, and its absence means the spectrum value is
     // the whole story. Kept alongside rather than replacing it: tiff-meta derives a light tag from
@@ -12594,28 +12603,84 @@ self.onmessage = async (e) => {
   // reproduction has to be able to override whatever the machine remembers.
   // THE TILE LADDER, AND 8192 IS NOT ON IT.
   //
-  // It was, from the beginning, and it never once finished a render. Across 713 masters on record
-  // there are 164 at 512, 49 at 1024, 87 at 2048, 413 at 4096 and ZERO at 8192; across 137 plans
-  // where the planner was free to choose, it picked 8192 exactly never. What it did instead was
-  // CALIBRATE it - 54 times, for 2,202 seconds in total, the worst a single 456-second allocation of
-  // an 874 MB tile on a 2 GB tablet, to evaluate a candidate it was going to reject. A Gecko phone
-  // preparing that same candidate at a 24,576 render width locked the page outright, which is what
-  // tools/check-probe-budget.mjs exists to describe.
+  // It was, from the beginning, and IT WORKED - which has to be said first, because the comment that
+  // stood here for a day said it had never once finished a render. Corrected 2026-10-20 against
+  // plan.tried, the planner's own words rather than a tile field: of 831 masters, 737 carry a plan and
+  // 182 of those raced free, and in six of them the planner said `chose 8192: 874MB is under half the
+  // 12885MB ceiling, take the speed` in so many words, taking it as already-proven in four more. All
+  // ten finished. One is the largest master in the archive - a 1,048,576 on 2026-10-19, 22.9 GB over
+  // 10,240 passes and five hours - rendered at 8192 the day before this ladder dropped it. The old
+  // claim read `o.tile`, the STORE size, where the pass is `o.render`; by store there are indeed zero,
+  // because an 8192 pass is stored as 4096 x2.
   //
-  // `?tile=` was added as the way round it. Removing the size removes the reason for the workaround.
+  // AND IT IS SLOWER ANYWAY - MEASURED, not estimated. A 2-to-6 worker sweep at 65,535 uv, same slab,
+  // same light, one build, 2026-10-20:
   //
-  // AND IT BOUNDS THE POOL. Eight workers at 4096 hold 8 x 67.4 MB = 539 MB, plus well under a
-  // megabyte each of cloud, band and breccia bitmaps - call it 547 MB, on any device, in any
-  // configuration, because poolWidthFor takes min(cores, POOL_MAX, room). At 8192 the same eight
-  // would hold 2.15 GB, which is the three hours of paging the shed heuristic was built for. With
-  // that size gone the pool cannot reach a footprint worth shedding to relieve.
+  //     N   footprint   busy    wall    Mpx/s   Mpx/worker-s
+  //     2      538 MB   1.96   56.7 s    47.4       24.2
+  //     3      807 MB   2.90   45.1 s    59.5       20.5
+  //     4     1076 MB   3.59   50.9 s    52.8       14.7
+  //     5     1345 MB   4.65   48.9 s    54.9       11.8
+  //     6     1614 MB   5.43   52.8 s    50.8        9.4
+  //  4096/8      539 MB   7.12   22.9 s   117.5       16.5
   //
-  // ONE LIST, so the ceiling and the URL cap cannot drift from it: probe-pool-width asserts all three.
+  // PER WORKER-SECOND THE BIG TILE IS THE EFFICIENT ONE - 24.2 against 16.5, a 47% advantage, which is
+  // exactly what a solo `calibrate` measures and exactly why the planner liked it. Then it collapses:
+  // 24.2, 20.5, 14.7, 11.8, 9.4, monotonic, tracking FOOTPRINT and not worker count, with the pool
+  // 90-98% busy and 0% idle in every run. So it is memory bandwidth, not scheduling.
+  //
+  // THE DECISIVE PAIR IS THE LAST TWO ROWS. 4096 x 8 holds 539 MB; 8192 x 2 holds 538 MB. The same
+  // pressure to within a megabyte, and 117.5 Mpx/s against 47.4 - because at that budget 4096 fits
+  // eight workers and 8192 fits two. The scarce resource is footprint, not cores: at a fixed footprint
+  // you want the most workers you can fit, so you want the smallest tile that still paints efficiently.
+  // 8192 spends the whole budget on two of them and never beats 2x the 4096 default at any width.
+  //
+  // WHICH MAKES `est` THE REAL DEFECT. It is calibrated on ONE SOLO TILE and then divided by the pool
+  // width, so it assumes the Nth worker is as cheap as the first. It is right per worker-second and
+  // wrong per render. A score that could see this would have to calibrate WITH a pool. The claim that
+  // stood here until the sweep - that 8192 was the faster choice on the desktop - was that estimate
+  // repeated as though it were a measurement, and every plan that chose 8192 was at 4 to 12 passes,
+  // where there is barely a pool to contend.
+  //
+  // AND IT COST THE FLEET CALIBRATION: 58 probes for 2,209 seconds in total, the worst a single
+  // 456-second allocation of an 874 MB tile on a 2 GB tablet, to evaluate a candidate that 48 of those
+  // 58 went on to reject. A Gecko phone preparing that same candidate at a 24,576 render width locked
+  // the page outright, which is what tools/check-probe-budget.mjs exists to describe.
+  //
+  // SO IT IS OFF THE LADDER AND STILL REACHABLE, which is where the evidence actually pointed. Every
+  // cost above is PLANNER-PATH: forcedTile() zeroes `proven` and `died`, skips the canvasFits walk over
+  // TILE_LADDER entirely, and does one bloom probe at the size asked for that is measured, recorded and
+  // never refuses. The 58 calibration probes, the 456-second allocation on the 2 GB tablet and the Gecko
+  // phone that locked at 24,576 all came from the walk. Keeping 8192 out of the LADDER closes all of it;
+  // capping the URL at TILE_MAX closed nothing.
+  //
+  // IT IS REACHABLE FOR MEASUREMENT, NOT FOR SPEED. The restoration was argued on the desktop getting
+  // its speed back, and the sweep above then showed there is no speed to get back - 2x slower at every
+  // width tried. The knob stays anyway, and the sweep is the argument for it: a size that cannot be
+  // reached cannot be measured, and the ban it replaced was defended for a day with a census that had
+  // read the wrong field and an estimate that had never been run. Being able to type the configuration
+  // the planner refuses is how both of those were caught.
+  //
+  // THE FOOTPRINT IS THEN THE OPERATOR'S, exactly as `?pool=` already is. Eight workers at 8192 hold
+  // 2.15 GB and poolWidthFor will allow it, because room is floor(12885 / 269) = 47 on this desktop and
+  // does not bind - the budget is a deviceMemory fiction and paging does not throw, it just takes three
+  // hours. That hole is real, and it is reachable only by typing it.
+  //
+  // AND IT BOUNDS THE POOL, the one argument here that is arithmetic rather than census. Eight workers
+  // at 4096 hold 8 x 67.4 MB = 539 MB, plus well under a megabyte each of cloud, band and breccia
+  // bitmaps - call it 547 MB, in every configuration THE PLANNER CAN CHOOSE, because poolWidthFor takes
+  // min(cores, POOL_MAX, room). That is the whole fleet, and it is deliberately not the phrase that
+  // stood here: "on any device, in any configuration" stopped being true the moment a URL could reach
+  // past the ladder.
+  //
+  // TWO LISTS, and the gates assert which is which: the LADDER is what the planner may pick and what the
+  // probe button may allocate, TILE_FORCE_MAX is how far a deliberate URL may reach past it.
   const TILE_LADDER = [512, 1024, 2048, 4096];
   const TILE_MAX = TILE_LADDER[TILE_LADDER.length - 1];
+  const TILE_FORCE_MAX = 8192;
   const forcedTile = () => TILE_FORCED || tilePick;
   const TILE_FORCED = (() => {
-    try { const v = +new URLSearchParams(location.search).get('tile'); return v >= 256 && v <= TILE_MAX ? v : 0; }
+    try { const v = +new URLSearchParams(location.search).get('tile'); return v >= 256 && v <= TILE_FORCE_MAX ? v : 0; }
     catch (_) { return 0; }
   })();
   // ?dim=off — CALIBRATE, REPORT, DO NOT VETO.
@@ -12849,7 +12914,13 @@ self.onmessage = async (e) => {
     const widthNow = () => { const e = document.getElementById("expres"); return e && +e.value > 0 ? +e.value : 1024; };
     const fill = () => {
       if (!sel) return;
-      const W = widthNow(), rec = planRec(W), pass = (rec.probe || []).slice().sort((a, b) => a - b);
+      // FILTERED AGAINST THE CURRENT LADDER, because rec.probe is REMEMBERED and the ladder moved. A
+      // desktop that proved 8192 before 2026-10-20 still carried it here, so this dropdown went on
+      // offering a size the planner had retired - and nobody decided that, a stale record did. This is
+      // the fleet-facing surface, so it shows what the planner will consider; `?tile=` is the deliberate
+      // way past the ladder, and a select populated from last month's probe is not.
+      const W = widthNow(), rec = planRec(W),
+        pass = (rec.probe || []).filter(t => t <= TILE_MAX).slice().sort((a, b) => a - b);
       const keep = sel.value;
       sel.length = 1;                                    // option 0 is Auto and always stays
       for (const t of pass) { const o = document.createElement("option"); o.value = String(t); o.textContent = String(t); sel.appendChild(o); }
@@ -12895,7 +12966,7 @@ self.onmessage = async (e) => {
         const rec = planRec(W); rec.probe = pass; rec.probedAt = Date.now(); planWrite(W, rec);
         // WHICH CLEARED SIZES FIT THE MEMORY BUDGET, using the planner's own arithmetic. That is all this
         // is, and the label says so. It is NOT the planner's shortlist and must not be read as one: the
-        // planner descends from 8192 and STOPS once two viable sizes exist, so it never reaches the
+        // planner descends from TILE_MAX and STOPS once two viable sizes exist, so it never reaches the
         // small end of this list - and it admits a size on `calibrate`, one real tile, where this probe
         // demands two canvases through canvasFits and refuses sizes calibrate accepts. The two disagree
         // by design, in both directions, so neither predicts the other.
@@ -13418,7 +13489,8 @@ self.onmessage = async (e) => {
     // arrive back where they started - an iPhone's 262,144 did six.
     //
     // AND THE FOOTPRINT IT WAS DEFENDING IS NOW BOUNDED. With 8192 off the tile ladder the pool can hold
-    // at most POOL_MAX x tileMBof(4096) = 536 MB on any device in any configuration; every shed above
+    // at most POOL_MAX x tileMBof(4096) = 536 MB in any configuration the PLANNER can choose (a typed
+    // `?tile=8192` reaches 2.15 GB, and that is the operator's footprint, not the fleet's); every shed above
     // happened between 32 MB and that ceiling. The three hours of paging this was built for happened at
     // 8192, which no longer exists.
     //
@@ -13772,8 +13844,12 @@ self.onmessage = async (e) => {
     // questions: the trail travels in the master so a file can be read months later, and the status
     // line is the only thing that answers it BEFORE six minutes have been spent. A width that was
     // refused reports the clause that refused it; a width that pooled reports how wide.
+    // HOISTED OUT OF THE BLOCK so the trail, the panel and the MASTER read one value instead of three
+    // copies of the same expression. It was block-scoped, so the metadata could not see it and a
+    // sequential tiled render recorded no reason at all - the trail carried it and nothing else did.
+    let poolWhy = null;
     {
-      const whyKey = pool ? null : (poolWhyNot() || 'exp.pool.narrow');
+      const whyKey = poolWhy = pool ? null : (poolWhyNot() || 'exp.pool.narrow');
       // The TRAIL takes the key, which is stable across languages and is what a master should carry;
       // the PANEL takes the translation, which is what a person should read.
       // PLANNED, not `workers`. The pool RAMPS FROM ONE deliberately - the first pass is painted solo
@@ -14009,9 +14085,11 @@ self.onmessage = async (e) => {
         markedCells: markedCells || undefined,
         resumedTiles: sink.resumedTiles || undefined,
         resumeWhy: resumeWhy || undefined,            // why a prior render was refused, when one was
-        // absent = painted on this thread. The pool no longer narrows itself, so `workers` is the
-        // width throughout and `poolPlanned` can only differ from it if the two ever drift.
-        workers: poolRan ? poolRan.n : undefined,
+        // ZERO = painted on this thread, and `poolWhy` names the clause that refused the pool. The pool
+        // no longer narrows itself, so `workers` is the width throughout and `poolPlanned` can only
+        // differ from it if the two ever drift.
+        workers: poolRan ? poolRan.n : 0,
+        poolWhy: poolRan ? undefined : poolWhy,
         poolPlanned: poolRan && poolRan.planned !== poolRan.n ? poolRan.planned : undefined,
         // HOW HARD THE RENDER FOUND IT, which is what the shed heuristic used to act on and now only
         // records. `over` counts row medians past the strain level, `panic` short-window medians past

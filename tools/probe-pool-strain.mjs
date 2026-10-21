@@ -204,22 +204,32 @@ console.log(NL + 'F  the strain level is the app’s own expression, on every ma
     strainFin(2, 4096) > STRAIN_AT, true);
 }
 
-console.log(NL + 'G  8192 is unreachable as a tile size, which is what bounds the footprint');
+console.log(NL + 'G  8192 is off the ladder and opt-in, which is what bounds the footprint');
 {
   const ladder = JSON.parse(SRC.match(/const TILE_LADDER = (\[[0-9, ]*\]);/)[1]);
-  claim('the ladder tops out at 4096', Math.max(...ladder), 4096);
+  const ceil = Math.max(...ladder);
+  claim('the ladder tops out at 4096', ceil, 4096);
   claim('and it is the ladder the canvasFits probe iterates',
     SRC.includes('for (const ts of TILE_LADDER) {'), true);
   claim('the planner starts at TILE_MAX rather than a number of its own',
     SRC.includes('let ts = Math.min(W, TILE_MAX);'), true);
-  claim('and ?tile= cannot name a size the planner will not consider',
-    SRC.includes('v >= 256 && v <= TILE_MAX ? v : 0'), true);
+  // THE PLANNER MAY NOT PICK IT; AN OPERATOR MAY ASK FOR IT. Two ceilings, two constants, so that
+  // widening the fleet's reach and widening a typed override are separate edits. The one-day total ban
+  // rested on a census that had read the STORE size, and every cost it was aimed at is planner-path.
+  claim('but ?tile= clamps to TILE_FORCE_MAX, so the size is opt-in rather than gone',
+    SRC.includes('v >= 256 && v <= TILE_FORCE_MAX ? v : 0'), true);
+  // ...and the panel is not a third way in: rec.probe is REMEMBERED, so a machine that proved 8192
+  // before the ladder moved kept offering it from a stale list nobody had chosen to honour.
+  claim('and the panel select is filtered to what the planner will consider',
+    SRC.includes('(rec.probe || []).filter(t => t <= TILE_MAX)'), true);
+  claim('so a remembered [512,1024,2048,4096,8192] does not offer the retired size',
+    [512, 1024, 2048, 4096, 8192].filter(t => t <= ceil).includes(8192), false);
   const bleed = 4, tileMB = t => Math.round((t + 2 * bleed) ** 2 * 4 / 1e6);
-  const peak = PMAX * tileMB(Math.max(...ladder));
-  claim('so the pool can never hold more than 550 MB of tiles (' + PMAX + ' x '
-    + tileMB(Math.max(...ladder)) + ' MB = ' + peak + ' MB)', peak <= 550, true);
-  claim('where the banned size would have allowed over 2 GB (' + PMAX + ' x ' + tileMB(8192) + ' MB)',
-    PMAX * tileMB(8192) > 2000, true);
+  const peak = PMAX * tileMB(ceil);
+  claim('so no plan the PLANNER can choose holds more than 550 MB of tiles (' + PMAX + ' x '
+    + tileMB(ceil) + ' MB = ' + peak + ' MB)', peak <= 550, true);
+  claim('while a typed ?tile=8192 reaches past 2 GB - the operator footprint, not the fleet ('
+    + PMAX + ' x ' + tileMB(8192) + ' MB)', PMAX * tileMB(8192) > 2000, true);
   let bad = [];
   for (let hc = 2; hc <= 64; hc++) for (const room of [2, 3, 8, 64, 4096]) {
     const w = widthOn(hc, room);

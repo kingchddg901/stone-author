@@ -151,10 +151,13 @@ claim('its outcome does not, because the peak gate acts on its own', A2.ts, 4096
 
 // 8192 IS NOT A TILE SIZE ANY MORE, and these are the three places that have to agree about it.
 //
-// It never finished a render: 713 masters on record, zero at 8192, and zero selections in 137 plans
-// where the planner was free to choose. What it cost was 2,202 s of calibration across 54 renders -
-// the worst a 456 s allocation of an 874 MB tile on a 2 GB tablet - to evaluate a candidate that was
-// always rejected. `?tile=` was added as the way round it.
+// NOT because it never worked. That claim was published here on 2026-10-20 and corrected the same
+// day: it counted `o.tile`, the STORE size, where the pass is `o.render`. Of 831 masters, 182 plans
+// raced free and ten landed on 8192 - six saying `chose 8192 ... take the speed` outright - and all
+// ten finished, one of them the 22.9 GB 1,048,576 of 2026-10-19. It went for what it cost the FLEET:
+// 58 calibration probes for 2,209 s, the worst a 456 s allocation of an 874 MB tile on a 2 GB tablet,
+// to evaluate a candidate 48 of the 58 then rejected, plus a Gecko phone that locked outright
+// preparing it at 24,576. `?tile=` was the way round it and no longer reaches: the URL cap IS TILE_MAX.
 //
 // EVERYTHING ABOVE STAYS. Cases A to C still drive the SCORING with 8192 in a synthetic ladder,
 // because the scoring is what would have to be right if the size ever came back, and a rule enforced
@@ -170,19 +173,56 @@ console.log('\nthe ban: 8192 is unreachable as a tile size');
   // would be silent - the planner would simply start a size the probe had never cleared.
   claim('the planner starts at TILE_MAX rather than a number of its own',
     SRC.includes('let ts = Math.min(W, TILE_MAX);'), true);
-  claim('and ?tile= cannot name a size the planner will not consider',
-    SRC.includes("v >= 256 && v <= TILE_MAX ? v : 0"), true);
+  // ?tile= REACHES PAST THE LADDER, ON PURPOSE, and these claims are the whole of that policy. It was
+  // capped at TILE_MAX for one day on the strength of a census that had read the STORE size; every cost
+  // the cap was meant to avoid is planner-path, so the cap bought nothing and taxed the one machine
+  // where 8192 won. The force ceiling is its own constant so that raising the planner's reach and
+  // raising the operator's stay two separate edits.
+  const FMAX = Number(liftSlice('const TILE_FORCE_MAX = ', ';').replace(/\D/g, ''));
+  claim('?tile= clamps to TILE_FORCE_MAX, not to the ladder',
+    SRC.includes('v >= 256 && v <= TILE_FORCE_MAX ? v : 0'), true);
+  claim('which is 8192 - above the ladder, so the size is opt-in rather than gone', FMAX, 8192);
+  // AND THE PANEL IS NOT A WAY IN. rec.probe is REMEMBERED, so a desktop that proved 8192 before the
+  // ladder moved still carried it, and the select filled straight from that list - it went on offering a
+  // retired size that nobody had decided to offer. A stale record is not an opt-in.
+  claim('and the panel select is filtered to what the planner will consider',
+    SRC.includes('(rec.probe || []).filter(t => t <= TILE_MAX)'), true);
+  const ceil = Math.max(...ladder);
+  claim('so a remembered [512,1024,2048,4096,8192] does not offer the retired size',
+    [512, 1024, 2048, 4096, 8192].filter(t => t <= ceil).includes(8192), false);
 
-  // WHAT THE BAN BUYS, as arithmetic rather than as a claim about one machine: the pool's whole tile
-  // footprint. At 8192 eight workers hold 2.15 GB, which is the three hours of paging the shed
-  // heuristic was built for; at 4096 they hold a quarter of that on any device there is.
+  // WHAT THE LADDER BUYS, as arithmetic rather than as a claim about one machine: the pool's whole tile
+  // footprint on every path the planner can take. A typed ?tile=8192 is outside that, deliberately -
+  // eight workers there hold 2.15 GB, which is the three hours of paging the shed heuristic was built
+  // for, and `room` does not bind because floor(12885 / 269) is 47.
   const bleed = 4, tileMB = t => Math.round((t + 2 * bleed) ** 2 * 4 / 1e6);
   const PMAX = Number(liftSlice('const POOL_MAX = ', ';').replace(/\D/g, ''));
-  const peak = PMAX * tileMB(Math.max(...ladder));
-  claim('so the pool can never hold more than 550 MB of tiles (' + PMAX + ' x '
-    + tileMB(Math.max(...ladder)) + ' MB = ' + peak + ' MB)', peak <= 550, true);
-  claim('where the banned size would have allowed over 2 GB (' + PMAX + ' x ' + tileMB(8192) + ' MB)',
-    PMAX * tileMB(8192) > 2000, true);
+  const peak = PMAX * tileMB(ceil);
+  claim('so no plan the PLANNER can choose holds more than 550 MB of tiles (' + PMAX + ' x '
+    + tileMB(ceil) + ' MB = ' + peak + ' MB)', peak <= 550, true);
+  claim('while a typed ?tile=8192 reaches past 2 GB - the operator footprint, not the fleet ('
+    + PMAX + ' x ' + tileMB(8192) + ' MB)', PMAX * tileMB(8192) > 2000, true);
+
+  // THE COMPARISON THAT SETTLED IT, as arithmetic so it cannot be lost. Measured 2026-10-20 at 65,535
+  // uv: 4096 x 8 ran 22.9 s at 117.5 Mpx/s, 8192 x 2 ran 56.7 s at 47.4 Mpx/s - and the two hold the
+  // SAME footprint to within a megabyte. Per worker-second the big tile is the efficient one (24.2
+  // against 16.5, and that is what a solo `calibrate` measures), but efficiency falls monotonically
+  // with footprint - 24.2, 20.5, 14.7, 11.8, 9.4 across 2 to 6 workers - with the pool 90-98% busy and
+  // 0% idle, so it is bandwidth and not scheduling. The scarce resource is FOOTPRINT, not cores: at a
+  // fixed budget you want the most workers you can fit, which is the smallest tile that still paints
+  // efficiently. This claim is here so that moving either constant has to face that measurement.
+  const equalAt = n => Math.abs(PMAX * tileMB(ceil) / (n * tileMB(8192)) - 1);
+  claim('4096 x ' + PMAX + ' and 8192 x 2 are the same footprint, which is why 8192 loses on width',
+    equalAt(2) < 0.01, true);
+  // AND IT DOES NOT EVEN FIT TWO. 8 x 67 = 536 MB buys floor(536 / 269) = ONE 8192 tile, and
+  // poolWidthFor returns 0 below two workers because one worker is slower than none. So the fastest
+  // 8192 configuration measured - 2 workers, 538 MB - is already over the ladder's own ceiling, by two
+  // megabytes. There is no pooled 8192 inside the guarantee at all. Asserted as 1 rather than 2 because
+  // the first version of this claim said 2, and the gate caught the arithmetic.
+  claim('and the ladder budget that seats 8 workers at 4096 seats ONE at 8192',
+    Math.floor(PMAX * tileMB(ceil) / tileMB(8192)), 1);
+  claim('so the fastest 8192 run measured was already over that ceiling',
+    2 * tileMB(8192) > PMAX * tileMB(ceil), true);
 }
 {
   // ABLATION: put it back on the ladder. Both the ceiling claim and the footprint bound must go red,
