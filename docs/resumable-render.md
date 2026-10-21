@@ -156,11 +156,17 @@ a different job and is discarded, not adapted.
   there was nowhere to put the next one, continuing it hits the same wall at the same tile. The offer
   will appear and the resume will fail.
 
-  **And the requirement is twice the finished master, for the whole run.** Chrome implements
-  `createWritable` with a swap file exchanged at `close()`, so the old master and the new one both exist
-  for the length of the render — measured at 65,535, that is 1.5 GB of a tablet's storage to produce a
-  744 MB file. A 1,048,576 master is around 23 GB, so it wants roughly **46 GB** while it runs, which is
-  more than a 32 GB tablet has in total. It fails by a factor of five, not by a margin.
+  **And the budget is twice the finished master — one copy for the run, one for the save.** The copy
+  written as the render goes lives in OPFS and *is* the resume: it is the thing the tiles-already-written
+  promise is made of, so it is the price of durability rather than waste. Saving produces the second,
+  because the blob handed to the download **is** that OPFS file. Both then exist until the next render
+  starts, since `removeEntry` runs at the head of a render and deliberately not after a save —
+  "removing it at the end would pull the floor out from under a save still in flight."
+
+  So the second copy is not a transient peak, it is **parked storage**: finish a 1,048,576, save it, and
+  half the space does not come back until you render again. Measured across two tile sizes, such a master
+  runs 20–23 GB, so the budget is 40–46 GB and roughly 20 GB of it lingers. On a 32 GB tablet that is
+  more than the whole device — it fails by a factor of five, not by a margin.
 
   **Nothing in the page can check this, and the asymmetry is the useful part.** `navigator.storage
   .estimate()` returns `quota` and `usage` for the origin, and because the master lives in OPFS that is

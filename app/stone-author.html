@@ -747,7 +747,7 @@
       <label class="tgl" id="tier-why-row" hidden><input type="checkbox" id="tier-why"><span data-i18n="big.why">WHY</span></label>
       <span class="stat" id="tier-note"></span>
     </div>
-    <div class="sl" id="tier-storage-row" hidden><span class="note" style="grid-column:1/-1;margin:0" data-i18n="big.storage-note">Storage: a render needs about twice the finished master free for the whole run - the browser keeps the previous file alive until the new one closes, so a 1,048,576 master of around 23 GB wants roughly 46 GB while it runs. Nothing here can check that for you: a browser cannot read free disk space, and storage.estimate() reports a padded per-origin budget rather than the volume. It can prove a render impossible and never prove one fits, so the headroom is yours to confirm before starting - and it is why these sizes are not recommended on a phone or tablet, where the figure is larger than the whole device.</span></div>
+    <div class="sl" id="tier-storage-row" hidden><span class="note" style="grid-column:1/-1;margin:0" data-i18n="big.storage-note">Storage: budget about twice the finished master. One copy is written as the render goes and stays in browser storage for the whole run - that copy IS the resume, which is how a render that dies is picked up from the tiles already written. Saving makes the second. Both then exist until the next render starts, which clears the first. A 1,048,576 master runs 20-23 GB depending on the tile, so plan for 40-46 GB and expect half of it to linger afterwards. Nothing here can check this for you: a browser cannot read free disk space, and storage.estimate() reports a padded per-origin budget rather than the volume - it can prove a render impossible and never prove one fits. Which is why these sizes are not recommended on a phone or tablet, where the figure exceeds the whole device.</span></div>
     <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.tile-probe-note">Tile: the planner races candidate sizes and picks one. Probe measures which sizes this device can actually paint at the chosen width - it allocates each one, marks its far corner and reads it back, which is how a canvas that silently stops painting is caught. Only sizes that pass are offered. On a device short of memory it is often worth taking one size BELOW what the planner settles on: a large tile can lose light at the joins in a way a single calibration tile cannot show, and on the slowest hardware here the smaller tile was also the faster one. A suggestion, not a rule — it costs a capable machine speed for nothing.</span></div>
     <div class="sl"><span class="lbl" data-i18n="lbl.tile">Tile</span><div class="grp">
       <button id="tileprobe" type="button" data-i18n="btn.tileprobe">Probe</button>
@@ -842,7 +842,7 @@ window.SA_I18N = (() => {
   "big.extreme": "Extreme",
   "big.once": "Unreasonable",
   "big.why": "WHY",
-  "big.storage-note": "Storage: a render needs about twice the finished master free for the whole run — the browser keeps the previous file alive until the new one closes, so a 1,048,576 master of around 23 GB wants roughly 46 GB while it runs. Nothing here can check that for you: a browser cannot read free disk space, and storage.estimate() reports a padded per-origin budget rather than the volume. It can prove a render impossible and never prove one fits, so the headroom is yours to confirm before starting — and it is why these sizes are not recommended on a phone or tablet, where the figure is larger than the whole device.",
+  "big.storage-note": "Storage: budget about twice the finished master. One copy is written as the render goes and stays in browser storage for the whole run — that copy IS the resume, which is how a render that dies is picked up from the tiles already written. Saving makes the second. Both then exist until the next render starts, which clears the first. A 1,048,576 master runs 20–23 GB depending on the tile, so plan for 40–46 GB and expect half of it to linger afterwards. Nothing here can check this for you: a browser cannot read free disk space, and storage.estimate() reports a padded per-origin budget rather than the volume — it can prove a render impossible and never prove one fits. Which is why these sizes are not recommended on a phone or tablet, where the figure exceeds the whole device.",
   "big.warn-why": "WHY?\n\nYou are requesting up to 687 billion pixels.\n\nThis feature is available locally because somebody has to test the limits.",
   "big.large": "Large render",
   "big.mem-rec": "Recommended: {gb} GB of memory — the machine this tier is known to finish on. Below that it is untested, not unsupported.",
@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.20.167';
+  const BUILD = '2026.10.20.168';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
