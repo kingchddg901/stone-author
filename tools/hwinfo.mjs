@@ -11,7 +11,7 @@
 //   3. how far did clocks fall    idle all-core against loaded all-core
 //   4. did SMT actually work      T1 sibling usage against T0 - the one that decides whether a
 //                                 12-thread cap on a 6-core part is honest
-//   5. memory-bound?              DRAM read+write bandwidth under load
+//   5. memory-bound?              DRAM bandwidth, AND system memory pressure - different questions
 //   6. did it reach steady state  were temps and clocks still moving at the end - because a render
 //                                 that ends before plateau under-reports what a longer one costs
 //   7. was the GPU the ceiling    utilisation, clock and power against their own limits - and whether
@@ -76,17 +76,44 @@ if (span !== null) console.log('  span ' + (span / 60).toFixed(1) + ' min, every
 // Total CPU Usage is the cheapest honest discriminator: idle sits near zero, the solo baseline pass
 // shows roughly one thread of twelve (~8%), and the full pool pins everything.
 const use = series('Total CPU Usage [%]') || series('Total CPU Usage');
-let busyFrom = -1, busyTo = -1;
+let busyFrom = -1, busyTo = -1, runsFound = 0;
 if (use) {
-  const HOT = 60;
-  busyFrom = use.findIndex(v => v !== null && v >= HOT);
-  for (let i = use.length - 1; i >= 0; i--) if (use[i] !== null && use[i] >= HOT) { busyTo = i; break; }
+  // 25, NOT 60. A render that is bound by its hand-offs does not hold a high CPU figure - the stone
+  // 1,048,576 of 2026-10-21 oscillated between 22% and 100% for 82 minutes, so a 60% threshold found
+  // 24 separate "loaded stretches", took the longest at 10.6 min, and put the other 76 minutes in the
+  // IDLE baseline. Every figure in this report was then the average of a render against itself.
+  // Idle on this machine is 7-15%, so 25 separates the two without needing the render to behave.
+  const HOT = 25;
+  // THE LONGEST RUN, NOT FIRST-TO-LAST. This took the first hot sample and the last one, so a log that
+  // caught a cancelled render before the real one spanned BOTH plus the idle gap between them - the
+  // gap averaged into the loaded figures and the pre-idle baseline shrank to whatever preceded the
+  // false start. A log is a record of a session, not of one render, and sessions have false starts.
+  //
+  // GAP TOLERANCE because a render is not hot in every sample: the solo calibration pass, the gaps
+  // between rows and the final encode all dip below the threshold without the render having stopped.
+  // 15 samples is 30 s at the usual 2 s interval - longer than any dip seen, far shorter than the
+  // pause between two deliberate runs.
+  const GAP = 60;
+  let i = 0;
+  while (i < use.length) {
+    if (use[i] === null || use[i] < HOT) { i++; continue; }
+    let start = i, end = i, j = i;
+    while (j < use.length) {
+      if (use[j] !== null && use[j] >= HOT) { end = j; j++; continue; }
+      if (j - end > GAP) break;
+      j++;
+    }
+    runsFound++;
+    if (end - start > busyTo - busyFrom) { busyFrom = start; busyTo = end; }
+    i = end + 1;
+  }
 }
 const inLoad = (a) => busyFrom >= 0 ? a.slice(busyFrom, busyTo + 1).filter(v => v !== null) : a.filter(v => v !== null);
 const preIdle = (a) => busyFrom > 1 ? a.slice(0, busyFrom).filter(v => v !== null) : [];
 const postIdle = (a) => busyTo >= 0 && busyTo < a.length - 2 ? a.slice(busyTo + 1).filter(v => v !== null) : [];
 
 if (use && busyFrom >= 0) {
+  if (runsFound > 1) console.log('  ' + runsFound + ' loaded stretches in this log — reading the LONGEST and ignoring the rest');
   console.log('  phases: idle ' + busyFrom + ' samples -> LOADED ' + (busyTo - busyFrom + 1) +
               ' samples (' + fx((busyTo - busyFrom + 1) * (dt || 0) / 60, 1) + ' min) -> idle ' +
               (use.length - busyTo - 1));
@@ -189,6 +216,60 @@ console.log('  ' + '-'.repeat(74));
                'peak ' + fx(Math.max(...inLoad(wr)), 1));
   const mc = series('Memory Clock [MHz]');
   if (mc) lane(5, 'memory clock (MHz)', fx(mean(preIdle(mc)), 0), fx(mean(inLoad(mc)), 0), fx(mean(postIdle(mc)), 0));
+
+  // SYSTEM MEMORY, WHICH BANDWIDTH DOES NOT ANSWER. The 10-worker glass log read 1.4 GB/s of DRAM - a
+  // couple of percent of a dual-channel budget - and sat at 85-90% PHYSICAL MEMORY LOAD throughout, on
+  // 16 GB. Those are different questions and only the first was being asked. A ceiling that is
+  // insensitive to tile size and worker count, which is what two 1,048,576 renders at 2048x8 and
+  // 4096x8 produced to within 0.1%, is the shape a memory-pressure ceiling makes and not the shape a
+  // bandwidth or compute one makes.
+  //
+  // AVAILABLE IS THE ONE THAT BITES, not used: Windows will sit near full with cache it releases on
+  // demand, so a high load figure alone proves nothing. What matters is whether the floor of available
+  // memory FALLS as the render proceeds, and whether it keeps falling - printed as a trend for that
+  // reason rather than as a mean.
+  const pu = series('Physical Memory Used [MB]'), pa = series('Physical Memory Available [MB]');
+  const pl = series('Physical Memory Load [%]');
+  if (pl) lane(5, 'physical memory load (%)', fx(mean(preIdle(pl)), 0), fx(mean(inLoad(pl)), 0), fx(mean(postIdle(pl)), 0),
+               'peak ' + fx(Math.max(...inLoad(pl)), 0) + '%');
+  if (pu) lane(5, 'physical memory used (MB)', fx(mean(preIdle(pu)), 0), fx(mean(inLoad(pu)), 0), fx(mean(postIdle(pu)), 0),
+               'peak ' + fx(Math.max(...inLoad(pu)), 0));
+  if (pa) {
+    const L = inLoad(pa), lo = Math.min(...L);
+    lane(5, 'physical memory free (MB)', fx(mean(preIdle(pa)), 0), fx(mean(L), 0), fx(mean(postIdle(pa)), 0),
+         'LOWEST ' + fx(lo, 0) + ' MB');
+    const a = L.slice(0, Math.floor(L.length / 3)), z = L.slice(-Math.floor(L.length / 3));
+    const ma = mean(a), mz = mean(z);
+    console.log('      free memory ' + fx(ma, 0) + ' -> ' + fx(mz, 0) + ' MB over the render'
+      + (mz < ma * 0.9 ? '   <- STILL FALLING: the render is taking memory it does not give back'
+         : (lo < 1024 ? '   <- under 1 GB free at the floor, which is where paging starts'
+            : '   (held)')));
+  }
+  // THE PAGE FILE IS THE ONLY DIRECT EVIDENCE OF PAGING, and everything above is circumstantial without
+  // it. Free memory falling can be a working set; free memory falling WHILE the page file grows is the
+  // system moving something to disk to make room, which is the mechanism the three-hour 8192 incident
+  // was blamed on and which has never actually been observed. A figure that does not move settles the
+  // question in the other direction just as firmly.
+  const pf = series('Page File Used [MB]');
+  if (pf) {
+    const L = inLoad(pf), a = L.slice(0, Math.floor(L.length / 3)), z = L.slice(-Math.floor(L.length / 3));
+    const ma = mean(a), mz = mean(z), hi = Math.max(...L);
+    lane(5, 'page file used (MB)', fx(mean(preIdle(pf)), 0), fx(mean(L), 0), fx(mean(postIdle(pf)), 0),
+         'peak ' + fx(hi, 0));
+    console.log('      page file ' + fx(ma, 0) + ' -> ' + fx(mz, 0) + ' MB across the render'
+      + (mz > ma + 200 ? '   <- PAGING: it grew by ' + fx(mz - ma, 0) + ' MB while the render ran'
+         : '   (flat - nothing was pushed to disk)'));
+  }
+
+  const dyn = series('GPU D3D Memory Dynamic [MB]'), ded = series('GPU D3D Memory Dedicated [MB]');
+  // DYNAMIC IS VRAM THAT IS NOT VRAM: surfaces spilled to system memory across the PCIe link. On a
+  // card with four lanes that spill is the difference between fast and unusable, so it is worth seeing
+  // even when dedicated has room. The glass log never spilled - 2,378 MB of 4,096 at peak, dynamic
+  // flat at ~200 MB - which ruled the link out there and says nothing about a heavier footprint.
+  if (ded) lane(5, 'VRAM dedicated (MB)', fx(mean(preIdle(ded)), 0), fx(mean(inLoad(ded)), 0), fx(mean(postIdle(ded)), 0),
+                'peak ' + fx(Math.max(...inLoad(ded)), 0));
+  if (dyn) lane(5, 'VRAM spilled to system (MB)', fx(mean(preIdle(dyn)), 0), fx(mean(inLoad(dyn)), 0), fx(mean(postIdle(dyn)), 0),
+                'peak ' + fx(Math.max(...inLoad(dyn)), 0));
 }
 
 // ---- 6. STEADY STATE, which decides whether any of this generalises --------------------------------
@@ -256,6 +337,71 @@ console.log('  ' + '-'.repeat(74));
             + (pk ? ', clock ' + fx(100 * ldc / pk, 0) + '% of peak' : '')
             + '). Flat out in bursts, idle between them: the cost is in the hand-offs, not the work'
           : '-> the GPU had headroom throughout and was not the limit'));
+    }
+  }
+}
+
+// ---- 8. the drive, and the save, which are two different measurements -------------------------------
+// THE SAVE IS THE CONTROL FOR THE RENDER. A render writing slowly proves nothing on its own - the drive
+// might be incapable. But a 1,048,576 writes its master to OPFS as it goes and then copies the whole
+// thing out afterwards, so the same log contains the render's rate AND the same drive's rate when
+// something actually asks it for throughput. Measured 2026-10-21: 5.4 MB/s at 3.6% busy for 82 minutes,
+// then 84.6 MB/s with peaks past 340 for the 4.6-minute save. Fifteen times faster, on demand, straight
+// afterwards. That turns "storage was not the bottleneck" from an assumption into a comparison.
+//
+// AND THE TOTAL IS ITS OWN NUMBER. ~26 GB written during the render plus ~22.8 GB on the save is about
+// 49 GB of writes for a 23 GB file. Free space decides whether a render can start; total writes is what
+// a drive accumulates over a hundred of them, and they are not the same question.
+{
+  const wr = series('Write Rate'), rd = series('Read Rate');
+  const act = series('Total Activity'), dtemp = series('Drive Temperature');
+  if (wr || act) {
+    console.log('');
+    console.log('   8  THE DRIVE - and the tail, where the master is copied out');
+    // ITS OWN PERCENTILE, because the one in section 7 takes a SERIES and slices inLoad itself - this
+    // needs the p95 of an already-sliced window, since the save lives in postIdle rather than in load.
+    const p95of = (v) => { const s = v.slice().sort((x, y) => x - y); return s[Math.floor(s.length * 0.95)] || 0; };
+    const gb = (a) => (a.reduce((x, y) => x + y, 0) * (dt || 2) / 1024).toFixed(1);
+    const line = (tag, set) => {
+      if (!wr) return;
+      const W = set(wr);
+      if (!W.length) return;
+      const A = act ? set(act) : [];
+      console.log('      ' + tag.padEnd(18) + 'write ' + fx(mean(W), 1).padStart(7) + ' MB/s'
+        + '   p95 ' + fx(p95of(W), 1).padStart(7)
+        + '   peak ' + fx(Math.max(...W), 1).padStart(7)
+        + (A.length ? '   busy ' + fx(mean(A), 1).padStart(5) + '%' : '')
+        + '   ~' + gb(W) + ' GB');
+    };
+    // THESE ARE NOT "RENDER" AND "SAVE", and labelling them that way was wrong. A 1,048,576 copies its
+    // master out afterwards at 85 MB/s, which keeps the CPU well above the threshold - so the save sits
+    // INSIDE the loaded phase and the tail is only whatever idles after it. The 320 MB/s peak below is
+    // the save, reported as part of the render.
+    //
+    // Nothing in a hardware log can find that boundary: both are busy. Splitting them needs the
+    // master's own `ms.render` against its `at`, which is what tools/lib/find-meta.mjs reads - and done
+    // that way the same render was 5.4 MB/s at 3.6% busy for 82 minutes, then 84.6 MB/s for a 4.6-minute
+    // save. Fifteen times faster on demand, immediately afterwards.
+    line('loaded phase', inLoad);
+    line('after it', postIdle);
+    if (dtemp) lane(8, 'drive temperature (C)', fx(mean(preIdle(dtemp)), 1), fx(mean(inLoad(dtemp)), 1),
+                    fx(mean(postIdle(dtemp)), 1), 'peak ' + fx(Math.max(...inLoad(dtemp)), 1));
+    if (wr) {
+      const L = inLoad(wr), P = postIdle(wr);
+      if (L.length && P.length) {
+        const r = mean(P) / Math.max(0.01, mean(L));
+        const peak = Math.max(...L.concat(P));
+        // THE COMPARISON THAT SURVIVES not knowing where the save begins: the PEAK against the MEAN.
+        // Whichever window the copy landed in, some sample in this log shows the drive at its real rate,
+        // and if the mean sits far below that peak then the work was never asking for throughput. A
+        // ratio of the two windows cannot say that when one of them contains both activities.
+        console.log('      ' + (peak > mean(L) * 5
+          ? '-> this drive reached ' + fx(peak, 0) + ' MB/s in this log against a loaded mean of '
+            + fx(mean(L), 1) + ' - it had ' + fx(peak / Math.max(0.01, mean(L)), 0)
+            + 'x the throughput the render asked for, so storage was not the ceiling'
+          : '-> the loaded mean is close to the best this drive did here: it may be the limit, look further')
+          + (r > 1.5 ? '   (tail ' + fx(r, 1) + 'x the loaded rate)' : ''));
+      }
     }
   }
 }
