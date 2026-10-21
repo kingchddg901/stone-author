@@ -148,7 +148,12 @@ console.log(NL + 'C  but it is all recorded');
 {
   const P = makePool(8, { fin: true, cores: 12 }); P.settle(1000);
   for (let i = 0; i < 40; i++) P.settle(1200);
-  claim('1.2x is a working pool and counts as nothing', P.state().strain, { over: 0, panic: 0, max: 1 });
+  // THE SHAPE GREW AND THE CLAIM COMPARES ALL OF IT. `base` is the denominator every ratio here is
+  // against - without it `max: 14` names fourteen times a number nobody recorded - and `at` locates
+  // each crossing, which is what lets a strain figure be checked against a hardware log at all. On a
+  // run that crossed nothing `at` must be EMPTY, not absent: an empty array is a measurement.
+  claim('1.2x is a working pool and counts as nothing', P.state().strain,
+    { over: 0, panic: 0, max: 1, base: 1000, at: [] });
 }
 
 console.log(NL + 'D  the window is a ROW, so a band cannot manufacture the figure');
@@ -243,7 +248,7 @@ console.log(NL + 'ablation: a shed put back');
   // CASE B ASSERTS THAT NOTHING HAPPENS, and an assertion that nothing happens cannot bite on its own.
   // This puts the old action back - one decrement, guarded exactly as it used to be - and requires B to
   // notice. Without this the file passes against a pool that sheds on every pass.
-  const acts = REGION.replace('if (med > STRAIN_AT * base) strain.over++;',
+  const acts = REGION.replace('if (med > STRAIN_AT * base) { strain.over++; strainMark(Math.round(med / base), 0); }',
                               'if (med > STRAIN_AT * base) { strain.over++; if (target > 2) target--; }');
   if (acts === REGION) { console.log('  FAIL  could not find the row branch to ablate - probe is stale'); fails++; }
   else {
@@ -255,7 +260,7 @@ console.log(NL + 'ablation: a shed put back');
 
 console.log(NL + 'ablation: the row comparison neutered');
 {
-  const flat = REGION.replace('if (med > STRAIN_AT * base) strain.over++;', '');
+  const flat = REGION.replace('if (med > STRAIN_AT * base) { strain.over++; strainMark(Math.round(med / base), 0); }', '');
   if (flat === REGION) { console.log('  FAIL  could not find the row comparison to ablate - probe is stale'); fails++; }
   else {
     const P = makePool(8, { region: flat, fin: true, cores: 12 }); P.settle(1000);
@@ -266,7 +271,7 @@ console.log(NL + 'ablation: the row comparison neutered');
 
 console.log(NL + 'ablation: the panic comparison neutered');
 {
-  const slow = REGION.replace('if (m >= PANIC * base) strain.panic++;', '');
+  const slow = REGION.replace('if (m >= PANIC * base) { strain.panic++; strainMark(Math.round(m / base), 1); }', '');
   if (slow === REGION) { console.log('  FAIL  could not find the panic comparison to ablate - probe is stale'); fails++; }
   else {
     const P = makePool(8, { region: slow, fin: true, cores: 12 }); P.settle(1000);

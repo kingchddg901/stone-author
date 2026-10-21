@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.21.169';
+  const BUILD = '2026.10.21.170';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13515,13 +13515,34 @@ self.onmessage = async (e) => {
     // over  - row medians past the strain level, which is where a worker used to go
     // panic - short-window medians past 10x, which used to go immediately
     // max   - the worst ratio the render saw, rounded
-    const strain = { over: 0, panic: 0, max: 0 };
+    // COUNTED BUT NEVER LOCATED, which is why it could not be checked against anything. A 1,048,576 on
+    // 2026-10-21 reported `panic: 38` beside an HWiNFO log covering every second of the same render,
+    // and the two could not be joined: 38 crossings with no idea WHEN. The whole point of keeping the
+    // figure after retiring the mechanism was that a device genuinely in trouble would show up in it,
+    // and a count cannot be correlated with anything.
+    //
+    // `base` IS THE DENOMINATOR AND WAS ALSO MISSING. Every ratio here is against the solo first tile,
+    // so `max: 14` meant fourteen times a number the file did not record - unreadable on its own, and
+    // the solo tile time is a clean per-device figure in its own right.
+    //
+    // `at` carries [ms since the first tile settled, the ratio, kind] with kind 1 for a short-window
+    // panic and 0 for a row median. Capped, because an unbounded array on a pathological device is how
+    // a diagnostic becomes the fault. At ~12 bytes an entry the cap is 7 KB against a 23 GB master.
+    const STRAIN_AT_MAX = 600;
+    const strain = { over: 0, panic: 0, max: 0, base: 0, at: [] };
+    let strainT0 = 0;
+    const strainMark = (r, kind) => {
+      if (strain.at.length < STRAIN_AT_MAX) strain.at.push([Math.round(performance.now() - strainT0), r, kind]);
+    };
     const busyCount = () => { let b = 0; for (const q of pool) if (q.busy) b++; return b; };
     const medOf = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
 
     function poolSettle(q, ms) {
       q.busy = false;
-      if (!base) { base = Math.max(1, ms); target = n; return; }        // the solo tile: then open up
+      // THE SOLO TILE IS BOTH THE BASELINE AND THE CLOCK ZERO. Every ratio below is against `base`, and
+      // every timestamp is against the moment it settled - so a crossing's wall clock is the master's
+      // own (at - ms.render) + base + the recorded offset, which is what joins this to a hardware log.
+      if (!base) { base = Math.max(1, ms); target = n; strainT0 = performance.now(); strain.base = base; return; }
       recent.push(ms);
       const note = m => { const r = Math.round(m / base); if (r > strain.max) strain.max = r; };
       // THE SHORT WINDOW. One pass of the pool, never the pool's CURRENT width - that used to be
@@ -13530,7 +13551,7 @@ self.onmessage = async (e) => {
       if (recent.length % SHORT === 0) {
         const m = medOf(recent.slice(-SHORT));
         note(m);
-        if (m >= PANIC * base) strain.panic++;
+        if (m >= PANIC * base) { strain.panic++; strainMark(Math.round(m / base), 1); }
       }
       // THE ROW. A reality window is a BAND, and a band fills anything shorter than a row: a 262,144
       // carrying one disc read 6x on an eight-tile median while a 256-tile median of the same tiles read
@@ -13540,7 +13561,7 @@ self.onmessage = async (e) => {
         const med = medOf(recent);
         recent.length = 0;
         note(med);
-        if (med > STRAIN_AT * base) strain.over++;
+        if (med > STRAIN_AT * base) { strain.over++; strainMark(Math.round(med / base), 0); }
       }
     }
     // DISPATCHED, STARTED, FINISHED - the three the pool can see. The fourth, WRITTEN, belongs to
