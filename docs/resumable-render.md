@@ -151,6 +151,29 @@ a different job and is discarded, not adapted.
   which folded two failure classes into one word. **Resume survives the process dying; it does not
   survive the machine dying.** Say which, because the difference is the whole feature.
 
+- **Running out of storage.** This is the one the feature most looks like it should cover and least
+  does: the tiles already written are exactly what resume relies on, and if the render stopped because
+  there was nowhere to put the next one, continuing it hits the same wall at the same tile. The offer
+  will appear and the resume will fail.
+
+  **And the requirement is twice the finished master, for the whole run.** Chrome implements
+  `createWritable` with a swap file exchanged at `close()`, so the old master and the new one both exist
+  for the length of the render — measured at 65,535, that is 1.5 GB of a tablet's storage to produce a
+  744 MB file. A 1,048,576 master is around 23 GB, so it wants roughly **46 GB** while it runs, which is
+  more than a 32 GB tablet has in total. It fails by a factor of five, not by a margin.
+
+  **Nothing in the page can check this, and the asymmetry is the useful part.** `navigator.storage
+  .estimate()` returns `quota` and `usage` for the origin, and because the master lives in OPFS that is
+  at least the right volume — but `quota` is a padded, fingerprint-resistant budget the browser may
+  revise, and it says nothing about what the OS does to the disk underneath. So it can prove a render
+  **impossible** and can never prove one **fits**. A browser cannot read free disk space at all.
+
+  The remedy is therefore a stated contract rather than a gate: the headroom is the operator's to
+  confirm, and `big.storage-note` says so in the panel beside the tier checkboxes, where it appears once
+  **Unreasonable** is ticked — before **WHY**, rather than after. Narrowing the input instead would close
+  a seam that is deliberately open: a desktop with the room should not be refused because a tablet
+  would not have been able to.
+
 ## A related opportunity, which is not this feature
 
 While measuring UV renders, the per-tile cost decomposed as roughly **10 ms of painting against 1,300 to

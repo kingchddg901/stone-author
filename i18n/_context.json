@@ -1998,6 +1998,9 @@
  "ui.tile-probe-note": {
   "where": "tile probe control in the Render section"
  },
+ "big.storage-note": {
+  "where": "note beside the large-render tier checkboxes in the Render section, shown once Unreasonable is ticked; storage.estimate() is a JavaScript API name and stays in English"
+ },
  "a11y.render": {
   "where": "accessible name for the group of render controls"
  },
