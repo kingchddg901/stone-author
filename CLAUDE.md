@@ -50,6 +50,7 @@ node tools/check-render-purity.mjs # nothing that scales the coat may measure th
 node tools/check-wake-lock.mjs     # every export path takes and drops the screen lock
 node tools/check-device-seal.mjs   # the device identity is sealed under the slab, and fails closed
 node tools/check-bleed.mjs         # every blur has bleed behind it; the bloom is probed, not assumed
+node tools/check-meta-window.mjs   # a master's own record is found however far back in the file it sits
 node tools/check-fn-refs.mjs       # every line pin in docs/functions.md lands on its function
 node tools/check-material-fork.mjs # the stone/wood/X branch lives at one seam, nowhere else
 ```

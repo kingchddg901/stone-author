@@ -63,6 +63,8 @@ jobs:
         run: node tools/check-bleed.mjs
       - name: PNG metadata
         run: node tools/check-png-meta.mjs
+      - name: A master's own record is found however far back it sits
+        run: node tools/check-meta-window.mjs
       - name: Every line pin in the function reference lands on its function
         run: node tools/check-fn-refs.mjs
       - name: The material fork happens in one place or it is not a fork
