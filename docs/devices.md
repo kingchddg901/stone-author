@@ -69,6 +69,52 @@ shed and recovered under the previous build; neither narrows now. The Tab A is t
 heuristic was built for, and its own record in `docs/sidecars/README.md` has it shedding 4 → 2 and
 losing a third of its throughput to it.
 
+### The same fleet at 262,144
+
+Sixteen times the pixels — 42.9 Gpx — and the order holds but the spread opens from 56× to 70×:
+
+| device | engine | hc | tile | pool | light | time | Mpx/s | narrowing | build |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| desktop | Blink | 12 | 4096 | 8 | uv | 5.1 min | **139.2** | — | .163 |
+| S23 Ultra | Blink | 8 | 2048 | 8 | uv | 9.5 min | **75.0** | — | .164 |
+| iPhone 14 Pro | WebKit | 4 | 2048 | 4 | uv | 11.7 min | **61.2** | shed ×12 | .164 |
+| desktop | Gecko | 12 | 4096 | 8 | uv | 12.2 min | **58.8** | strain only | .165 |
+| A7 Lite | Blink | 8 | 2048 | 8 | uv | 1.64 h | **7.3** | strain only | .165 |
+| Tab A 8.0 | Blink | 4 | 2048 | 4 | uv | 2.87 h | **4.2** | strain only | .165 |
+| Tab A 8.0 | Blink | 4 | 1024 | 2 | day | 6.08 h | **2.0** | shed 4 → 2 | .82 |
+
+**The A7 Lite row is the best evidence the shed retirement has produced.** A 2 GB tablet carried 10,240
+passes at **8 of 8 workers and never narrowed** — and its `poolStrain` reads `over 1, panic 229, max 18`.
+The ratio axis called that device in trouble **229 times**, with a worst reading of 18× its own solo
+baseline, on a pool footprint of 8 × 17 MB where paging is arithmetically impossible. Under the
+mechanism that used to act on that figure it would have shed repeatedly and finished narrow. It finished
+at full width in 1.64 h instead, which is what "the range it fired on is a subset of the range it
+false-fires on" looks like when the device is allowed to carry on.
+
+**And the last two rows are the same device, before and after.** The Tab A 8.0 ran this size twice:
+6.08 h at 2 workers of 4 planned, having shed 4 → 3 → 2, and then 2.87 h at 4 of 4 with 98% occupancy.
+**2.12× on the same hardware** — and per worker-second the two runs are within 8% of each other, so
+1.96 × 1.08 accounts for all of it. Almost the whole gain is the pool not narrowing; the 1024 → 2048 pass
+is the 8%. The shed was costing this device **52% of its throughput**, which is worse than the third
+recorded against its 65,535 in `docs/sidecars/README.md`.
+
+### What the two tablets say about the strain figure
+
+With both on build `.165` at the same size and the same 2 GB, the readings diverge completely:
+
+| device | cores | wall | mean busy | `poolStrain` |
+| --- | --- | --- | --- | --- |
+| A7 Lite | 8 | 1.64 h | 7.87 of 8 (98%) | `over 1, panic 229, max 18` |
+| Tab A 8.0 | 4 | 2.87 h | 3.92 of 4 (98%) | none at all |
+
+Same build, same render, same memory, same occupancy, both finished at full width — and one read as in
+trouble 229 times while the other never crossed a threshold. That isolates the mechanism: **strain is
+measured against the first solo tile, so the ratio scales with pool width rather than with distress.**
+Eight workers against a fast solo baseline read 10–18×; four against a slower one read nothing.
+`STRAIN_AT = 3 + 3 × (n / hardwareConcurrency)` exists to correct for exactly this and under-corrects on
+the 8-core device. It is a cleaner falsification of the ratio axis than the 1× to 18× range was, because
+nothing differs between these two runs except the width the ratio is implicitly scaled by.
+
 ### The desktop tile walk
 
 The same image at five tile sizes on both engines, 160 passes to 40,960 — a 256× range. 256 is below
