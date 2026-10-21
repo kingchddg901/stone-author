@@ -168,6 +168,23 @@ a different job and is discarded, not adapted.
   runs 20–23 GB, so the budget is 40–46 GB and roughly 20 GB of it lingers. On a 32 GB tablet that is
   more than the whole device — it fails by a factor of five, not by a margin.
 
+  **And it is written twice as well as held twice**, which is a different question and a different cost.
+  Measured on a 1,048,576 at a 4096 pass against an HWiNFO drive log, aligned to the render's own window:
+
+  | | write rate | drive activity | written |
+  | --- | --- | --- | --- |
+  | during the render, 82.2 min | mean **5.4 MB/s**, p95 12.0, peak 91.0 | mean **3.6%** | ~26 GB |
+  | the save, 4.6 min | mean **84.6 MB/s**, p95 279.7, peak 348.8 | mean 20.7% | ~22.8 GB |
+
+  About **49 GB of writes for a 23 GB master**, and the drive never rose above 32.5 °C. The space figure
+  is a free-disk question; this one is a disk-life question, and on a device where the master is a large
+  fraction of the volume it is the second that accumulates.
+
+  The rates are also worth reading as a negative result. The render writes at 5.4 MB/s with the drive
+  **3.6% busy** — and then the save demonstrates the same drive sustaining 84.6 MB/s with peaks past 340.
+  So the render could write fifteen times faster and does not; storage is not what makes a 1,048,576 take
+  82 minutes, and the save is the proof rather than an assumption.
+
   **Nothing in the page can check this, and the asymmetry is the useful part.** `navigator.storage
   .estimate()` returns `quota` and `usage` for the origin, and because the master lives in OPFS that is
   at least the right volume — but `quota` is a padded, fingerprint-resistant budget the browser may
