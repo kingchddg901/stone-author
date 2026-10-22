@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.21.170';
+  const BUILD = '2026.10.22.171';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14123,7 +14123,14 @@ self.onmessage = async (e) => {
         // 10x, `max` the worst ratio against the solo baseline. Absent means nothing crossed at all.
         // A master written before 2026-10-20 carries `poolShed` instead, which is a record of workers
         // actually taken away - a different fact, and not comparable to this one.
-        poolStrain: poolRan && (poolRan.strain.over || poolRan.strain.panic) ? poolRan.strain : undefined,
+        // RECORDED WHENEVER A POOL RAN, not only when something crossed. The gate used to drop the
+        // whole object when `over` and `panic` were both zero - and on 2026-10-22 a 6-worker 1,048,576
+        // crossed nothing at all, which is a RESULT: the same render at eight workers reported 38
+        // panics. "It never strained" is the more interesting of those two readings and the file could
+        // not say it. The gate also took `base` with it, so the one run worth quantifying as calm lost
+        // its solo-tile time as well. An empty `at` is a measurement; an absent poolStrain now means
+        // only that no pool ran.
+        poolStrain: poolRan ? poolRan.strain : undefined,
         ms: { render: msRender, total: Date.now() - expT0 },
         // Paired on purpose: time ALONE cannot say why a tile was slow. Against its own byte count it
         // can -- time that tracks bytes is the picture being dense, time that spikes where bytes did
