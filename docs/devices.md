@@ -115,6 +115,85 @@ Eight workers against a fast solo baseline read 10–18×; four against a slower
 the 8-core device. It is a cleaner falsification of the ratio axis than the 1× to 18× range was, because
 nothing differs between these two runs except the width the ratio is implicitly scaled by.
 
+### Pool width at 1,048,576, and why `trace.busy` is not a saturation figure
+
+Five renders of the same slab at the same 4096 pass, varying only the pool width — the first and only
+size where the question has been asked with a hardware log attached.
+
+| workers | mean busy | machine otherwise | wall | Mpx/s | Mpx/worker-s |
+| --- | --- | --- | --- | --- | --- |
+| 5, after shedding from 8 | 5.70 | quiet | **74.0 min** | **154.7** | 27.2 |
+| 5, after shedding from 8 | 5.65 | quiet | **74.1 min** | 154.6 | **27.4** |
+| 6 | 5.80 | a long video | 79.2 min | 144.6 | 24.9 |
+| 8 | 7.90 | desk in use | 76.2 min | 150.4 | 19.0 |
+| 8 | 7.83 | desk in use | 82.2 min | 139.4 | 17.8 |
+
+**Fewer workers is the better pool and does not finish sooner.** Per worker-second the ordering is
+clean and monotonic — 27 at five, 25 at six, 18–19 at eight — and the wall clock refuses to follow it.
+The two 8-worker runs are 76.2 and 82.2, an 8% spread on one configuration, which is wider than any
+difference between configurations and is the first thing to know before reading the rest.
+
+**The figure that explains it comes from the hardware log, not the trace.** Aligned to each render's
+own window, with the machine's own baseline subtracted from each — the 10 minutes before the 8-worker
+run, the half hour after the 6-worker one:
+
+| | 8 workers | 6 workers |
+| --- | --- | --- |
+| threads busy, machine alone | 1.49 | 1.04 |
+| threads busy during the render | 4.91 | 5.21 |
+| **the render alone** | **3.42** | **4.17** |
+| per busy worker | **0.44** | **0.72** |
+| pool reported busy | 7.83 of 8 (98%) | 5.80 of 6 (97%) |
+
+So **the pool reports 97–98% busy while each busy worker consumes under three quarters of a thread,
+and under half of one at eight.** Those are not contradictory readings: `trace.busy` counts a worker
+from dispatch to completion, including everything it spends waiting on readback, transfer and deflate.
+It is an occupancy figure and it has been read as a saturation figure — including in this document's
+own 65,535 table, where "mean busy" should be understood as *how much of the pool was holding a tile*,
+not *how much of the machine was working*.
+
+And six workers put **22% more CPU into the render than eight did** (4.17 threads against 3.42) while
+using two fewer. Two workers' worth of apparent width was buying nothing and costing scheduling.
+
+### Nothing on this machine is the ceiling
+
+Every candidate, measured in the same window as the renders above:
+
+| | 8 workers | 6 workers |
+| --- | --- | --- |
+| CPU | 40.9% of twelve threads | 43.4% |
+| memory load | 84%, 2,675 MB free | 90%, 1,542 MB free |
+| page file | 1,218 MB | 1,427 MB |
+| core temperature | 49.3 °C | 46.4 °C |
+| package power | 31.7 W | 32.2 W |
+| drive write | 5.4 MB/s at 3.6% busy | 5.7 MB/s at 6.5% busy |
+
+Against a 12-minute **glass** render on the same machine, which pinned all six cores at 88–91%,
+reached 68.8 °C and pulled 58.9 W. Stone at 1,048,576 takes six times as long while asking the machine
+for half as much.
+
+The drive figure is the one that closes itself: the same log shows the master being copied out
+afterwards at **84.6 MB/s with peaks past 340**, so the render could write fifteen times faster and
+does not. That is a comparison rather than an assumption — see `docs/resumable-render.md`.
+
+### The paging premise, measured and false
+
+The shed retirement's own note blames a three-hour 8192 render on paging. Measured across the full 85
+minutes of load on the 8-worker run, from a 4,411 MB baseline:
+
+- free memory touched **62 MB** at minute three of the ramp and was never near it again;
+- the trend **rose in all seven** ten-minute windows;
+- it finished at **4,768 MB — 357 MB above where it started**;
+- the page file peaked 335 MB up and ended **83 MB below** its baseline.
+
+The 6-worker run repeats it from a tighter 2,906 MB start: floor 122 MB, finished at 3,794 MB, page
+file ending 73 MB below baseline. **Nothing was pushed to disk and kept, in either run.** That premise
+had been carried as fact for weeks without an instrument pointed at it.
+
+Strain tells the same story from the other side: the 8-worker run recorded **38 panics** and the
+6-worker run **none at all**, on a render that was 4% slower and demonstrably no closer to any limit.
+As with the two tablets above, the ratio tracks the width it is scaled by.
+
 ### The desktop tile walk
 
 The same image at five tile sizes on both engines, 160 passes to 40,960 — a 256× range. 256 is below
