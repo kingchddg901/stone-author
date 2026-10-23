@@ -62,7 +62,25 @@ Measured on one stone slab under one light, at every width where both passes exi
 | 262,144 | 0.0866 | 0.0983 | 11.9% |
 | 1,048,576 | 0.0289 | 0.0339 | 14.8% |
 
-Smaller tiles win at every width, monotonically — pass 1024 beats pass 2048 where both exist too.
+**It does not keep going.** "Smaller is better" holds from 4096 down to 2048 and then reverses,
+because shrinking the tile trades window context against more tile boundaries and more deflate streams,
+and the two balance somewhere below 2048. Measured on the same slab, best pass per width:
+
+| width | 512 | 1024 | 2048 | 4096 | best |
+|---|---|---|---|---|---|
+| 4,096 | **1.0972** | 1.3658 | 1.3778 | 1.6668 | 512 |
+| 8,192 | **0.6875** | 0.7210 | 0.7197 | 1.0161 | 512 |
+| 16,384 | 0.4302 | 0.4556 | **0.3808** | 0.5646 | 2048 |
+| 24,576 | 0.3695 | 0.3741 | **0.3047** | 0.4933 | 2048 |
+| 32,768 | 0.3257 | 0.3235 | **0.2467** | 0.3936 | 2048 |
+| 65,535 | **0.2296** | 0.2458 | 0.2662 | 0.2917 | 512 |
+| 262,144 | — | — | **0.0866** | 0.0983 | 2048 |
+
+512 wins at four widths and 2048 at seven, with no clean pattern between them — 65,535 picks 512 while
+both its neighbours pick 2048, on the best-sampled cells in the table. So there is an optimum rather
+than a direction, it is not stable across widths, and **a master rendered at a pass the ladder did not
+use is not comparable to it without this table.** That matters for the fleet: a device whose GL limit
+forces a smaller tile is not producing a smaller file for a reason anyone can predict.
 
 **Confirmed on identical pixels.** The glass slab was rendered at 65,535 under both passes. The light
 figure, measured over every pixel, is byte-for-byte identical (`{"mean":143.8,"lit40":100,"every":100}`),

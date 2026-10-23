@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>GPU probe</title>
+<!--
+  WHAT THIS ANSWERS, AND WHY IT IS NOT THE RENDERER.
+
+  A WebGPU port of the glass loop is a large piece of work whose value rests on two facts nobody has
+  for any device but the authoring desktop: whether WebGPU exists there at all, and what the GPU can
+  do RELATIVE TO THAT DEVICE'S OWN CPU. The second is the one that matters - an absolute Mpx/s says
+  how fast the card is, but the ratio says whether porting would change anything, and a slow device
+  with a proportionally decent GPU has more to gain than a fast one.
+
+  So this runs the SAME arithmetic twice, once in WGSL and once in JavaScript, on whatever opens it.
+  It is a proxy for the per-pixel loop rather than the loop itself: three fbm2 evaluations (36 corner
+  hashes) and three exponentials, which is roughly what a glass sample costs before glassUnform's op
+  chain and glassMelt's cell walk. Those two are branchy and would hurt the GPU more than this does,
+  so treat every ratio here as an OPTIMISTIC bound on what a port would deliver.
+
+  THE HASH IS EXACT ON BOTH SIDES. nz() is integer multiply and xor, so the WGSL and the JS agree to
+  the bit. Everything after it is f32 on the GPU and f64 in JS, and the probe reports that divergence
+  rather than hiding it, because for glass the question is never "is it close" but "which half of the
+  pixel does it reach" - shading tolerates a thousandth of a level, a compartment label does not.
+-->
+<style>
+  :root { --bg:#14151a; --fg:#e8e6e3; --dim:#9a9aa2; --ok:#7fd08a; --no:#e0796f; --line:#2a2c35; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#f6f6f4; --fg:#1b1c20; --dim:#5c5f68; --line:#dcdce2; } }
+  :root[data-theme="dark"] { --bg:#14151a; --fg:#e8e6e3; --dim:#9a9aa2; --line:#2a2c35; }
+  html,body { background:var(--bg); color:var(--fg); margin:0; }
+  body { font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; padding:16px; }
+  main { max-width:48rem; margin:0 auto; }
+  h1 { font-size:1.15rem; margin:0 0 .25rem; letter-spacing:.01em; }
+  p.sub { color:var(--dim); margin:0 0 1.25rem; }
+  button { font:inherit; font-weight:600; padding:.65rem 1.1rem; border-radius:7px;
+    border:1px solid var(--line); background:var(--fg); color:var(--bg); cursor:pointer; }
+  button[disabled] { opacity:.5; cursor:default; }
+  table { border-collapse:collapse; width:100%; margin:1rem 0; font-variant-numeric:tabular-nums; }
+  th,td { text-align:left; padding:.4rem .6rem .4rem 0; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:500; white-space:nowrap; }
+  td.v { font:500 14px/1.45 ui-monospace,"SF Mono",Consolas,monospace; overflow-wrap:anywhere; }
+  .ok { color:var(--ok); } .no { color:var(--no); }
+  #out { white-space:pre-wrap; font:500 13px/1.5 ui-monospace,"SF Mono",Consolas,monospace;
+    background:color-mix(in srgb, var(--fg) 5%, transparent); border:1px solid var(--line);
+    border-radius:7px; padding:.8rem; margin-top:1rem; }
+  footer { color:var(--dim); margin-top:1.5rem; font-size:.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>GPU probe</h1>
+  <p class="sub">Same arithmetic in WGSL and in JavaScript, on this device. The ratio is the answer.</p>
+  <button id="go">Run</button>
+  <table id="t"></table>
+  <div id="out" hidden></div>
+  <footer>Read the ratio, not the rate. A port only pays where the GPU beats this device&rsquo;s own CPU.</footer>
+</main>
+<script>
+(() => {
+  const N = 270400;                 // one 520x520 tile, matching the desktop measurement
+  const WGS = 256;
+  const rows = [];
+  const T = document.getElementById('t'), OUT = document.getElementById('out'), GO = document.getElementById('go');
+  const put = (k, v, cls) => { rows.push([k, v, cls || '']); draw(); };
+  const draw = () => { T.innerHTML = rows.map(([k, v, c]) =>
+    '<tr><th>' + k + '</th><td class="v ' + c + '">' + v + '</td></tr>').join(''); };
+  const log = s => { OUT.hidden = false; OUT.textContent += s + '\n'; };
+
+  // ---- the arithmetic, in JS. fp64 by definition: these are the reference values. ----------------
+  const nz = (xi, yi, s) => {
+    let h = (Math.imul(xi, 374761393) ^ Math.imul(yi, 668265263) ^ Math.imul(s, 2246822519)) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const vnoise = (x, y, s) => {
+    const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi,
+      sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty),
+      a = nz(xi, yi, s), b = nz(xi + 1, yi, s), c = nz(xi, yi + 1, s), d = nz(xi + 1, yi + 1, s);
+    return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy;
+  };
+  const fbm2 = (x, y, s) => vnoise(x, y, s) * 0.6 + vnoise(x * 2.1, y * 2.1, s + 9) * 0.3
+    + vnoise(x * 4.3, y * 4.3, s + 19) * 0.1;
+  const sampleAt = i => {
+    const x = (i % 520) * 0.013 + 0.37, y = ((i / 520) | 0) * 0.011 + 0.23;
+    const Tt = 4.2 * (1 + 0.27 * (fbm2(x * 26, y * 1.5, 71) - 0.5) * 2);
+    const lay = fbm2(x * 4.55, y * 4.55, 311), melt = fbm2(x * 13, y * 13, 991);
+    const m = 1 + 0.55 * (lay - 0.5) - 0.45 * melt;
+    return 0.9 * Math.exp(-0.31 * Tt) * m + 0.8 * Math.exp(-0.27 * Tt) * m + 0.7 * Math.exp(-0.19 * Tt) * m;
+  };
+
+  const WGSL = `
+fn nz(xi: i32, yi: i32, s: i32) -> f32 {
+  var h: u32 = (u32(xi) * 374761393u) ^ (u32(yi) * 668265263u) ^ (u32(s) * 2246822519u);
+  h = (h ^ (h >> 13u)) * 1274126177u;
+  return f32(h ^ (h >> 16u)) / 4294967296.0;
+}
+fn vnoise(x: f32, y: f32, s: i32) -> f32 {
+  let xi = i32(floor(x)); let yi = i32(floor(y));
+  let tx = x - floor(x); let ty = y - floor(y);
+  let sx = tx * tx * (3.0 - 2.0 * tx); let sy = ty * ty * (3.0 - 2.0 * ty);
+  let a = nz(xi, yi, s); let b = nz(xi + 1, yi, s);
+  let c = nz(xi, yi + 1, s); let d = nz(xi + 1, yi + 1, s);
+  return (a * (1.0 - sx) + b * sx) * (1.0 - sy) + (c * (1.0 - sx) + d * sx) * sy;
+}
+fn fbm2(x: f32, y: f32, s: i32) -> f32 {
+  return vnoise(x, y, s) * 0.6 + vnoise(x * 2.1, y * 2.1, s + 9) * 0.3 + vnoise(x * 4.3, y * 4.3, s + 19) * 0.1;
+}
+@group(0) @binding(0) var<storage, read_write> out: array<f32>;
+@compute @workgroup_size(${WGS})
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x; if (i >= ${N}u) { return; }
+  let x = f32(i % 520u) * 0.013 + 0.37;
+  let y = f32(i / 520u) * 0.011 + 0.23;
+  var T = 4.2 * (1.0 + 0.27 * (fbm2(x * 26.0, y * 1.5, 71) - 0.5) * 2.0);
+  let lay = fbm2(x * 4.55, y * 4.55, 311);
+  let melt = fbm2(x * 13.0, y * 13.0, 991);
+  let m = 1.0 + 0.55 * (lay - 0.5) - 0.45 * melt;
+  out[i] = 0.9 * exp(-0.31 * T) * m + 0.8 * exp(-0.27 * T) * m + 0.7 * exp(-0.19 * T) * m;
+}`;
+
+  const med = a => { const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+
+  async function main() {
+    GO.disabled = true; rows.length = 0; OUT.textContent = ''; OUT.hidden = true;
+    put('device', navigator.userAgent);
+    put('cores reported', String(navigator.hardwareConcurrency || 'not reported'));
+    put('deviceMemory', navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'not reported');
+
+    // ---- CPU first: it always works, so a device with no WebGPU still reports something useful ----
+    log('CPU: warming...');
+    for (let i = 0; i < 20000; i++) sampleAt(i);
+    const cpuT = [];
+    for (let k = 0; k < 3; k++) {
+      const t0 = performance.now();
+      let acc = 0; for (let i = 0; i < N; i++) acc += sampleAt(i);
+      cpuT.push(performance.now() - t0);
+      if (acc === Infinity) log('');          // keep the loop from being optimised away
+      await new Promise(r => setTimeout(r, 0));
+    }
+    const cpuMs = med(cpuT), cpuRate = N / 1e6 / (cpuMs / 1000);
+    put('CPU, one thread', cpuMs.toFixed(0) + ' ms   ' + cpuRate.toFixed(2) + ' Mpx/s');
+    log('CPU: ' + cpuT.map(x => x.toFixed(0)).join(', ') + ' ms');
+
+    if (!navigator.gpu) {
+      put('WebGPU', 'NOT AVAILABLE on this browser', 'no');
+      put('verdict', 'No GPU path is possible here. The CPU figure above is this device’s whole story.', 'no');
+      GO.disabled = false; return;
+    }
+    let adapter = null;
+    try { adapter = await navigator.gpu.requestAdapter(); } catch (e) { log('requestAdapter threw: ' + e.message); }
+    if (!adapter) {
+      put('WebGPU', 'navigator.gpu exists but no adapter was granted', 'no');
+      put('verdict', 'No GPU path here either — the API is present and the hardware is not reachable.', 'no');
+      GO.disabled = false; return;
+    }
+    const info = adapter.info || {};
+    put('WebGPU adapter', [info.vendor, info.architecture, info.device, info.description]
+      .filter(Boolean).join(' / ') || 'granted, reports nothing about itself', 'ok');
+
+    const device = await adapter.requestDevice();
+    device.addEventListener && device.addEventListener('uncapturederror', e => log('GPU error: ' + e.error.message));
+    const pipe = device.createComputePipeline({ layout: 'auto',
+      compute: { module: device.createShaderModule({ code: WGSL }), entryPoint: 'main' } });
+    const buf = device.createBuffer({ size: N * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const rd = device.createBuffer({ size: N * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const bind = device.createBindGroup({ layout: pipe.getBindGroupLayout(0),
+      entries: [{ binding: 0, resource: { buffer: buf } }] });
+    const run = async () => {
+      const e = device.createCommandEncoder(), p = e.beginComputePass();
+      p.setPipeline(pipe); p.setBindGroup(0, bind);
+      p.dispatchWorkgroups(Math.ceil(N / WGS)); p.end();
+      e.copyBufferToBuffer(buf, 0, rd, 0, N * 4);
+      device.queue.submit([e.finish()]);
+      await rd.mapAsync(GPUMapMode.READ);
+      const copy = new Float32Array(rd.getMappedRange().slice(0));
+      rd.unmap(); return copy;
+    };
+    await run(); await run();
+    const gpuT = []; let last = null;
+    for (let k = 0; k < 7; k++) { const t0 = performance.now(); last = await run(); gpuT.push(performance.now() - t0); }
+    const gpuMs = med(gpuT), gpuRate = N / 1e6 / (gpuMs / 1000);
+    put('GPU', gpuMs.toFixed(1) + ' ms   ' + gpuRate.toFixed(1) + ' Mpx/s');
+    log('GPU: ' + gpuT.map(x => x.toFixed(1)).join(', ') + ' ms');
+
+    // ---- determinism: same dispatch, repeated, compared bit for bit ----
+    const a = new Uint32Array(last.buffer), b = new Uint32Array((await run()).buffer);
+    let differ = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) differ++;
+    put('GPU determinism', differ === 0 ? 'bit-identical across runs' : differ + ' of ' + N + ' values differ',
+      differ === 0 ? 'ok' : 'no');
+
+    // ---- f32 against the fp64 reference, in levels of 255 ----
+    let sum = 0, mx = 0;
+    for (let i = 0; i < N; i += 7) { const d = Math.abs(sampleAt(i) - last[i]); sum += d; if (d > mx) mx = d; }
+    const n = Math.ceil(N / 7);
+    put('f32 vs fp64', 'mean ' + ((sum / n) * 255).toFixed(4) + ' levels, max ' + (mx * 255).toFixed(3) + ' levels');
+
+    put('GPU / CPU on this device', (gpuRate / cpuRate).toFixed(1) + '× one thread', 'ok');
+    const pool = Math.max(1, navigator.hardwareConcurrency || 1);
+    put('GPU / this device’s whole pool', (gpuRate / (cpuRate * pool)).toFixed(1) + '× ' + pool + ' threads',
+      gpuRate > cpuRate * pool ? 'ok' : 'no');
+    GO.disabled = false;
+  }
+  GO.addEventListener('click', () => main().catch(e => { log('FAILED: ' + e.message); GO.disabled = false; }));
+})();
+</script>
+</body>
+</html>
