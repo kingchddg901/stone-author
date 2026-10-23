@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.22.172';
+  const BUILD = '2026.10.22.173';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -7165,6 +7165,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
     }
     const REL = Math.max(0, GLASS.relief), TINT = Math.max(0, GLASS.tint);
+    // NOBODY READS THE SLOPE WHEN THERE IS NO RELIEF. gu and gv feed exactly one line - `sl`, which
+    // feeds the brightness multiplier `m` - and `m` multiplies that term by REL. At REL = 0 the whole
+    // gradient is computed per sample and then multiplied by zero, which is every slab that leaves
+    // relief alone. glassFormT returns the same thickness as glassFormTG, asserted bit-identical over
+    // 8,000 points by tools/probe-glass-gradient.mjs, so taking the cheap one here cannot move a pixel.
+    const WANTG = REL > 0;
     const OPQ = Math.max(0, Math.min(1, GLASS.opacity)), OREF = 8;   // mm: the opal's single path
     // Beer-Lambert per channel per millimetre. Green is absorbed least, which is the whole reason a
     // thick sheet looks green down its edge: it is path length, not a pigment.
@@ -7306,9 +7312,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           // The thickness marks read the FORMED position: they were pressed by the last thing that
           // touched the sheet, not carried up from the mould.
           glassFlow(ox, oy, F, fv);
-          glassFormTG(ox, oy, F, fv, gform);        // thickness and both slopes, one set of hashes
-          let T = gform[0];
-          const gu = gform[1], gv = gform[2];       // slope, in mm per foot - analytic, not differenced
+          let T, gu = 0, gv = 0;
+          if (WANTG) {
+            glassFormTG(ox, oy, F, fv, gform);      // thickness and both slopes, one set of hashes
+            T = gform[0]; gu = gform[1]; gv = gform[2];   // slope in mm per foot, analytic
+          } else {
+            T = glassFormT(ox, oy, F, fv);          // no relief: the slope would be multiplied by zero
+          }
           glassMelt(sx, sy, F, fv, melt);                           // bubbles are in the melt: they move
           if (melt[0] > 0) T -= F.TH * 0.5 * melt[0];               // a bubble is a void
           if (melt[1] > 0) T += F.TH * 0.6 * melt[1];               // a stone is not
