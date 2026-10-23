@@ -132,7 +132,20 @@ const biggest = new Set(archive.slice()
 // minutes. Rarity still PRINTS, because it is worth knowing a file was the last of its kind, but it no
 // longer holds anything back - which is what "NOTABLE IS A FLAG, NEVER A DECISION" was always meant to
 // say and did not manage, since the flag was wired straight to the hold.
-const HOLD_SECONDS = 3600;
+// AN HOUR STOPPED BEING EXPENSIVE. This was 3600 when a 1,048,576 was a rare thing and the archive
+// held two of them. Three days later there are seven, five of them rendered in one afternoon at 1.3
+// to 1.4 hours each as a deliberate experiment in pool width - and a figure you will produce five
+// times before dinner is not one worth keeping 113 GB to avoid reproducing.
+//
+// The threshold is not "how long did this take", it is "how long am I unwilling to wait for it
+// again", and that moved because the machine got faster and the habit changed. Two hours keeps the
+// pair of five-hour sequential masters - which are also the only 8192-pass renders that will ever
+// exist, since the ladder no longer offers it - and lets the hour-long ones go.
+//
+// Raised deliberately and recorded, which is the thing the --release note below warns about: a
+// threshold moved QUIETLY to release one file releases everything else at that cost without anybody
+// deciding to. This is that decision, made once, in the open.
+const HOLD_SECONDS = 2 * 3600;
 
 function notable(name, o) {
   const note = [], hold = [];
