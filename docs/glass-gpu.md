@@ -15,11 +15,14 @@ WGSL and in JavaScript on whatever opens it and reports the ratio:
 | device | WebGPU | GPU vs one thread | GPU vs the whole pool | a full port would give |
 | --- | --- | --- | --- | --- |
 | Tab A 8.0 | **none** | — | — | **not possible** |
+| A7 Lite | **none** | — | — | **not possible** |
 | desktop, RX 6500 XT | yes | 15.9× | 1.3× (12 threads) | 1.90× |
 | S23 Ultra | yes | 12.8× | 1.6× (8 threads) | 1.56× |
 | iPhone 14 Pro | yes | 7.6× | 1.9× (4 threads) | 1.82× |
 
-**Nothing reaches 2×, and the device with the most to gain cannot run it at all.** Those figures are
+**Nothing reaches 2×, and neither of the two devices with the most to gain can run it at all.**
+Both tablets predate WebGPU, which is not a coincidence that will age away in the direction anyone
+wants: the hardware slow enough to need a GPU path is the hardware too old to have the API. Those figures are
 also the optimistic bound: the probe is a proxy with no op chain, no SDF loop and no cell walk, and
 all three branch — divergence costs a GPU far more than it costs a core.
 
