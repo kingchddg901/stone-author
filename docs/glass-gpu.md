@@ -1,14 +1,69 @@
-# A GPU path for glass — scope
+# A GPU path for glass — measured, and not worth building
+
+Status: **closed 2026-10-23.** The scope below is kept because the reasoning is sound and the cost
+analysis still holds; what changed is that the premise it rests on was finally measured and is false.
 
 Not a plan to build one. A written answer to "would it help, what would it cost, and what breaks",
 so the decision is made against measurements rather than against the obvious appeal of an idle GPU.
+That turned out to matter more than expected: the appeal was the error.
 
-**The short version.** Glass is the one material here that is genuinely compute-bound, the work is
-almost exactly fragment-shader shaped, and the GPU sits at 3% of its clock while six cores burn — an
-idleness that belongs to glass alone, since a stone render drives the same card to 1,911 MHz. But a
-GPU pass **cannot be bit-exact with the CPU pass**, and §7 of `glass-one-pixel.md` explains why that is
-worse for glass than it would be for stone. So this is a *second renderer behind a toggle*, not an
-optimisation — and there is a 36% CPU win already specified that should land first.
+## The verdict, before the reasoning that led to it
+
+Measured with [`tools/gpu-probe.html`](../tools/gpu-probe.html), which runs the same arithmetic in
+WGSL and in JavaScript on whatever opens it and reports the ratio:
+
+| device | WebGPU | GPU vs one thread | GPU vs the whole pool | a full port would give |
+| --- | --- | --- | --- | --- |
+| Tab A 8.0 | **none** | — | — | **not possible** |
+| desktop, RX 6500 XT | yes | 15.9× | 1.3× (12 threads) | 1.90× |
+| S23 Ultra | yes | 12.8× | 1.6× (8 threads) | 1.56× |
+| iPhone 14 Pro | yes | 7.6× | 1.9× (4 threads) | 1.82× |
+
+**Nothing reaches 2×, and the device with the most to gain cannot run it at all.** Those figures are
+also the optimistic bound: the probe is a proxy with no op chain, no SDF loop and no cell walk, and
+all three branch — divergence costs a GPU far more than it costs a core.
+
+**Why, in one line: this work is a hash chain, not shading.** Three `fbm2` evaluations is 36 `nz`
+calls, and `nz` is `Math.imul`, xor and shift — roughly 250–290 **integer** operations per sample
+against a handful of floats and three `exp`. A GPU is enormous at float throughput and ordinary at
+32-bit integer multiply, so the one arithmetic shape where its advantage mostly evaporates is exactly
+the shape this renderer has. It also explains the observation that started the whole line of enquiry:
+the card never bumps during a glass render because integer hashing does not light up the parts of a
+GPU that draw power.
+
+The corollary is the useful part. **The ratio moves inversely with core count** — 15.9× a single
+thread on the desktop against 7.6× on the iPhone, because a device with fast cores has a GPU that is
+proportionally less far ahead of them. The two cancel, every device lands between 1.3× and 1.9×, and
+there is no device-class where this pays.
+
+**What the prize turned out to be instead.** §4's analytic gradient, which needs no GPU, no toggle and
+no capability matrix: landed in build `2026.10.22.172` and measured at **12.4%** off a 65,535 on the
+rung with the only two-run baseline, bit-identical output on a poured sheet. That is the whole return
+from this investigation, and it was step 1 of the list in §7 all along.
+
+**Two things worth keeping from the measurement**, since both were open questions:
+
+- **The GPU is deterministic run to run** — bit-identical across five dispatches of 262,144
+  invocations. Cross-*device* determinism is a far weaker claim and untested, but a device reproducing
+  itself is the rule that matters.
+- **f32 shading is not the problem.** Against the fp64 reference the divergence is **0.0002 levels
+  mean, 0.002 max** — four orders of magnitude under the analytic-gradient change already shipped. The
+  "cannot be bit-exact" objection is correctly aimed at the compartment label (§3) and badly
+  overstated for the shading. Only the label flips, at roughly 0.0034% of samples, and each flip is
+  the 130-level class.
+
+---
+
+**The original short version, left as written.** Glass is the one material here that is genuinely
+compute-bound, the work is almost exactly fragment-shader shaped, and the GPU sits at 3% of its clock
+while six cores burn — an idleness that belongs to glass alone, since a stone render drives the same
+card to 1,911 MHz. But a GPU pass **cannot be bit-exact with the CPU pass**, and §7 of
+`glass-one-pixel.md` explains why that is worse for glass than it would be for stone. So this is a
+*second renderer behind a toggle*, not an optimisation — and there is a 36% CPU win already specified
+that should land first.
+
+The sentence that did not survive is "almost exactly fragment-shader shaped". It is shaped like a hash
+chain, and that single word is the difference between an order of magnitude and 1.3×.
 
 ---
 
@@ -47,7 +102,13 @@ has been stone.
 
 ---
 
-## 2. The work is fragment-shader shaped
+## 2. The work is fragment-shader *shaped*, and that was the wrong thing to measure
+
+> **Measured 2026-10-23 and found to be the error in this document.** The per-pixel work does have the
+> shape of a fragment shader — independent samples, no communication, pure arithmetic. What it does
+> not have is the arithmetic a GPU is fast at. The cost below is dominated by `fbm2`, `fbm2` is 12
+> `nz` calls, and `nz` is integer multiply and xor. Shape is not throughput, and this section
+> measured the shape.
 
 From `glass-one-pixel.md`, per pixel per supersample: one op walk (16 records, 4 of them spins), one
 `glassFlow`, **three** `glassFormT` each of which may call `fbm2`, `exp` and `sin`, one `glassMelt`
@@ -251,16 +312,31 @@ becomes minutes.
 each device is proven; and nothing at all for the hand-off ceiling that makes a 1,048,576 take 79
 minutes with 4.17 threads of 12 busy.
 
-**Open questions, in the order they should be answered:**
+**Open questions, in the order they should be answered** — all four now answered, three of them not
+the way this list expected:
 
-1. Land the analytic gradient. A third of glass, on every device, in the safe class of inexactness.
+1. ~~Land the analytic gradient.~~ **DONE, build `2026.10.22.172`.** 12.4% off a 65,535, on every
+   device, no toggle. The only item on this list that paid, and the only one that needed no GPU.
 2. ~~Measure whether `OffscreenCanvas` 2D in a worker is falling back to software raster.~~
    **ANSWERED 2026-10-22: it is not.** A stone render drives this card to 1,911 MHz and 59.5% mean
    utilisation, so the accelerated path works and reaches a worker. The 94 MHz is glass declining to
    use a GPU that stone uses heavily — the difference is the workload, not a setting. Nothing to fix.
-3. Only then: a WebGPU compute pass for `glassFormT` alone, which is 40.6% of a tile and does **not**
-   touch the ribbon label — the largest win in the safe class, and a port small enough to validate
-   against the CPU path tile by tile.
-4. The full per-pixel port, with `glassLay` kept on the CPU or proven exact, last.
+3. ~~A WebGPU compute pass for `glassFormT` alone, 40.6% of a tile.~~ **CLOSED.** That 40.6% was
+   measured on a slab whose `glassFormT` takes a long branch. On a *poured* sheet it takes the
+   shortest one — a single `fbm2`, no `sqrt`, `exp`, `sin` or `cos` — and measures ~20% of a tile,
+   so this step's ceiling there is 1.25×. A second renderer behind a toggle for 1.25× is not a thing
+   to build.
+4. ~~The full per-pixel port.~~ **CLOSED.** Priced against the measured GPU ratio rather than an
+   Amdahl ceiling: 1.90× on the desktop, 1.56x on the S23, 1.82× on the iPhone, impossible on the
+   Tab A. The ceiling said 21×; the ceiling assumed an infinitely fast GPU and this one is 1.3–1.9×
+   a CPU pool.
 
-Step 3 is the interesting one: it is most of the win, and it stops short of the thing that breaks.
+**What this list got right**, and it is worth saying because the ordering was the useful part: step 1
+first, and step 1 was the whole return. Doing the cheap CPU thing before the expensive GPU thing is
+also what made the GPU case honest — §4 said so at the time, and it was right for a reason it could
+not have known, since landing the gradient is what revealed `glassFormT` to be 20% rather than 40.6%
+of a poured tile.
+
+**What would reopen this.** A material whose per-pixel cost is float-dominated rather than
+hash-dominated, or a device whose GPU is strong where its CPU is weak. Neither exists in this fleet.
+Wood is the only untested material, and its cost profile is unknown.
