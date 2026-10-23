@@ -281,9 +281,12 @@ Averaging happens on **colour**, after the lookup — never on the coordinate, f
 ## What this adds up to
 
 Per pixel per sample, at minimum: one op walk (sixteen records on the reference slab, four of them
-spins), one `glassFlow`, **three** `glassFormT` — each of which may call `fbm2`, `exp` and `sin` —
-one `glassMelt` over nine hashed cells, one `glassLay` over every mould compartment, and three `exp`
+spins), one `glassFlow`, **one** `glassFormT` — which may call `fbm2`, `exp` and `sin` — one
+`glassMelt` over nine hashed cells, one `glassLay` over every mould compartment, and three `exp`
 for the absorption.
+
+That said **three** `glassFormT` until build `2026.10.22.172` replaced the finite difference with an
+analytic gradient, and the line stayed wrong here for a day afterwards. §4 has the arithmetic.
 
 Measured shares of a 4096 tile on the reference slab:
 
@@ -296,5 +299,38 @@ Measured shares of a 4096 tile on the reference slab:
 
 Two optimisations landed on 2026-10-17 (the warp field memoised per render, the op list compiled per
 tile) and took a 65,535 master from 12.44 to 8.30 minutes and the preview from 1,618 to 327 ms. Both
-removed work that was being **repeated**, not work that was being done. What remains above is the
-picture being computed.
+removed work that was being **repeated**, not work that was being done.
+
+## The corner cache, and what it taught about where the cost is
+
+A third piece of repeated work, found on 2026-10-23 and shipped in build `2026.10.23.174`.
+
+`fbm2` is three `vnoise` octaves and each `vnoise` reads four lattice-corner hashes, so twelve `nz`
+calls per `fbm2`. There are **two `fbm2` call sites per sample** on this slab — `glassFormT`'s ream
+and `glassLay`'s cord wander — which is 24 `nz` a pixel, and almost all of it is the same four
+corners over and over. Instrumented over a 2048 tile:
+
+| | same lattice cell as the previous call |
+| --- | --- |
+| 65,535 | **96.5%** |
+| 1,048,576 | **99.3%** |
+
+**The rate rises with render size**, because a finer pixel step puts more samples inside one cell —
+the opposite of how adaptive supersampling behaves, where the prize shrinks as the render grows.
+`vnoiseC` keeps the last cell's four corners per call site per octave and reuses them; measured on
+the shipped path it hits **93.1%** at 65,535 and **99.3%** at 1,048,576.
+
+It is **exact, not approximate**. `nz` is a pure function of three integers, so a cached corner is
+the same double, and both `vnoiseC` and `fbm2C` carry their uncached siblings' expressions character
+for character. `tools/probe-hash-cache.mjs` holds that bitwise over 43,042 calls and ablates four
+ways; the renderer's own `check-same-image.mjs` is the end-to-end check.
+
+**What was surprising is how little of `fbm2` the hashing turned out to be.** Eliminating ~95% of the
+hash work removes only **37.4%** of one `fbm2` — 58.9 ns falls to 36.9 ns — which puts `nz` at
+roughly **1.8 ns a call**. The smoothstep interpolation and the coordinate multiplies are the bulk of
+it, not the integer hashing.
+
+That matters beyond this optimisation, because `glass-gpu.md` rests its verdict partly on the claim
+that this work is "a hash chain, not shading" and that a GPU's advantage evaporates on integer
+multiply. The hash share is real but smaller than that framing implies, and that section should be
+re-read against these numbers rather than trusted.

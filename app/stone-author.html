@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.22.173';
+  const BUILD = '2026.10.23.174';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2286,6 +2286,41 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     v += out[0] * 0.1; gx += out[1] * 0.1 * 4.3; gy += out[2] * 0.1 * 4.3;
     out[0] = v; out[1] = gx; out[2] = gy;
   }
+  // THE FOUR CORNERS ARE THE EXPENSIVE PART AND THEY HARDLY EVER CHANGE. nz is a pure function of
+  // three integers, so a lattice corner's value can be kept and reused with no approximation
+  // whatever - this is not a cheaper noise, it is the SAME noise computed once instead of hundreds
+  // of times. Measured on a 2048 tile of the reference slab: 96.47% of vnoise calls at 65,535 land
+  // in the same lattice cell as the previous call with that seed, and 99.28% at 1,048,576. The rate
+  // RISES with render size, because a finer pixel step puts more samples inside one cell.
+  //
+  // ONE SLOT PER CALL SITE PER OCTAVE, holding a cell key and its four corners. A slot is a
+  // last-cell cache, not a table: nothing to evict, nothing to size against the picture, and no
+  // invalidation, because the key IS the whole input. Each worker keeps its own, exactly as
+  // _warpMemo does, so nothing crosses the wire and a slab cannot change under it.
+  //
+  // THE KEY IS STORED AS DOUBLES, which is the part to leave alone. Math.floor of a finite double
+  // is integer-valued and exactly representable, so a comparison cannot alias; an Int32Array would
+  // wrap past 2^31 and two different cells could compare equal. A false MISS costs four hashes, a
+  // false HIT is a wrong picture - the same rule warpCacheKey is written to below.
+  const _NZC = new Float64Array(12 * 7).fill(NaN);
+  function vnoiseC(x, y, s, slot) {
+    const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi;
+    const o = slot * 7;
+    let a, b, c, d;
+    if (_NZC[o] === s && _NZC[o + 1] === xi && _NZC[o + 2] === yi) {
+      a = _NZC[o + 3]; b = _NZC[o + 4]; c = _NZC[o + 5]; d = _NZC[o + 6];
+    } else {
+      a = nz(xi, yi, s); b = nz(xi + 1, yi, s); c = nz(xi, yi + 1, s); d = nz(xi + 1, yi + 1, s);
+      _NZC[o] = s; _NZC[o + 1] = xi; _NZC[o + 2] = yi;
+      _NZC[o + 3] = a; _NZC[o + 4] = b; _NZC[o + 5] = c; _NZC[o + 6] = d;
+    }
+    const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+    // vnoise's OWN expression, character for character. Re-associating it would move the last place,
+    // and T feeds exp(-a*T) on every channel, so this has to read identically and not merely equally.
+    return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy;
+  }
+  // fbm2's own expression, likewise verbatim. The three octaves take three consecutive slots.
+  function fbm2C(x, y, s, k) { return vnoiseC(x, y, s, k) * 0.6 + vnoiseC(x * 2.1, y * 2.1, s + 9, k + 1) * 0.3 + vnoiseC(x * 4.3, y * 4.3, s + 19, k + 2) * 0.1; }
   // FOG: sparse, soft, highly translucent particles — a deep sub-surface haze that reads as depth / a bad
   // resin core (the milky imperfection a fabricator saws off). Flat and even to start; movable points so the
   // magnet can push them into clear windows later (polarity, default unaffected — no tool touches them yet).
@@ -4993,7 +5028,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // with a metal layer reached it, and nothing gated that. It carries nothing new behind it.
       fbm2, woodAtan2, groundCol, surfaceGloss, woodEye, woodStain, specRGB, drawLayerArtifacts,
       resample, smoothPath, handRoute, pathLen, segD, tangent, roughen, lineGeom, curvature, sinuate,
-      vnoise, vnoiseG, fbm2G, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
+      vnoise, vnoiseG, fbm2G, vnoiseC, fbm2C, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
     // THE GLOW TRIO ARRIVES SEPARATELY, and not for tidiness. liftCol is a function declaration and
     // emitCross is declared up at the top, so both could be named in the literal above - glowLift is a
     // const arrow seven thousand lines below it, and naming it there is a temporal dead zone that
@@ -5036,6 +5071,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // the glass comes back unformed, which is a silent wrong picture rather than a throw.
     s += `var OPK={spin:1,blow:2,roll:3,press:4,stir:5};\n`;
     s += `var _wkF=new Float64Array(1),_wkI=new Int32Array(_wkF.buffer);\n`;
+    // _NZC, the corner cache vnoiseC reads. Per worker and NaN-filled, so a fresh core starts with
+    // every slot MISSING rather than with slot 0 answering for seed 0 at cell (0,0) - which a
+    // zero-filled array would do, and which is a wrong picture rather than a slow one.
+    s += `var _NZC=new Float64Array(12*7).fill(NaN);\n`;
     // DECLARED, not assigned into existence. The init handler creates these four, but an assignment
     // with no `var` makes an implicit global - which works in sloppy mode and would stop working the
     // day this source is evaluated as a module or under 'use strict'. Declaring them also lets
@@ -6437,9 +6476,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (F.RM > 0 && (fv[0] || fv[1])) {
       const a = ox * fv[0] + oy * fv[1];               // along the draw
       const c = -ox * fv[1] + oy * fv[0];              // across it
-      T *= 1 + F.RM * 0.30 * (fbm2(c * F.RS, a * F.RS * 0.06, 71) - 0.5) * 2;
+      T *= 1 + F.RM * 0.30 * (fbm2C(c * F.RS, a * F.RS * 0.06, 71, 0) - 0.5) * 2;
     } else if (F.RM > 0) {
-      T *= 1 + F.RM * 0.18 * (fbm2(ox * F.RS * 0.5, oy * F.RS * 0.5, 11) - 0.5) * 2;   // poured: no draw
+      T *= 1 + F.RM * 0.18 * (fbm2C(ox * F.RS * 0.5, oy * F.RS * 0.5, 11, 3) - 0.5) * 2;   // poured: no draw
     }
     if (F.form === 'spun') {
       // CROWN. Spun flat from a bubble, so it thins towards the rim and keeps the pontil boss. A
@@ -7001,7 +7040,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     let p = c * F.LC - ga * F.LS;                              // across the ribbons
     // The wander is hand-laying, so it is laid too - which means the draw stretches it along with
     // everything else, for free, because it is evaluated in gather coordinates.
-    p += F.CW * 0.25 * (fbm2(gc * F.RS * 0.35, ga * F.RS * 0.35, 311) - 0.5) * 2;
+    p += F.CW * 0.25 * (fbm2C(gc * F.RS * 0.35, ga * F.RS * 0.35, 311, 6) - 0.5) * 2;
     const ph = p * F.CS, fl = Math.floor(ph), f = ph - fl;
     let i = fl % F.CN; if (i < 0) i += F.CN;
     out[0] = i; out[1] = -1; out[2] = 0; out[3] = 1;      // procedural strips are always full
@@ -7086,7 +7125,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // THE REAL LESSON IS ABOUT THE INSTRUMENT. The same build, unchanged, measured 34,782 / 35,775 /
   // 35,769 late in a session and 15,648 immediately after closing the tab and opening a fresh one.
   // A bench with no control for its own degradation will attribute that to whatever was edited last.
-  // tools/bench-control.mjs exists so a session says whether its renderer is still trustworthy.
+  //
+  // THERE IS NO SUCH TOOL. This line said "tools/bench-control.mjs exists so a session says whether
+  // its renderer is still trustworthy" and it never did - which is worse than saying nothing, because
+  // the one comment whose job is to point at the control pointed at a file. The degradation it warns
+  // about then cost a measurement on 2026-10-23: a 2048 tile read ~3,000 ms early in a session and
+  // ~6,000 ms later in the same tab, and the first reading of build 174 was taken against the second.
+  //
+  // WHAT ACTUALLY WORKS, measured the same day. A FRESH TAB: the same tile and build read 698 ms in
+  // one and roughly twice that late in a long session. Two app instances as iframes in one page is
+  // WORSE, not better - they contend, and a 1024 tile went from ~700 ms to 900-1,200 with triple the
+  // spread. Two tabs rendering at once is the same mistake. And the new functions tier up slowly, so
+  // a build-to-build comparison has to discard a real warm-up: build 174's series fell monotonically
+  // from 980 to 658 ms across sixteen renders while 173's stayed flat.
+  //
+  // For a change worth a few percent the local bench cannot see it at all. The instrument is a pair
+  // of real renders: two 65,535 masters on one afternoon reproduced to 0.3% of each other.
   //
   // The property form stays because it is already here and reads no worse, not because it is faster.
   const _WM = { m: null };
