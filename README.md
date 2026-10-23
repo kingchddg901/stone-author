@@ -129,6 +129,10 @@ run. See [`docs/gallery.md`](docs/gallery.md).
   coat/spectrum/back-light/lens, layers, export), from a four-way code read.
 - **`final-render.md`** — the offline render pipeline (`renderFull`/`renderTiled`, workers, encoders)
   and roadmap, plus the CPU/GPU split.
+- **`master-timing.md`** — what a master’s own clock can be asked, and why the obvious reading of
+  it is wrong: `ms.render` understated one render by 15×, and `perTile.ms` is a consumer timeline
+  whose sums are real and whose entries are not. Carries the two checks that recover the truth,
+  and what they found across every long render in the archive.
 - **`glass-gpu.md`** — CLOSED. Whether to move the glass loop onto the GPU, measured across the
   fleet and answered no: 1.3–1.9× where WebGPU exists at all, and absent on BOTH devices with the
   most to gain. The work is a hash chain rather than shading, which is the one arithmetic shape
