@@ -4,7 +4,8 @@ Not a plan to build one. A written answer to "would it help, what would it cost,
 so the decision is made against measurements rather than against the obvious appeal of an idle GPU.
 
 **The short version.** Glass is the one material here that is genuinely compute-bound, the work is
-almost exactly fragment-shader shaped, and the GPU sits at 3% of its clock while six cores burn. But a
+almost exactly fragment-shader shaped, and the GPU sits at 3% of its clock while six cores burn — an
+idleness that belongs to glass alone, since a stone render drives the same card to 1,911 MHz. But a
 GPU pass **cannot be bit-exact with the CPU pass**, and §7 of `glass-one-pixel.md` explains why that is
 worse for glass than it would be for stone. So this is a *second renderer behind a toggle*, not an
 optimisation — and there is a 36% CPU win already specified that should land first.
@@ -28,11 +29,17 @@ shading. And the two load the machine completely differently:
 | cores | all six at **88–91%** | 4.17 threads of 12 |
 | package power | **58.9 W** | 32.2 W |
 | core temp | **68.8 °C** | 46.4 °C |
-| GPU | 2.9%, **94 MHz of 2,887** | idle |
+| GPU | 2.9%, **94 MHz of 2,887** | **59.5%, 1,911 MHz, 30.6 W** |
 
 Stone is bound by its hand-offs — 0.72 CPU threads per busy worker, drive under 7%, memory with
-headroom, nothing saturated. **A faster compute device makes a render that is waiting wait at the same
-speed.** Glass is the opposite: it is the only workload in the archive that pins this machine, and it
+headroom, and no *sustained* saturation anywhere. Not nothing, though: that stone GPU cell read
+`idle` until 2026-10-22, when four 1,048,576 runs measured it at 44.8–67.6% mean and **99% peak in
+every one** against a 1.6% idle floor. `OffscreenCanvas` 2D in a worker is hardware-accelerated, so a
+stone render already uses this card — which strengthens the conclusion below rather than weakening it,
+because a WebGPU pass would contend for a device that is two-thirds busy rather than claim an idle one.
+
+**A faster compute device makes a render that is waiting wait at the same speed.** Glass is the
+opposite: it is the only workload in the archive that pins this machine, and it
 pins it doing arithmetic.
 
 So the GPU question is a glass question. Stone would get nothing, and every 1,048,576 rendered so far
@@ -152,6 +159,11 @@ The ×4 link is this card's famous weakness and it does not matter here, because
 readback per tile rather than streaming. The card ran the entire 12-minute glass render at **94 MHz of
 a 2,887 MHz clock and 4 W** — there is an order of magnitude of headroom sitting idle.
 
+That was read off HWiNFO live and no archived log covered it, so it was unverifiable for eleven days.
+Reproduced 2026-10-22 on `glass hard baseline-65535-day-win-chrome-1022-211553`, 229 samples over
+7:41: **3.0% util, 112 MHz, 3.3 W, 29.9 °C**, while the CPU held 72.5% mean at 4,173 MHz and 48.2 W
+with no throttling. The original reading stands to within 18 MHz and 0.1 percentage points.
+
 The real hardware question is not this card. It is that the fleet includes an iPhone, an S23, a Tab A
 8.0 and an A7 Lite, and a GPU path that only works on the desktop splits the fleet in a way the CPU
 path never has.
@@ -239,9 +251,10 @@ minutes with 4.17 threads of 12 busy.
 **Open questions, in the order they should be answered:**
 
 1. Land the analytic gradient. A third of glass, on every device, in the safe class of inexactness.
-2. Measure whether `OffscreenCanvas` 2D in a worker is falling back to software raster on this
-   machine — the GPU at 94 MHz during a CPU-pinned render says something is not reaching it, and that
-   may be a setting rather than a missing renderer.
+2. ~~Measure whether `OffscreenCanvas` 2D in a worker is falling back to software raster.~~
+   **ANSWERED 2026-10-22: it is not.** A stone render drives this card to 1,911 MHz and 59.5% mean
+   utilisation, so the accelerated path works and reaches a worker. The 94 MHz is glass declining to
+   use a GPU that stone uses heavily — the difference is the workload, not a setting. Nothing to fix.
 3. Only then: a WebGPU compute pass for `glassFormT` alone, which is 40.6% of a tile and does **not**
    touch the ribbon label — the largest win in the safe class, and a port small enough to validate
    against the CPU path tile by tile.
