@@ -129,6 +129,9 @@ run. See [`docs/gallery.md`](docs/gallery.md).
   coat/spectrum/back-light/lens, layers, export), from a four-way code read.
 - **`final-render.md`** — the offline render pipeline (`renderFull`/`renderTiled`, workers, encoders)
   and roadmap, plus the CPU/GPU split.
+- **`master-size.md`** — what a master costs at each resolution: the 56× per-pixel fall across the
+  ladder, the two mechanisms behind it (busy content getting cheaper, 3.4×, and the image emptying
+  out, 63×) and why a single rung means nothing. Carries the streamed-path `bytes` collision.
 - **`sections.md`** — a tile kept as a cut (its shape plus where on the slab it came from), the
   slot/seed distinction, the rhombus groupings and the cut lock.
 - **`tile-cutter.md`** — PARKED. Cutting a rendered master into its pieces afterwards from a vector

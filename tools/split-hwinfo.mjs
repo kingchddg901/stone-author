@@ -132,7 +132,23 @@ for (const m of hit) {
   // FOREIGN I/O. A render writes its own master at a rate its metadata predicts. Sustained writing
   // far above that belongs to something else, and that something else is what makes a comparison
   // between two runs invalid without anybody noticing.
-  if (o.bytes && C.wr >= 0) {
+  // WHOSE BYTES ARE IN o.bytes. On every path but one it is the compressed payload, so it predicts the
+  // disk. On the STREAMED path it is the count of uncompressed scanline bytes fed to the encoder - the
+  // write-completeness check - which runs about 6x the real file. Predicting disk from it would hand
+  // this check an 11 GB allowance on a 65535 master and the check would never fire again. The formula
+  // is the signature (w*h*4 + h, to the byte), so a master that lost the flag is caught too. See
+  // docs/master-size.md.
+  const RH = +o.h || Math.round(o.w * 0.625);
+  const inputBytes = !!o.streamed || o.bytes === o.w * RH * 4 + RH;
+  if (o.bytes && C.wr >= 0 && inputBytes) {
+    let total = 0;
+    const dt = rows.length > 1 ? (rows[1].t - rows[0].t) / 1000 : 2;
+    for (const r of win) { const w = num(r, C.wr); if (w !== null) total += w * dt / 1024; }
+    console.log('    disk: ' + total.toFixed(1) + ' GB written — ' + fx(mean(win, C.wr), 1)
+      + ' MB/s mean, ' + fx(mean(win, C.act), 1) + '% busy');
+    console.log('    streamed master: its `bytes` is encoder INPUT, not file size, so nothing here can');
+    console.log('    say what share of those GB was this render. Foreign I/O is UNCHECKED here, not absent.');
+  } else if (o.bytes && C.wr >= 0) {
     const own = o.bytes / (o.ms.render / 1000) / 1e6;      // MB/s this render accounts for
     // A RATE THRESHOLD CANNOT DO THIS. The render's own writing is bursty - a quiet 8-worker run had a
     // 5.4 MB/s mean, a 12.0 p95 and a 91 MB/s PEAK - so any trip low enough to catch a download also
