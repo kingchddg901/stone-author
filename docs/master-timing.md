@@ -137,6 +137,48 @@ minutes and read **+25%**, with its tenths steady near 300 s and then spiking to
 So a fleet timing taken at eight workers on a fanless device is measuring the throttle as much as the
 silicon, and the same device at four workers is not.
 
+## Comparing two builds needs the free-memory floor beside the clock
+
+A build-to-build timing comparison on this machine is not interpretable without the minimum free
+memory of each run. Measured on three consecutive builds rendering the same slab at 65,535, same
+tiling, same worker count, same `inputs` signature:
+
+| build | render | clock | temp | cpu | **min free RAM** |
+| --- | --- | --- | --- | --- | --- |
+| `171` | 7.68 min | 4171 | 57.5 | 72.2% | 2,448 MB |
+| `171` | 7.61 min | 4186 | 59.4 | 74.4% | 2,120 MB |
+| `172` | 6.70 min | 4169 | 58.3 | 71.5% | **439 MB** |
+| `173` | 6.18 min | 4148 | 59.7 | 71.5% | 1,584 MB |
+| `173` | 6.16 min | 4206 | 57.4 | 69.2% | 1,584 MB |
+
+**Clock, temperature and CPU match across all five to within about 1%. Only memory differs, and it
+differs by four to six times.** The `172` run sat in the same 312–468 MB band this doc already
+names as the cause of 1M degradation, and it is handicapped by roughly 0.44 min — 7%.
+
+That one bad run sits on *both* comparisons it takes part in, and it pushes them in opposite
+directions. Against `171` it makes the analytic gradient look **smaller** than it is: the published
+12.4% is a floor, and the clean `171`→`173` pair is 19.3% for both changes together. Against `173`
+it makes the relief guard look **larger** than it is: 7.9% from the clocks against ~1% from three
+measurements that hold memory fixed.
+
+**The tell was that the saving disagreed with itself across two widths.** The guard removes a fixed
+slice of per-sample work, and both rungs render the same slab, so its saving *cannot* depend on
+render width — yet it came out 20.9% at 32,768 and 7.8% at 65,535. A 13-point spread in a quantity
+that must be constant is proof that an input is wrong, not a reason to average the two.
+
+Three things follow, and they apply to every optimisation measured from here on:
+
+- **Record the free-memory minimum with every timing comparison**, not the mean: the `172` run
+  averaged 1,759 MB and bottomed at 439.
+- **Prefer an A/B inside one session** over two renders on different days. Where a change is a
+  runtime branch it can be measured without a second build at all — the relief guard is
+  `REL > 0`, so rendering at `relief: 1e-12` takes the expensive path with a brightness
+  contribution of nil and reproduces the previous build's work exactly, output verified identical.
+- **A microbenchmark of the same arithmetic runs about 1.7× faster than the render does.** One
+  `glassFormT` call times at 76.9 ns in a tight 1,600-point loop and costs ~130 ns in the render,
+  where the coordinates are all distinct and the branches are cold. Use the microbenchmark for
+  *ratios* between two functions and the renders for absolute scale.
+
 ## What this does not recover
 
 `trace.busy` exists on 50% of the long renders and `poolStrain` on 25% — both are newer than the

@@ -98,16 +98,60 @@ console.log('  ' + hit.length + ' render' + (hit.length === 1 ? '' : 's') + ' in
 // ---- the idle floor, from everything no render was using ----------------------------------------
 const inAny = r => hit.some(m => r.t >= m.start - 60000 && r.t <= m.end + 300000);
 const idle = rows.filter(r => !inAny(r));
+// OUTSIDE A RENDER IS NOT THE SAME AS IDLE, and on this machine the gap reached 8 threads of 12.
+// A render that is KILLED writes no master, so nothing marks its hours as a render and every one of
+// its samples lands in this set. On 2026-10-23 a 1,048,576 glass render was killed after seven hours
+// of an 8.2 h log; the floor came out at 8.336 threads, that figure was then taken off both of the
+// real renders in the window, and one of them was reported as using -0.03 threads. A render cannot
+// use fewer threads than the floor it runs above, so a non-positive "render alone" is never a quiet
+// machine - it is this.
+//
+// The floor is therefore the QUIET DECILE of these samples rather than their mean, and both are
+// printed. A mean well above the decile means this window holds work no master accounts for, and
+// then nothing is subtracted at all: a missing figure costs one reading, a wrong one silently
+// corrupts every per-worker number taken from it, which is what happened above.
+const occOf = r => { let s = 0; for (const i of THREADS) { const v = num(r, i); if (v !== null) s += v; } return s / 100; };
+const pctl = (v, p) => { const s = [...v].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.max(0, Math.round((p / 100) * (s.length - 1))))]; };
+let FLOOR = null;
 if (idle.length > 300) {
+  const occ = idle.map(occOf);
+  const quiet = pctl(occ, 10), mid = pctl(occ, 50), avg = threadsOf(idle);
+  const over = occ.filter(x => x > quiet + 1).length / occ.length;
+  // TWO WAYS FOR THIS WINDOW NOT TO BE IDLE, and the shape test only catches one. A killed render
+  // that stopped partway leaves a BIMODAL window - busy, then quiet - and its mean sits well above
+  // its quiet decile, which is the test below. A log that was started for one long render and
+  // stopped with it leaves a window that is busy THROUGHOUT, and there the decile is as high as the
+  // mean and the shape test passes it: "1m res stress test.CSV" reported a floor of 8.457 threads
+  // of 12 that way. So the decile is also held to an absolute bound, because an idle desktop does
+  // not keep a quarter of its threads busy - if it does, something is running that this log cannot
+  // name, and that is the same refusal for a different reason.
+  const tooHigh = quiet > THREADS.length / 4;
   console.log('');
-  console.log('  IDLE FLOOR, from ' + idle.length.toLocaleString() + ' samples outside every render ('
+  console.log('  OUTSIDE EVERY RENDER, from ' + idle.length.toLocaleString() + ' samples ('
     + (idle.length * 2 / 3600).toFixed(1) + ' h)');
-  console.log('    ' + threadsOf(idle).toFixed(3) + ' threads of 12   ' + fx(mean(idle, C.cpu), 2)
-    + '% cpu   ' + fx(mean(idle, C.free), 0) + ' MB free   ' + fx(mean(idle, C.pf), 0) + ' MB page file');
-  console.log('    subtract this, not a window beside one render: a ten-minute baseline taken while the');
-  console.log('    desk was in use read 1.49 threads against a true floor of 0.57, on this machine.');
+  console.log('    quiet decile ' + quiet.toFixed(3) + '   median ' + mid.toFixed(3) + '   mean '
+    + avg.toFixed(3) + ' threads of ' + THREADS.length);
+  console.log('    ' + fx(mean(idle, C.cpu), 2) + '% cpu   ' + fx(mean(idle, C.free), 0)
+    + ' MB free   ' + fx(mean(idle, C.pf), 0) + ' MB page file');
+  if (avg > quiet + 1 || tooHigh) {
+    if (tooHigh) {
+      console.log('    NOT IDLE - the quiet decile is itself ' + quiet.toFixed(3) + ' of ' + THREADS.length
+        + ' threads, which is a load and');
+      console.log('    not a floor. This window is busy throughout, so no part of it measures an idle machine.');
+    } else {
+      console.log('    NOT IDLE - ' + (100 * over).toFixed(0) + '% of this window sits more than a thread above');
+      console.log('    its own quiet decile, so it holds work no master in this log accounts for. A killed or');
+      console.log('    unsaved render is the usual cause.');
+    }
+    console.log('    Nothing is subtracted below, and no per-worker figure is offered.');
+  } else {
+    FLOOR = quiet;
+    console.log('    IDLE FLOOR ' + quiet.toFixed(3) + ' threads, subtracted below. Take it from a window this');
+    console.log('    long, never from ten minutes beside one render: such a baseline taken while the desk was');
+    console.log('    in use read 1.49 threads against a true floor of 0.57, on this machine.');
+  }
 }
-const FLOOR = idle.length > 300 ? threadsOf(idle) : null;
 
 // ---- each render --------------------------------------------------------------------------------
 for (const m of hit) {
@@ -123,9 +167,12 @@ for (const m of hit) {
     + ' min   ' + win.length.toLocaleString() + ' samples');
   console.log('    pass ' + o.render + '   workers ' + (o.workers === undefined ? 'absent' : o.workers)
     + (busy !== null ? '   busy ' + busy.toFixed(2) : '') + '   ' + (px / (o.ms.render / 1000) / 1e6).toFixed(1) + ' Mpx/s');
-  console.log('    cpu ' + fx(mean(win, C.cpu), 1) + '%   threads ' + thr.toFixed(2) + ' of 12'
-    + (FLOOR !== null && busy ? '   render alone ' + (thr - FLOOR).toFixed(2) + ' = '
-      + ((thr - FLOOR) / busy).toFixed(2) + ' per busy worker' : ''));
+  console.log('    cpu ' + fx(mean(win, C.cpu), 1) + '%   threads ' + thr.toFixed(2) + ' of ' + THREADS.length
+    + (FLOOR !== null && busy
+      ? (thr - FLOOR > 0
+        ? '   render alone ' + (thr - FLOOR).toFixed(2) + ' = ' + ((thr - FLOOR) / busy).toFixed(2) + ' per busy worker'
+        : '   render alone ' + (thr - FLOOR).toFixed(2) + ' - IMPOSSIBLE, the floor sits above this render')
+      : ''));
   console.log('    memory ' + fx(mean(win, C.load), 0) + '%, ' + fx(mean(win, C.free), 0) + ' MB free'
     + '   page file ' + fx(mean(win, C.pf), 0) + ' MB   ' + fx(mean(win, C.temp), 1) + ' C   ' + fx(mean(win, C.pw), 1) + ' W');
 
