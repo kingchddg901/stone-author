@@ -140,11 +140,34 @@ both partials share the *same four corner hashes*, which are the expensive part.
 instead of thirty-six.
 
 It is **not bit-exact**: a closed-form gradient and a finite difference at ε = 0.004 are close, not
-equal, so no existing master would reproduce. Note where it lands, though — the gradient feeds only
-`sl` in the shading multiplier below. It never touches a coordinate and never touches the ribbon
-label, so it shifts shading by a fraction of a level rather than moving anything across a boundary.
-That is a different class of change from the spin identity in §2, which moves coordinates and would
-jump pixels by up to 130 levels.
+equal, so no existing master reproduces. Note where it lands, though — the gradient feeds only `sl`
+in the shading multiplier below. It never touches a coordinate and never touches the ribbon label, so
+it moves nothing across a boundary. That is a different class of change from the spin identity in §2,
+which moves coordinates and would jump pixels by up to 130 levels. The call site was re-verified on
+build `2026.10.22.172`: `gu`/`gv` are read at exactly one line, `sl` at exactly one, and `m` is a
+plain multiplier on the final RGB that never reaches `T`, the absorption terms or `glassLay`.
+
+**The SIZE of it was asserted here and not measured, and the assertion was wrong.** This said the
+shift was "a fraction of a level". [`tools/probe-glass-gradient.mjs`](../tools/probe-glass-gradient.mjs)
+scores it over 1,600 points per form at the production ε = 0.004:
+
+| form | mean | worst |
+| --- | --- | --- |
+| spun, flowing | **4.75 levels** | 16.72 |
+| spun, poured | **4.71** | 14.00 |
+| rolled | 2.76 | **56.91** |
+| blown | 2.62 | 15.13 |
+| poured, no draw | 0.21 | 0.95 |
+
+Only the drawless pour is under a level. The **class** claim survived measurement and the
+**magnitude** claim did not, which is why the two are now stated apart: a safe class is not the same
+as a small change, and this doc had been using one to imply the other.
+
+**Landed in build `2026.10.22.172`.** `glassFormTG` returns the thickness and both slopes from one set
+of hashes. Its value lines are `glassFormT`'s own character for character — re-associating even
+`1 + k*(f-0.5)` would move `T` in the last place on every pixel — and section D of the probe asserts
+the shipped function's thickness is **bit-identical to `glassFormT` across 8,000 points**. So the only
+thing that moved is the slope, and the table above is the whole of the change rather than part of it.
 
 ---
 

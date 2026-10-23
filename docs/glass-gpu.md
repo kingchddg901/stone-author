@@ -104,8 +104,11 @@ For most of the pipeline that would be a tolerance question. **§7 is why it is 
 A fp32 coordinate that lands a hair the wrong side of a `glassCellSDF` boundary does not shade
 slightly differently — it selects **a different cane**, and the doc measures that class of error at up
 to **130 levels**. Compare the analytic-gradient change discussed in §4 of that doc, which is also not
-bit-exact but "never touches a coordinate and never touches the ribbon label", so it "shifts shading by
-a fraction of a level".
+bit-exact but "never touches a coordinate and never touches the ribbon label" — a re-verified claim.
+That doc also said it "shifts shading by a fraction of a level"; measured, it is 2.6–4.8 levels on
+four of five forms. The CLASS is what separates the two cases, not the size: a shading-only change of
+five levels is still categorically safer than a coordinate change of one, because only one of them can
+select a different cane.
 
 **Two classes of inexactness, and the GPU sits in the dangerous one.** Any port has to treat the
 coordinate walk and `glassLay` as structural, not numeric.

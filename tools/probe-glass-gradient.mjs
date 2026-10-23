@@ -40,9 +40,14 @@ function liftFn(name) {
   return SRC.slice(hits[0], i + 1);
 }
 
-const lifted = ['nz', 'vnoise', 'fbm2', 'glassFormT'].map(liftFn).join('\n');
-const APP = new Function(lifted + '\nreturn { nz, vnoise, fbm2, glassFormT };')();
+// The LAST four are the shipped analytic path. This probe keeps its own reference implementation
+// below - instrumented with the edge flags the scoring needs, which the shipped one has no business
+// carrying - and section D asserts the two agree. Without that, the probe would go on proving a COPY
+// correct while the app drifted away from it, which is the failure mode a probe is supposed to catch.
+const lifted = ['nz', 'vnoise', 'fbm2', 'glassFormT', 'vnoiseG', 'fbm2G', 'glassFormTG'].map(liftFn).join('\n');
+const APP = new Function(lifted + '\nreturn { nz, vnoise, fbm2, glassFormT, glassFormTG };')();
 const { nz, fbm2, glassFormT } = APP;
+const shippedFormTG = APP.glassFormTG;
 
 // ---- the analytic side ------------------------------------------------------------------------
 // vnoise interpolates with a smoothstep, sx = tx^2(3-2tx), whose derivative is 6tx(1-tx). The value
@@ -187,6 +192,29 @@ console.log('\nC  the saving, in hashes');
   console.log('     one call with gradients  1 x ' + perFbm + ' = ' + perFbm + ' hashes');
   console.log('     and two fewer of every exp, sin, sqrt and branch in the rest of the function');
   claim('the gradient pair costs two thirds of the hashes', 3 * perFbm - perFbm, 24);
+}
+
+console.log('\nD  the SHIPPED glassFormTG is the one proved above');
+{
+  const mine = [0, 0, 0, 0], theirs = [0, 0, 0];
+  let worstT = 0, worstG = 0, checked = 0;
+  for (const { F, fv } of FORMS) for (const [ox, oy] of PTS) {
+    glassFormTG(ox, oy, F, fv, mine);
+    shippedFormTG(ox, oy, F, fv, theirs);
+    // T IS COMPARED AGAINST glassFormT, NOT against this file's reference. The reference writes the
+    // streak as 1 + k*(f-0.5); the app writes glassFormT's own 1 + RM*0.30*(f-0.5)*2 - algebraically
+    // equal, different last place. The app is right to keep its twin EXACT, and that is the invariant
+    // worth asserting: the new function returns the OLD thickness, so the only thing that moved is the
+    // slope. Asserting against the reference instead went red at 1.78e-15 and was the wrong question.
+    const t0 = glassFormT(ox, oy, F, fv);
+    if (theirs[0] !== t0) worstT = Math.max(worstT, Math.abs(theirs[0] - t0) || 1e-300);
+    const s = Math.max(1e-9, Math.abs(mine[1]) + Math.abs(mine[2]));
+    worstG = Math.max(worstG, (Math.abs(theirs[1] - mine[1]) + Math.abs(theirs[2] - mine[2])) / s);
+    checked++;
+  }
+  claim('thickness is bit-identical to glassFormT', worstT === 0,
+    checked + ' points' + (worstT ? '   worst |dT| ' + worstT.toExponential(2) : ''));
+  claim('gradient matches the reference', worstG < 1e-12, 'worst relative ' + worstG.toExponential(2));
 }
 
 console.log('');
