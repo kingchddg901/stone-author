@@ -1,21 +1,24 @@
 # What a master costs
 
-A render's file size is not a fixed cost per pixel. Across the thirteen widths on the ladder the median
-cost falls **55.7× per pixel**, so a master a million pixels wide costs far less than its pixel count
-suggests. This doc states that stair, what causes it — two separate things, measured, of very different
-sizes — and what the figure cannot be read to mean.
+A render's file size is not a fixed cost per pixel. It falls as the render grows — but how fast, and
+why, turns out to be a property of the **material**, not of the renderer. Stone and glass were both
+walked up a size ladder on a single slab, and they do different things for opposite reasons.
 
 Every number here comes from the harvested master sidecars (`.claude/master-meta/`), which record each
-render's own metadata whether or not the file still exists. 825 masters. Two conventions hold throughout,
-and both matter because getting them wrong is how the first version of this doc disagreed with itself:
+render's own metadata whether or not the file still exists. Four conventions hold throughout, and each
+one is here because getting it wrong produced a wrong answer first:
 
 - **One median.** Every figure is a median of per-master values, averaging the middle pair on an even
   count. Mixing that with a median-of-totals divided by a pixel count moves the low rungs by ~1.5%.
-- **Streamed masters are excluded**, for a reason given below that matters more than the exclusion.
+- **The tile pass is part of the measurement.** A 2048 pass and a 4096 pass of the *same picture* differ
+  by 9–38% in bytes. Any figure here that pools passes is noisier for it, and says so.
+- **One slab.** 805 of 851 masters share a single stone slab, which is the only reason a controlled
+  stone ladder exists at all. The glass ladder was rendered for this doc for the same reason.
+- **Streamed masters are excluded**, for a reason given near the end that matters more than the exclusion.
 
-## The stair
+## The stair, pooled
 
-Median compressed payload per width, with the ratio against raw 8-bit RGBA (4 bytes a pixel):
+Median compressed payload per width across every master on record — all slabs, all passes, all devices:
 
 | width | Mpx | masters | median file | bytes/px | vs raw |
 |---|---|---|---|---|---|
@@ -33,100 +36,189 @@ Median compressed payload per width, with the ratio against raw 8-bit RGBA (4 by
 | 524,288 | 171,798.7 | 1 | 9.92 GB | 0.0577 | 69:1 |
 | 1,048,576 | 687,194.8 | 10 | 23.27 GB | 0.0339 | 118:1 |
 
-From one end to the other: **1,048,576× the pixels for 18,833× the bytes.** Four times the pixels costs
-between 2.1 and 3.3 times the bytes at every rung, never four.
+**1,048,576× the pixels for 18,833× the bytes.** This table is useful for "roughly what will this cost",
+and for nothing else — it pools three things that each move the figure by tens of percent, and the
+sections below take them apart.
 
-## What this is not
+## Tile size changes the file by up to 38%
 
-The stair is a trend across thirteen widths. It is **not** a figure for any one width, and a step between
-neighbours is meaningless on its own — the scatter within a single width is larger than the step to the
-next one almost everywhere:
+Deflate's sliding window is 32 KB regardless of how much you feed it, and the TIFF carries no predictor
+(tags written are 256, 257, 258, 259, 262 — no 317). A 2048-wide RGBA row is 8 KB, so the window spans
+about four rows; a 4096-wide row is 16 KB, so it spans two. **A bigger tile sees less vertical context,
+and vertical context is where the correlation is.**
 
-| width | n | median | min | max | spread, % of median |
-|---|---|---|---|---|---|
-| 1,024 | 44 | 1.8857 | 0.0486 | 2.8411 | 148% |
-| 2,048 | 43 | 1.5254 | 0.4716 | 2.3304 | 122% |
-| 4,096 | 39 | 1.0972 | 0.5403 | 1.7866 | 114% |
-| 8,192 | 78 | 0.7453 | 0.3080 | 1.3724 | 143% |
-| 16,384 | 52 | 0.4433 | 0.0187 | 1.1568 | 257% |
-| 20,480 | 33 | 0.3998 | 0.1414 | 0.6972 | 139% |
-| 24,576 | 37 | 0.3660 | 0.1221 | 0.5699 | 122% |
-| 32,768 | 43 | 0.3242 | 0.0978 | 0.4277 | 102% |
-| 65,535 | 403 | 0.2694 | 0.0200 | 0.4384 | 155% |
-| 131,072 | 24 | 0.1413 | 0.1244 | 0.1678 | 31% |
-| 262,144 | 19 | 0.0906 | 0.0190 | 0.1052 | 95% |
-| 524,288 | 1 | 0.0577 | 0.0577 | 0.0577 | 0% |
-| 1,048,576 | 10 | 0.0339 | 0.0289 | 0.0339 | 15% |
+Measured on one stone slab under one light, at every width where both passes exist:
 
-The cause is the slab, not the size: a nearly empty slab renders at 0.0187 bytes/px at 16,384 while a
-dense one costs sixty times that at the same width. The two tight rows (131,072 and 1,048,576) are tight
-because they are nearly all one slab on one machine, which is a property of the sample and not of the
-ladder.
+| width | pass 2048 | pass 4096 | 2048 is smaller by |
+|---|---|---|---|
+| 4,096 | 1.3778 | 1.6668 | 17.3% |
+| 8,192 | 0.7197 | 1.0161 | 29.2% |
+| 16,384 | 0.3808 | 0.5646 | 32.6% |
+| 20,480 | 0.3583 | 0.5628 | 36.3% |
+| 24,576 | 0.3047 | 0.4933 | 38.2% |
+| 32,768 | 0.2467 | 0.3936 | 37.3% |
+| 65,535 | 0.2662 | 0.2917 | 8.7% |
+| 131,072 | 0.1413 | 0.1603 | 11.9% |
+| 262,144 | 0.0866 | 0.0983 | 11.9% |
+| 1,048,576 | 0.0289 | 0.0339 | 14.8% |
 
-Holding the slab, the light and the engine constant (stone, uv, desktop Blink) gives the same overall
-fall but is **not monotonic**: 24,576 reads 0.3534 and 32,768 reads 0.3932, on cells of two and three
-runs. The pooled medians are monotonic across all thirteen widths; a held control on small cells is not.
-Read the trend, never a rung.
+Smaller tiles win at every width, monotonically — pass 1024 beats pass 2048 where both exist too.
 
-## Two mechanisms, and they are not the same size
+**Confirmed on identical pixels.** The glass slab was rendered at 65,535 under both passes. The light
+figure, measured over every pixel, is byte-for-byte identical (`{"mean":143.8,"lit40":100,"every":100}`),
+so the two files are the same picture. The 4096 pass cost **+9.1%** (428.2 MB against 392.5 MB) and ran
+**7.6% slower** (8:16 against 7:41). Bigger tiles cost twice over, and nothing in the GPU path wants them
+either: readback is 0.1% of a tile at SS=1 and 0.007% at SS=4, so fewer dispatches buys around 0.08%.
 
-The obvious explanation — a bigger render is mostly empty, so most tiles compress to nothing — is true
-only at the very top. Below 131,072 the share of tiles at the compression floor actually *falls*:
+## What the scatter is, and what it is not
 
-| width | tiles | % of tiles at the floor |
+An earlier version of this doc said the spread within a width was "the slab, not the size". That was
+wrong by omission — the pass is in there too, and at several widths it is the larger term:
+
+| width | pooled spread | one slab, one light, one pass | pass medians apart |
+|---|---|---|---|
+| 8,192 | 148% | 28% | 56% |
+| 16,384 | 260% | 38% | 48% |
+| 24,576 | 122% | 46% | 62% |
+| 32,768 | 102% | 48% | 60% |
+| 65,535 | 155% | 14% | 27% |
+| 262,144 | 95% | 24% | 13% |
+
+Control the slab, the light and the pass and the residual spread drops from 95–260% to 14–48%. A single
+step between neighbouring widths is 8–48%, so **the pooled stair is a trend over thirteen widths and
+never a comparison between two of them.**
+
+## Stone: elements that thin out
+
+The obvious explanation for a falling cost — a bigger render is mostly empty, so most tiles compress to
+nothing — is true of stone only at the very top. Below 131,072 the share of tiles at the compression
+floor actually *falls*:
+
+| width | tiles | % at the floor |
 |---|---|---|
 | 2,048 | 12 | 8.3% |
-| 4,096 | 40 | 2.5% |
-| 8,192 | 40 | 2.5% |
 | 16,384 | 40 | 2.5% |
-| 20,480 | 70 | 1.4% |
-| 24,576 | 96 | 1.0% |
 | 32,768 | 160 | 0.6% |
-| 65,535 | 160 | 0.6% |
 | 131,072 | 640 | 0.4% |
 | 262,144 | 10,240 | 6.5% |
 | 524,288 | 10,240 | 21.7% |
 | 1,048,576 | 40,960 | 39.6% |
 
-So emptiness cannot explain ten of the thirteen rows. Separating the two effects needs the per-tile
-figures, where the *dearest* tile in a master is by definition fully occupied — emptiness cannot touch
-that column:
+Separating the two effects needs the per-tile figures, where the *dearest* tile in a master is by
+definition fully occupied — emptiness cannot touch that column:
 
 | width | pass | dearest tile, bytes/px | 90th pct | median tile |
 |---|---|---|---|---|
 | 2,048 | 512 | 1.6615 | 1.5877 | 1.0088 |
-| 4,096 | 512 | 1.4537 | 1.4453 | 0.9077 |
 | 8,192 | 1,024 | 1.2740 | 1.1085 | 0.6071 |
 | 16,384 | 2,048 | 1.0140 | 0.8441 | 0.3646 |
-| 20,480 | 2,048 | 0.9780 | 0.7850 | 0.3207 |
-| 24,576 | 2,048 | 0.9341 | 0.7189 | 0.2915 |
 | 32,768 | 2,048 | 0.8910 | 0.7159 | 0.2749 |
 | 65,535 | 4,096 | 0.6934 | 0.5280 | 0.2351 |
 | 131,072 | 4,096 | 0.7104 | 0.3335 | 0.1090 |
-| 262,144 | 2,048 | 0.7214 | 0.2254 | 0.0456 |
 | 524,288 | 4,096 | 0.5355 | 0.1432 | 0.0331 |
 | 1,048,576 | 4,096 | 0.4808 | 0.0878 | 0.0153 |
 
-Both columns fall, by very different factors, and that is the finding:
+- **The busiest content gets 3.5× cheaper per pixel** (1.662 → 0.481). Stone's element count is fixed at
+  9,021, so detail that spanned one pixel at 2,048 spans hundreds at 1,048,576; neighbouring pixels agree
+  and deflate wins. This operates at every width.
+- **The median tile falls 65.7×** (1.009 → 0.0153). The gap between those two columns *is* the emptiness,
+  and it only becomes the larger term above 131,072.
 
-- **The busiest content gets cheaper per pixel: 3.5×** (1.662 → 0.481). The element count is fixed, so
-  detail that spanned one pixel at 2,048 spans hundreds at 1,048,576. Neighbouring pixels agree with each
-  other and deflate wins. This operates at every width and is the whole of the effect low on the ladder.
-- **More of the image becomes nothing: the median tile falls 65.7×** (1.009 → 0.0153), against the
-  dearest tile's 3.5×. The gap between those two columns *is* the emptiness, and it only becomes the
-  larger term above 131,072.
+The dearest column is not monotonic and one exception is unexplained: 131,072 (0.7104) and 262,144
+(0.7214) both sit above 65,535 (0.6934). For 262,144 the pass is 2,048 where its neighbours use 4,096, so
+its tiles are a quarter the area and the figure is not comparable. 131,072 has no such excuse.
 
-**The dearest column is not monotonic, and one exception is not explained.** 131,072 (0.7104) and 262,144
-(0.7214) both sit *above* 65,535 (0.6934). For 262,144 there is a reason — its median pass is 2,048 where
-its neighbours use 4,096, so its tiles are a quarter the area and the figure is not comparable. 131,072
-has no such excuse: the same 4,096 pass as 65,535, 24 masters, and it still reads higher. So the 3.5×
-holds end to end while the column wobbles in the middle, and the trend is what carries, exactly as with
-the stair.
+## Glass: a field that does not thin out
+
+Rendered for this doc: one glass slab (element signature `13/0/0/0/0/0`, state `924b76af`), one build,
+pass 2048, 8 workers, walked from 2,048 to 131,072.
+
+| width | tiles | wall | bytes | bytes/px | ratio |
+|---|---|---|---|---|---|
+| 2,048 | 1 | 3.1 s | 1,237,474 | 0.4721 | — |
+| 4,096 | 4 | 7.5 s | 3,948,886 | 0.3766 | 0.7978 |
+| 8,192 | 12 | 13.1 s | 12,471,164 | 0.2973 | 0.7895 |
+| 16,384 | 40 | 33.2 s | 39,240,859 | 0.2339 | 0.7866 |
+| 32,768 | 160 | 2:01 | 124,011,301 | 0.1848 | 0.7901 |
+| 65,535 | 640 | 7:41 | 392,456,484 | 0.1462 | 0.7912 |
+| 131,072 | 2,560 | 28:04 | 1.24 GB | 0.1156 | 0.7904 |
+
+**Glass is a power law.** The ratio is 0.7909 ± 0.0034 over six doublings — a relative spread of 0.43% —
+so `bytes/px = 0.4721 × 0.791^doublings`, an exponent of **−0.338** on width.
+
+The 131,072 rung was predicted before it was rendered, from a law fitted on the six rungs below it:
+**predicted 0.1156 bytes/px and 1.24 GB; measured 0.1156 and 1.24 GB**, a ratio of 0.7904 against 0.7910.
+That is an out-of-sample extrapolation a full doubling past its own data, landing within 0.08%.
+
+### Stone is not a power law, on matched footing
+
+The same control — one slab, one light, one pass (2048):
+
+| | mean ratio per doubling | sd | relative spread | exponent |
+|---|---|---|---|---|
+| glass | 0.7909 | 0.0034 | **0.4%** | −0.338 |
+| stone | 0.6484 | 0.1965 | **30%** | −0.625 |
+
+Stone's ratios wander from 0.52 to 1.08 with no trend — it even goes *up* from 32,768 to 65,535 — while
+glass holds four significant figures. Stone's compression also improves nearly twice as fast per
+doubling when it improves at all.
+
+The reason is the same thing that makes the two materials cost what they do to render. Stone is a fixed
+number of drawn elements thinning out across more pixels, and they thin at different rates at different
+scales. Glass is a field evaluated per pixel, with structure at every scale, so it scales.
+
+### The mechanism is inverted
+
+| | 2,048 | 65,535 | |
+|---|---|---|---|
+| glass, dearest tile | 0.295 | 0.653 | **rises 2.2×** |
+| glass, median tile | 0.295 | 0.051 | falls 5.8× |
+| stone, dearest tile | 1.662 | 0.481 | **falls 3.5×** |
+
+Stone's busiest region gets *smoother* per pixel as it resolves. Glass's busiest region gets *richer*.
+Glass's total still falls, but it falls because the median empties, not because detail runs out.
+
+### The sheet is not exhausted
+
+At first reading the pinned upper tail looks like a detail ceiling — p95, p99 and max stop moving between
+32,768 and 65,535 (ratios 0.99, 1.05, 1.06). It is not exhaustion but **saturation**: those tiles are
+aliasing, carrying structure finer than the pixel grid, and aliasing is what deflate cannot compress. The
+value is pinned because ~0.65 bytes/px is what that pattern costs the encoder.
+
+The discriminator is the *extent*, not the value:
+
+| width | tiles >0.50 bytes/px | share |
+|---|---|---|
+| 16,384 | 6 of 40 | 15.0% |
+| 32,768 | 18 of 160 | 11.3% |
+| 65,535 | 49 of 640 | 7.7% |
+| 131,072 | 129 of 2,560 | 5.0% |
+
+A fixed saturated area would multiply the count by 4 every doubling. It goes ×3.00, ×2.72, ×2.63 — so the
+noisy region **shrinks by about a third per doubling** as it resolves into real structure. The 5.0% at
+131,072 was predicted at ~5.2% before the render. The sheet keeps paying, with diminishing returns, and
+never fully resolves — which is what a field with structure at every scale should do.
+
+### Controls
+
+Both axes were checked rather than assumed. The 2,048 and 65,535 rungs were each rendered twice, later in
+the same session:
+
+- **bytes byte-identical both times** (1,237,474 and 392,456,484), so determinism holds exactly and the
+  compression axis is not in question;
+- **wall clock reproduced to 1.0% and 3.2%**, so the ladder's timing is not an artefact of running the
+  small rungs first.
+
+One thing remains unexplained: per-tile cost falls 4.28× from a lone 2048 tile (3.083 s) to one inside a
+640-tile render (0.720 s), and the pass-2048 runs carry a real ~40% penalty over their first 128 tiles.
+The obvious reading is warm-up amortisation, but the pass-4096 run of the same picture shows **no ramp at
+all** over the equivalent pixel count, so whatever it is does not scale with pixels. Recorded here as
+open rather than explained.
 
 ## The streamed exception — `o.bytes` means something else there
 
 Seventeen masters report **exactly 4 bytes a pixel plus one byte a row**, to the byte: `w × h × 4 + h`.
-That is not a compression ratio. Every one of them carries `streamed: true`, and the streamed writer
+That is not a compression ratio. Every one carries `streamed: true`, and the streamed writer
 (`renderStreamedPNG`) does compress — through `CompressionStream('deflate')`, the same encoder every other
 path uses. What it records in `bytes` is the count of **uncompressed scanline bytes fed in**, because that
 is the quantity its write-completeness check needs: the band total must equal `p.FH * rowLen` or the
@@ -138,14 +230,13 @@ result under `bytes`, the key every other path uses for the output size. The wri
 the real figure for a 20480 hero: a file of 171 MB, against the 1,048 MB its metadata reports.
 
 **So `o.bytes` is the compressed payload on every path except streamed, where it is the uncompressed
-input.** Anything that reads it across paths is wrong by about 6× on those masters. Two places it bites:
+input** — about 6× out. Two places it bites:
 
-- Any size analysis. The first version of the table above showed 20,480 at exactly 4.0000 bytes/px, which
-  is what sent this doc looking.
-- `tools/split-hwinfo.mjs` predicts a render's disk writes from `o.bytes` to decide whether anything else
-  was using the disk. On a streamed 65,535 it expects 12.3 GB where the real master is about 0.8 GB, so it
-  would tolerate 11.4 GB of foreign I/O before firing. That check is dead on every streamed run, and it
-  was validated only against tiled ones.
+- Any size analysis. The first version of this doc showed 20,480 at exactly 4.0000 bytes/px, which is what
+  sent it looking.
+- `tools/split-hwinfo.mjs` predicts a render's disk writes from `o.bytes`. On a streamed 65,535 it expects
+  12.3 GB where the real master is about 0.8 GB, so it would tolerate 11.4 GB of foreign I/O before
+  firing. That check now refuses the prediction on a streamed master rather than passing it.
 
 The fix is cheap — the IDAT chunks are all accumulated before the metadata string is built, so the
 compressed size is knowable at that point — but it adds a persisted key and is not made here.
@@ -155,10 +246,8 @@ compressed size is knowable at that point — but it adds a persisted key and is
 That `o.bytes` is the payload and not the size on disk is **already recorded** in
 [`docs/sidecars/README.md`](sidecars/README.md), which measures it 3.9 MB short of the file on one
 262,144 master and says to use `archive/index.json` — the only place the on-disk size is kept — for
-anything about compression. The stair above still uses the sidecar payload, because the index covers only
-the 90 archived masters against 825 here, and the gap is small enough not to move it.
-
-How small, across all 90 masters where both figures are recorded:
+anything about compression. The ladders above still use the sidecar payload, because the index covers only
+the 90 archived masters, and the gap is small enough not to move them:
 
 | | gap, file over payload |
 |---|---|
@@ -167,9 +256,8 @@ How small, across all 90 masters where both figures are recorded:
 | 1,024 | up to 6.97% |
 
 The container's directory and metadata chunk are a fixed cost, so they vanish into a 23 GB file and are
-visible in a 1.2 MB one. That tilts the stair slightly: measured as **files** rather than payloads the
-fall is **58.7×** rather than 55.7×, because the low rung gains ~7% and the top gains 0.005%. The
-direction of every finding above is unchanged.
+visible in a 1.2 MB one. Measured as **files** rather than payloads the pooled stone stair falls 58.7×
+rather than 55.7×. The direction of every finding above is unchanged.
 
 One entry in that index must not be read as a container gap: the 262,144 glass master records 48.4%,
 because its file was re-saved from GIMP after signing. Same pixels, a different encoder — GIMP's TIFF

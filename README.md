@@ -129,9 +129,10 @@ run. See [`docs/gallery.md`](docs/gallery.md).
   coat/spectrum/back-light/lens, layers, export), from a four-way code read.
 - **`final-render.md`** — the offline render pipeline (`renderFull`/`renderTiled`, workers, encoders)
   and roadmap, plus the CPU/GPU split.
-- **`master-size.md`** — what a master costs at each resolution: the 56× per-pixel fall across the
-  ladder, the two mechanisms behind it (busy content getting cheaper, 3.4×, and the image emptying
-  out, 63×) and why a single rung means nothing. Carries the streamed-path `bytes` collision.
+- **`master-size.md`** — what a master costs at each resolution, and why that is a property of the
+  MATERIAL. Glass is a power law (0.791 per doubling, 0.4% spread, predicted a rung before it was
+  rendered); stone is not (30% spread on matched footing) and its mechanism is inverted. Also: tile
+  size moves the file 9–38%, and the streamed-path `bytes` collision.
 - **`sections.md`** — a tile kept as a cut (its shape plus where on the slab it came from), the
   slot/seed distinction, the rhombus groupings and the cut lock.
 - **`tile-cutter.md`** — PARKED. Cutting a rendered master into its pieces afterwards from a vector
