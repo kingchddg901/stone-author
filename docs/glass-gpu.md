@@ -75,10 +75,18 @@ proportionally less far ahead of them. The two cancel, every device lands betwee
 there is no device-class where this pays.
 
 **What the prize turned out to be instead.** §4's analytic gradient, which needs no GPU, no toggle and
-no capability matrix: landed in build `2026.10.22.172` and measured at **12.4%** off a 65,535 on the
-rung with the only two-run baseline, bit-identical output on a poured sheet. It was step 1 of the list
-in §7 all along, it cost nothing in risk, and on the 1,048,576 currently rendering it is worth about
-four hours on its own.
+no capability matrix: landed in build `2026.10.22.172`, bit-identical output on a poured sheet, step 1
+of the list in §7 all along, and it cost nothing in risk.
+
+It is worth **about 18%** off a 65,535 — not the 12.4% first published here. That figure came from a
+172 master that rendered with 439 MB free, and `master-timing.md` sets out why a run in that band is
+handicapped by around 7%. The clean anchors are the two `171` baselines at 7.64 min and the two
+`173` runs at 6.17 min, both un-starved: **19.3% for the gradient and the relief guard together**,
+measured with no model in it, and a floor rather than a point, since `173` had less memory headroom
+than `171` did. The guard accounts for about 1.1% of that, so the gradient has the rest — and because
+the guard is small the split hardly moves even if its own figure is wrong by double.
+
+On a 1,048,576 that is **four and a half hours**, and it remains the only item on §7's list that paid.
 
 **What the closing argument got wrong, recorded because the shape of it will recur.** The measurement
 was right and the inference was not. A ratio was compared against an intuition about whether a
@@ -360,8 +368,9 @@ minutes with 4.17 threads of 12 busy.
 **Open questions, in the order they should be answered** — all four now answered, three of them not
 the way this list expected:
 
-1. ~~Land the analytic gradient.~~ **DONE, build `2026.10.22.172`.** 12.4% off a 65,535, on every
-   device, no toggle. The only item on this list that paid, and the only one that needed no GPU.
+1. ~~Land the analytic gradient.~~ **DONE, build `2026.10.22.172`.** ~18% off a 65,535, on every
+   device, no toggle — revised up from 12.4% once the baseline it had been measured against turned out
+   to be memory-starved. The only item on this list that paid, and the only one that needed no GPU.
 2. ~~Measure whether `OffscreenCanvas` 2D in a worker is falling back to software raster.~~
    **ANSWERED 2026-10-22: it is not.** A stone render drives this card to 1,911 MHz and 59.5% mean
    utilisation, so the accelerated path works and reaches a worker. The 94 MHz is glass declining to

@@ -56,7 +56,7 @@ and adaptive supersampling makes an SS=1 render *slower* — 1.47× at 1,048,576
 1.4% it then samples sixteen times. The 10.9× is uniform SS=4 against adaptive SS=4, which is a
 comparison between two renders nobody currently makes.
 
-So it belongs on a different list from the analytic gradient (12.4% off every render) or a GPU
+So it belongs on a different list from the analytic gradient (~18% off every render) or a GPU
 partial port (1.55× off every render). Those make the work faster. This makes a render that is
 currently unaffordable merely expensive — 16.3 days to 35.9 hours — and buys nothing at all until
 the aliasing is worth paying to fix.

@@ -161,6 +161,24 @@ directions. Against `171` it makes the analytic gradient look **smaller** than i
 it makes the relief guard look **larger** than it is: 7.9% from the clocks against ~1% from three
 measurements that hold memory fixed.
 
+**The two changes can still be separated, without a third clean render.** The un-starved anchors
+bracket them: `171` pays three `glassFormT` evaluations a sample and `173` pays one, so the
+difference between those two is twice the in-render cost of one call — `x` = 0.7375 min, which is
+132 ns a call across eight workers over 2.68 G samples. Timing the shipped functions against each
+other gives the derivative algebra at 0.090 of one call, so `a` = 0.066 min and a clean `172` would
+have run 6.24 min rather than the 6.70 it recorded:
+
+| | worth at 65,535 |
+| --- | --- |
+| analytic gradient, build `172` | **18.4%** |
+| relief guard, build `173` | **1.06%** |
+| both together | **19.3%** — measured directly, no model |
+
+Only `a/x` comes from a bench rather than a master, and **the split is insensitive to it**: the
+guard is small, so doubling its figure moves the gradient by half a point. The guard's 1.06% also has
+an independent confirmation — a tile rendered at `relief: 0` against `relief: 1e-12` inside one page
+load reads 1.0%, with the output verified identical between the arms.
+
 **The tell was that the saving disagreed with itself across two widths.** The guard removes a fixed
 slice of per-sample work, and both rungs render the same slab, so its saving *cannot* depend on
 render width — yet it came out 20.9% at 32,768 and 7.8% at 65,535. A 13-point spread in a quantity
