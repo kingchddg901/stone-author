@@ -133,10 +133,10 @@ run. See [`docs/gallery.md`](docs/gallery.md).
   it is wrong: `ms.render` understated one render by 15×, and `perTile.ms` is a consumer timeline
   whose sums are real and whose entries are not. Carries the two checks that recover the truth,
   and what they found across every long render in the archive.
-- **`glass-gpu.md`** — CLOSED. Whether to move the glass loop onto the GPU, measured across the
-  fleet and answered no: 1.3–1.9× where WebGPU exists at all, and absent on BOTH devices with the
-  most to gain. The work is a hash chain rather than shading, which is the one arithmetic shape
-  a GPU is not far ahead on. Read before the idea comes back.
+- **`glass-gpu.md`** — OPEN, partial port first. Whether to move the glass loop onto the GPU,
+  measured across the fleet: only 1.3–1.9×, because the work is a hash chain rather than shading
+  — but 1.9× is 11.6 hours on a 1,048,576, so the multiple was never the decision. Desktop only;
+  both tablets have no WebGPU. Carries the closing argument that was wrong and why.
 - **`master-size.md`** — what a master costs at each resolution, and why that is a property of the
   MATERIAL. Glass is a power law (0.791 per doubling, 0.4% spread, predicted a rung before it was
   rendered); stone is not (30% spread on matched footing) and its mechanism is inverted. Also: tile

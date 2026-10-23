@@ -1,11 +1,13 @@
-# A GPU path for glass — measured, and not worth building
+# A GPU path for glass — measured, and worth building for the long ones
 
-Status: **closed 2026-10-23.** The scope below is kept because the reasoning is sound and the cost
-analysis still holds; what changed is that the premise it rests on was finally measured and is false.
+Status: **OPEN 2026-10-23, partial port first.** This document was closed earlier the same day on the
+strength of a correct measurement and a wrong judgement, and reopened within hours. Both are left
+visible below, because the mistake is more instructive than the conclusion.
 
-Not a plan to build one. A written answer to "would it help, what would it cost, and what breaks",
-so the decision is made against measurements rather than against the obvious appeal of an idle GPU.
-That turned out to matter more than expected: the appeal was the error.
+A written answer to "would it help, what would it cost, and what breaks", decided against
+measurements rather than against the obvious appeal of an idle GPU. The appeal *was* an error — the
+GPU is not sitting idle for want of being asked, and the speedup is small. What took a second pass is
+that a small multiple of a very large number is still a very large number.
 
 ## The verdict, before the reasoning that led to it
 
@@ -22,9 +24,42 @@ WGSL and in JavaScript on whatever opens it and reports the ratio:
 
 **Nothing reaches 2×, and neither of the two devices with the most to gain can run it at all.**
 Both tablets predate WebGPU, which is not a coincidence that will age away in the direction anyone
-wants: the hardware slow enough to need a GPU path is the hardware too old to have the API. Those figures are
-also the optimistic bound: the probe is a proxy with no op chain, no SDF loop and no cell walk, and
-all three branch — divergence costs a GPU far more than it costs a core.
+wants: the hardware slow enough to need a GPU path is the hardware too old to have the API. Those
+figures are also the optimistic bound: the probe is a proxy with no op chain, no SDF loop and no cell
+walk, and all three branch — divergence costs a GPU far more than it costs a core.
+
+### The multiple is not the decision. The clock is.
+
+That table was read as "1.3–1.9×, not worth a second renderer" and the doc was closed on it. The
+error is visible the moment the same ratio is written in hours instead:
+
+| render | CPU today | full port 1.90× | saved | partial 1.55× | saved |
+| --- | --- | --- | --- | --- | --- |
+| 65,535 | 7 min | 4 min | 3 min | 4 min | 2 min |
+| 262,144 | 1.8 h | 56 min | 51 min | 1.2 h | 38 min |
+| **1,048,576** | **24.5 h** | **12.9 h** | **11.6 h** | **15.8 h** | **8.7 h** |
+| 262,144 SS=4 | 28.6 h | 15.0 h | 13.5 h | 18.4 h | 10.1 h |
+| 1,048,576 SS=4 | 19.1 days | 10.0 days | 9.0 days | 12.3 days | 6.8 days |
+
+1.9× is three minutes on a 65,535 and **eleven and a half hours** on a 1,048,576. The 24.5 h row is
+not a projection from the ladder — it is a render measured live at 0.538 s a tile, 28% of the way
+through, on the machine this would be built for.
+
+**And supersampling does not dilute it.** The ratio is the card's throughput advantage, which is
+fixed, so the absolute saving scales with the render rather than shrinking against it. At the sizes
+where this slab needs SS to resolve its aliasing, the saving is measured in days.
+
+So the verdict is:
+
+- **The partial port is worth building: 8.7 h on the render currently running.** The label stays on
+  the CPU, nothing moves that is not the shading class already proved safe in §3, no existing master
+  changes, and the CPU path stays canonical behind the toggle §6 specifies.
+- **The full port's extra 2.9 h does not obviously pay for what it costs** — an integer-label rewrite
+  of the *CPU* path, re-dating every glass master in the 130-level class. Judge it on its own later,
+  against a partial port already banked, not bundled into this decision.
+- **It is a desktop feature and always was.** Both tablets have no WebGPU, and the phones only ever
+  render small. §6's toggle — opt-in, off by default, declared in metadata, never planner-chosen — is
+  unchanged and is now the whole deployment story.
 
 **Why, in one line: this work is a hash chain, not shading.** Three `fbm2` evaluations is 36 `nz`
 calls, and `nz` is `Math.imul`, xor and shift — roughly 250–290 **integer** operations per sample
@@ -41,8 +76,15 @@ there is no device-class where this pays.
 
 **What the prize turned out to be instead.** §4's analytic gradient, which needs no GPU, no toggle and
 no capability matrix: landed in build `2026.10.22.172` and measured at **12.4%** off a 65,535 on the
-rung with the only two-run baseline, bit-identical output on a poured sheet. That is the whole return
-from this investigation, and it was step 1 of the list in §7 all along.
+rung with the only two-run baseline, bit-identical output on a poured sheet. It was step 1 of the list
+in §7 all along, it cost nothing in risk, and on the 1,048,576 currently rendering it is worth about
+four hours on its own.
+
+**What the closing argument got wrong, recorded because the shape of it will recur.** The measurement
+was right and the inference was not. A ratio was compared against an intuition about whether a
+speedup "feels worth it", and that intuition had been formed on seven-minute test renders while the
+actual work had grown to day-and-a-half ones. Nothing in the table was wrong; the table simply had no
+column for hours, so the number it was judged against did not exist.
 
 **Two things worth keeping from the measurement**, since both were open questions:
 
