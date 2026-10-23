@@ -133,6 +133,10 @@ run. See [`docs/gallery.md`](docs/gallery.md).
   it is wrong: `ms.render` understated one render by 15×, and `perTile.ms` is a consumer timeline
   whose sums are real and whose entries are not. Carries the two checks that recover the truth,
   and what they found across every long render in the archive.
+- **`adaptive-supersampling.md`** — MEASURED, not built. Glass aliases because the field holds a
+  label and cannot be filtered; supersampling is the honest fix and costs 16×. But the aliasing is
+  localised and SHRINKS with size — 1.4% of a 1,048,576 — so doing it only where it is needed is
+  16.3 days against 35.9 hours. The largest win measured on this renderer.
 - **`glass-gpu.md`** — OPEN, partial port first. Whether to move the glass loop onto the GPU,
   measured across the fleet: only 1.3–1.9×, because the work is a hash chain rather than shading
   — but 1.9× is 11.6 hours on a 1,048,576, so the multiple was never the decision. Desktop only;
