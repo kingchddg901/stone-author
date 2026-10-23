@@ -1,7 +1,9 @@
 # Supersampling where it is needed
 
-Status: **measured, not built.** The arithmetic and the measurements are here; nothing is
-implemented, and the two things that would decide the implementation are named at the end.
+Status: **measured, not built. A capability, not a speed improvement** — see the note below the
+cost table: it makes an SS=1 render slower, and only pays once supersampling is wanted.
+The arithmetic and the measurements are here; nothing is implemented, and the two things that would
+decide the implementation are named at the end.
 
 Glass aliases. The field holds a **label**, not a colour, so it cannot be filtered where it is
 sampled — a band edge finer than the pixel grid resolves as speckle rather than as a soft edge. The
@@ -49,9 +51,15 @@ plain render:
 plain-render figures use 0.5379 s per 2048 tile, measured live on a 1,048,576 at 28% through rather
 than extrapolated from the ladder.
 
-For scale against everything else tried on this renderer: the analytic gradient was 12.4%, and a full
-WebGPU port measures 1.9× on the only machine that can run one. This is 10.9× on the thing that was
-actually blocking the work.
+**It is a capability, not a speedup, and the distinction matters.** Every render made so far is SS=1,
+and adaptive supersampling makes an SS=1 render *slower* — 1.47× at 1,048,576, for the probe and the
+1.4% it then samples sixteen times. The 10.9× is uniform SS=4 against adaptive SS=4, which is a
+comparison between two renders nobody currently makes.
+
+So it belongs on a different list from the analytic gradient (12.4% off every render) or a GPU
+partial port (1.55× off every render). Those make the work faster. This makes a render that is
+currently unaffordable merely expensive — 16.3 days to 35.9 hours — and buys nothing at all until
+the aliasing is worth paying to fix.
 
 ## Where the aliasing comes from
 
