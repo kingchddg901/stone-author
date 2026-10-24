@@ -1,12 +1,12 @@
 # A GPU path for glass — measured, and worth building for the long ones
 
-Status: **measured 2026-10-24, and the answer reversed.** The one measurement this page asked for
-now exists: `tools/gpu-native-probe.html`, three arms, against the *current* arithmetic with the
-corner cache granted to the CPU. A GPU-native field — noise read out of a hardware-filtered texture
-rather than hashed per invocation — came back at **246× the eight-worker pool** on an RDNA-2 desktop,
-3.30× the transliterated port the page had been arguing about. Read "The measurement, 2026-10-24"
-first. Everything under "Where this stands" was the right question and is now answered; every hour
-figure below it is stale.
+Status: **CLOSED 2026-10-24. Do not build it.** Both halves are now measured and they point opposite
+ways. A GPU-native field is **246× the eight-worker pool** (`tools/gpu-native-probe.html`, three
+devices) — and the field is only **13–18% of a render** (`tools/count-field-calls.mjs`, counted on
+the master slab), so the whole port is worth **1.15× to 1.21×**. 5:05 becomes about 4:20. That buys a
+second renderer, a second code path for the ribbon label, and a picture that is no longer
+byte-identical across GPU vendors. Read "What the field is actually worth" first; the rest of the
+page is the reasoning that led here and is kept.
 
 Earlier status, left as written: **OPEN 2026-10-23, partial port first.** This document was closed
 on the strength of a correct measurement and a wrong judgement, and reopened within hours. Both are
@@ -188,23 +188,48 @@ contains. At 65,535 a 520²-tile port would be 16,129 dispatches — **9 s of ro
 arithmetic**. A GPU field has to go out in few, large dispatches; a tile-at-a-time port throws the
 win away on overhead. This is a shape constraint on the port, decided before any code.
 
-### A fast field is not a fast render
+### What the field is actually worth
 
-This prices the noise field and the three exponentials. A render is also the unform walk, the roller
-and stamp geometry, the ribbon label, the colour flatten and the write. **The field's share of a real
-render is not measured**, and it is the whole decision:
+This is the measurement every number above was waiting for, and it closes the page.
 
-| if the field is | the render is | 5:05 becomes |
-|---|---|---|
-| 30% | 1.43× faster | 3:34 |
-| 50% | 1.99× faster | 2:33 |
-| 70% | 3.30× faster | 1:32 |
-| 90% | 9.65× faster | 32 s |
-| 95% | 18.6× faster | 16 s |
-| 99% | 71× faster | 4 s |
+`tools/count-field-calls.mjs` puts a counter in each noise entry point and each of its callers and
+changes nothing else. On the glass master slab, radial mould, four tiles spread across the sheet, at
+the real export size of `renderOneTile(65535, …, 520, 520, 0)`:
 
-**Measuring that share is the next step**, and it is cheap — the per-line-item timings already exist
-for the CPU path. Nothing else about the port should be decided first.
+| counted | per pixel |
+|---|---|
+| `fbm2C` | **2.000**, on every tile — one in `glassFormT`, one in `glassLay`'s cord wander |
+| `fbm2G` | 0 — `REL` is 0 on this slab, so the gradient path is cold |
+| `glassFormT`, `glassLay` | 1 each — **no supersampling**, one sample per pixel |
+| tile paint | **597–651 ns**, mean 625 |
+
+`fbm2C` costs 40.0–44.4 ns on this box, so the noise is **80–89 ns of 625 — 13–14% of paint**. Add the
+three Beer-Lambert exponentials and the whole modelled field is **17.7%**.
+
+| what a GPU field replaces | share | at 246× | 5:05 becomes |
+|---|---|---|---|
+| the noise only | 12.8–14.2% | **1.15–1.16×** | 4:21 – 4:26 |
+| the noise and the exponentials | 17.7% | **1.21×** | 4:11 |
+
+**So the port is worth about a fifth, not a third and not nine times.** And that is a ceiling: it
+treats the GPU side as free, ignoring the 0.59–1.51 ms of submit, fence and map per dispatch. Against
+it stands a second renderer to write and keep, §3's ribbon label which cannot be filtered at all, and
+a picture that differs by vendor because the texture unit's filter precision does (0.368 levels on
+the desktop, 0.822 on an S23). **That is not a trade worth making.**
+
+The sanity check that the tile is the render: 10,033 tiles of 520² cover a 65,535 × 40,959 sheet, and
+at 164.9 ms each over eight workers that is 3:27 of paint inside a 5:05 render — the rest being
+assembly and encoding, which a GPU field does not touch either.
+
+### Ablation was the obvious instrument and it lied
+
+Worth keeping, because it failed in the direction that looks like a result. Stubbing `fbm2C` and
+`fbm2G` to something cheap made a tile take **277.9 ms against the control's 164.9** — *slower,*
+after removing work — with per-tile readings swinging 196 to 344. The stub changed the field's
+**values**, the values decide the ribbon labelling in `glassLay`, and the renderer then painted a
+different picture. An ablation measures the thing it removes only when nothing downstream depends on
+what it removed. Counting perturbs nothing: 163.6 ms against the control's 164.9, inside its own
+spread.
 
 ### Three instruments were wrong before the fourth was right
 
