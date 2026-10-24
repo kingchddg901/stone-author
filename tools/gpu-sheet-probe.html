@@ -1,0 +1,471 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GPU sheet</title>
+<!--
+  MANY TILES, WITH THE READBACK IN THE NUMBER.
+
+  tools/gpu-tile-probe.html times ONE tile and reports the shader alone: 0.131 ms against 103 ms on
+  a CPU thread, 98.6x an eight-worker pool. That number is true and it is not an export. A master is
+  40,960 tiles, every one of which has to come back off the GPU and into the TIFF writer, and none
+  of that appears anywhere in 0.131 ms.
+
+  So this page dispatches N tiles and times the whole loop - upload, dispatch, readback - against
+  the renderer's own renderOneTile doing the same N tiles. Two GPU arms, because the difference
+  between them is the entire engineering question:
+
+    ONE AT A TIME   submit a tile, await it, map the buffer, read it, repeat. The obvious spelling,
+                    and the one that walks into mapAsync being quantised to the compositor's frame
+                    clock - already measured on this machine while building the first GPU probe,
+                    where it pinned four separate timings to multiples of ~16.7 ms. If that bites,
+                    the naive loop cannot beat the CPU pool no matter how fast the shader is.
+    ALL AT ONCE     N uniform buffers, N bind groups, N dispatches encoded into ONE command buffer,
+                    one submit, one map at the end. The GPU never waits for JS and JS maps once.
+
+  WHAT EACH SIDE INCLUDES, because that is where a throughput comparison goes wrong:
+    the GPU arms   uniform upload, dispatch, copy to a mappable buffer, map, and a Float32Array
+                   read of every pixel. NOT the canvas write and NOT the TIFF encode.
+    the CPU arm    renderOneTile, which is what the exporter actually calls - so it DOES include
+                   the canvas write and the mould, work the shader does not do. It is the honest
+                   baseline for "how long does a tile take today", not a like-for-like shader race.
+  The one-tile probe is the like-for-like comparison. This one is the throughput question.
+
+  THE TWO GPU ARMS MUST AGREE PIXEL FOR PIXEL. Batching is a chance to hand a dispatch the wrong
+  uniform and get a plausible-looking tile of the wrong part of the sheet, which no timing would
+  catch. They are compared, and a mismatch voids the page rather than printing a speed.
+
+  RUN: node tools/make-probe-builds.mjs, then python tools/serve-studio.py and open this page.
+-->
+<style>
+  :root { --bg:#faf9f7; --fg:#1b1a19; --dim:#6b6864; --rule:#dcd8d2; --good:#1d6b3a; --warn:#8a5a00; --bad:#9b2420; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; } }
+  :root[data-theme="dark"] { --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; }
+  body { background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin:0; padding:16px; }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; }
+  p.sub { color:var(--dim); margin:0 0 14px; max-width:68ch; }
+  button { font:inherit; padding:7px 15px; border:1px solid var(--rule); border-radius:5px;
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  button:disabled { color:var(--dim); cursor:default; }
+  input { font:inherit; width:5em; padding:6px; border:1px solid var(--rule); border-radius:5px;
+          background:var(--bg); color:var(--fg); }
+  label { color:var(--dim); margin-right:14px; }
+  table { border-collapse:collapse; margin:12px 0; font-size:13px; }
+  td, th { border-bottom:1px solid var(--rule); padding:4px 14px 4px 0; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  h2 { font-size:14px; margin:18px 0 0; font-weight:600; }
+  .big { font-size:19px; font-weight:600; margin:14px 0 0; }
+  pre { color:var(--dim); font-size:12px; white-space:pre-wrap; margin:10px 0 0; }
+</style>
+
+<h1>GPU sheet</h1>
+<p class="sub">Many tiles, with the readback in the number. The one-tile probe times the shader; this
+times the loop an exporter would actually run, against the renderer's own renderOneTile.</p>
+<label>tiles <input id="n" type="number" value="16" min="1" max="256"></label>
+<label>tile px <input id="tw" type="number" value="512" min="64" max="1024" step="64"></label>
+<label>reps <input id="reps" type="number" value="3" min="1" max="10"></label>
+<button id="run">Run</button>
+<div id="res"></div>
+<pre id="log"></pre>
+
+<script type="module">
+import { WGSL } from './lib/glass-gpu.mjs';
+import { packReal } from './lib/glass-real.mjs';
+
+const RES = document.getElementById('res'), LOG = document.getElementById('log');
+const log = m => { LOG.textContent += (LOG.textContent ? '\n' : '') + m; };
+let TB = null;
+function pair(k, v, cls) {
+  if (!TB) { TB = document.createElement('table'); RES.appendChild(TB); }
+  const tr = document.createElement('tr');
+  const a = document.createElement('th'); a.textContent = k;
+  const b = document.createElement('td'); b.textContent = v; if (cls) b.className = cls;
+  tr.appendChild(a); tr.appendChild(b); TB.appendChild(tr);
+}
+function head(t) { TB = null; const h = document.createElement('h2'); h.textContent = t; RES.appendChild(h); }
+function big(t, cls) { const p = document.createElement('p'); p.className = 'big ' + (cls || ''); p.textContent = t; RES.appendChild(p); }
+
+const FULLW = 65535;
+
+// SPIN TABLE, LIFTED FROM THE APP'S SOURCE. packReal needs it and the harness hook does not expose
+// it, so it is read out of the file the same way gpu-port-harness.html reads the rest - by name,
+// with the one constant its body closes over. Guessing it was on __sa would have packed a zero-
+// length table and quietly given every spin op the wrong angles.
+async function liftSpinTable() {
+  let src = null;
+  for (const u of ['../app/stone-author.html', 'app/stone-author.html']) {
+    try { const r = await fetch(u); if (r.ok) { src = await r.text(); break; } } catch (e) {}
+  }
+  if (src === null) throw new Error('could not read the app to lift spinTable');
+  const i = src.indexOf('function spinTable(');
+  if (i < 0) throw new Error('the app has no function spinTable');
+  let d = 0, body = null;
+  for (let k = src.indexOf('{', i); k < src.length; k++) {
+    if (src[k] === '{') d++;
+    else if (src[k] === '}') { d--; if (!d) { body = src.slice(i, k + 1); break; } }
+  }
+  const nb = (src.match(/const SPIN_NB = [^;]*;/) || [])[0];
+  if (!body || !nb) throw new Error('spinTable or SPIN_NB has moved - this probe is stale');
+  const out = new Function(nb + chrNL + body + chrNL + 'return spinTable();')();
+  if (!out || !out.length) throw new Error('spinTable returned nothing');
+  return out;
+}
+const chrNL = String.fromCharCode(10);
+const CAPTURE = '../harness/dist/scene-capture.html';
+const SLABJSON = '/harness/dist/slab.json';
+
+// The capture build gives BOTH halves of this page: the real F for packReal, and __sa.renderOneTile
+// for the CPU arm. One iframe, and the CPU baseline is the renderer rather than a re-implementation
+// of it - which is the right baseline for a throughput question even though it is not like-for-like.
+function loadScene() {
+  return new Promise((resolve, reject) => {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0';
+    fr.src = CAPTURE;
+    const fail = m => { fr.remove(); reject(new Error(m)); };
+    fr.onerror = () => fail('the capture build would not load - run: node tools/make-probe-builds.mjs');
+    fr.onload = async () => {
+      try {
+        const w = fr.contentWindow;
+        for (let i = 0; i < 150 && !w.__sa; i++) await new Promise(r => setTimeout(r, 100));
+        if (!w.__sa) return fail('the capture build never exposed __sa');
+        const slab = await (await fetch(SLABJSON)).json();
+        w.__sa.deserialize(slab); w.__sa.render();
+        const c = w.__sa.renderOneTile(FULLW, 0, 0, 64, 64, 0); c.width = c.height = 1;
+        if (!w.__F) return fail('a tile was painted but __F was never set - the capture is stale');
+        resolve({ w, F: w.__F, canes: w.__CANES, light: w.__LIGHT, tint: w.__TINT, mix: w.__MIX });
+      } catch (e) { fail(String(e && e.message || e)); }
+    };
+    document.body.appendChild(fr);
+  });
+}
+
+// TILE ORIGINS SPREAD ACROSS THE SHEET, not N copies of one corner. A run of adjacent tiles would
+// share whatever the cache happens to hold and flatter both arms equally but unrepresentatively;
+// an export walks the whole sheet.
+function tileOrigins(n, TW) {
+  const perRow = Math.max(1, Math.floor(FULLW / TW));
+  const total = perRow * perRow;
+  const step = Math.max(1, Math.floor(total / n));
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const t = (i * step) % total;
+    out.push([(t % perRow) * TW, Math.floor(t / perRow) * TW]);
+  }
+  return out;
+}
+
+// packReal writes tileX and tileY as int32s at a known place in the 304-byte uniform; patching
+// those two rather than re-packing keeps every other field provably identical between tiles.
+const OFF_TILEW = 160 + 29 * 4, OFF_TILEX = 160 + 30 * 4, OFF_TILEY = 160 + 31 * 4;
+function uniFor(base, tx, ty, TW) {
+  const b = base.slice(0);
+  const d = new DataView(b);
+  d.setInt32(OFF_TILEW, TW, true);
+  d.setInt32(OFF_TILEX, tx, true);
+  d.setInt32(OFF_TILEY, ty, true);
+  return b;
+}
+
+async function getDevice() {
+  if (!navigator.gpu) throw new Error('no navigator.gpu - WebGPU needs a secure context, so a LAN '
+    + 'address will never work here; use localhost');
+  const ad = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+  if (!ad) throw new Error('requestAdapter returned null');
+  const want = ad.features.has('timestamp-query') ? ['timestamp-query'] : [];
+  const dev = await ad.requestDevice({ requiredFeatures: want });
+  return { ad, dev, ts: want.length > 0 };
+}
+
+document.getElementById('run').onclick = async () => {
+  const btn = document.getElementById('run');
+  btn.disabled = true; RES.textContent = ''; TB = null; LOG.textContent = '';
+  try {
+    const N = Math.max(1, Math.min(256, +document.getElementById('n').value | 0));
+    const TW = Math.max(64, Math.min(1024, +document.getElementById('tw').value | 0));
+    const REPS = Math.max(1, Math.min(10, +document.getElementById('reps').value | 0));
+    const n = TW * TW, bytes = n * 3 * 4;
+
+    head('this device');
+    pair('user agent', navigator.userAgent);
+    const { ad, dev, ts } = await getDevice();
+    pair('timestamp-query', ts ? 'yes — the shader time below is the GPU clock'
+      : 'NO — shader time is wall clock and includes submit overhead', ts ? 'good' : 'warn');
+    const lim = dev.limits.maxStorageBufferBindingSize;
+    pair('max storage binding', (lim / 1048576).toFixed(0) + ' MiB');
+    if (bytes * N > lim) {
+      pair('too much at once', (bytes * N / 1048576).toFixed(0) + ' MiB of output for ' + N
+        + ' tiles exceeds it — lower the tile count or the tile size', 'bad');
+      return;
+    }
+
+    const scene = await loadScene();
+    const F = scene.F;
+    const packed = packReal(F, {
+      SLAB: 8, spin: await liftSpinTable(), canes: scene.canes,
+      CORD: scene.mix[0], OPQ: scene.mix[1], OREF: scene.mix[2],
+      kr: scene.tint[0], kg: scene.tint[1], kb: scene.tint[2],
+      LBR: scene.light[0], LBG: scene.light[1], LBB: scene.light[2],
+      tileW: TW, tileX: 0, tileY: 0, fullW: FULLW,
+    });
+    const s = packed.summary;
+    pair('the document', s.ops + ' ops (' + s.kinds + '), ' + s.ribbons + ' ribbons, ' + s.stamps
+      + ' stamps, ' + s.form);
+    const tiles = tileOrigins(N, TW);
+    pair('the run', N + ' tiles of ' + TW + '×' + TW + ', spread across a '
+      + FULLW.toLocaleString() + ' px sheet — ' + (bytes / 1048576).toFixed(1) + ' MiB a tile, '
+      + (bytes * N / 1048576).toFixed(0) + ' MiB in all');
+
+    // ---- the shader, compiled once and shared by both arms ------------------------------------
+    const code = Object.values(WGSL).join('\n');
+    dev.pushErrorScope('validation');
+    const mod = dev.createShaderModule({ code });
+    const ci = await mod.getCompilationInfo();
+    const errs = ci.messages.filter(m => m.type === 'error');
+    if (errs.length) throw new Error('WGSL ' + errs[0].lineNum + ': ' + errs[0].message);
+    const pipe = await dev.createComputePipelineAsync({
+      layout: 'auto', compute: { module: mod, entryPoint: 'main' } });
+    const vErr = await dev.popErrorScope();
+    if (vErr) throw new Error(vErr.message.split('\n')[0]);
+
+    const arena = dev.createBuffer({ size: packed.arena.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    dev.queue.writeBuffer(arena, 0, packed.arena);
+
+    const mkQuery = () => ts ? {
+      set: dev.createQuerySet({ type: 'timestamp', count: 2 }),
+      res: dev.createBuffer({ size: 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC }),
+      map: dev.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
+    } : null;
+    const readQuery = async q => {
+      if (!q) return 0;
+      await q.map.mapAsync(GPUMapMode.READ);
+      const v = new BigInt64Array(q.map.getMappedRange().slice(0));
+      q.map.unmap();
+      return Number(v[1] - v[0]) / 1e6;
+    };
+
+    // ---- ARM A: one tile at a time -------------------------------------------------------------
+    // The obvious loop. Every tile is its own submit and its own map, so the GPU idles while JS
+    // waits for a buffer and JS waits for a clock it does not control.
+    head('one at a time');
+    const px = dev.createBuffer({ size: bytes,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const ub = dev.createBuffer({ size: 304,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const rb = dev.createBuffer({ size: bytes,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const grpA = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
+      { binding: 0, resource: { buffer: px } }, { binding: 2, resource: { buffer: ub } },
+      { binding: 3, resource: { buffer: arena } }] });
+
+    // REPEATED, BECAUSE ONE SHOT IS NOT A NUMBER HERE. Three runs of this page gave the batched
+    // arm 2.7x, 3.9x and 6.9x the pool, and the readback 522, 729 and 1412 MB/s. The spread is
+    // warming - buffers and driver state - and the first run is always the cold one. Each arm runs
+    // REPS times and the BEST is reported, which is what the one-tile probe does for the same
+    // reason; every rep is logged, so a wide spread stays visible instead of being averaged away.
+    const outA = new Float32Array(n * 3 * N);
+    let shaderA = 0, mapA = 0, waitA = 0, copyA = 0, wallA = Infinity;
+    const allA = [];
+    for (let rep = 0; rep < REPS; rep++) {
+    let shaderR = 0, mapR = 0, waitR = 0, copyR = 0;
+    const tA0 = performance.now();
+    for (let i = 0; i < N; i++) {
+      const q = mkQuery();
+      dev.queue.writeBuffer(ub, 0, uniFor(packed.uni, tiles[i][0], tiles[i][1], TW));
+      const enc = dev.createCommandEncoder();
+      const pass = enc.beginComputePass(q
+        ? { timestampWrites: { querySet: q.set, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 } }
+        : {});
+      pass.setPipeline(pipe); pass.setBindGroup(0, grpA);
+      pass.dispatchWorkgroups(Math.ceil(n / 64)); pass.end();
+      enc.copyBufferToBuffer(px, 0, rb, 0, bytes);
+      if (q) { enc.resolveQuerySet(q.set, 0, 2, q.res, 0); enc.copyBufferToBuffer(q.res, 0, q.map, 0, 16); }
+      dev.queue.submit([enc.finish()]);
+      // SPLIT, because the two halves point at different fixes. Waiting for mapAsync is the GPU
+      // handing the memory over; the Float32Array copy out of it is JS moving 3 MiB. If it is the
+      // wait, the transfer is the problem and a smaller payload is the lever. If it is the copy,
+      // the lever is not copying.
+      const m0 = performance.now();
+      await rb.mapAsync(GPUMapMode.READ);
+      const m1 = performance.now();
+      outA.set(new Float32Array(rb.getMappedRange()), i * n * 3);
+      const m2 = performance.now();
+      rb.unmap();
+      waitR += m1 - m0; copyR += m2 - m1;
+      mapR += performance.now() - m0;
+      shaderR += await readQuery(q);
+    }
+    const wA = performance.now() - tA0;
+    allA.push(wA);
+    if (wA < wallA) { wallA = wA; shaderA = shaderR; mapA = mapR; waitA = waitR; copyA = copyR; }
+    }
+    pair('shader', shaderA.toFixed(2) + ' ms for ' + N + ' tiles   ('
+      + (shaderA / N).toFixed(3) + ' a tile)');
+    pair('waiting for the map', waitA.toFixed(1) + ' ms   (' + (waitA / N).toFixed(2) + ' a tile)');
+    pair('copying out of it', copyA.toFixed(1) + ' ms   (' + (copyA / N).toFixed(2) + ' a tile)');
+    pair('readback in all', mapA.toFixed(1) + ' ms   (' + (mapA / N).toFixed(2) + ' a tile), '
+      + (bytes / 1048576 * N / (mapA / 1000)).toFixed(0) + ' MB/s',
+      mapA > shaderA * 4 ? 'bad' : 'warn');
+    pair('wall clock', wallA.toFixed(1) + ' ms   (' + (wallA / N).toFixed(2) + ' a tile)');
+
+    // ---- ARM B: all at once --------------------------------------------------------------------
+    // N uniform buffers and N bind groups, so one command buffer can carry N different tile
+    // origins, and one output buffer big enough for all of them so the map happens once.
+    head('all at once');
+    const pxB = dev.createBuffer({ size: bytes * N,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const rbB = dev.createBuffer({ size: bytes * N,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    // Each dispatch writes into its OWN SLICE of one big buffer, reached through a bound range
+    // rather than an offset the shader computes - so the shader is the same one arm A runs, and the
+    // pixel index it writes stays tile-local. That is the point: batching must not need a different
+    // shader, or it is not the same thing being measured.
+    const ubsB = tiles.map(() => dev.createBuffer({ size: 304,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }));
+    const groupsB = tiles.map((t, i) => dev.createBindGroup({
+      layout: pipe.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: pxB, offset: i * bytes, size: bytes } },
+        { binding: 2, resource: { buffer: ubsB[i] } },
+        { binding: 3, resource: { buffer: arena } }] }));
+
+    let wallB = Infinity, shaderB = 0, mapB = 0, waitB = 0, copyB = 0, outB = null;
+    const allB = [];
+    for (let rep = 0; rep < REPS; rep++) {
+    const qB = mkQuery();
+    const tB0 = performance.now();
+    tiles.forEach((t, i) => dev.queue.writeBuffer(ubsB[i], 0, uniFor(packed.uni, t[0], t[1], TW)));
+    const encB = dev.createCommandEncoder();
+    const passB = encB.beginComputePass(qB
+      ? { timestampWrites: { querySet: qB.set, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 } }
+      : {});
+    passB.setPipeline(pipe);
+    for (let i = 0; i < N; i++) {
+      passB.setBindGroup(0, groupsB[i]);
+      passB.dispatchWorkgroups(Math.ceil(n / 64));
+    }
+    passB.end();
+    encB.copyBufferToBuffer(pxB, 0, rbB, 0, bytes * N);
+    if (qB) { encB.resolveQuerySet(qB.set, 0, 2, qB.res, 0); encB.copyBufferToBuffer(qB.res, 0, qB.map, 0, 16); }
+    dev.pushErrorScope('validation');
+    dev.queue.submit([encB.finish()]);
+    const mB0 = performance.now();
+    await rbB.mapAsync(GPUMapMode.READ);
+    const mB1 = performance.now();
+    const got = new Float32Array(rbB.getMappedRange().slice(0));
+    const mB2 = performance.now();
+    rbB.unmap();
+    const wB = performance.now() - tB0;
+    const errB = await dev.popErrorScope();
+    if (errB) throw new Error(errB.message.split('\n')[0]);
+    const shB = await readQuery(qB);
+    allB.push(wB);
+    if (wB < wallB) { wallB = wB; shaderB = shB; mapB = mB2 - mB0;
+                      waitB = mB1 - mB0; copyB = mB2 - mB1; outB = got; }
+    }
+    pair('shader', shaderB.toFixed(2) + ' ms for ' + N + ' tiles   ('
+      + (shaderB / N).toFixed(3) + ' a tile)');
+    pair('waiting for the map', waitB.toFixed(1) + ' ms   (' + (waitB / N).toFixed(2) + ' a tile)');
+    pair('copying out of it', copyB.toFixed(1) + ' ms   (' + (copyB / N).toFixed(2) + ' a tile)');
+    pair('readback in all', mapB.toFixed(1) + ' ms   (' + (mapB / N).toFixed(2) + ' a tile), '
+      + (bytes / 1048576 * N / (mapB / 1000)).toFixed(0) + ' MB/s');
+    pair('wall clock', wallB.toFixed(1) + ' ms   (' + (wallB / N).toFixed(2) + ' a tile)', 'good');
+
+    // ---- DO THE TWO ARMS AGREE? ----------------------------------------------------------------
+    // Batching is a chance to hand a dispatch the wrong uniform and paint a perfectly plausible
+    // tile of the wrong part of the sheet. No timing would notice.
+    head('do the two arms draw the same thing?');
+    let worst = 0, bad = 0, flatA = true, flatB = true;
+    const a0 = outA[0], b0 = outB[0];
+    for (let i = 0; i < n * 3 * N; i++) {
+      const d = Math.abs(outA[i] - outB[i]);
+      if (d > worst) worst = d;
+      if (d > 1e-5) bad++;
+      if (outA[i] !== a0) flatA = false;
+      if (outB[i] !== b0) flatB = false;
+    }
+    if (flatA || flatB) {
+      pair('one arm is flat', 'every pixel of ' + (flatA ? 'the one-at-a-time' : 'the batched')
+        + ' arm is the same value, so an agreement between them means nothing', 'bad');
+    }
+    pair('worst difference', worst.toExponential(2) + ' levels');
+    pair('channels apart', bad.toLocaleString() + ' of ' + (n * 3 * N).toLocaleString(),
+      bad === 0 ? 'good' : 'bad');
+    if (bad || flatA || flatB) {
+      big('The two arms do not draw the same tiles — the timings above are not comparable.', 'bad');
+      return;
+    }
+
+    // ---- the CPU, doing the same N tiles -------------------------------------------------------
+    head('the renderer, same tiles');
+    scene.w.__sa.renderOneTile(FULLW, tiles[0][0], tiles[0][1], TW, TW, 0);   // warm
+    let wallC = Infinity; const allC = [];
+    for (let rep = 0; rep < REPS; rep++) {
+      const tC0 = performance.now();
+      for (const [tx, ty] of tiles) {
+        const c = scene.w.__sa.renderOneTile(FULLW, tx, ty, TW, TW, 0);
+        c.width = c.height = 1;
+      }
+      const wC = performance.now() - tC0;
+      allC.push(wC); if (wC < wallC) wallC = wC;
+    }
+    pair('renderOneTile, wall clock', wallC.toFixed(0) + ' ms for ' + N + ' tiles   ('
+      + (wallC / N).toFixed(1) + ' a tile)');
+    pair('what it includes that the GPU arms do not', 'the mould, supersampling where the document '
+      + 'asks for it, and the canvas write', 'warn');
+
+    const POOL = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
+    const poolMs = wallC / POOL;
+    pair('an ' + POOL + '-worker pool would take about', poolMs.toFixed(0) + ' ms   ('
+      + (poolMs / N).toFixed(1) + ' a tile) — perfect scaling assumed, so this flatters the CPU');
+
+    head('what this says');
+    const gainA = poolMs / wallA, gainB = poolMs / wallB;
+    pair('one at a time, against the pool', gainA.toFixed(1) + '×',
+      gainA > 2 ? 'good' : gainA > 1 ? 'warn' : 'bad');
+    pair('all at once, against the pool', gainB.toFixed(1) + '×',
+      gainB > 2 ? 'good' : gainB > 1 ? 'warn' : 'bad');
+    const bat = wallA / wallB;
+    pair('batching is worth', bat.toFixed(2) + '× over the naive loop — '
+      + (bat > 1.3 ? 'the naive loop was latency-bound and batching fixes it'
+         : 'nothing. Batching removes LATENCY, and latency is not what this costs: the readback '
+           + 'moves the same bytes either way and that is where the time is.'),
+      bat > 1.3 ? 'good' : 'warn');
+    const sharePct = 100 * shaderB / wallB;
+    pair('the shader is', sharePct.toFixed(1) + '% of the batched wall clock — the rest is upload, '
+      + 'readback and the map', sharePct > 50 ? 'good' : 'warn');
+
+    const TILES_FULL = Math.pow(Math.ceil(FULLW / TW), 2);
+    pair('a full ' + FULLW.toLocaleString() + ' sheet is', TILES_FULL.toLocaleString() + ' tiles');
+    pair('extrapolated, batched', (wallB / N * TILES_FULL / 1000).toFixed(0) + ' s   against '
+      + (poolMs / N * TILES_FULL / 1000).toFixed(0) + ' s for the pool', 'warn');
+    pair('and that extrapolation assumes', 'the whole sheet behaves like these ' + N + ' tiles, that '
+      + (bytes * TILES_FULL / 1073741824).toFixed(0) + ' GiB moves off the GPU at this rate, and '
+      + 'that the TIFF encode - which neither arm does - is free. It is none of those.', 'warn');
+
+    big(gainB > 2
+      ? 'Batched, the GPU is ' + gainB.toFixed(1) + '× the pool with the readback counted.'
+      : 'With the readback counted the GPU is ' + gainB.toFixed(1) + '× the pool — the shader '
+        + 'is not the bottleneck.', gainB > 2 ? 'good' : 'warn');
+    log('every rep, wall clock for all ' + N + ' tiles (the BEST is what is reported above):');
+    log('  one at a time: ' + allA.map(v => v.toFixed(1)).join('  ') + ' ms');
+    log('  all at once:   ' + allB.map(v => v.toFixed(1)).join('  ') + ' ms');
+    log('  renderOneTile: ' + allC.map(v => v.toFixed(0)).join('  ') + ' ms');
+    const spread = Math.max(...allB) / Math.min(...allB);
+    log(spread > 1.5
+      ? '  the batched arm spread ' + spread.toFixed(1) + 'x across reps. The first is cold; a '
+        + 'single run of this page was not worth quoting, which is why it repeats.'
+      : '  the batched arm held within ' + spread.toFixed(2) + 'x across reps.');
+    log('arm A per-tile wall: ' + (wallA / N).toFixed(2) + ' ms, of which map ' + (mapA / N).toFixed(2));
+    log('arm B per-tile wall: ' + (wallB / N).toFixed(2) + ' ms, of which map ' + (mapB / N).toFixed(2));
+    log('CPU per-tile wall:   ' + (wallC / N).toFixed(1) + ' ms');
+  } catch (e) {
+    head('failed');
+    pair('error', String(e && e.message || e), 'bad');
+    log(String(e && e.stack || e));
+  } finally {
+    btn.disabled = false;
+  }
+};
+</script>
