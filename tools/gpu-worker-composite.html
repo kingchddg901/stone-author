@@ -1,0 +1,208 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>the worker's composite, against the main thread's</title>
+<!--
+  THE GROUND, THE COAT AND THE WINDOWS, MOVED TO A WORKER - AND THE SAME BYTES OR IT IS NOTHING.
+
+  The GPU path paints glass in a shader and then renderOneTile lays the ground, applies the coat and
+  composites the windows on the main thread. That has to stop: `map` is 23.4 ms of a 28.2 ms tile and
+  all of it is this thread waiting, because the pixels must arrive in JS before putImageData can
+  place them. A texture readback hands a worker the glass directly - but only if the worker can do
+  the wrapping, which means the composite moves whether it is worth moving or not.
+
+  It is worth almost nothing on its own: measured at 1.6 ms a tile on a slab with every coat token at
+  zero, and 210 ms a tile with three of them at 0.6. The reason to do it is the readback.
+
+  WHAT THIS COMPARES is the bytes that reach the TIFF, not an intermediate canvas:
+
+    A   pool.tile(i)  ->  renderOneTile here  ->  storedTilePixels here
+    B   pool.finish(i) -> the worker composites and cuts -> deflated parts, inflated back
+
+  Both arms run in the same build off the same shader, so a difference is the composite moving and
+  nothing else. Deflated SIZES are not the test - two different pictures can compress to the same
+  length - so the parts are inflated and every channel compared.
+
+  Run: node tools/make-probe-builds.mjs, python tools/serve-studio.py, then open this page.
+-->
+<style>
+  :root { --bg:#faf9f7; --fg:#1b1a19; --dim:#6b6864; --rule:#dcd8d2; --good:#1d6b3a; --warn:#8a5a00; --bad:#9b2420; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; } }
+  body { background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin:0; padding:16px; }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; }
+  h2 { font-size:14px; margin:18px 0 0; font-weight:600; }
+  p.sub { color:var(--dim); margin:0 0 14px; max-width:68ch; }
+  button { font:inherit; padding:7px 15px; border:1px solid var(--rule); border-radius:5px;
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  label { margin-right:12px; }
+  table { border-collapse:collapse; margin:12px 0; font-size:13px; }
+  td, th { border-bottom:1px solid var(--rule); padding:4px 14px 4px 0; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; white-space:nowrap; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  .big { font-size:18px; font-weight:600; margin:14px 0 0; }
+</style>
+
+<h1>the worker's composite, against the main thread's</h1>
+<p class="sub">The ground, the coat and the windows have to move to a worker before the readback can,
+and this is the gate that says the bytes did not change on the way. Both arms run in one build off
+one shader; the deflated parts are inflated and every channel compared, because equal compressed
+lengths are not equal pictures.</p>
+<label>width <select id="w"><option>2048</option><option selected>4096</option><option>16384</option></select></label>
+<label>tiles <input id="n" type="number" value="4" min="1" max="24" style="width:4em"></label>
+<button id="run">Run</button>
+<div id="res"></div>
+
+<script type="module">
+const RES = document.getElementById('res');
+let TB = null;
+function pair(k, v, cls) {
+  if (!TB) { TB = document.createElement('table'); RES.appendChild(TB); }
+  const tr = document.createElement('tr');
+  const a = document.createElement('th'); a.textContent = k;
+  const b = document.createElement('td'); b.textContent = v; if (cls) b.className = cls;
+  tr.appendChild(a); tr.appendChild(b); TB.appendChild(tr);
+}
+function head(t) { TB = null; const h = document.createElement('h2'); h.textContent = t; RES.appendChild(h); }
+function big(t, cls) { const p = document.createElement('p'); p.className = 'big ' + (cls || ''); p.textContent = t; RES.appendChild(p); }
+
+function load() {
+  return new Promise((res, rej) => {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0';
+    fr.src = '../harness/dist/stone-author.hooked.html';
+    fr.onerror = () => rej(new Error('could not load the hooked build'));
+    fr.onload = async () => {
+      const w = fr.contentWindow;
+      for (let i = 0; i < 160 && !w.__sa; i++) await new Promise(r => setTimeout(r, 100));
+      if (!w.__sa) return rej(new Error('no __sa'));
+      for (const k of ['gpuPool', 'tilePool', 'storedTilePixels', 'markSigNow'])
+        if (!w.__sa[k]) return rej(new Error('this build predates the hook for ' + k + ' - rebuild it'));
+      res(w);
+    };
+    document.body.appendChild(fr);
+  });
+}
+
+// INFLATE, because the worker hands back deflated parts and the question is about pixels. Sizes
+// agreeing proves nothing: two different tiles can compress to the same length.
+async function inflate(u8) {
+  const ds = new DecompressionStream('deflate');
+  const wr = ds.writable.getWriter();
+  wr.write(u8); wr.close();
+  const rd = ds.readable.getReader(), out = [];
+  let n = 0;
+  for (;;) { const { done, value } = await rd.read(); if (done) break; out.push(value); n += value.length; }
+  const b = new Uint8Array(n); let o = 0;
+  for (const q of out) { b.set(q, o); o += q.length; }
+  return b;
+}
+
+document.getElementById('run').onclick = async () => {
+  const btn = document.getElementById('run');
+  btn.disabled = true; RES.textContent = ''; TB = null;
+  try {
+    const W = +document.getElementById('w').value;
+    const N = Math.max(1, Math.min(24, +document.getElementById('n').value | 0));
+    const w = await load(), sa = w.__sa;
+    const slab = await (await fetch('/harness/dist/slab.json')).json();
+    sa.deserialize(slab); sa.render();
+
+    head('this device, this document');
+    const cap = await sa.gpuCapability();
+    if (!cap.ok) { big('no GPU here: ' + cap.why, 'bad'); return; }
+    const was = sa.gpuPrefGet(); sa.gpuPrefSet(true);
+    const why = sa.gpuWhyNot();
+    if (why) { sa.gpuPrefSet(was); big('the predicate refuses this slab: ' + why, 'warn'); return; }
+    const p = await sa.tiffPlan(W);
+    pair('plan', p.ts + ' px render tiles, store ' + p.store + ', bleed ' + p.bleed + ', k ' + p.k
+      + ', ' + p.rAcross + ' x ' + p.rDown);
+    const markSig = sa.markSigNow();
+    const total = p.rAcross * p.rDown;
+    const step = Math.max(1, Math.floor(total / N));
+    const picks = [];
+    for (let i = 0; i < N && i * step < total; i++) picks.push(i * step);
+    pair('tiles', picks.join(', ') + '   (spread, because the top of a sheet is its cheapest and '
+      + 'its least structured)');
+
+    // ---- ARM A: the main thread composites, as it does today -----------------------------------
+    head('A: renderOneTile here, then storedTilePixels here');
+    const A = new Map();
+    {
+      const pool = await sa.gpuPool(W, p);
+      if (!pool) { sa.gpuPrefSet(was); big('gpuPool returned null', 'bad'); return; }
+      for (const i of picks) {
+        const c = await pool.tile(i);
+        const cx = c.getContext('2d');
+        const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
+        for (let sy = 0; sy < p.k; sy++) for (let sx = 0; sx < p.k; sx++) {
+          const tx = gx * p.k + sx, ty = gy * p.k + sy;
+          if (tx >= p.across || ty >= p.down) continue;
+          const pr = sa.storedTilePixels(cx, p, sx, sy, tx, ty, W, markSig);
+          A.set(ty * p.across + tx, new Uint8Array(pr.px.buffer, pr.px.byteOffset, pr.px.byteLength).slice(0));
+        }
+        c.width = c.height = 1;
+      }
+      pool.close();
+      pair('stored tiles', A.size);
+    }
+
+    // ---- ARM B: the worker composites and cuts -------------------------------------------------
+    head('B: the glass goes to a worker, which lays the ground, the coat and the windows');
+    const B = new Map();
+    let refused = null;
+    {
+      const pool = await sa.gpuPool(W, p);
+      p.markSig = markSig; p.fin = true; p.finishOnly = true;
+      const fw = await sa.tilePool(W, p);
+      if (!fw) refused = 'tilePool refused - no finishers to compare against';
+      else {
+        pool.useFinishers(fw);
+        pair('finishers', fw.planned);
+        for (const i of picks) {
+          const rec = await pool.finish(i);
+          if (!rec || !rec.painted) { refused = 'tile ' + i + ' came back painted:false'; break; }
+          for (const part of rec.parts) B.set(part.idx, await inflate(part.z));
+        }
+      }
+      pool.close();
+    }
+    sa.gpuPrefSet(was);
+    if (refused) { big(refused, 'bad'); return; }
+    pair('stored tiles', B.size);
+
+    // ---- and are they the same bytes? ----------------------------------------------------------
+    head('do the two arms write the same tile?');
+    let missing = 0, lenBad = 0, chanBad = 0, worst = 0, firstIdx = -1, cmp = 0, flat = true;
+    const first = A.get(picks.length ? [...A.keys()][0] : 0);
+    for (const [idx, a] of A) {
+      const b = B.get(idx);
+      if (!b) { missing++; continue; }
+      if (a.length !== b.length) { lenBad++; continue; }
+      for (let j = 0; j < a.length; j++) {
+        const d = Math.abs(a[j] - b[j]);
+        if (d) { chanBad++; if (d > worst) worst = d; if (firstIdx < 0) firstIdx = idx; }
+        if (first && a[j] !== first[0]) flat = false;
+      }
+      cmp += a.length;
+    }
+    // A FLAT ARM AGREES WITH ANYTHING. If every byte of A is the same value then equality is not
+    // evidence of anything, and this page would be reporting that two blank tiles match.
+    pair('tiles in A but not in B', missing, missing ? 'bad' : 'good');
+    pair('tiles whose length differs', lenBad, lenBad ? 'bad' : 'good');
+    pair('bytes compared', cmp.toLocaleString());
+    pair('is arm A flat?', flat ? 'YES - every byte the same value, so an agreement means nothing'
+      : 'no, it varies', flat ? 'bad' : 'good');
+    pair('channels apart', chanBad.toLocaleString()
+      + (chanBad ? '   (worst ' + worst + ' level' + (worst === 1 ? '' : 's')
+          + ', first in stored tile ' + firstIdx + ')' : ''),
+      chanBad === 0 ? 'good' : 'bad');
+    big(!missing && !lenBad && !flat && chanBad === 0
+      ? 'The worker writes the same bytes. The composite can move, so the readback can follow.'
+      : 'The two arms differ - the composite cannot move until this reads zero.',
+      !missing && !lenBad && !flat && chanBad === 0 ? 'good' : 'bad');
+  } catch (e) {
+    head('failed'); pair('error', String(e && e.message || e), 'bad'); console.error(e);
+  } finally { btn.disabled = false; }
+};
+</script>

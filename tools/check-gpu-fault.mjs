@@ -68,11 +68,17 @@ const fnBody = (name) => {
   if (at < 0) return '';
   return CODE.slice(at, at + 400);
 };
-for (const [name, sig] of [['tile', 'async tile(i) {'], ['finish', 'async finish(i) {']]) {
+// THE TWO THINGS THAT HAND DATA ONWARD, which is not the same list as the two public methods.
+// tile() used to be where a paint happened; it is now a composite over paintSlot(), and every
+// paint - the sequential one, the prefetch and the finisher lookahead - goes through paintSlot.
+// So that is where the check belongs, and this gate said so by going red when the split happened.
+for (const [name, sig] of [['paintSlot', 'async paintSlot(i) {'], ['finish', 'async finish(i) {']]) {
   const body = fnBody(sig);
   ok('pool.' + name + '() refuses once a fault is visible', /faultCheck\(\)/.test(body),
      body ? '' : 'could not find ' + JSON.stringify(sig));
 }
+// And tile() must still REACH it, rather than having quietly become a second way in.
+ok('pool.tile() goes through paintSlot', /async tile\(i\) \{[\s\S]{0,120}?paintSlot\(i\)/.test(CODE));
 // The producer check stays too - earlier is better when the producer is what notices.
 ok('paintOne still throws on a fault it sees itself',
    /if\s*\(!e\s*&&\s*cap\.fault\)\s*throw/.test(CODE));

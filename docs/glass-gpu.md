@@ -776,6 +776,31 @@ Both arms live in [`tools/gpu-sheet-probe.html`](../tools/gpu-sheet-probe.html) 
 reference and the same tie counter, so there is one gate for "the GPU's bytes are the canvas's
 bytes" rather than two that can drift apart.
 
+### Step one of two: the composite moves, and the bytes do not
+
+The texture readback only works if the worker can wrap the glass, because the main thread never sees
+a pixel to wrap it with. So the ground, the coat and the windows move first - on their own merits
+that is worth 1.6 ms a tile, which is nothing, and the reason to do it is the readback that follows.
+
+`tile()` was one function: paint, then composite. It is two now. `paintSlot(i)` carries the prefetch,
+the slot rotation and the fault check and hands back a slot; `glassFrom(slot)` puts that slot's
+ImageData on a scratch surface and transfers it out as a bitmap; `tile(i)` is still there, composite
+and all, for the sequential path and for `gpu-path-check.html`. The worker gained a third branch
+beside `d.bmp`: `d.glass` is the picture only, blitted inside `woodRect()` under the tile's own
+transform, with everything `renderOneTile` wraps round it still to happen.
+
+**And the gate is the bytes that reach the TIFF, not an intermediate canvas.**
+[`tools/gpu-worker-composite.html`](../tools/gpu-worker-composite.html) runs both arms in one build
+off one shader - the main thread's `renderOneTile` plus `storedTilePixels`, against the worker's
+composite and cut - inflates the deflated parts and compares every channel, because two different
+tiles can compress to the same length. **0 apart over 67,108,864 bytes**, with arm A checked for
+flatness so that an agreement means something.
+
+It also caught the one defect this step had, on its first run. The message that carries the bitmap
+chose its field with `bmp: (bmp && !asGlass) || undefined, glass: (bmp && asGlass) || undefined` -
+and `a && b` yields `b`, so `glass` was the BOOLEAN `true` rather than the bitmap. Every tile threw
+in `drawImage`. Written out as a ternary and checked as a truth table rather than by eye.
+
 ## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
 
 **His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,

@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.202';
+  const BUILD = '2026.10.24.204';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5215,7 +5215,26 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `if(d.bmp){tcx.drawImage(d.bmp,0,0);d.bmp.close();}else{\n`;
     s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_GROUND;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
-    s += `paintContent(false,false);\n`;
+    // CONTENT FROM SOMEBODY ELSE, GROUND AND COAT STILL OURS. d.bmp above is a tile that is already
+    // finished; d.glass is only the picture, and everything renderOneTile wraps around it still has
+    // to happen - which is why this sits INSIDE the else, after the ground and under the same
+    // transform, exactly where paintContent would have run.
+    //
+    // ONLY WHERE THE SLAB IS, and this is the line that cost a round when the GPU path was new.
+    // paintGlassContent writes through putImageData for the band rows inside woodRect() and nowhere
+    // else, so every pixel outside that rectangle keeps the ground. The shader has no such bound -
+    // it fills the whole tile - and blitting all of it painted over the ground wherever the picture
+    // does not reach, which on a 4096 export is most of the bottom row. woodRect() reads the
+    // transform through g2d, so g2d has to be this canvas while it is asked.
+    //
+    // drawImage AND NOT putImageData, because what arrives is an ImageBitmap. At 1:1 with integer
+    // rectangles that is exact - gpu-sheet-probe.html's texture arm round-trips 12,582,912 channels
+    // through drawImage with 0 apart - and tools/gpu-worker-composite.html is the gate that says so
+    // for the sub-rectangle this uses.
+    s += `if(d.glass){var pg=g2d;g2d=tcx;var WB=null;try{WB=woodRect();}finally{g2d=pg;}` + NL;
+    s += `if(WB){tcx.save();tcx.setTransform(1,0,0,1,0,0);` + NL;
+    s += `tcx.drawImage(d.glass,WB.x0,WB.y0,WB.bw,WB.bh,WB.x0,WB.y0,WB.bw,WB.bh);tcx.restore();}` + NL;
+    s += `d.glass.close();}else{paintContent(false,false);}` + NL;
     s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:false,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
     // THE WINDOWS, after the coat and only for tiles a disc actually reaches - the same order and
     // the same skip test renderOneTile uses, because a window composites over a FINISHED tile and a
@@ -14887,6 +14906,11 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // The worker pool solves the same problem by pre-starting idx+1..idx+n inside finish(). It can,
     // because its workers paint their own tiles. These cannot: the bitmap does not exist until the
     // GPU has drawn it, so the drawing is what has to run ahead.
+    // ONE SCRATCH CANVAS for the glass handoff. transferToImageBitmap leaves it blank and reusable,
+    // so this is allocated once and not per tile - 16.9 MB at a 2048 tile is not a per-tile cost to
+    // take lightly, and the allocator is the one thing that would make the handoff worse than the
+    // composite it replaces.
+    let gl = null;
     const jobs = new Map();            // i -> Promise of the finish record
     let chain = Promise.resolve();     // the GPU, which does one tile at a time
 
@@ -14979,20 +15003,20 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       if (closed || !fin || i >= TOTAL || jobs.has(i)) return;
       const draw = chain.then(async () => {
         const tD = performance.now();
-        const c = await api.tile(i);
+        const slot = await api.paintSlot(i);
         own.draw += performance.now() - tD; own.n++;
-        return c;
+        return slot;
       });
       chain = draw.catch(() => {});       // a failed draw must not stop the ones behind it
-      jobs.set(i, draw.then(async c => {
-        // createImageBitmap COPIES; the transfer after it does not. That copy is the price of
-        // moving the work - one 16.9 MB copy at a 2048 tile, against the 410 ms of deflate it buys
-        // a way out of.
+      jobs.set(i, draw.then(async slot => {
+        // transferToImageBitmap MOVES the backing store rather than copying it, so what used to be
+        // createImageBitmap's 16.9 MB copy of a finished canvas is now a putImageData into a
+        // scratch surface and a transfer out of it. The worker does the ground, the coat and the
+        // windows on the other side.
         const tB = performance.now();
-        const bmp = await createImageBitmap(c);
+        const bmp = api.glassFrom(slot);
         own.bitmap += performance.now() - tB;
-        c.width = c.height = 1;
-        return fin.finishBitmap(i, bmp);
+        return fin.finishBitmap(i, bmp, true);
       }));
       jobs.get(i).catch(() => {});        // parked; rethrown by the await in finish()
     }
@@ -15040,7 +15064,15 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         for (let k = i + 1; k < i + 1 + depth; k++) pump(k);
         return rec;
       },
-      async tile(i) {
+      // THE PAINT ALONE, WITHOUT THE COMPOSITE. tile() used to be one function and the finishers
+      // had to take its output - a finished tile - which meant renderOneTile ran on this thread
+      // whatever else moved. Splitting it lets the glass go to a worker and the ground, the coat
+      // and the windows go with it; the slot is what comes back, because the pixels stay where the
+      // shader left them until somebody asks.
+      //
+      // The prefetch, the slot rotation and the fault check all live here, so both callers get them
+      // and neither can forget one.
+      async paintSlot(i) {
         if (closed) throw new Error('gpu pool used after close');
         faultCheck();
         busyN = 1;
@@ -15075,6 +15107,23 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
             // the await above when the caller reaches that tile.
             pr.catch(() => {});
           }
+          return slot;
+        } finally { busyN = 0; }
+      },
+      // THE GLASS AS A BITMAP, with the ground and the coat left to whoever takes it. One
+      // putImageData and one transferToImageBitmap - the same two steps the composite did on this
+      // thread, minus the composite.
+      glassFrom(slot) {
+        const g = gl || (gl = new OffscreenCanvas(ew, ew));
+        const gx2 = g.getContext('2d');
+        gx2.putImageData(set[slot].img, 0, 0);
+        return g.transferToImageBitmap();
+      },
+      // AND THE WHOLE TILE, for the callers that want one: the sequential export path when the
+      // finishers refuse, and tools/gpu-path-check.html, which is the gate that this still equals
+      // renderOneTile.
+      async tile(i) {
+        const slot = await this.paintSlot(i);
           const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
           const img = set[slot].img;
           const tA = performance.now();
@@ -15096,7 +15145,6 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
             cx.restore();
           });
           } finally { own.asm += performance.now() - tA; }
-        } finally { busyN = 0; }
       },
       useFinishers(f) { fin = f; api.finishers = (f && f.planned) || 0; },
       close() {
@@ -15291,7 +15339,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // idle. Only the busy count during the gap separates them, and nothing was recording it.
     const trace = new Map();                               // idx -> {d,s,f}; the consumer adds w
     const TRACE_KEEP = 512;                                // a consumer that never reads must not leak
-    const start = (idx, bmp) => {
+    const start = (idx, bmp, asGlass) => {
       if (idx >= p.renders || inflight.has(idx)) return;
       if (busyCount() >= target) return;
       const q = pool.find(x => !x.busy);
@@ -15350,7 +15398,12 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
                           ew: p.ts + 2 * p.bleed, eh: p.ts + 2 * p.bleed, ex0: gx * p.ts - p.bleed,
                           ey0: gy * p.ts - p.bleed, bleed: p.bleed, bs, finalW, finalH,
                           fin: !!p.fin, gx, gy, k: p.k, store: p.store, across: p.across, down: p.down,
-                          markSig: p.markSig || 0, bmp: bmp || undefined }, bmp ? [bmp] : []);
+                          markSig: p.markSig || 0,
+                          // ONE FIELD OR THE OTHER, never both: d.bmp short-circuits the whole
+                          // composite and d.glass runs it, so a message carrying both would take
+                          // the first branch and silently drop the ground, coat and windows.
+                          bmp: asGlass ? undefined : (bmp || undefined),
+                          glass: asGlass ? (bmp || undefined) : undefined }, bmp ? [bmp] : []);
       }));
     };
     return {
@@ -15394,7 +15447,10 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // A TILE SOMEBODY ELSE DREW. Same workers, same reply, same scheduler - the only difference
       // is that the pixels arrive instead of being painted. Returns the finish record, so a caller
       // can hand this straight to the branch that already consumes pool.finish().
-      async finishBitmap(idx, bmp) {
+      // asGlass SAYS WHICH OF THE TWO THINGS THIS IS: a finished tile, or the picture with the
+      // ground, coat and windows still to put round it. It travels all the way to the worker's
+      // branch, so the caller decides and nothing here has to guess from the bitmap's size.
+      async finishBitmap(idx, bmp, asGlass) {
         if (!p.fin) throw new Error('finishBitmap without p.fin');
         // START REFUSES WHEN EVERY WORKER IS BUSY - silently, by design, because its caller is a
         // scheduler that will offer the same index again a moment later. This caller is not: it
@@ -15406,7 +15462,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         // So it waits for a slot instead of being dropped. Waiting on the passes already in flight
         // rather than on a timer, because a worker going free is exactly what unblocks this.
         while (!inflight.has(idx)) {
-          start(idx, bmp);
+          start(idx, bmp, asGlass);
           if (inflight.has(idx)) break;
           const pend = [...inflight.values()];
           if (!pend.length) { await new Promise(r => setTimeout(r, 1)); continue; }
