@@ -138,6 +138,36 @@ There are six `vnoiseC` a pixel, so **roughly 8% of every pixel on V8 is one fun
 inlined**. A shader pays none of it, which is a small part of the GPU path's case and the first part
 of it that is measured on two devices rather than argued.
 
+**All three devices, both engines, every piece.** The decomposition now exists on a JavaScriptCore
+device as well, and it makes the finding much sharper than one engine could:
+
+| ns a call | floors | key | 4 reads | arith | nz | **body inlined** | **called** | **call tax** |
+|---|---|---|---|---|---|---|---|---|
+| desktop, V8 | 0.99 | 1.74 | 0.72 | 2.41 | 1.34 | **3.54** | 12.26 | **+8.72** |
+| S23, V8 | 0.81 | 1.49 | 0.95 | 3.16 | 1.29 | **3.63** | 10.93 | **+7.30** |
+| iPhone, JSC | 0.96 | 1.18 | 0.86 | 2.45 | 0.97 | **3.38** | **2.93** | **−0.45** |
+
+**Every piece is near equal and the body costs the same everywhere — 3.38 to 3.63 ns across two
+engines and three parts.** The whole of the 4× is the call: V8 pays 7–9 ns for it and JSC pays
+nothing. On JSC the called form is in fact marginally CHEAPER than the inlined one, which is why that
+device’s run flips the probe’s own verdict line to “it is not the call” — correct there, and the
+reverse of V8.
+
+**And it accounts for the gap.** The desktop sample is 110.9 ns against the iPhone’s 33.3, a
+difference of 77.6. Six un-inlined `vnoiseC` calls are **52.3 ns of that, 67%**; three `Math.exp` are
+**19.1 ns, 25%**. Together **92%**. There is no third thing to find.
+
+**A WRONG INFERENCE, KILLED BY THE SAME RUN.** Before the iPhone ran this, the reasoning was that
+JSC’s body must be cheaper in its non-flop part — seven `Float64Array` reads — because JSC’s whole
+called function beat V8’s inlined body on a device whose baseline flop is 43% slower. The direct test
+says no: four value reads cost **0.86 ns on the iPhone against 0.72 on the desktop**, so JSC is
+*slower* at typed-array access, not faster. The advantage is the call and only the call.
+
+**And §2306’s outlining is vindicated hardest on JSC.** Folding the miss path back into `vnoiseC`
+costs 8.32 ns there against 2.93 as it ships — **2.8× worse**, where on V8 the same change is within
+noise. The decision that fixed build 174’s bimodality turns out to matter far more on the engine that
+was never measured when it was made.
+
 **Shape does not move it.** Folding the miss path in — build 174's actual arrangement, which the
 variants probe only ever tested alongside a storage change that was independently 20–30% worse —
 gives 12.41 ns. The call to `vnoiseCfill` is not what blocks inlining.
