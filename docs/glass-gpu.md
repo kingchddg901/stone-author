@@ -1,8 +1,45 @@
 # A GPU path for glass — measured, and worth building for the long ones
 
-Status: **OPEN 2026-10-23, partial port first.** This document was closed earlier the same day on the
-strength of a correct measurement and a wrong judgement, and reopened within hours. Both are left
-visible below, because the mistake is more instructive than the conclusion.
+Status: **needs re-deciding, 2026-10-24.** Every hour figure below was derived against a renderer
+that no longer exists, and the page contradicts itself about which partial port it means. Read
+"Where this stands after 2026-10-24" first; the reasoning underneath is sound and the arithmetic is
+stale.
+
+Earlier status, left as written: **OPEN 2026-10-23, partial port first.** This document was closed
+on the strength of a correct measurement and a wrong judgement, and reopened within hours. Both are
+left visible below, because the mistake is more instructive than the conclusion.
+
+## Where this stands after 2026-10-24
+
+**Three things changed, and two of them cut against the port.**
+
+**The baseline moved 38%.** Every hour in the verdict table rests on a 1,048,576 measured at 24.5 h,
+live, at 0.538 s a tile. Six CPU changes since took a 65,535 from **7.645 min to 4.743**, measured,
+byte-identical where claimed and recorded in `renderer-determinism.md`. At the same scaling that
+1,048,576 is **about 15.2 h**, so the partial port's 8.7 h becomes **nearer 5.4 h at an unchanged
+ratio** — and the ratio is not unchanged.
+
+**The biggest CPU win is one a per-invocation GPU port cannot have.** The corner cache is worth 13.3%
+of a 65,535 and it works by keeping the four lattice hashes of the **last cell this thread saw**:
+consecutive samples on a scanline land in the same cell 93–99% of the time. A GPU invocation has no
+previous sample. It would recompute all twenty-four hashes where the CPU now computes about one,
+so the work the port would take over is **roughly 37% cheaper on the CPU than when the port was
+priced**. Recovering it on a GPU means cooperating across a workgroup, which is a different and much
+larger piece of work than the shading pass §3 scopes. This is an architectural observation, not a
+measurement.
+
+**And the page disagrees with itself about which port.** The verdict names "the shading class already
+proved safe in §3" at 1.55×, worth 8.7 h. Item 3 of §7 closes "a WebGPU compute pass for
+`glassFormT` alone" at a 1.25× ceiling on a poured sheet. Those are two different ports with two
+different ratios, and the header has been saying OPEN while the list says CLOSED. Nothing below
+resolves it.
+
+**So the honest position is that this cannot be decided from this page as written.** What it needs is
+one measurement: the port's ratio against the *current* arithmetic, on a poured sheet, with the
+corner cache in place on the CPU side. Until that exists the 1.55× is a number about a renderer that
+was retired in a day. The CPU list is also not finished — the radial mould still carries
+`woodAtan2`, and `adaptive-supersampling.md` is measured and unbuilt — and doing the cheap exact
+thing first is what this document already got right once.
 
 A written answer to "would it help, what would it cost, and what breaks", decided against
 measurements rather than against the obvious appeal of an idle GPU. The appeal *was* an error — the
