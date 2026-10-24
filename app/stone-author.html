@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.178';
+  const BUILD = '2026.10.24.179';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6940,8 +6940,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // as it did. Checked over 200,000 random points at zero deviation before the field was added.
       const ox = op.ox, oy = op.oy;
       if (k === 1) {                                           // spin
-        const px = x - ox, py = y - oy, r = Math.sqrt(px * px + py * py);
-        if (r > 1e-9) { const th = woodAtan2(py, px) - op.a * r; x = ox + r * Math.cos(th); y = oy + r * Math.sin(th); }
+        // A SPIN IS A ROTATION BY -a*r ABOUT ITS CENTRE, and that is all it ever was. The angle form
+        // took the long way round - recover the angle, subtract a*r, rebuild the point - and the
+        // rotation needs neither the angle nor the radius back out, only cos and sin of a*r. Two
+        // transcendentals instead of three, and no guard: at r = 0 the cosine is 1, the sine is 0, and
+        // the point lands on the centre, which is what the guard was protecting.
+        //
+        // THIS MOVED THE PICTURE, DELIBERATELY, AND IT IS THE FIRST BUILD TO DO SO. woodAtan2 is a
+        // polynomial approximation - 9.70e-4 rad mean error, 1.51e-3 worst - and `c + r*(cos, sin)`
+        // turns an angular error into a POSITIONAL one of r times epsilon: 12 px at one foot from the
+        // centre, 70 px at the rim of an 8 ft slab rendered at 65,535. Every glass master with a spin
+        // in it carries that, with the bands where the approximation put them rather than where the
+        // geometry does. This form has no approximation in it at all. renderer-determinism.md records
+        // the change, what it cost to look at, and that it was accepted.
+        const px = x - ox, py = y - oy, ar = op.a * Math.sqrt(px * px + py * py);
+        const c1 = Math.cos(ar), s1 = Math.sin(ar);
+        x = ox + px * c1 + py * s1; y = oy - px * s1 + py * c1;
       } else if (k === 2) {                                    // blow
         const s = op.s; x = ox + (x - ox) / s; y = oy + (y - oy) / s;
       } else if (k === 3) {                                    // roll

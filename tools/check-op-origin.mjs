@@ -49,7 +49,16 @@ ok('glassUnform is where it was', at > 0);
 {
   const spin = body.slice(body.indexOf('if (k === 1)'), body.indexOf('} else if (k === 2)'));
   ok('spin measures its radius from the centre', /const px = x - ox, py = y - oy/.test(spin));
-  ok('spin puts the point back around the centre', /x = ox \+ r \* Math\.cos\(th\); y = oy \+ r \* Math\.sin\(th\)/.test(spin));
+  // REPOINTED AT THE ROTATION FORM in build 2026.10.24.179, which dropped the angle round-trip. The
+  // CLAIM is unchanged and is the only thing this line is for: both coordinates are rebuilt around
+  // ox/oy, so an absent centre resolves to zero and `0 + v` returns v. What moved is the expression
+  // between the translations, from r and an angle to a plain rotation by a*r.
+  ok('spin puts the point back around the centre',
+    /x = ox \+ px \* c1 \+ py \* s1; y = oy - px \* s1 \+ py \* c1/.test(spin));
+  // A CALL, not a mention: the comment beside this code explains why woodAtan2 left, and matching
+  // the name alone made this assertion fail on the explanation for its own existence.
+  ok('and it no longer recovers the angle to do it', !/woodAtan2\(/.test(spin),
+    'woodAtan2 is a polynomial approximation and r*epsilon made it positional — see renderer-determinism.md');
   const blow = body.slice(body.indexOf('} else if (k === 2)'), body.indexOf('} else if (k === 3)'));
   ok('blow spreads from the centre', /x = ox \+ \(x - ox\) \/ s; y = oy \+ \(y - oy\) \/ s/.test(blow));
 }

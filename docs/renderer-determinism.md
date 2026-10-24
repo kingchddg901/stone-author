@@ -24,13 +24,66 @@ every tile contains drawn pixels.
 
 | axis | bit-identical | visible difference |
 | --- | --- | --- |
-| same engine, eight app builds apart | **yes**, 160/160 tiles | none |
+| same engine, eight app builds apart | **yes**, 160/160 tiles | none — but see `179` below |
 | same engine, browser version + dpr + runtime all changed | **yes**, 148/148 comparable | none |
 | same engine and machine, same render tile size | **yes**, byte for byte | none |
 | same engine and machine, **different render tile size** | **no**, 632/640 tiles | **none found** |
 | Blink x86 vs Blink ARM | **no** | **none found** |
 | Gecko vs Blink or WebKit | **no** | **yes — a different picture** |
 | WebKit vs Blink | **no** | **not tested visually** |
+
+### Build `2026.10.24.179` changed the picture on purpose — the only one that has
+
+The row above says eight app builds apart is bit-identical, and that was true of every build until this
+one. **A glass slab with a spin in it does not reproduce across `179`,** and the break was taken
+deliberately after looking at it.
+
+**What was wrong.** A spin maps `p` to `c + R(-a*r)*(p - c)`. The renderer computed that by recovering
+the angle with `woodAtan2`, subtracting `a*r`, and rebuilding the point from `r` and the new angle —
+the same map, the long way round. But `woodAtan2` is a **polynomial approximation**, mean error
+**9.70e-4 rad** and worst **1.51e-3 rad**, and `c + r*(cos, sin)` turns an angular error into a
+positional one of `r * epsilon`:
+
+| distance from the centre | displacement | px of 65,535 across an 8 ft slab |
+| --- | --- | --- |
+| 1 ft | 1.51e-3 ft | 12.4 |
+| 4 ft | 6.04e-3 ft | 49.4 |
+| 5.7 ft | 8.60e-3 ft | 70.5 |
+
+So every glass master with a spin carries bands where the approximation put them rather than where the
+geometry does, and the error grows towards the rim. `woodAtan2` is named for the material it was
+written for: in `woodEye` and `woodStain` an angle is used as an angle and 0.06° is invisible. It was
+reused in two glass paths that multiply it by radius.
+
+**What it cost to fix.** Written as the rotation it is, the spin needs no `atan2` and no `r > 1e-9`
+guard — at `r = 0` the cosine is 1, the sine is 0, and the point lands on the centre. The new form is
+exact: checked against the same map written with `Math.atan2`, it agrees to **2.05e-15 of the radius,
+8.3e-11 px of 65,535**. The change against the OLD form, on the reference slab, is **7.08e-3 ft worst
+(58 px) and 2.53e-3 ft mean**.
+
+Measured on a 1024 tile at 65,535, same slab, nothing else altered:
+
+| where on the sheet | pixels that moved | worst level | mean where moved |
+| --- | --- | --- | --- |
+| near the spin centre | **53.9%** | 94 | 45.5 |
+| mid-sheet | 15.3% | 105 | 31.0 |
+| at the corner | 23.5% | 95 | 39.5 |
+
+**What was accepted.** The look was compared side by side at 1:1 before the change landed and judged
+close enough, with the note that the lower region may want supersampling — which agrees with
+`adaptive-supersampling.md`, where the spin is already held responsible for half the aliasing. The
+trade is: masters rendered before `179` are historical for any slab with a spin, and in exchange the
+spin is geometrically true and the renderer is deterministic again from `179` on.
+
+**It is not a speed change and should not be quoted as one.** `woodAtan2` is a polynomial, so dropping
+it saves **9.4% of one spin** — a ceiling of about 2.3% off a render, since four spins are 24.4% of a
+4096 tile. Gated by `tools/probe-spin-identity.mjs`, which asserts the exactness and *prints* the
+accepted cost rather than asserting it, so the figures above cannot drift out of this page unnoticed.
+
+**Still open, and the same defect.** The radial mould reads `woodAtan2(ga, gc) * (0.5 + r)`, which
+amplifies the same error by radius in the same way. It is untouched: there the angle is genuinely
+wanted, so the choice is the approximation or `Math.atan2`'s cost, and that is a separate look
+decision rather than an identity waiting to be used.
 
 ### The render tile size changes the picture
 
