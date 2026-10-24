@@ -69,6 +69,8 @@ jobs:
         run: node tools/check-fn-refs.mjs
       - name: The app’s shader matches tools/lib
         run: node tools/check-gpu-sync.mjs
+      - name: The GPU’s finishers are actually reached
+        run: node tools/check-gpu-finish.mjs
       - name: The material fork happens in one place or it is not a fork
         run: node tools/check-material-fork.mjs
       - name: Nothing is called from outside the function that declares it

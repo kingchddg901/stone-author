@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.193';
+  const BUILD = '2026.10.24.194';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15550,9 +15550,17 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       if (fw) { pool.useFinishers(fw); p.fin = true; p.trail.push('gpu finishers ' + fw.planned); }
       else { p.fin = false; p.trail.push('gpu finishers refused'); }
     } else if (pool && pool.gpu) p.fin = false;
-    // THE GPU WAS DECIDED ABOVE, before the signature was taken. The worker pool is the fallback.
-    if (pool) p.fin = false;
-    else pool = layTiles ? null : await tilePool(W, p);
+    // THE GPU WAS DECIDED ABOVE, before the signature was taken. The worker pool is the fallback,
+    // and p.fin is already settled by the block above - it must NOT be touched here.
+    //
+    // It was. This line read `if (pool) p.fin = false;`, left over from when a GPU pool could only
+    // hand back a canvas, and it ran four lines after the finisher block had set it true. So the
+    // finishers were built, attached, reported in the trail as "gpu finishers 8" - and then never
+    // called, because the export loop takes the pool.finish branch on p.fin alone. Four quartets of
+    // 32k masters were rendered through the path this was meant to replace, and the only thing that
+    // caught it was gpuOwn coming back with draw: 0 and n: 0 while copy was non-zero: the shader had
+    // run and the lookahead that feeds the workers never had.
+    if (!pool) pool = layTiles ? null : await tilePool(W, p);
     // SAY WHETHER IT POOLED, in the trail and on the panel. Both, because they answer different
     // questions: the trail travels in the master so a file can be read months later, and the status
     // line is the only thing that answers it BEFORE six minutes have been spent. A width that was
