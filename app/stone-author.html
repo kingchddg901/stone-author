@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.187';
+  const BUILD = '2026.10.24.188';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14775,23 +14775,43 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       return null;                                         // the CPU path is always there
     }
 
-    const px = dev.createBuffer({ size: n * 3 * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-    const pk = dev.createBuffer({ size: bytes3,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-    const rb = dev.createBuffer({ size: bytes3,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-    const ub = dev.createBuffer({ size: 304,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    // TWO OF EVERYTHING, so tile n+1 can be on the GPU while tile n is being deflated and written.
+    //
+    // THE MEASUREMENT THAT ASKED FOR THIS: on the 262,144 master the shader is about 2 ms of a
+    // 128 ms tile, and HWiNFO had the GPU at 6.8% and 2 W while the CPU sat at 46% - neither device
+    // working, because every step waits on the one in front of it. Submit, wait, map, copy,
+    // deflate, write, repeat.
+    //
+    // A second set of buffers is the whole mechanism. tile(n) hands back its canvas and immediately
+    // starts n+1 into the OTHER set, so the caller's deflate and disk write overlap the next tile's
+    // shader and readback instead of following them.
+    const SETS = 2;
+    const set = Array.from({ length: SETS }, () => ({
+      px: dev.createBuffer({ size: n * 3 * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }),
+      pk: dev.createBuffer({ size: bytes3,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }),
+      rb: dev.createBuffer({ size: bytes3,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
+      ub: dev.createBuffer({ size: 304,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+      img: new ImageData(ew, ew),
+      uni: packed.uni.slice(0),
+    }));
+    for (const s of set) s.view = new DataView(s.uni);
+    // THE ARENA IS SHARED and read-only to the shader - it is the document, identical for every
+    // tile, and 40,874 floats of it. Two copies would be two uploads of the same thing.
     const ar = dev.createBuffer({ size: Math.max(4, packed.arena.byteLength),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     dev.queue.writeBuffer(ar, 0, packed.arena);
-    const grp = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
-      { binding: 0, resource: { buffer: px } }, { binding: 2, resource: { buffer: ub } },
-      { binding: 3, resource: { buffer: ar } }] });
-    const grpP = dev.createBindGroup({ layout: pipeP.getBindGroupLayout(0), entries: [
-      { binding: 0, resource: { buffer: px } }, { binding: 1, resource: { buffer: pk } },
-      { binding: 2, resource: { buffer: ub } }] });
+    for (const s of set) {
+      s.grp = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: s.px } }, { binding: 2, resource: { buffer: s.ub } },
+        { binding: 3, resource: { buffer: ar } }] });
+      s.grpP = dev.createBindGroup({ layout: pipeP.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: s.px } }, { binding: 1, resource: { buffer: s.pk } },
+        { binding: 2, resource: { buffer: s.ub } }] });
+    }
 
     // packReal writes tileX and tileY as int32s at a known place in the 304-byte uniform; patching
     // those two keeps every other field provably identical from tile to tile.
@@ -14802,43 +14822,50 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const DIM = Math.min(65535, dev.limits.maxComputeWorkgroupsPerDimension || 65535);
     const split = g => { const x = Math.min(g, DIM); return [x, Math.ceil(g / x)]; };
     const OFF_TX = 160 + 30 * 4, OFF_TY = 160 + 31 * 4, OFF_TH = 160 + 33 * 4;
-    const uni = packed.uni.slice(0), uniView = new DataView(uni);
-    const img = new ImageData(ew, ew);
+    const TOTAL = p.rAcross * p.rDown;
     let closed = false, busyN = 0, held = 0;
+    // the one prefetch in flight, if any: { i, slot, p }
+    let ahead = null;
 
-    async function paintOne(ex0, ey0) {
-      const d = img.data;
+    async function paintOne(ex0, ey0, s) {
+      const d = s.img.data, uni = s.uni, uniView = s.view;
       for (let y0 = 0; y0 < ew; y0 += rowsMax) {
         const rows = Math.min(rowsMax, ew - y0), cells = ew * rows;
         uniView.setInt32(OFF_TX, ex0, true);
         uniView.setInt32(OFF_TY, ey0 + y0, true);     // the band's own origin on the sheet
         uniView.setInt32(OFF_TH, rows, true);         // and its own height: the last one is short
-        dev.queue.writeBuffer(ub, 0, uni);
+        dev.queue.writeBuffer(s.ub, 0, uni);
         const [dX, dY] = split(Math.ceil(cells / 64));
         const [pX, pY] = split(Math.ceil(cells / 4 / 64));
         dev.pushErrorScope('validation');
         const enc = dev.createCommandEncoder();
         const a = enc.beginComputePass();
-        a.setPipeline(pipe); a.setBindGroup(0, grp);
+        a.setPipeline(pipe); a.setBindGroup(0, s.grp);
         a.dispatchWorkgroups(dX, dY); a.end();
         // TWO PASSES. A pass boundary is the ordering guarantee that needs no looking up, and the
         // pack reads exactly what the paint wrote.
         const b = enc.beginComputePass();
-        b.setPipeline(pipeP); b.setBindGroup(0, grpP);
+        b.setPipeline(pipeP); b.setBindGroup(0, s.grpP);
         b.dispatchWorkgroups(pX, pY); b.end();
-        enc.copyBufferToBuffer(pk, 0, rb, 0, cells * 3);
+        enc.copyBufferToBuffer(s.pk, 0, s.rb, 0, cells * 3);
         dev.queue.submit([enc.finish()]);
-        await rb.mapAsync(GPUMapMode.READ, 0, cells * 3);
-        const src = new Uint8Array(rb.getMappedRange(0, cells * 3));
+        await s.rb.mapAsync(GPUMapMode.READ, 0, cells * 3);
+        const src = new Uint8Array(s.rb.getMappedRange(0, cells * 3));
         let o = y0 * ew * 4;
         for (let j = 0; j < cells * 3; j += 3, o += 4) {
           d[o] = src[j]; d[o + 1] = src[j + 1]; d[o + 2] = src[j + 2]; d[o + 3] = 255;
         }
-        rb.unmap();
+        s.rb.unmap();
         const e = await dev.popErrorScope();
         if (e) throw new Error(e.message.split(String.fromCharCode(10))[0]);
       }
     }
+
+    // WHERE A TILE'S GPU WORK BEGINS, called both directly and as the prefetch for the next one.
+    const start = (i, slot) => {
+      const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
+      return paintOne(gx * p.ts - p.bleed, gy * p.ts - p.bleed, set[slot]);
+    };
 
     return {
       // EVERY FIELD THE EXPORT READS OFF A POOL, not just the ones the tile loop touches. The
@@ -14847,7 +14874,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // writes `workers: undefined` into the master's provenance and a trace whose target is
       // undefined, on a file that cannot afterwards say what drew it. Which matters more here than
       // for any other painter, because a GPU master is NOT byte-identical to a CPU one.
-      planned: 1, workers: 1, shed: 0, strain: null, gpu: true,
+      planned: 1, workers: 1, shed: 0, strain: null, gpu: true, pipelined: SETS > 1,
       get busy() { return busyN; },
       get tiles() { return held; },
       stamp: () => null,                                   // no per-worker trace: there is one of it
@@ -14855,9 +14882,34 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         if (closed) throw new Error('gpu pool used after close');
         busyN = 1;
         try {
-          const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
-          await paintOne(gx * p.ts - p.bleed, gy * p.ts - p.bleed);
+          // THE PREFETCH IS SPECULATIVE, so a caller that skips is not a correctness problem. A
+          // resumed export skips every tile already on disk, so the indices arrive with gaps; a
+          // prefetch for the wrong one is simply discarded and the right one computed here.
+          let slot;
+          if (ahead && ahead.i === i) {
+            slot = ahead.slot;
+            const pending = ahead; ahead = null;
+            await pending.p;                        // rethrows here, where a caller can see it
+          } else {
+            if (ahead) { const stale = ahead; ahead = null; try { await stale.p; } catch (_) {} }
+            slot = 0;
+            await start(i, slot);
+          }
           held++;
+          // AND THE NEXT ONE GOES NOW, before this tile's canvas is built and long before the
+          // caller deflates it. That overlap is the entire point: the GPU works through the CPU's
+          // half of the tile instead of waiting for it.
+          if (i + 1 < TOTAL && !closed) {
+            const nxt = (slot + 1) % SETS;
+            const pr = start(i + 1, nxt);
+            ahead = { i: i + 1, slot: nxt, p: pr };
+            // A REJECTION NOBODY IS AWAITING YET is an unhandled rejection, and this one would be
+            // reported as a page error while the export carried on. Parked here and rethrown by
+            // the await above when the caller reaches that tile.
+            pr.catch(() => {});
+          }
+          const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
+          const img = set[slot].img;
           return renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed, cx => {
             // ONLY WHERE THE SLAB IS. paintGlassContent writes through
             // g2d.putImageData(img, B.x0, by, ...) for the band rows inside woodRect() and nowhere
@@ -14879,7 +14931,16 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       close() {
         if (closed) return;
         closed = true;
-        for (const b of [px, pk, rb, ub, ar]) { try { b.destroy(); } catch (_) {} }
+        // AN IN-FLIGHT PREFETCH STILL HOLDS A BUFFER. Destroying underneath it is a validation
+        // error at best; the promise is already caught, so this only has to wait for it.
+        const wait = ahead ? ahead.p.catch(() => {}) : Promise.resolve();
+        ahead = null;
+        wait.then(() => {
+          for (const s of set) for (const b of [s.px, s.pk, s.rb, s.ub]) {
+            try { b.destroy(); } catch (_) {}
+          }
+          try { ar.destroy(); } catch (_) {}
+        });
       },
     };
   }
