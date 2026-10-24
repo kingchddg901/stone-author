@@ -113,6 +113,17 @@ About **17 pixels per million**, each one a ribbon label flipping where a sample
 a boundary — a label cannot average, so a flip is large when it happens. Against `179`'s 53.9% at a
 mean of 45 levels, this is four orders of magnitude smaller, and it is the mechanism rather than noise.
 
+**Measured on renders, and deterministic again.** Two 65,535 runs on `181` are **byte-identical to
+each other** at 392,459,832 image bytes, and both differ from `180` on **631 of 640 tiles, worst byte
+delta 106** — so almost every tile carries a few of those 17-per-million flips, which is what a
+scatter of that density looks like at 4.2 M pixels a tile.
+
+On speed the pair is honest rather than tidy: **4.769 and 4.894 min against `180`'s 5.116, so 6.8%
+and 4.3%** — against a prediction of 3–5%. They are not tight enough to pick between, and the thread
+column says why: the slower run took 0.4 threads of foreign load and shows **no compute gain at all**
+(2485 core-seconds against `180`'s 2475), while the clean run shows **8.7% less** (2260). A third run
+on a quiet box would settle it; what is already safe to say is that the floor is 4.3%.
+
 `tools/probe-spin-identity.mjs` holds the bound at 1e-7 of the radius and ablates five ways. Two of
 its arms had to be repointed at the table, and one of them — `cos` and `sin` swapped — had silently
 stopped corrupting anything while still reporting green, because its threshold was tighter than the
