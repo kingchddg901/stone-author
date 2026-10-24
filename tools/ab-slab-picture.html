@@ -1,0 +1,166 @@
+<!doctype html>
+<!--
+  Two builds of the app, as pictures: the whole slab and two crops, with a difference panel.
+
+  WHAT THESE FOUR PAGES FOUND, so the next reader does not re-derive it.
+
+  The reference master's op chain is 5,2,2,1,5,2,5,3 - three stirs, a roll and three blows. The roll
+  divides the coordinate by 2.5 and each blow divides it again, while the stir maps to its warp grid
+  with a FIXED slab-space centre (F.PX, and SLAB_FT for the width). So by the time each stir runs,
+  the coordinate has shrunk by 2.5 to 11.5 and lands far outside the grid: cu is outside [0,1] on
+  100% of samples, for every stir, starting with the FIRST one to fire - before anything has
+  displaced it. Measured inside glassUnwarp, not reconstructed from the outside.
+
+  THE MATERIAL'S FINE DETAIL COMES FROM THAT EXTRAPOLATION. It is not a defect to clamp away: an
+  interpolant clamp was written, measured, and reverted precisely because it removed the detail -
+  the whole slab went from fine structure to broad smooth bands. These pages are what measured it.
+
+  The consequence that did land is in the shader, not the renderer: extrapolating ~200 cells off a
+  grid edge cancels catastrophically in f32, so tools/lib/glass-gpu.mjs writes its bilinears as
+  a + t*(b-a) rather than a*(1-t) + b*t. Same algebra, 18x fewer disagreeing channels against the
+  CPU on a real tile.
+
+  RUN: node tools/make-probe-builds.mjs      then serve the repo and open this page.
+       python tools/serve-studio.py          -> http://127.0.0.1:8777/tools/<this file>
+  The builds live in harness/dist and are git-ignored, so they are never stale in a checkout - they
+  are absent, and every page here says which one it could not find.
+-->
+<meta charset="utf-8">
+<title>two builds, as a picture</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; background: #14110f; color: #e8e2d8;
+         margin: 1.2rem; }
+  canvas { border: 1px solid #3a3330; }
+  .dim { color: #8a827a; }
+  .bad { color: #d9705f; }
+</style>
+<div id="s">rendering both builds&hellip;</div>
+<canvas id="c" width="10" height="10"></canvas>
+<script type="module">
+const s = document.getElementById('s'), out = document.getElementById('c');
+const W = 65535, P = 256;
+// two tiles, so the change is not read off one lucky square
+// [sheet width, tile x, tile y, label] - the first is the entire slab, the rest are crops of it
+const ROWS = [[P, 0, 0, 'the whole slab'],
+              [W, 64000, 30000, 'tile 64,000,30,000 of a 65,535 px sheet'],
+              [W, 31000, 12000, 'tile 31,000,12,000 of a 65,535 px sheet']];
+const ARMS = [['../harness/dist/stone-author.before.html', 'at the ref'],
+              ['../harness/dist/stone-author.hooked.html', 'the working tree']];
+
+function load(src) {
+  return new Promise((res, rej) => {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0';
+    fr.src = src;
+    fr.onerror = () => rej(new Error('could not load ' + src));
+    fr.onload = async () => {
+      const w = fr.contentWindow;
+      for (let i = 0; i < 150 && !w.__sa; i++) await new Promise(r => setTimeout(r, 100));
+      w.__sa ? res(w) : rej(new Error(src + ' never exposed __sa'));
+    };
+    document.body.appendChild(fr);
+  });
+}
+
+(async () => {
+  try {
+    const slab = await (await fetch('/harness/dist/slab.json')).json();
+    // IDENTICAL ARMS REPORT 0 LEVELS, which is indistinguishable from an edit that changed
+    // nothing. make-probe-builds takes the before arm from a git ref and the after from the
+    // working tree, so a clean checkout gives two copies of one build - say so rather than
+    // letting a zero read as a result.
+    const srcs = [];
+    const ws = [];
+    for (const [src] of ARMS) { const w = await load(src); w.__sa.deserialize(slab);
+      w.__sa.render(); ws.push(w); srcs.push(w.document.documentElement.innerHTML); }
+    const sameBuild = srcs[0] === srcs[1];
+
+    const LH = 22, PAD = 10, COLS = 3;
+    out.width = PAD + COLS * (P + PAD);
+    out.height = LH + ROWS.length * (P + PAD + LH);
+    const g = out.getContext('2d');
+    g.fillStyle = '#14110f'; g.fillRect(0, 0, out.width, out.height);
+    g.font = '12px ui-monospace, Consolas, monospace'; g.textBaseline = 'middle';
+
+    const heads = [ARMS[0][1], ARMS[1][1], 'where they differ, scaled to its own worst'];
+    g.fillStyle = '#c9a227';
+    heads.forEach((h, i) => g.fillText(h, PAD + i * (P + PAD), LH / 2));
+
+    // THE WHOLE SLAB FIRST, because a 256 px crop of a 65,535 px sheet is 0.4% of its width and a
+    // flat crop proves nothing on its own - at that scale a smooth material IS flat, and a crop
+    // that bands hard inside 256 px may be the artifact rather than the detail. Judge an edit on
+    // the whole slab first and treat a crop as a magnifier, never as the evidence.
+
+    let worst = 0, worstPc = 0;
+    for (let r = 0; r < ROWS.length; r++) {
+      const [sheet, tx, ty, label] = ROWS[r];
+      const y0 = LH + r * (P + PAD + LH);
+      const d = [];
+      for (let a = 0; a < 2; a++) {
+        const c = ws[a].__sa.renderOneTile(sheet, tx, ty, P, P, 0);
+        g.drawImage(c, PAD + a * (P + PAD), y0);
+        d.push(c.getContext('2d').getImageData(0, 0, P, P).data);
+        c.width = c.height = 1;
+      }
+      // A FIXED GAIN MAKES A DEAD PICTURE HERE. At x3 every difference past 85 levels pegs at white,
+      // and the worst on the whole slab is 107 over half its pixels - so the panel came out solid
+      // amber and carried no information at all. That is what a difference image does when the change
+      // is TOTAL rather than sparse: amplification is for finding a small change, and this is not one.
+      //
+      // So it is normalised to the row's own worst instead. 255 is exactly that row's maximum and
+      // everything else is relative to it, which always has structure as long as the differences
+      // vary. If they genuinely do not, the saturated fraction printed beside it says so rather than
+      // leaving a flat panel to be read as detail.
+      let maxd = 0, nd = 0;
+      const mag = new Uint8Array(P * P);
+      for (let i = 0, j = 0; i < d[0].length; i += 4, j++) {
+        const dr = Math.abs(d[0][i] - d[1][i]), dg = Math.abs(d[0][i + 1] - d[1][i + 1]),
+              db = Math.abs(d[0][i + 2] - d[1][i + 2]);
+        const m = Math.max(dr, dg, db);
+        mag[j] = m;
+        if (m > maxd) maxd = m;
+        if (m) nd++;
+      }
+      const im = g.createImageData(P, P);
+      let pegged = 0;
+      for (let j = 0, i = 0; j < mag.length; j++, i += 4) {
+        const v = maxd ? Math.round(mag[j] / maxd * 255) : 0;
+        if (v >= 250) pegged++;
+        im.data[i] = v; im.data[i + 1] = Math.round(v * 0.8); im.data[i + 2] = Math.round(v * 0.4);
+        im.data[i + 3] = 255;
+      }
+      const tmp = document.createElement('canvas');
+      tmp.width = tmp.height = P; tmp.getContext('2d').putImageData(im, 0, 0);
+      g.drawImage(tmp, PAD + 2 * (P + PAD), y0);
+      const pc = 100 * nd / (P * P);
+      if (maxd > worst) { worst = maxd; worstPc = pc; }
+      g.fillStyle = '#9a9289';
+      g.fillText(label + '   —   ' + maxd + ' levels at most, ' + pc.toFixed(1)
+        + '% of pixels moved, ' + (100 * pegged / mag.length).toFixed(1) + '% of the panel at its peak',
+        PAD, y0 + P + LH / 2 + 2);
+      g.fillStyle = '#c9a227';
+    }
+
+    // hand the composite back to disk rather than leaving it in the tab; see do_PUT in
+    // tools/serve-studio.py for why that endpoint exists
+    const blob = await new Promise(r => out.toBlob(r, 'image/png'));
+    let saved = '';
+    try {
+      const r = await fetch('/_out/ab-slab.png', { method: 'PUT', body: blob });
+      saved = r.ok ? ' <span class="dim">— written to tools/_out/ab-slab.png ('
+        + (blob.size / 1024).toFixed(0) + ' KB)</span>'
+        : ' <span class="bad">— could not write it: ' + r.status + '</span>';
+    } catch (e) { saved = ' <span class="bad">— could not write it: ' + e.message + '</span>'; }
+    s.innerHTML = (sameBuild ? '<span class="bad">THE SAME BUILD TWICE - the two arms are byte-identical, '
+      + 'so the zero below is the comparison failing to have anything to compare. Edit the app and '
+      + 'run node tools/make-probe-builds.mjs again.</span><br>' : '')
+      + 'worst of the two tiles: <b>' + worst + ' levels</b> on ' + worstPc.toFixed(1)
+      + '% of pixels. <span class="dim">Left is the build at the ref, middle is the same slab from '
+      + 'the working tree, right is where they differ, each panel scaled to its own worst.</span>' + saved;
+    document.title = 'ab picture: ' + worst + ' levels';
+  } catch (e) {
+    s.innerHTML = '<span class="bad">' + String(e && e.message || e) + '</span>';
+    document.title = 'ab picture: FAILED';
+  }
+})();
+</script>

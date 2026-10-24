@@ -1,0 +1,180 @@
+<!doctype html>
+<!--
+  What the painter actually hands glassUnwarp, recorded inside the function.
+
+  WHAT THESE FOUR PAGES FOUND, so the next reader does not re-derive it.
+
+  The reference master's op chain is 5,2,2,1,5,2,5,3 - three stirs, a roll and three blows. The roll
+  divides the coordinate by 2.5 and each blow divides it again, while the stir maps to its warp grid
+  with a FIXED slab-space centre (F.PX, and SLAB_FT for the width). So by the time each stir runs,
+  the coordinate has shrunk by 2.5 to 11.5 and lands far outside the grid: cu is outside [0,1] on
+  100% of samples, for every stir, starting with the FIRST one to fire - before anything has
+  displaced it. Measured inside glassUnwarp, not reconstructed from the outside.
+
+  THE MATERIAL'S FINE DETAIL COMES FROM THAT EXTRAPOLATION. It is not a defect to clamp away: an
+  interpolant clamp was written, measured, and reverted precisely because it removed the detail -
+  the whole slab went from fine structure to broad smooth bands. These pages are what measured it.
+
+  The consequence that did land is in the shader, not the renderer: extrapolating ~200 cells off a
+  grid edge cancels catastrophically in f32, so tools/lib/glass-gpu.mjs writes its bilinears as
+  a + t*(b-a) rather than a*(1-t) + b*t. Same algebra, 18x fewer disagreeing channels against the
+  CPU on a real tile.
+
+  RUN: node tools/make-probe-builds.mjs      then serve the repo and open this page.
+       python tools/serve-studio.py          -> http://127.0.0.1:8777/tools/<this file>
+  The builds live in harness/dist and are git-ignored, so they are never stale in a checkout - they
+  are absent, and every page here says which one it could not find.
+-->
+<meta charset="utf-8">
+<title>what the painter really hands the warp grid</title>
+<style>
+  body { font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace; max-width: 74rem; margin: 2rem auto;
+         padding: 0 1rem; background: #14110f; color: #e8e2d8; }
+  h2 { font-size: .95rem; margin: 1.5rem 0 .3rem; color: #c9a227;
+       border-bottom: 1px solid #3a3330; padding-bottom: .2rem; }
+  td, th { padding: .1rem .9rem .1rem 0; text-align: left; }
+  th { color: #9a9289; font-weight: 400; }
+  .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .bad { color: #d9705f; } .ok { color: #7bbf6a; } .warn { color: #d9a84f; } .dim { color: #8a827a; }
+  table { border-collapse: collapse; margin-bottom: .4rem; }
+  p { max-width: 62rem; }
+</style>
+<div id="o">loading both instrumented builds&hellip;</div>
+<script type="module">
+const o = document.getElementById('o');
+
+// THE RECORDER SITS INSIDE glassUnwarp, not outside it. The previous attempt reconstructed the
+// (cu, cvv) mapping from F.RM and F.RS by their names and reported a cvv of -6.94; the painter's own
+// call site is (y - F.PY) * 12 / SLAB_FT + 0.5 * F.H on the coordinate the op chain has already
+// moved, which has nothing to do with either field. A number derived from a guessed mapping is the
+// guess, measured.
+const ARMS = [
+  ['at the ref', '../harness/dist/stone-author.rec-before.html'],
+  ['the working tree', '../harness/dist/stone-author.rec-after.html'],
+];
+const W = 65535, TW = 512, TILES = [[0, 0], [31000, 12000], [64000, 30000], [16000, 38000]];
+
+function load(src) {
+  return new Promise((res, rej) => {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0';
+    fr.src = src;
+    fr.onerror = () => rej(new Error('could not load ' + src));
+    fr.onload = async () => {
+      const w = fr.contentWindow;
+      for (let i = 0; i < 150 && !w.__sa; i++) await new Promise(r => setTimeout(r, 100));
+      if (!w.__sa) return rej(new Error(src + ' never exposed __sa'));
+      if (!w.__UW) return rej(new Error(src + ' has no recorder - the build is stale'));
+      res(w);
+    };
+    document.body.appendChild(fr);
+  });
+}
+function reset(w) {
+  const u = w.__UW;
+  u.n = 0; u.out = 0; u.cvvLo = 1e9; u.cvvHi = -1e9; u.fyLo = 1e9; u.fyHi = -1e9;
+  u.fxLo = 1e9; u.fxHi = -1e9; u.dLo = 1e9; u.dHi = -1e9; u.perS.clear();
+}
+
+(async () => {
+  try {
+    const slab = await (await fetch('/harness/dist/slab.json')).json();
+    const ws = [];
+    for (const [, src] of ARMS) { const w = await load(src); w.__sa.deserialize(slab); w.__sa.render(); ws.push(w); }
+    o.textContent = '';
+    const add = h => { const d = document.createElement('div'); d.innerHTML = h; o.appendChild(d); };
+
+    // the grid's own authored range, for the only comparison that says whether a displacement is real
+    const g = ws[0];
+    g.__sa.renderOneTile(W, 0, 0, 32, 32, 0);
+    const Fg = g.__F;
+
+    add('<h2>the recorder, and whether it recorded</h2>');
+    let t = '<table><tr><th>arm</th><th class="n">glassUnwarp calls</th>'
+      + '<th class="n">outside the grid</th><th>distinct warp grids</th></tr>';
+    const res = [];
+    for (let a = 0; a < ARMS.length; a++) {
+      reset(ws[a]);
+      for (const [tx, ty] of TILES) {
+        const c = ws[a].__sa.renderOneTile(W, tx, ty, TW, TW, 0); c.width = c.height = 1;
+      }
+      const u = ws[a].__UW;
+      res.push({ n: u.n, out: u.out, cvvLo: u.cvvLo, cvvHi: u.cvvHi, fyLo: u.fyLo, fyHi: u.fyHi,
+                 fxLo: u.fxLo, fxHi: u.fxHi, dLo: u.dLo, dHi: u.dHi,
+                 perS: [...u.perS.entries()].map(([k, v]) => ({ k, ...v })) });
+      const r = res[a];
+      t += '<tr><td>' + ARMS[a][0] + '</td><td class="n">' + r.n.toLocaleString() + '</td>'
+        + '<td class="n ' + (r.out === r.n ? 'bad' : r.out ? 'warn' : 'ok') + '">'
+        + r.out.toLocaleString() + ' <span class="dim">(' + (100 * r.out / r.n).toFixed(2) + '%)</span></td>'
+        + '<td>' + r.perS.length + '</td></tr>';
+    }
+    add(t + '</table>');
+    if (!res[0].n) { add('<p class="bad">the recorder never fired - nothing below means anything</p>'); return; }
+
+    add('<h2>the coordinate the painter asks for (recorded, not reconstructed)</h2>');
+    t = '<table><tr><th></th><th class="n">cvv</th><th class="n">grid row fy</th>'
+      + '<th class="n">grid column fx</th></tr>';
+    for (let a = 0; a < ARMS.length; a++) {
+      const r = res[a];
+      t += '<tr><td>' + ARMS[a][0] + '</td>'
+        + '<td class="n">' + r.cvvLo.toFixed(4) + ' … ' + r.cvvHi.toFixed(4) + '</td>'
+        + '<td class="n">' + r.fyLo.toFixed(2) + ' … ' + r.fyHi.toFixed(2) + '</td>'
+        + '<td class="n">' + r.fxLo.toFixed(2) + ' … ' + r.fxHi.toFixed(2) + '</td></tr>';
+    }
+    add(t + '</table>');
+    // IDENTICAL ARMS ARE THE DEFAULT, not an edge case: make-probe-builds takes the "before" from a
+    // git ref and the "after" from the working tree, so a clean checkout gives two copies of one
+    // build. Reported as what it is, because two identical arms agreeing is not a result.
+    const identical = res[0].cvvLo === res[1].cvvLo && res[0].cvvHi === res[1].cvvHi
+      && res[0].dLo === res[1].dLo && res[0].dHi === res[1].dHi;
+    add(identical
+      ? '<p class="warn">The two arms are identical in every figure above. Either the working tree '
+        + 'matches the ref this was built against - the usual case on a clean checkout, and then '
+        + 'there is nothing here to compare - or an edit that should have shown up did not reach '
+        + 'glassUnwarp. Edit the app and run <code>node tools/make-probe-builds.mjs</code> again.</p>'
+      : '<p class="dim">The arms differ. Note that the COORDINATE rows differing is expected whenever '
+        + 'the edit changes what glassUnwarp returns: three stirs run on this chain and each one '
+        + 'displaces the coordinate the next is handed, so a change propagates into its own input.</p>');
+
+    add('<h2>per warp grid</h2>');
+    t = '<table><tr><th>grid</th><th class="n">samples</th><th class="n">rows outside</th>'
+      + '<th class="n">fy range</th></tr>';
+    for (const s of res[0].perS) {
+      t += '<tr><td>' + s.k + '</td><td class="n">' + s.n.toLocaleString() + '</td>'
+        + '<td class="n ' + (s.out === s.n ? 'bad' : s.out ? 'warn' : 'ok') + '">'
+        + s.out.toLocaleString() + '</td><td class="n">' + s.fyLo.toFixed(1) + ' … '
+        + s.fyHi.toFixed(1) + '</td></tr>';
+    }
+    add(t + '</table>');
+
+    add('<h2>the displacement it returns</h2>');
+    t = '<table><tr><th></th><th class="n">out[0] range, in slab units</th></tr>';
+    for (let a = 0; a < ARMS.length; a++) {
+      t += '<tr><td>' + ARMS[a][0] + '</td><td class="n">' + res[a].dLo.toFixed(4)
+        + ' … ' + res[a].dHi.toFixed(4) + '</td></tr>';
+    }
+    if (Fg) {
+      const S = Fg.S || (Fg.OPC.find(x => x.S) || {}).S;
+      if (S) {
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 0; i < S.u.length; i++) { if (S.u[i] < lo) lo = S.u[i]; if (S.u[i] > hi) hi = S.u[i]; }
+        t += '<tr><td class="dim">the stir authored values in</td><td class="n dim">'
+          + (-hi).toFixed(4) + ' … ' + (-lo).toFixed(4) + '</td></tr>';
+      }
+    }
+    add(t + '</table>');
+    const inRange = Fg ? '' : ' <span class="warn">(the grid’s own range could not be read, so the '
+      + 'last row is missing and the comparison is incomplete)</span>';
+    add('<p>A displacement far outside the grid’s own values is what EXTRAPOLATING an edge '
+      + 'gradient produces, and on this document that is where the material’s fine detail comes '
+      + 'from rather than a fault to remove - clamping the interpolant was tried and reverted because '
+      + 'it erased the detail. What the figures above are for is noticing when an edit changes the '
+      + 'extrapolation, not judging it.</p>');
+
+    document.title = 'recorded: ' + (100 * res[0].out / res[0].n).toFixed(1) + '% outside the grid';
+  } catch (e) {
+    o.innerHTML = '<span class="bad">' + String(e && e.message || e) + '</span>';
+    document.title = 'recorded: FAILED';
+  }
+})();
+</script>

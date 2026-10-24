@@ -103,10 +103,26 @@ fn glassUnwarp(cu: f32, cvv: f32) -> vec2<f32> {
   var i0 = i32(fx); var j0 = i32(fy);
   if (i0 > E.WPnx - 2) { i0 = E.WPnx - 2; } if (i0 < 0) { i0 = 0; }
   if (j0 > E.WPny - 2) { j0 = E.WPny - 2; } if (j0 < 0) { j0 = 0; }
+  // WRITTEN AS a + t*(b-a), NOT a*(1-t) + b*t. The two are the same algebraically and are not the
+  // same in f32. This document's op chain divides the coordinate by 2.5 to 11.5 before each stir
+  // sees it, while cu maps with a fixed slab-space centre, so tx reaches -200 on a 161-column grid
+  // and every sample extrapolates far off the grid's edge. That is not a defect to clamp away - it
+  // is where the material's fine detail comes from.
+  //
+  // At tx = -200 the shipped spelling forms u[k]*201 - u[k+1]*200: two numbers two hundred times
+  // the answer, subtracted. About 7.6 bits of cancellation, which f64 absorbs out of its 53 and f32
+  // cannot out of its 24 - and it was 64 levels on 3.1% of a tile. This spelling subtracts the two
+  // grid values FIRST, while they are the same size, then scales the difference. Measured against
+  // an f64 reference over the real coordinate windows: worst error 1.01e-4 the old way, 2.72e-6
+  // this way, a factor of 37, and within about 6 ulps of what f32 can represent at all.
   let tx = fx - f32(i0); let ty = fy - f32(j0);
   let k = j0 * E.WPnx + i0; let k2 = k + E.WPnx;
-  let u = -((aWU(k) * (1.0 - tx) + aWU(k + 1) * tx) * (1.0 - ty) + (aWU(k2) * (1.0 - tx) + aWU(k2 + 1) * tx) * ty);
-  let v = -((aWV(k) * (1.0 - tx) + aWV(k + 1) * tx) * (1.0 - ty) + (aWV(k2) * (1.0 - tx) + aWV(k2 + 1) * tx) * ty);
+  let ua = aWU(k) + tx * (aWU(k + 1) - aWU(k));
+  let ub = aWU(k2) + tx * (aWU(k2 + 1) - aWU(k2));
+  let va = aWV(k) + tx * (aWV(k + 1) - aWV(k));
+  let vb = aWV(k2) + tx * (aWV(k2 + 1) - aWV(k2));
+  let u = -(ua + ty * (ub - ua));
+  let v = -(va + ty * (vb - va));
   return vec2<f32>(u, v);
 }`;
 
@@ -165,10 +181,15 @@ fn rollerAt(cu: f32, cvv: f32) -> vec2<f32> {
   var i0 = i32(fx); var j0 = i32(fy);
   if (i0 > E.RLnx - 2) { i0 = E.RLnx - 2; } if (i0 < 0) { i0 = 0; }
   if (j0 > E.RLny - 2) { j0 = E.RLny - 2; } if (j0 < 0) { j0 = 0; }
+  // the same stable spelling, for the same reason; see the note on glassUnwarp above
   let tx = fx - f32(i0); let ty = fy - f32(j0);
   let k = j0 * E.RLnx + i0; let k2 = k + E.RLnx;
-  let s = (aBS(k) * (1.0 - tx) + aBS(k + 1) * tx) * (1.0 - ty) + (aBS(k2) * (1.0 - tx) + aBS(k2 + 1) * tx) * ty;
-  let v = (aBV(k) * (1.0 - tx) + aBV(k + 1) * tx) * (1.0 - ty) + (aBV(k2) * (1.0 - tx) + aBV(k2 + 1) * tx) * ty;
+  let sa = aBS(k) + tx * (aBS(k + 1) - aBS(k));
+  let sb = aBS(k2) + tx * (aBS(k2 + 1) - aBS(k2));
+  let va = aBV(k) + tx * (aBV(k + 1) - aBV(k));
+  let vb = aBV(k2) + tx * (aBV(k2 + 1) - aBV(k2));
+  let s = sa + ty * (sb - sa);
+  let v = va + ty * (vb - va);
   return vec2<f32>(s, v);
 }
 fn rollerHand(s: f32) -> vec2<f32> {

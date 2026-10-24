@@ -1,0 +1,149 @@
+<!doctype html>
+<!--
+  Which stir in the chain leaves the warp grid, and in which axis.
+
+  WHAT THESE FOUR PAGES FOUND, so the next reader does not re-derive it.
+
+  The reference master's op chain is 5,2,2,1,5,2,5,3 - three stirs, a roll and three blows. The roll
+  divides the coordinate by 2.5 and each blow divides it again, while the stir maps to its warp grid
+  with a FIXED slab-space centre (F.PX, and SLAB_FT for the width). So by the time each stir runs,
+  the coordinate has shrunk by 2.5 to 11.5 and lands far outside the grid: cu is outside [0,1] on
+  100% of samples, for every stir, starting with the FIRST one to fire - before anything has
+  displaced it. Measured inside glassUnwarp, not reconstructed from the outside.
+
+  THE MATERIAL'S FINE DETAIL COMES FROM THAT EXTRAPOLATION. It is not a defect to clamp away: an
+  interpolant clamp was written, measured, and reverted precisely because it removed the detail -
+  the whole slab went from fine structure to broad smooth bands. These pages are what measured it.
+
+  The consequence that did land is in the shader, not the renderer: extrapolating ~200 cells off a
+  grid edge cancels catastrophically in f32, so tools/lib/glass-gpu.mjs writes its bilinears as
+  a + t*(b-a) rather than a*(1-t) + b*t. Same algebra, 18x fewer disagreeing channels against the
+  CPU on a real tile.
+
+  RUN: node tools/make-probe-builds.mjs      then serve the repo and open this page.
+       python tools/serve-studio.py          -> http://127.0.0.1:8777/tools/<this file>
+  The builds live in harness/dist and are git-ignored, so they are never stale in a checkout - they
+  are absent, and every page here says which one it could not find.
+-->
+<meta charset="utf-8">
+<title>which stir leaves the grid, and in which axis</title>
+<style>
+  body { font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace; max-width: 76rem; margin: 2rem auto;
+         padding: 0 1rem; background: #14110f; color: #e8e2d8; }
+  h2 { font-size: .95rem; margin: 1.5rem 0 .3rem; color: #c9a227;
+       border-bottom: 1px solid #3a3330; padding-bottom: .2rem; }
+  td, th { padding: .12rem .9rem .12rem 0; text-align: left; }
+  th { color: #9a9289; font-weight: 400; }
+  .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .bad { color: #d9705f; } .ok { color: #7bbf6a; } .warn { color: #d9a84f; } .dim { color: #8a827a; }
+  table { border-collapse: collapse; }
+  p { max-width: 64rem; }
+</style>
+<div id="o">loading&hellip;</div>
+<script type="module">
+const o = document.getElementById('o');
+
+// THE QUESTION. glassUnwarp is handed a coordinate outside its grid on 100% of samples. Two very
+// different causes look identical once the calls are pooled:
+//   - the FIRST stir to fire is already outside  -> the mapping and the chain's SCALE disagree from
+//     the start; the stirs' own displacements are not what carries it out;
+//   - only the LATER ones are                    -> each stir's own displacement is carrying the
+//     coordinate out, and the first one is fine.
+// Note what runs BEFORE the first stir rather than assuming nothing does: on this chain the roll at
+// index 7 fires first and divides the coordinate by its own s.
+// glassUnform walks the op chain BACKWARDS (it inverts the forming), so "first to fire" is the
+// HIGHEST op index. This keys every call by that index.
+const W = 65535, TW = 256, TILES = [[0, 0], [31000, 12000], [64000, 30000]];
+
+function load(src) {
+  return new Promise((res, rej) => {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0';
+    fr.src = src;
+    fr.onerror = () => rej(new Error('could not load ' + src));
+    fr.onload = async () => {
+      const w = fr.contentWindow;
+      for (let i = 0; i < 150 && !w.__sa; i++) await new Promise(r => setTimeout(r, 100));
+      if (!w.__sa) return rej(new Error('no __sa'));
+      if (!w.__PO) return rej(new Error('no per-op recorder - the build is stale'));
+      res(w);
+    };
+    document.body.appendChild(fr);
+  });
+}
+
+(async () => {
+  try {
+    const slab = await (await fetch('/harness/dist/slab.json')).json();
+    const w = await load('../harness/dist/perop-capture.html');
+    w.__sa.deserialize(slab); w.__sa.render();
+    w.__PO.rows.clear();
+    for (const [tx, ty] of TILES) {
+      const c = w.__sa.renderOneTile(W, tx, ty, TW, TW, 0); c.width = c.height = 1;
+    }
+    const F = w.__F;
+    const S = F && (F.S || (F.OPC.find(x => x.S) || {}).S);
+    o.textContent = '';
+    const add = h => { const d = document.createElement('div'); d.innerHTML = h; o.appendChild(d); };
+
+    const rows = [...w.__PO.rows.entries()].sort((a, b) => b[0] - a[0]);
+    if (!rows.length) { add('<p class="bad">the recorder never fired</p>'); return; }
+
+    add('<h2>the chain, and what each stir is handed</h2>');
+    add('<p class="dim">Op chain ' + F.OPC.map(x => x.k).join(',') + ' (k=5 is a stir), walked from the '
+      + 'highest index down. The grid is ' + (S ? S.nx + '×' + S.ny + ' over cu ∈ [0,1] and '
+      + 'cvv ∈ [0,' + S.H.toFixed(4) + ']' : 'absent') + ' — the domain '
+      + 'tools/probe-glass-stir.mjs sweeps, so that is the intended one.</p>');
+
+    let t = '<table><tr><th>fires</th><th>op index</th><th class="n">samples</th>'
+      + '<th class="n">cu range</th><th class="n">outside [0,1]</th>'
+      + '<th class="n">cvv range</th><th class="n">outside [0,H]</th></tr>';
+    rows.forEach(([idx, r], order) => {
+      const pu = 100 * r.outU / r.n, pv = 100 * r.outV / r.n;
+      t += '<tr><td>' + (order + 1) + (order ? '' : ' <span class="dim">(first)</span>') + '</td>'
+        + '<td>' + idx + '</td><td class="n">' + r.n.toLocaleString() + '</td>'
+        + '<td class="n">' + r.cuLo.toFixed(3) + ' … ' + r.cuHi.toFixed(3) + '</td>'
+        + '<td class="n ' + (pu > 99.9 ? 'bad' : pu ? 'warn' : 'ok') + '">' + pu.toFixed(1) + '%</td>'
+        + '<td class="n">' + r.cvLo.toFixed(3) + ' … ' + r.cvHi.toFixed(3) + '</td>'
+        + '<td class="n ' + (pv > 99.9 ? 'bad' : pv ? 'warn' : 'ok') + '">' + pv.toFixed(1) + '%</td></tr>';
+    });
+    add(t + '</table>');
+
+    const first = rows[0][1];
+    const firstOutU = 100 * first.outU / first.n, firstOutV = 100 * first.outV / first.n;
+    add('<h2>what that says</h2>');
+    if (firstOutU > 99.9 || firstOutV > 99.9) {
+      const pre = F.OPC.map((x, i) => [i, x.k]).filter(([i]) => i > rows[0][0]);
+      add('<p class="bad">The FIRST stir to fire is already outside the grid on '
+        + Math.max(firstOutU, firstOutV).toFixed(1) + '% of samples. '
+        + (pre.length
+            ? 'Only ' + pre.map(([i, k]) => 'op ' + i + ' (k=' + k + ')').join(', ') + ' has run '
+              + 'before it, and a stir has not - so no stir’s own displacement is carrying the '
+              + 'coordinate out. '
+            : 'Nothing has run before it. ')
+        + 'The mapping to (cu, cvv) uses a FIXED slab-space centre and a fixed slab width while the '
+        + 'chain has already rescaled the coordinate, so the two disagree from the first stir '
+        + 'onward. Clamping the interpolant cannot fix that - it only decides which wrong value '
+        + 'comes back, and on this document the extrapolation is where the detail lives.</p>');
+    } else {
+      add('<p class="warn">The first stir is inside the grid and the later ones are not, so each '
+        + 'stir’s own displacement is carrying the coordinate out. That is a different repair '
+        + 'from a wrong domain.</p>');
+    }
+
+    // AND WHAT THE PAINTER'S OWN MAPPING PRODUCES, independent of any op. If cu is already out of
+    // [0,1] before a single op has run, the pixel-to-(cu,cvv) map is the thing to look at.
+    if (F) {
+      add('<h2>the mapping the stir arm uses</h2>');
+      const SLAB = (F.__slab !== undefined) ? F.__slab : null;
+      add('<p class="dim">cu = (x - F.PX) * 12 / SLAB_FT + 0.5, taken from the stir arm of '
+        + 'glassUnform. F.PX is ' + (F.PX !== undefined ? F.PX.toFixed(4) : '?') + ', F.PY is '
+        + (F.PY !== undefined ? F.PY.toFixed(4) : '?') + ', F.H is ' + F.H.toFixed(4) + '.</p>');
+    }
+    document.title = 'stir domain: first stir ' + Math.max(firstOutU, firstOutV).toFixed(0) + '% outside';
+  } catch (e) {
+    o.innerHTML = '<span class="bad">' + String(e && e.message || e) + '</span>';
+    document.title = 'stir domain: FAILED';
+  }
+})();
+</script>

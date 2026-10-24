@@ -1,0 +1,239 @@
+<!doctype html>
+<!--
+  Two builds of the app, the same four tiles, compared per pixel rather than per statistic.
+
+  WHAT THESE FOUR PAGES FOUND, so the next reader does not re-derive it.
+
+  The reference master's op chain is 5,2,2,1,5,2,5,3 - three stirs, a roll and three blows. The roll
+  divides the coordinate by 2.5 and each blow divides it again, while the stir maps to its warp grid
+  with a FIXED slab-space centre (F.PX, and SLAB_FT for the width). So by the time each stir runs,
+  the coordinate has shrunk by 2.5 to 11.5 and lands far outside the grid: cu is outside [0,1] on
+  100% of samples, for every stir, starting with the FIRST one to fire - before anything has
+  displaced it. Measured inside glassUnwarp, not reconstructed from the outside.
+
+  THE MATERIAL'S FINE DETAIL COMES FROM THAT EXTRAPOLATION. It is not a defect to clamp away: an
+  interpolant clamp was written, measured, and reverted precisely because it removed the detail -
+  the whole slab went from fine structure to broad smooth bands. These pages are what measured it.
+
+  The consequence that did land is in the shader, not the renderer: extrapolating ~200 cells off a
+  grid edge cancels catastrophically in f32, so tools/lib/glass-gpu.mjs writes its bilinears as
+  a + t*(b-a) rather than a*(1-t) + b*t. Same algebra, 18x fewer disagreeing channels against the
+  CPU on a real tile.
+
+  RUN: node tools/make-probe-builds.mjs      then serve the repo and open this page.
+       python tools/serve-studio.py          -> http://127.0.0.1:8777/tools/<this file>
+  The builds live in harness/dist and are git-ignored, so they are never stale in a checkout - they
+  are absent, and every page here says which one it could not find.
+-->
+<meta charset="utf-8">
+<title>two builds, four tiles, per pixel</title>
+<style>
+  body { font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace; max-width: 72rem; margin: 2rem auto;
+         padding: 0 1rem; background: #14110f; color: #e8e2d8; }
+  h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: .02em; }
+  h2 { font-size: .95rem; font-weight: 600; margin: 1.6rem 0 .4rem; color: #c9a227;
+       border-bottom: 1px solid #3a3330; padding-bottom: .2rem; }
+  table { border-collapse: collapse; margin: .5rem 0; }
+  td, th { padding: .15rem .8rem .15rem 0; text-align: left; vertical-align: top; }
+  th { color: #9a9289; font-weight: 400; }
+  .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .ok { color: #7bbf6a; } .bad { color: #d9705f; } .warn { color: #d9a84f; } .dim { color: #8a827a; }
+  #log { white-space: pre-wrap; }
+  canvas { image-rendering: pixelated; border: 1px solid #3a3330; margin: .3rem .3rem 0 0; }
+</style>
+<h1>two builds, the same four tiles, one instrument</h1>
+<p class="dim">Both builds render in one page through one function, so the comparison is per pixel
+rather than per statistic: a mean can hide a change, and a CRC proves one happened without locating
+it. The before arm comes from a git ref and the after from the working tree &mdash; see
+<code>node tools/make-probe-builds.mjs</code>.</p>
+<div id="log">loading both builds&hellip;</div>
+<div id="shots"></div>
+
+<script type="module">
+const log = document.getElementById('log');
+const shots = document.getElementById('shots');
+function head(s) { const h = document.createElement('h2'); h.textContent = s; log.after(h); return h; }
+let tail = log;
+function say(html, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.innerHTML = html;
+  tail.after(d); tail = d; return d;
+}
+function sect(s) { const h = document.createElement('h2'); h.textContent = s; tail.after(h); tail = h; }
+
+// the four tiles the before snapshot used, unchanged
+const W = 65535, TW = 512;
+const TILES = [[0, 0], [31000, 12000], [64000, 30000], [16000, 38000]];
+
+// CRC32, so a tile has one number that changes if ANY byte does. Defined here once and used for both
+// arms - the point is that the two sides share the instrument, not that this matches an older run.
+const CRCT = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(u8) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRCT[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function loadBuild(src) {
+  return new Promise((resolve, reject) => {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0';
+    fr.src = src;
+    fr.onerror = () => reject(new Error('could not load ' + src));
+    fr.onload = async () => {
+      const w = fr.contentWindow;
+      for (let i = 0; i < 150 && !w.__sa; i++) await new Promise(r => setTimeout(r, 100));
+      if (!w.__sa) return reject(new Error(src + ' never exposed __sa'));
+      resolve({ w, fr });
+    };
+    document.body.appendChild(fr);
+  });
+}
+
+// one tile out of one build, as RGB bytes - alpha left out on purpose, it is 255 everywhere and
+// would dilute every statistic below by a quarter
+function tileRGB(w, slab, tx, ty) {
+  const c = w.__sa.renderOneTile(W, tx, ty, TW, TW, 0);
+  const d = c.getContext('2d').getImageData(0, 0, TW, TW).data;
+  const out = new Uint8Array(TW * TW * 3);
+  for (let i = 0, j = 0; i < d.length; i += 4) { out[j++] = d[i]; out[j++] = d[i + 1]; out[j++] = d[i + 2]; }
+  c.width = c.height = 1;
+  return out;
+}
+
+function stats(a) {
+  let s = 0, lo = 255, hi = 0;
+  for (let i = 0; i < a.length; i++) { s += a[i]; if (a[i] < lo) lo = a[i]; if (a[i] > hi) hi = a[i]; }
+  return { mean: s / a.length, lo, hi, crc: crc32(a) };
+}
+
+// the comparison that locates rather than summarises
+function diff(a, b) {
+  let maxd = 0, nd = 0, sum = 0, px = 0, first = -1;
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < a.length; i += 3) {
+    const dr = Math.abs(a[i] - b[i]), dg = Math.abs(a[i + 1] - b[i + 1]), db = Math.abs(a[i + 2] - b[i + 2]);
+    const d = Math.max(dr, dg, db);
+    hist[d]++;
+    if (d) { px++; sum += d; if (d > maxd) maxd = d; if (first < 0) first = i / 3; }
+    nd += dr + dg + db;
+  }
+  return { maxd, px, total: a.length / 3, meanOnChanged: px ? sum / px : 0,
+           meanAll: nd / a.length, first, hist };
+}
+
+function paint(a, label) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128; c.title = label;
+  const g = c.getContext('2d'), im = g.createImageData(128, 128);
+  for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) {
+    const s = ((y * 4) * TW + x * 4) * 3, d = (y * 128 + x) * 4;
+    im.data[d] = a[s]; im.data[d + 1] = a[s + 1]; im.data[d + 2] = a[s + 2]; im.data[d + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  const wrap = document.createElement('span');
+  wrap.appendChild(c);
+  shots.appendChild(wrap);
+  return c;
+}
+
+(async () => {
+  try {
+    const slab = await (await fetch('/harness/dist/slab.json')).json();
+    const before = await loadBuild('../harness/dist/stone-author.before.html');
+    const after  = await loadBuild('../harness/dist/stone-author.hooked.html');
+    for (const b of [before, after]) { b.w.__sa.deserialize(slab); b.w.__sa.render(); }
+    log.textContent = '';
+
+    // THE BUILDS MUST ACTUALLY DIFFER, or this page compares a file with itself and reports a
+    // perfect match - which is exactly what a broken differential looks like. Asked of the SOURCE
+    // rather than of any particular edit: an earlier version looked for one specific line, which
+    // made the check useless the moment that edit was reverted.
+    const srcOf = w => w.document.documentElement.innerHTML;
+    const bLen = srcOf(before.w).length, aLen = srcOf(after.w).length;
+    const same = srcOf(before.w) === srcOf(after.w);
+    sect('is this differential able to find anything?');
+    say('before arm ' + bLen.toLocaleString() + ' chars, after arm ' + aLen.toLocaleString()
+      + ' &nbsp; ' + (same
+        ? '<span class="bad">THE SAME BUILD TWICE - every number below is meaningless. '
+          + 'make-probe-builds takes the before arm from a git ref and the after from the working '
+          + 'tree, so a clean checkout gives you this. Edit the app, rebuild, reload.</span>'
+        : '<span class="ok">two different builds</span>'));
+    if (same) return;
+
+    sect('the four tiles');
+    const rows = [];
+    for (const [tx, ty] of TILES) {
+      const a = tileRGB(before.w, slab, tx, ty);
+      const b = tileRGB(after.w, slab, tx, ty);
+      const sa = stats(a), sb = stats(b), d = diff(a, b);
+      paint(a, tx + ',' + ty + ' before'); paint(b, tx + ',' + ty + ' after');
+      rows.push({ tx, ty, sa, sb, d });
+    }
+
+    const flat = rows.filter(r => r.sa.lo === r.sa.hi);
+    if (flat.length) {
+      say('<span class="bad">' + flat.length + ' of ' + rows.length + ' tiles are a single flat colour '
+        + 'before the change - a diff of two blanks is 0 for reasons that have nothing to do with the '
+        + 'edit.</span>');
+    }
+
+    let t = '<table><tr><th>tile</th><th class="n">mean before</th><th class="n">mean after</th>'
+      + '<th class="n">&Delta;mean</th><th class="n">max &Delta;level</th><th class="n">pixels changed</th>'
+      + '<th class="n">&Delta; on those</th><th>crc before &rarr; after</th></tr>';
+    for (const r of rows) {
+      const pc = 100 * r.d.px / r.d.total;
+      t += '<tr><td>' + r.tx + ',' + r.ty + '</td>'
+        + '<td class="n">' + r.sa.mean.toFixed(4) + '</td>'
+        + '<td class="n">' + r.sb.mean.toFixed(4) + '</td>'
+        + '<td class="n">' + (r.sb.mean - r.sa.mean).toExponential(3) + '</td>'
+        + '<td class="n ' + (r.d.maxd ? 'warn' : 'dim') + '">' + r.d.maxd + '</td>'
+        + '<td class="n">' + r.d.px.toLocaleString() + ' <span class="dim">(' + pc.toFixed(3) + '%)</span></td>'
+        + '<td class="n">' + (r.d.px ? r.d.meanOnChanged.toFixed(2) : '—') + '</td>'
+        + '<td class="' + (r.sa.crc === r.sb.crc ? 'dim' : 'warn') + '">' + r.sa.crc + ' → ' + r.sb.crc + '</td></tr>';
+    }
+    t += '</table>';
+    say(t);
+
+    sect('how far the change reaches');
+    const any = rows.some(r => r.d.px);
+    if (!any) {
+      say('<span class="warn">Not one pixel moved in any of the four tiles.</span> The edit is a no-op '
+        + 'at these four tiles, which does not make it a no-op elsewhere - four 512px squares are '
+        + 'a tiny sample of a 65,535px sheet, and a tile that never reaches the changed code cannot '
+        + 'show a change in it.');
+    } else {
+      const worst = rows.reduce((p, c) => c.d.maxd > p.d.maxd ? c : p);
+      say('Worst tile ' + worst.tx + ',' + worst.ty + ': <b>' + worst.d.maxd + ' levels</b> on '
+        + worst.d.px.toLocaleString() + ' of ' + worst.d.total.toLocaleString() + ' pixels ('
+        + (100 * worst.d.px / worst.d.total).toFixed(3) + '%), first at pixel ' + worst.d.first + '.');
+      const h = worst.d.hist, buckets = [[1, 1], [2, 3], [4, 7], [8, 15], [16, 31], [32, 63], [64, 255]];
+      let b = '<table><tr><th>&Delta; levels</th><th class="n">pixels</th></tr>';
+      for (const [lo, hi] of buckets) {
+        let n = 0; for (let i = lo; i <= hi; i++) n += h[i];
+        if (n) b += '<tr><td>' + (lo === hi ? lo : lo + '–' + hi) + '</td><td class="n">'
+          + n.toLocaleString() + '</td></tr>';
+      }
+      say(b + '</table>');
+    }
+
+    sect('what this does and does not establish');
+    say('<span class="dim">Establishes: what the edit does to THIS slab at THESE four tiles, '
+      + 'per pixel, measured by one function against the build at the ref. Does not establish: '
+      + 'what it does to any other document, nor to a roller pass - this slab has no roller, so '
+      + 'rollerAt is never reached here at all.</span>');
+
+    document.title = 'tile stats: ' + (any ? 'picture CHANGED' : 'no pixel moved');
+  } catch (e) {
+    log.innerHTML = '<span class="bad">' + String(e && e.message || e) + '</span>';
+    document.title = 'tile stats: FAILED';
+  }
+})();
+</script>

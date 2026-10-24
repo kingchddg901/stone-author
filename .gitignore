@@ -35,3 +35,6 @@ nul
 
 # scratch for one-off analysis runs; regenerate, never commit
 .tmp/
+
+# renders a probe page hands back through PUT /_out/ - look at them, do not commit them
+tools/_out/
