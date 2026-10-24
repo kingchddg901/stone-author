@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.192';
+  const BUILD = '2026.10.24.193';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14846,6 +14846,15 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const OFF_TX = 160 + 30 * 4, OFF_TY = 160 + 31 * 4, OFF_TH = 160 + 33 * 4;
     const TOTAL = p.rAcross * p.rDown;
     let closed = false, busyN = 0, held = 0;
+    // THE MAIN THREAD'S OWN SHARE, which no timer in the export loop can see. Measured at 192:
+    // waiting for a finished tile is 19 ms and the loop around it is 150, and breathe() is a
+    // MessageChannel yield - so that 150 is work running during the yield, for tiles the lookahead
+    // has already queued. These are the two candidates inside it, timed rather than inferred,
+    // because the last three inferences were all wrong.
+    //
+    //   copy    the readback loop - 4.2M pixels a tile at 2048, byte by byte into ImageData
+    //   bitmap  createImageBitmap, which copies ~16.9 MB before the transfer costs nothing
+    const own = { copy: 0, bitmap: 0, draw: 0, n: 0 };
     // the one prefetch in flight, if any: { i, slot, p }
     let ahead = null;
     // THE POOL, DEMOTED TO FINISHING. Attached after the fact because it needs p.markSig, which the
@@ -14888,10 +14897,12 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         dev.queue.submit([enc.finish()]);
         await s.rb.mapAsync(GPUMapMode.READ, 0, cells * 3);
         const src = new Uint8Array(s.rb.getMappedRange(0, cells * 3));
+        const tC = performance.now();
         let o = y0 * ew * 4;
         for (let j = 0; j < cells * 3; j += 3, o += 4) {
           d[o] = src[j]; d[o + 1] = src[j + 1]; d[o + 2] = src[j + 2]; d[o + 3] = 255;
         }
+        own.copy += performance.now() - tC;
         s.rb.unmap();
         const e = await dev.popErrorScope();
         if (e) throw new Error(e.message.split(String.fromCharCode(10))[0]);
@@ -14910,13 +14921,20 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // free, which is the whole point.
     function pump(i) {
       if (closed || !fin || i >= TOTAL || jobs.has(i)) return;
-      const draw = chain.then(() => api.tile(i));
+      const draw = chain.then(async () => {
+        const tD = performance.now();
+        const c = await api.tile(i);
+        own.draw += performance.now() - tD; own.n++;
+        return c;
+      });
       chain = draw.catch(() => {});       // a failed draw must not stop the ones behind it
       jobs.set(i, draw.then(async c => {
         // createImageBitmap COPIES; the transfer after it does not. That copy is the price of
         // moving the work - one 16.9 MB copy at a 2048 tile, against the 410 ms of deflate it buys
         // a way out of.
+        const tB = performance.now();
         const bmp = await createImageBitmap(c);
+        own.bitmap += performance.now() - tB;
         c.width = c.height = 1;
         return fin.finishBitmap(i, bmp);
       }));
@@ -14933,6 +14951,10 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       planned: 1, workers: 1, shed: 0, strain: null, gpu: true, pipelined: SETS > 1,
       get busy() { return busyN; },
       get tiles() { return held; },
+      // READ ONCE AT THE END, by the metadata. Totals rather than per tile: these are main-thread
+      // costs spread across the whole render, and a per-tile array of them would be describing
+      // which tile happened to be queued when, not which tile they belonged to.
+      get own() { return { ...own }; },
       stamp: () => null,                                   // no per-worker trace: there is one of it
       // THE SAME TILE, HANDED ON INSTEAD OF HANDED BACK. The GPU draws it and renderOneTile lays
       // the ground, the coat and the windows; a worker then does the cut, the marks, the light
@@ -15740,7 +15762,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // mark, including the first three GPU masters. A flag that cannot fire is worse than no
       // flag: those three had to be identified from poolStrain being null instead.
       const poolRan = pool ? { n: pool.workers, planned: pool.planned, strain: pool.strain,
-                               gpu: !!pool.gpu } : null;
+                               gpu: !!pool.gpu, own: pool.own ? pool.own : undefined } : null;
       if (pool) { pool.close(); pool = null; }
       proveTile(p.ts, W);                                  // settled: every render after this one matches it
       const msRender = Date.now() - tR;
@@ -15835,6 +15857,10 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         // levels, so two masters of the same slab that disagree are not evidence of a bug until
         // this field has been read - and a master written before this existed simply lacks it.
         gpu: (poolRan && poolRan.gpu) ? true : undefined,
+        // WHAT THE MAIN THREAD DID while the GPU and the workers were busy, in milliseconds for
+        // the whole render: `draw` is a tile end to end on this thread, of which `copy` is the
+        // readback loop and `bitmap` is createImageBitmap. `n` is how many tiles that covers.
+        gpuOwn: (poolRan && poolRan.own) ? poolRan.own : undefined,
         workers: poolRan ? poolRan.n : 0,
         poolWhy: poolRan ? undefined : poolWhy,
         poolPlanned: poolRan && poolRan.planned !== poolRan.n ? poolRan.planned : undefined,
