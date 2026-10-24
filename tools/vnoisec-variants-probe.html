@@ -1,0 +1,524 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>vnoiseC variants</title>
+<!--
+  vnoiseC COSTS 12.67 ns ON V8 AND 3.13 ON JAVASCRIPTCORE. WHY, AND CAN IT BE CLOSED?
+
+  tools/cpu-breakdown-probe.html measured the field on three devices. The primitives are near equal
+  between the engines - Math.imul 1.29x, Math.floor 1.23x, nz 1.52x - and the iPhone's plain-arithmetic
+  BASELINE is the SLOWEST of the three, so none of this is the silicon. What is 4x is vnoiseC, and
+  fbm2C is almost exactly three of those on every engine (1.05x, 1.12x, 0.97x of its parts), so the
+  octave stack is not where the time goes. vnoiseC is.
+
+  ITS HOT PATH IS SUPPOSED TO BE TINY: two floors, three compares against a cache key, four loads and
+  the interpolation. No calls - the miss path lives in vnoiseCfill, outlined deliberately. At 12.67 ns
+  on a machine whose baseline multiply-add is 1.42 ns, something in those dozen operations is costing
+  far more than it should.
+
+  THE SUSPECTS, each a variant below.
+    the computed index   o = slot * 7, so every one of the seven reads is _NZC[o + n] with a variable
+                         base. A constant index is a different instruction and a different bounds
+                         check. The renderer calls fbm2C at three fixed sites with k of 0, 3 and 6, so
+                         specialising per site is not a trick - it is what the call sites already are.
+    one array for both   the key (s, xi, yi) and the values share _NZC, so the compare and the load
+                         touch the same object through the same computed base.
+    the typed array      a Float64Array read is a load plus a bounds check. Plain closure variables
+                         are neither, and twelve slots of seven is only eighty-four of them.
+    the outlined fill    inlining it is KNOWN BAD and is here only as a control: the comment at
+                         app/stone-author.html:2306 records that putting the four nz calls back inside
+                         vnoiseC pushed it past V8's inlining budget and made build 174 bimodal, 87 or
+                         110 core-seconds for the same input. It is measured, not proposed.
+
+  EVERY VARIANT MUST BE BIT IDENTICAL FIRST. A faster field that moves a pixel is worthless here: the
+  renderer is gated on byte-identical output and T feeds exp(-a*T) on three channels, so a changed last
+  place is a changed image. Each variant is compared against the shipped fbm2C with Object.is over a
+  realistic walk BEFORE it is timed, and a variant that fails is timed anyway and printed red, because
+  knowing that the fast one is the wrong one is the useful half.
+
+  AND THE CHECK IS ABLATED. A correctness test that has never failed is a preference, so one variant is
+  deliberately wrong - it re-associates the interpolation, which is algebraically equal and numerically
+  not - and the probe asserts that the check catches it.
+
+  THIS CANNOT AUTHORISE A CHANGE TO THE APP. A microbenchmark has been wrong here twice today already.
+  Anything that wins must then be proven on a live 65,535 on the real box, per docs/master-timing.md.
+-->
+<style>
+  :root { --bg:#faf9f7; --fg:#1b1a19; --dim:#6b6864; --rule:#dcd8d2; --good:#1d6b3a; --warn:#8a5a00; --bad:#9b2420; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; } }
+  :root[data-theme="dark"] { --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; }
+  body { background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin:0; padding:16px; }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; }
+  p.sub { color:var(--dim); margin:0 0 14px; max-width:64ch; }
+  button { font:inherit; padding:7px 15px; border:1px solid var(--rule); border-radius:5px;
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  button:disabled { color:var(--dim); cursor:default; }
+  table { border-collapse:collapse; margin:12px 0; font-size:13px; }
+  td, th { border-bottom:1px solid var(--rule); padding:4px 14px 4px 0; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  td.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  pre { color:var(--dim); font-size:12px; white-space:pre-wrap; margin:10px 0 0; }
+  h2 { font-size:14px; margin:18px 0 0; font-weight:600; }
+</style>
+
+<h1>vnoiseC variants</h1>
+<p class="sub">The cached noise lookup costs four times as much on V8 as on JavaScriptCore, and it runs
+six times a sample. These are candidate rewrites of it — each checked bit-identical against the shipped
+one before it is timed, because a faster field that moves a pixel is no use here.</p>
+<button id="run">Run</button>
+<div id="res"></div>
+<pre id="log"></pre>
+
+<script>
+const LOG = document.getElementById('log');
+const log = m => { LOG.textContent += (LOG.textContent ? '\n' : '') + m; };
+const RES = document.getElementById('res');
+let TB = null, RUN = 0;
+function table(cols) {
+  TB = document.createElement('table');
+  const tr = document.createElement('tr');
+  for (const c of cols) { const th = document.createElement('th'); th.textContent = c; tr.appendChild(th); }
+  TB.appendChild(tr); RES.appendChild(TB); return TB;
+}
+function row(cells, cls) {
+  const tr = document.createElement('tr');
+  cells.forEach((c, i) => { const td = document.createElement('td'); td.textContent = c;
+    if (i && i < cells.length - 1) td.className = 'n'; tr.appendChild(td); });
+  if (cls) tr.children[0].className = cls;
+  TB.appendChild(tr);
+}
+function head(t) { TB = null; const h = document.createElement('h2'); h.textContent = t; RES.appendChild(h); }
+function pair(k, v, cls) {
+  if (!TB || TB.dataset.kind !== 'pair') { TB = document.createElement('table'); TB.dataset.kind = 'pair'; RES.appendChild(TB); }
+  const tr = document.createElement('tr');
+  const a = document.createElement('th'); a.textContent = k;
+  const b = document.createElement('td'); b.textContent = v; if (cls) b.className = cls;
+  tr.appendChild(a); tr.appendChild(b); TB.appendChild(tr);
+}
+
+// ---- the shipped pair comes out of the app, so "as shipped" is not a transcription ---------------
+const APP_PATHS = ['../app/stone-author.html', 'app/stone-author.html', './stone-author.html'];
+async function liftFromApp() {
+  let src = null, from = null, tried = [];
+  for (const u of APP_PATHS) {
+    try { const r = await fetch(u); if (r.ok) { src = await r.text(); from = u; break; } tried.push(u + ' ' + r.status); }
+    catch (e) { tried.push(u + ' ' + (e && e.message || 'failed')); }
+  }
+  if (src === null) throw new Error('could not find the app — tried ' + tried.join(', '));
+  const fn = name => {
+    const i = src.indexOf('function ' + name + '(');
+    if (i < 0) throw new Error('the app has no function ' + name);
+    let d = 0;
+    for (let k = src.indexOf('{', i); k < src.length; k++) {
+      if (src[k] === '{') d++;
+      else if (src[k] === '}') { d--; if (!d) return src.slice(i, k + 1); }
+    }
+    throw new Error('unbalanced ' + name);
+  };
+  const decl = (src.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0];
+  if (!decl) throw new Error('the app has no _NZC declaration');
+  return { src, fn, decl, from };
+}
+
+// ---- the variants, each a complete self-contained environment -----------------------------------
+// Every one gets its OWN cache, so a variant cannot be warmed or polluted by the one before it.
+const SLOTS = 12, W7 = 7;
+const NAN = 'Number.NaN';
+
+// the shipped vnoiseC body, parameterised by how it addresses the cache - this is the one axis the
+// variants move, and writing it once keeps every variant's ARITHMETIC character for character equal
+function cachedBody(get, set, needFill) {
+  return 'const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi;'
+    + 'if (' + get(0) + ' !== s || ' + get(1) + ' !== xi || ' + get(2) + ' !== yi) {' + needFill + '}'
+    + 'const a = ' + get(3) + ', b = ' + get(4) + ', c = ' + get(5) + ', d = ' + get(6) + ';'
+    + 'const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);'
+    + 'return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy;';
+}
+function fillBody(set) {
+  return 'const fa = nz(xi, yi, s), fb = nz(xi + 1, yi, s), fc = nz(xi, yi + 1, s), fd = nz(xi + 1, yi + 1, s);'
+    + set(0, 's') + set(1, 'xi') + set(2, 'yi')
+    + set(3, 'fa') + set(4, 'fb') + set(5, 'fc') + set(6, 'fd');
+}
+
+const VARIANTS = [
+  { name: 'as shipped',
+    what: 'the app’s own vnoiseC and fbm2C, lifted',
+    build: (L) => L.decl + L.fn('vnoiseCfill') + L.fn('vnoiseC') + L.fn('fbm2C')
+      + 'return { f: (x, y, s) => fbm2C(x, y, s, 0) };' },
+
+  { name: 'constant slot',
+    what: 'one vnoiseC per octave with the offset a literal, not slot * 7',
+    build: (L) => {
+      let out = L.decl;
+      for (let i = 0; i < 3; i++) {
+        const o = i * W7;
+        const get = n => '_NZC[' + (o + n) + ']';
+        const set = (n, v) => '_NZC[' + (o + n) + '] = ' + v + ';';
+        out += 'function fill' + i + '(xi, yi, s) {' + fillBody(set) + '}';
+        out += 'function vn' + i + '(x, y, s) {' + cachedBody(get, set, 'fill' + i + '(xi, yi, s);') + '}';
+      }
+      return out + 'return { f: (x, y, s) => vn0(x, y, s) * 0.6 + vn1(x * 2.1, y * 2.1, s + 9) * 0.3'
+        + ' + vn2(x * 4.3, y * 4.3, s + 19) * 0.1 };';
+    } },
+
+  // THE WINNER CHANGED TWO THINGS AT ONCE, so these two separate them. 'constant slot' both folded the
+  // index to a literal AND split one shared vnoiseC into three specialised ones, and those are
+  // different fixes with different costs to adopt. One shared function taking the offset directly
+  // removes only the multiply; three functions taking it as a parameter give only the specialisation.
+  { name: 'one function, offset passed',
+    what: 'isolates the multiply — shared vnoiseC, no slot * 7, but still a variable base',
+    build: (L) => {
+      const get = n => '_NZC[o + ' + n + ']';
+      const set = (n, v) => '_NZC[o + ' + n + '] = ' + v + ';';
+      return L.decl + 'function ofill(xi, yi, s, o) {' + fillBody(set) + '}'
+        + 'function ovn(x, y, s, o) {' + cachedBody(get, set, 'ofill(xi, yi, s, o);') + '}'
+        + 'return { f: (x, y, s) => ovn(x, y, s, 0) * 0.6 + ovn(x * 2.1, y * 2.1, s + 9, 7) * 0.3'
+        + ' + ovn(x * 4.3, y * 4.3, s + 19, 14) * 0.1 };';
+    } },
+
+  { name: 'three functions, offset passed',
+    what: 'isolates specialisation — one function an octave, but the base still a parameter',
+    build: (L) => {
+      let out = L.decl;
+      for (let i = 0; i < 3; i++) {
+        const get = n => '_NZC[o + ' + n + ']';
+        const set = (n, v) => '_NZC[o + ' + n + '] = ' + v + ';';
+        out += 'function pfill' + i + '(xi, yi, s, o) {' + fillBody(set) + '}';
+        out += 'function pvn' + i + '(x, y, s, o) {' + cachedBody(get, set, 'pfill' + i + '(xi, yi, s, o);') + '}';
+      }
+      return out + 'return { f: (x, y, s) => pvn0(x, y, s, 0) * 0.6 + pvn1(x * 2.1, y * 2.1, s + 9, 7) * 0.3'
+        + ' + pvn2(x * 4.3, y * 4.3, s + 19, 14) * 0.1 };';
+    } },
+
+  // THE ACTUAL INLINING, which the variants above all skirted - every one of them kept vnoiseC as a
+  // function and only changed how it addresses the cache or how many copies of it there are. This puts
+  // all three octaves' bodies inside ONE function with no call between them, which is the thing V8
+  // might be failing to do by itself. The fills stay outlined: putting them back in is the control
+  // below, and app/stone-author.html:2306 records what that cost the last time.
+  { name: 'all three octaves inlined',
+    what: 'ONE function, three cached bodies, no calls on the hot path — the real inlining test',
+    build: (L) => {
+      let out = L.decl, body = '';
+      const args = ['x, y, s', 'x * 2.1, y * 2.1, s + 9', 'x * 4.3, y * 4.3, s + 19'];
+      const mul = ['0.6', '0.3', '0.1'];
+      for (let i = 0; i < 3; i++) {
+        const o = i * W7;
+        const set = (n, v) => '_NZC[' + (o + n) + '] = ' + v + ';';
+        out += 'function ifill' + i + '(xi, yi, s) {' + fillBody(set) + '}';
+        body += 'const u' + i + ' = ' + args[i].split(', ')[0] + ', w' + i + ' = ' + args[i].split(', ')[1]
+          + ', t' + i + ' = ' + args[i].split(', ')[2] + ';'
+          + 'const xi' + i + ' = Math.floor(u' + i + '), yi' + i + ' = Math.floor(w' + i + ');'
+          + 'const tx' + i + ' = u' + i + ' - xi' + i + ', ty' + i + ' = w' + i + ' - yi' + i + ';'
+          + 'if (_NZC[' + o + '] !== t' + i + ' || _NZC[' + (o + 1) + '] !== xi' + i
+            + ' || _NZC[' + (o + 2) + '] !== yi' + i + ') ifill' + i + '(xi' + i + ', yi' + i + ', t' + i + ');'
+          + 'const a' + i + ' = _NZC[' + (o + 3) + '], b' + i + ' = _NZC[' + (o + 4) + '], c' + i
+            + ' = _NZC[' + (o + 5) + '], d' + i + ' = _NZC[' + (o + 6) + '];'
+          + 'const sx' + i + ' = tx' + i + ' * tx' + i + ' * (3 - 2 * tx' + i + ')'
+          + ', sy' + i + ' = ty' + i + ' * ty' + i + ' * (3 - 2 * ty' + i + ');'
+          + 'const r' + i + ' = (a' + i + ' * (1 - sx' + i + ') + b' + i + ' * sx' + i + ') * (1 - sy' + i + ')'
+          + ' + (c' + i + ' * (1 - sx' + i + ') + d' + i + ' * sx' + i + ') * sy' + i + ';';
+      }
+      return out + 'function inl(x, y, s) {' + body
+        + 'return r0 * ' + mul[0] + ' + r1 * ' + mul[1] + ' + r2 * ' + mul[2] + ';}'
+        + 'return { f: inl };';
+    } },
+
+  { name: 'key and values split',
+    what: 'the cache key in its own small array, the four hashes contiguous in another',
+    build: (L) => {
+      let out = 'const _K = new Float64Array(' + (SLOTS * 3) + ').fill(' + NAN + ');'
+        + 'const _V = new Float64Array(' + (SLOTS * 4) + ');';
+      for (let i = 0; i < 3; i++) {
+        const k = i * 3, v = i * 4;
+        const get = n => n < 3 ? '_K[' + (k + n) + ']' : '_V[' + (v + n - 3) + ']';
+        const set = (n, val) => (n < 3 ? '_K[' + (k + n) + ']' : '_V[' + (v + n - 3) + ']') + ' = ' + val + ';';
+        out += 'function kfill' + i + '(xi, yi, s) {' + fillBody(set) + '}';
+        out += 'function kvn' + i + '(x, y, s) {' + cachedBody(get, set, 'kfill' + i + '(xi, yi, s);') + '}';
+      }
+      return out + 'return { f: (x, y, s) => kvn0(x, y, s) * 0.6 + kvn1(x * 2.1, y * 2.1, s + 9) * 0.3'
+        + ' + kvn2(x * 4.3, y * 4.3, s + 19) * 0.1 };';
+    } },
+
+  { name: 'closure variables',
+    what: 'no typed array at all — seven plain doubles an octave, held in the closure',
+    build: (L) => {
+      let out = '';
+      for (let i = 0; i < 3; i++) {
+        out += 'let k' + i + 'a = ' + NAN + ', k' + i + 'b = ' + NAN + ', k' + i + 'c = ' + NAN
+          + ', v' + i + 'a = 0, v' + i + 'b = 0, v' + i + 'c = 0, v' + i + 'd = 0;';
+        const nm = ['k' + i + 'a', 'k' + i + 'b', 'k' + i + 'c',
+                    'v' + i + 'a', 'v' + i + 'b', 'v' + i + 'c', 'v' + i + 'd'];
+        const get = n => nm[n];
+        const set = (n, val) => nm[n] + ' = ' + val + ';';
+        out += 'function cfill' + i + '(xi, yi, s) {' + fillBody(set) + '}';
+        out += 'function cvn' + i + '(x, y, s) {' + cachedBody(get, set, 'cfill' + i + '(xi, yi, s);') + '}';
+      }
+      return out + 'return { f: (x, y, s) => cvn0(x, y, s) * 0.6 + cvn1(x * 2.1, y * 2.1, s + 9) * 0.3'
+        + ' + cvn2(x * 4.3, y * 4.3, s + 19) * 0.1 };';
+    } },
+
+  { name: 'closure vars, fill inlined',
+    what: 'CONTROL, known bad — the four nz calls back in the hot function (see :2306)',
+    build: (L) => {
+      let out = '';
+      for (let i = 0; i < 3; i++) {
+        out += 'let m' + i + 'a = ' + NAN + ', m' + i + 'b = ' + NAN + ', m' + i + 'c = ' + NAN
+          + ', w' + i + 'a = 0, w' + i + 'b = 0, w' + i + 'c = 0, w' + i + 'd = 0;';
+        const nm = ['m' + i + 'a', 'm' + i + 'b', 'm' + i + 'c',
+                    'w' + i + 'a', 'w' + i + 'b', 'w' + i + 'c', 'w' + i + 'd'];
+        const get = n => nm[n];
+        const set = (n, val) => nm[n] + ' = ' + val + ';';
+        out += 'function mvn' + i + '(x, y, s) {' + cachedBody(get, set, fillBody(set)) + '}';
+      }
+      return out + 'return { f: (x, y, s) => mvn0(x, y, s) * 0.6 + mvn1(x * 2.1, y * 2.1, s + 9) * 0.3'
+        + ' + mvn2(x * 4.3, y * 4.3, s + 19) * 0.1 };';
+    } },
+
+  { name: 'ABLATION re-associated',
+    what: 'deliberately wrong — a + (b - a) * sx, algebraically equal, numerically not',
+    ablation: true,
+    build: (L) => {
+      let out = '';
+      for (let i = 0; i < 3; i++) {
+        out += 'let z' + i + 'a = ' + NAN + ', z' + i + 'b = ' + NAN + ', z' + i + 'c = ' + NAN
+          + ', y' + i + 'a = 0, y' + i + 'b = 0, y' + i + 'c = 0, y' + i + 'd = 0;';
+        const nm = ['z' + i + 'a', 'z' + i + 'b', 'z' + i + 'c',
+                    'y' + i + 'a', 'y' + i + 'b', 'y' + i + 'c', 'y' + i + 'd'];
+        const set = (n, val) => nm[n] + ' = ' + val + ';';
+        out += 'function zfill' + i + '(xi, yi, s) {' + fillBody(set) + '}';
+        out += 'function zvn' + i + '(x, y, s) {'
+          + 'const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi;'
+          + 'if (' + nm[0] + ' !== s || ' + nm[1] + ' !== xi || ' + nm[2] + ' !== yi) zfill' + i + '(xi, yi, s);'
+          + 'const a = ' + nm[3] + ', b = ' + nm[4] + ', c = ' + nm[5] + ', d = ' + nm[6] + ';'
+          + 'const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);'
+          + 'const lo = a + (b - a) * sx, hi = c + (d - c) * sx;'      // the one changed line
+          + 'return lo + (hi - lo) * sy;' + '}';
+      }
+      return out + 'return { f: (x, y, s) => zvn0(x, y, s) * 0.6 + zvn1(x * 2.1, y * 2.1, s + 9) * 0.3'
+        + ' + zvn2(x * 4.3, y * 4.3, s + 19) * 0.1 };';
+    } },
+];
+
+// ---- the harness, as corrected in cpu-breakdown-probe ------------------------------------------
+const REPS = [1, 2, 4, 8], N = 270400, WD = 520, TARGET_MS = 25;
+const SX = 0.0031, SY = 0.0029;
+const med = v => { const s = [...v].sort((a, b) => a - b); return s[(s.length - 1) >> 1]; };
+function measure(fn) {
+  let M = 1;
+  for (let i = 0; i < 14; i++) {
+    const t0 = performance.now(); fn(M); const dt = performance.now() - t0;
+    if (dt >= TARGET_MS) break;
+    M = Math.max(M + 1, Math.ceil(M * Math.max(1.7, TARGET_MS / Math.max(dt, 0.05))));
+  }
+  fn(M * REPS[REPS.length - 1]);
+  const xs = [], ys = [], accs = [];
+  for (const r of REPS) {
+    const n = r * M, ts = []; let acc = 0;
+    for (let k = 0; k < 5; k++) { const t0 = performance.now(); acc = fn(n); ts.push(performance.now() - t0); }
+    xs.push(n); ys.push(med(ts)); accs.push(acc);
+  }
+  const per = xs.map((n, i) => ys[i] / n);
+  const ms = Math.min(...per), spread = (Math.max(...per) / ms - 1) * 100;
+  const span = REPS[REPS.length - 1] / REPS[0];
+  const ran = Math.abs(accs[accs.length - 1] / (accs[0] || 1e-9) - span) < span * 0.02;
+  return { ms, ns: ms * 1e6 / N, spread, ran, M };
+}
+// the renderer's own walk: scanline order at the dominant call's scale, so the cache hits as it does
+const walk = f => r => { let s = 0;
+  for (let k = 0; k < r; k++) for (let j = 0; j < WD; j++) { const y = j * SY * 1.56 + 0.11;
+    for (let i = 0; i < WD; i++) s += f(i * SX * 26 + 0.17, y, 71); } return s; };
+
+// EVERY VARIANT IS TIMED AGAINST THE SHIPPED ONE, INTERLEAVED, AND NOTHING IS TIMED IN SEQUENCE.
+// Measuring eight variants one after another did not reproduce: 'constant slot' came back 0.74x of
+// shipped on one run and 1.20x on the next, while 'as shipped' - always measured first - held at 40.68
+// then 40.37. The first position is clean and every later one drifts, so a table of eight sequential
+// readings is a table of eight different machine states.
+//
+// A B B A, with the order flipped each round, is this project's own answer to that: whatever drifts
+// between the two arms is shared by both, and reversing the order each round cancels what is left.
+// The RATIO within a round is the measurement; the absolute numbers are not. The shipped arm's own
+// spread across rounds is printed, because it is the only honest statement of how much the box moved
+// underneath the comparison.
+const ROUNDS = 5;
+function pairRatio(aFn, bFn, unit) {
+  const as = [], bs = [];
+  aFn(unit); bFn(unit);                                       // both warm before anything is kept
+  for (let r = 0; r < ROUNDS; r++) {
+    const seq = r % 2 ? ['b', 'a', 'a', 'b'] : ['a', 'b', 'b', 'a'];
+    for (const which of seq) {
+      const f = which === 'a' ? aFn : bFn;
+      const t0 = performance.now(); f(unit); const dt = performance.now() - t0;
+      (which === 'a' ? as : bs).push(dt);
+    }
+  }
+  // BOTH MODES, NOT THE LUCKY ONE. Ranking on the minimum made 'all three octaves inlined' look like
+  // 0.580x on one run and 0.888x on the next: its own arm swung 17.1 to 26.2 ms while the shipped arm
+  // held at 29.4-29.5. That is not noise, it is TWO MODES - the same signature
+  // app/stone-author.html:2306 records for build 174, which took either 87 or 110 core-seconds for the
+  // same input and held whichever it picked for the whole render. A minimum reports the good mode and
+  // hides the bad one, which is the worst possible statistic for exactly this failure. A variant now
+  // has to win in BOTH modes to count, and a variant whose own spread is far wider than the reference
+  // arm's is called bimodal rather than fast.
+  const mn = v => Math.min(...v), mx = v => Math.max(...v);
+  const aSpread = mx(as) / mn(as), bSpread = mx(bs) / mn(bs);
+  return { ratio: mn(bs) / mn(as), worst: mx(bs) / mx(as), aMs: mn(as), bMs: mn(bs),
+    aDrift: (aSpread - 1) * 100, bDrift: (bSpread - 1) * 100,
+    bimodal: twoModes(bs), refBimodal: twoModes(as), as, bs };
+}
+// TWO MODES OR ONE? The first attempt asked whether the variant's spread was 1.5x the reference arm's,
+// which with a spread of 1.32 needs the reference to be under 0.88 - and a max-over-min is never below
+// one, so that test could not fire on any input. A dead gate reporting "none in this run" is worse
+// than no gate, because it reads as a clean bill.
+//
+// Bimodal is not the same as noisy: noise spreads readings out, two modes put them in two CLUMPS with
+// a gap between. So sort the readings, find the widest gap between neighbours, and call it two modes
+// when that gap is wide relative to the spread AND both sides of it hold several readings. Noise has
+// its largest gap in the tail with one reading beyond it; two modes have it in the middle.
+function twoModes(v) {
+  if (v.length < 8) return false;
+  const s = [...v].sort((a, b) => a - b);
+  let gi = 0, g = 0;
+  for (let i = 1; i < s.length; i++) if (s[i] - s[i - 1] > g) { g = s[i] - s[i - 1]; gi = i; }
+  const lo = gi, hi = s.length - gi;
+  return g > s[0] * 0.15 && lo >= 3 && hi >= 3;
+}
+
+document.getElementById('run').onclick = async () => {
+  document.getElementById('run').disabled = true;
+  RES.textContent = ''; TB = null; LOG.textContent = ''; RUN++;
+  try {
+    head('this device');
+    pair('run', RUN === 1 ? '1 since this page loaded — the figure to quote'
+      : RUN + ' since this page loaded — RELOAD BEFORE QUOTING', RUN === 1 ? 'good' : 'warn');
+    pair('user agent', navigator.userAgent);
+    const L = await liftFromApp();
+    const nz = new Function(L.fn('nz') + 'return nz;')();
+    pair('lifted', 'nz, vnoiseCfill, vnoiseC, fbm2C and the _NZC declaration from ' + L.from, 'good');
+
+    // the reference every variant is judged against is the app's own fbm2C
+    const ref = new Function('nz', VARIANTS[0].build(L))(nz).f;
+
+    // ---- correctness before speed ------------------------------------------------------------
+    // A realistic walk, not a lattice: the cache's behaviour depends on the ORDER of the calls, so a
+    // variant could agree on scattered points and differ once the hit pattern changes.
+    const CHECK = 40000;
+    function identical(f) {
+      let worst = 0, bad = 0;
+      for (let j = 0; j < 200; j++) { const y = j * SY * 1.56 + 0.11;
+        for (let i = 0; i < 200; i++) {
+          const x = i * SX * 26 + 0.17;
+          const a = ref(x, y, 71), b = f(x, y, 71);
+          if (!Object.is(a, b)) { bad++; worst = Math.max(worst, Math.abs(a - b)); }
+        } }
+      return { bad, worst };
+    }
+
+    // the shipped arm is calibrated once and that unit is used for every pair, so both arms of every
+    // comparison do exactly the same amount of work
+    const refWalk = walk(ref);
+    const cal = measure(refWalk);
+    pair('shipped, measured alone', cal.ns.toFixed(2) + ' ns a sample, unit ' + cal.M
+      + ' passes, ladder spread ' + cal.spread.toFixed(1) + '%');
+
+    head('each variant against the shipped one, interleaved A B B A');
+    table(['variant', 'best mode', 'worst mode', 'its own spread', 'bit-identical', 'what it is']);
+    const results = [];
+    for (const V of VARIANTS) {
+      if (V.name === 'as shipped') continue;
+      let f;
+      try { f = new Function('nz', V.build(L))(nz).f; }
+      catch (e) { row([V.name, '—', '—', '—', 'DID NOT BUILD', String(e.message)], 'bad'); continue; }
+      const ok = identical(f);
+      const pr = pairRatio(refWalk, walk(f), cal.M);
+      results.push({ V, pr, ok });
+      const bit = ok.bad === 0 ? 'yes' : ok.bad + ' of 40,000 differ, worst ' + ok.worst.toExponential(1);
+      // a win has to hold in both modes; anything else is called what it is
+      const wins = !ok.bad && pr.ratio < 0.95 && pr.worst < 0.95 && !pr.bimodal;
+      row([V.name + (pr.bimodal ? '  BIMODAL' : ''), pr.ratio.toFixed(3) + '×',
+        pr.worst.toFixed(3) + '×', pr.bDrift.toFixed(0) + '%', bit, V.what],
+        ok.bad ? (V.ablation ? 'warn' : 'bad') : pr.bimodal ? 'bad'
+          : wins ? 'good' : pr.ratio > 1.05 ? 'bad' : '');
+      log(V.name + ': best ' + pr.ratio.toFixed(3) + ' worst ' + pr.worst.toFixed(3)
+        + (pr.bimodal ? '  TWO MODES' : ''));
+      // the raw readings, because a ratio cannot show two modes and a sorted list can
+      log('    shipped [' + [...pr.as].sort((a, b) => a - b).map(v => v.toFixed(1)).join(' ') + ']');
+      log('    variant [' + [...pr.bs].sort((a, b) => a - b).map(v => v.toFixed(1)).join(' ') + ']');
+    }
+
+    // ---- did the correctness check actually bite? ----------------------------------------------
+    // THE MODES ARE BETWEEN SESSIONS, NOT INSIDE ONE, which is why the gap detector above found
+    // nothing. Five fresh loads gave 0.580, 0.888, 0.564, 0.569, 0.884 for the inlined variant, every
+    // one of them TIGHT within its own run - V8 picks a mode when it optimises the function and holds
+    // it for the life of the page, exactly as build 174 held its mode for the life of a render. No
+    // statistic computed inside one run can see that, so each run's ratios are kept and shown back.
+    // Browser storage can be absent or throw, and the page has to read correctly without it.
+    head('across page loads, because that is where the modes live');
+    try {
+      const KEY = 'vnoisec-variant-ratios';
+      const prev = JSON.parse(localStorage.getItem(KEY) || '{}');
+      for (const r of results) {
+        if (r.ok.bad) continue;
+        (prev[r.V.name] = prev[r.V.name] || []).push(Number(r.pr.ratio.toFixed(3)));
+        if (prev[r.V.name].length > 20) prev[r.V.name] = prev[r.V.name].slice(-20);
+      }
+      localStorage.setItem(KEY, JSON.stringify(prev));
+      table(['variant', 'loads', 'ratios seen, oldest first', 'verdict']);
+      for (const [nm, arr] of Object.entries(prev)) {
+        const lo = Math.min(...arr), hi = Math.max(...arr);
+        const split = arr.length >= 3 && hi / lo > 1.25;
+        row([nm, String(arr.length), arr.join(' '),
+          arr.length < 3 ? 'reload a few times to tell'
+            : split ? 'TWO MODES across loads — ' + lo.toFixed(2) + ' or ' + hi.toFixed(2)
+                + ', chosen per session and held'
+            : 'one mode, ' + lo.toFixed(2) + '–' + hi.toFixed(2)],
+          arr.length < 3 ? '' : split ? 'bad' : hi < 0.95 ? 'good' : '');
+      }
+      pair('clearing it', 'localStorage key ' + KEY + ', kept per browser and never shared');
+    } catch (e) {
+      pair('browser storage unavailable', 'the per-load history needs localStorage; everything above '
+        + 'is unaffected', 'warn');
+    }
+
+    head('bimodality, which is what this project already paid for once');
+    const bim = results.filter(r => r.pr.bimodal);
+    pair('the reference arm itself', results.length && results[0].pr.refBimodal
+      ? 'ALSO ran in two modes, so every ratio here is suspect' : 'ran in one mode, as it should',
+      results.length && results[0].pr.refBimodal ? 'bad' : 'good');
+    pair('variants that ran in two modes', bim.length === 0 ? 'none in this run'
+      : bim.map(r => r.V.name + ' (' + r.pr.bMs.toFixed(1) + ' to '
+          + (r.pr.bMs * (1 + r.pr.bDrift / 100)).toFixed(1) + ' ms, own spread '
+          + r.pr.bDrift.toFixed(0) + '% against the reference arm’s '
+          + r.pr.aDrift.toFixed(0) + '%)').join('; '),
+      bim.length ? 'bad' : 'good');
+    pair('why that disqualifies rather than discounts', 'build 2026.10.23.174 settled into one of two '
+      + 'modes per render and HELD it - 87 core-seconds of work or 110, same code, same input, same '
+      + 'output bytes, slow in every fifth render. Outlining vnoiseCfill is what fixed it. A variant '
+      + 'that is fast in one mode and slow in the other is that defect coming back, and a minimum-of-'
+      + 'several-readings statistic reports only the mode you were lucky enough to get.');
+
+    head('is the check able to fail?');
+    const abl = results.find(r => r.V.ablation);
+    pair('the ablation', !abl ? 'did not build'
+      : abl.ok.bad > 0 ? 'caught — ' + abl.ok.bad + ' of 40,000 values differ, worst '
+          + abl.ok.worst.toExponential(1) + '. Algebraically equal, numerically not, and the check sees it.'
+      : 'NOT CAUGHT — the bit-identical column above is decoration and nothing in this table is '
+          + 'safe to act on',
+      !abl ? 'bad' : abl.ok.bad > 0 ? 'good' : 'bad');
+
+    head('what this does not settle');
+    pair('a win here is not a win', 'the field is one part of a render, and a microbenchmark has been '
+      + 'wrong twice today. Anything faster AND bit-identical has to be proven on a live 65,535 on the '
+      + 'real box before it goes near app/stone-author.html.');
+    pair('for reference', 'vnoiseC measured 12.67 ns on this desktop and 3.13 on an iPhone; fbm2C is '
+      + 'three of those, and a sample is two fbm2C plus three Math.exp.');
+  } catch (e) {
+    head('failed');
+    pair('error', String(e && e.message || e), 'bad');
+    log(String(e && e.stack || e));
+  } finally {
+    document.getElementById('run').disabled = false;
+  }
+};
+</script>
