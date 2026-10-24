@@ -327,12 +327,19 @@ async function gpuOnce(dev, code, binds, n, wgs, reps, ts) {
 }
 async function gpuCost(dev, codeFor, binds, n, wgs, ts) {
   const xs = [], ys = [], note = [], vals = [], walls = [];
-  // WARM THE PIPELINE FIRST. The S23 returned 27.7 / 16.9 / 33.8 / 67.5 ms for 64 / 128 / 256 / 512
-  // passes - the last three exactly linear, the first inflated to three times its place - and the
-  // monotonicity gate correctly refused the lot. All five readings at 64x were identical at 27.7, so
-  // it was not noise: it was the first dispatch paying for shader compile and allocation. The CPU arm
-  // had already been given a top-of-ladder warm-up for the same reason; the GPU arm had not.
-  await gpuOnce(dev, codeFor(GPU_REPS[0]), binds, n, wgs, 1, ts);
+  // WARM AT THE TOP OF THE LADDER, NOT THE BOTTOM - and the first attempt at this got it wrong in a
+  // way only a phone could show. The S23 read 27.7 / 16.9 / 33.8 / 67.5 ms for 64 / 128 / 256 / 512
+  // passes, the last three exactly linear at 0.132 ms a pass and the first inflated threefold. A
+  // bottom-of-ladder warm-up did not move it: it came back 27.7 / 16.8 / 33.8 / 67.5, with all five
+  // readings at 64x identical to 27.7, so it was never compile cost - a compile is paid once and shows
+  // in one reading, not five.
+  //
+  // It is the GPU CLOCK. A mobile governor ramps on sustained load, and one 64-pass dispatch is far too
+  // short to ask for it, so the whole first rung ran at idle frequency while every later rung ran at
+  // full. Arm 3 never showed this because arm 2 had already heated the part for it. Warming at the top
+  // of the ladder asks for the clock the measurement needs, which is exactly the fix the CPU arm got
+  // when its first rung read 35.4 against 24.7 - the lesson was applied to one arm and not the other.
+  await gpuOnce(dev, codeFor(GPU_REPS[GPU_REPS.length - 1]), binds, n, wgs, 1, ts);
   for (const r of GPU_REPS) {
     const o = await gpuOnce(dev, codeFor(r), binds, n, wgs, ts ? 5 : 9, ts);
     xs.push(r); ys.push(o.ms); vals.push(o.first); walls.push(o.wall - o.ms);

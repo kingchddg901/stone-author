@@ -24,33 +24,48 @@ written to run on the S23 and the iPhone and has not yet.
 | GPU, the same hashing transliterated | 0.048 ms | 597× | **74.6×** |
 | GPU native, filtered texture | 0.014 ms | 1,970× | **246×** |
 
-### Three devices, and only one of them measured cleanly first time
+### Three devices, all measured, all saying go
 
-| device | pool | CPU a pass | native arm | vs its own pool |
-|---|---|---|---|---|
-| desktop, AMD RDNA-2 | 8 | 28.5 ms | 0.014 ms | **246×**, reproducible across four runs |
-| S23 Ultra, Adreno 7xx | 8 | 26.0 ms (0.3% spread) | — | not measured; probe defect, now fixed |
-| iPhone 14 Pro, A16, iOS 18.7 | **4** | 9.0 ms | 0.042 ms | ~53×, **provisional** |
+| device | pool | CPU a pass | native arm | vs its own pool | filter error |
+|---|---|---|---|---|---|
+| desktop, AMD RDNA-2 | 8 | 28.5 ms | 0.014 ms | **246×** | 0.368 levels (f32) |
+| S23 Ultra, Adreno 7xx | 8 | 25.8 ms | 0.036 ms | **89×** | 0.822 levels (f16) |
+| iPhone 14 Pro, A16, iOS 18.7 | 4 | 9.0 ms | 0.044 ms | **51×** | 0.425 levels (f16) |
 
-**The phones broke the probe in four places and every one was a real defect**, which is the more
-useful result. `POOL` was hardcoded to this desktop's 8, so the iPhone's figures were divided by twice
-its real pool and printed at half their size — it reported 6.76× and 26.54× where the numbers are
-13.5× and 53×. `r32float` is **not filterable without a feature and neither phone has it**; the probe
-warned and then built the native arm from one anyway, which the S23 failed loudly (`out[0]` exactly
-0.00, misdiagnosed as a folded loop) and the iPhone failed **quietly** — plausible values wrong by
-**81 levels of 255**. Nothing but the accuracy arm could see that. The GPU ladder had no warm-up, so
-the S23's first rung read three times its place. And the CPU arm had no proof of its own work: the
-iPhone's 9.0 ms a pass is three times this desktop on identical arithmetic, and until the accumulator
-was gated the probe could not tell a very fast core from a very clever JIT.
+Every ladder exactly linear — the iPhone's native arm read 2.9 / 5.7 / 11.3 / 22.5 ms for 64 / 128 /
+256 / 512 passes, the S23's 2.4 / 4.7 / 9.3 / 18.6 — and every arm passed the scaling gates.
 
-**So the iPhone row is provisional and the S23 row is absent, deliberately.** Both need a re-run on
-the fixed probe. The desktop row is the only one standing.
+**The weakest device is 51×, and the decision stops caring above about 50×.** Past that the field is
+no longer what limits the render, so the three devices are not 246× / 89× / 51× worth of different
+answers; they are three devices that all clear the only bar that matters. The 5× spread between them
+changes the Amdahl column by a few percent and nothing else.
 
-**Mobile needs `r16float`, and it is nearly free.** It is filterable in core WebGPU on every device
-that has WebGPU at all. Forced on this desktop with `?f16`, it costs **0.427 levels against f32's
-0.368**, and 245.26× against 247.85× — so the half-precision lattice a phone must use is not a
-compromise worth arguing about. That switch exists so the mobile path cannot ship having only ever
-run on devices that cannot run the other one.
+### Two findings that constrain the port
+
+**The filter is not the same function on every device, so a GPU render would not be byte-identical
+across them.** At the same half precision the iPhone lands 0.425 levels from the CPU's `vnoise` and
+the S23 lands **0.822** — nearly double, on identical lattice data. That is the texture unit's own
+weight precision, not the format, and it is not something a shader can control. Against the
+determinism this project holds elsewhere — same slab, same pixels, gated in CI — a GPU field means
+**same slab, same picture, different bytes, by vendor.** Under a level is invisible and the existing
+`woodAtan2` shipped at 1.5e-3 rad for months, so this is very likely acceptable; but it is a property
+to decide on deliberately rather than discover after the port exists.
+
+**Mobile GPUs need the clock asked for.** The S23's transliterated arm read 27.7 / 16.9 / 33.8 /
+67.5 ms — the last three exactly linear at 0.132 ms a pass, the first inflated threefold, with all
+five readings at the first rung identical. A compile is paid once and shows in one reading, not five,
+so this was never compile cost: a mobile governor ramps on sustained load and one short dispatch does
+not ask for it. The whole first rung ran at idle frequency. The probe now warms at the *top* of its
+ladder. Anything that measures a phone GPU over a short burst is measuring the governor.
+
+### Still unexplained, and worth more than the port
+
+**The iPhone's CPU arm is 9.0 ms a pass against this desktop's 28.5 and the S23's 25.8** — three
+times faster per core on identical lifted arithmetic. Its ladder is 9.0 / 18.0 / 36.0 / 73.0, exactly
+linear, and the accumulator gate proves the loop ran, so it is not a JIT deleting work. Either an A16
+core really is that far ahead on this code, or V8 is compiling the field badly on the desktop. **If it
+is the second, it is a larger and far cheaper win than any GPU port**, and it applies to the renderer
+that exists today rather than one that does not. This has not been investigated.
 
 The CPU arm is **lifted out of `app/stone-author.html` at run time** — `nz`, `vnoise`, `vnoiseC`,
 `vnoiseCfill`, `fbm2C` and the `_NZC` declaration, fetched and sliced — so it is the shipped
