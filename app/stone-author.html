@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.176';
+  const BUILD = '2026.10.24.177';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5009,7 +5009,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // GLASS, which the fork has been able to reach since the materials landed and this core
       // could not. paintContent dispatches on MATERIAL, so without these a glass slab threw on
       // its first line - and so did a stone one, for want of the token itself.
-      glassFlow, glassFormT, unformBodies, compileUnform, glassFormTG, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
+      glassFlow, glassFormT, unformBodies, unformKey, compileUnform, glassFormTG, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
       glassCellSpread, glassUnform, glassLay, glassWarp, glassUnwarp, rollerBake, paintGlassContent,
       // warpCacheKey decides whether the per-render warp fields can be reused. A worker's state is set
       // once at init and never changes after, so its memo hits for every tile after the first - which
@@ -5083,6 +5083,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // every slot MISSING rather than with slot 0 answering for seed 0 at cell (0,0) - which a
     // zero-filled array would do, and which is a wrong picture rather than a slow one.
     s += `var _NZC=new Float64Array(12*7).fill(NaN);\n`;
+    // _UNFC, the one specialised chain compileUnform keeps. Per worker, so nothing crosses the wire
+    // and each core optimises its own copy ONCE rather than once per tile.
+    s += `var _UNFC={key:'',fn:null};\n`;
     // DECLARED, not assigned into existence. The init handler creates these four, but an assignment
     // with no `var` makes an implicit global - which works in sloppy mode and would stop working the
     // day this source is evaluated as a module or under 'use strict'. Declaring them also lets
@@ -7038,29 +7041,47 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     return out;
   }
+  // ONE FUNCTION PER CHAIN SHAPE, KEPT. Declared per worker like _warpMemo and for the same reason:
+  // the cache needs no invalidation because the key IS the whole input. A shape that could not be
+  // sliced is remembered as null, so it is not retried on every tile.
+  const _UNFC = { key: '', fn: null };
+  function unformKey(ops) {
+    let s = '';
+    for (let i = 0; i < ops.length; i++) s += (ops[i].k | 0) + ',';
+    return s;
+  }
   function compileUnform(F) {
     try {
       const LB = String.fromCharCode(123), RB = String.fromCharCode(125);   // see unformBodies
       const ops = F.OPC;
       if (!ops || !ops.length || ops.length > 64) return null;      // nothing to unroll, or absurd
+      const key = unformKey(ops);
+      if (_UNFC.key === key) return _UNFC.fn;                       // including a remembered null
+      _UNFC.key = key; _UNFC.fn = null;
       const B = unformBodies();
       for (const op of ops) if (op.k && !B[op.k]) return null;      // a kind this cannot slice
       const parts = [];
       for (let i = ops.length - 1; i >= 0; i--) {
         const body = B[ops[i].k];
         if (!body) continue;                                        // k === 0 is a no-op in the walk too
-        parts.push(LB + 'const op=O[' + i + '],ox=op.ox,oy=op.oy;' + body + RB);
+        parts.push(LB + 'const op=P[' + i + '],ox=op.ox,oy=op.oy;' + body + RB);
       }
       // THE EMITTED SOURCE CARRIES NO SPACES, which is not tidiness. check-i18n.mjs flags any
       // literal over 34 characters with five spaces and a lowercase run as prose that should have
       // gone through a pack, and 'out[0] = x; out[1] = y; out[2] = press; ' reads exactly like a
       // sentence to it. Generated code has no need of spaces, so writing it without them makes it
       // unambiguously not prose rather than teaching the gate an exception.
+      // IT READS THE CHAIN FROM F, IT DOES NOT CAPTURE IT. The records are recompiled per tile, so a
+      // function holding its own copy could only ever be built per tile - which is what made build 176
+      // SLOWER than 175 on a real render despite being 17.6% faster in a warm bench. Eight workers x
+      // 20 tiles meant 160 brand-new functions, each needing its own type feedback and its own trip up
+      // the optimiser, and none of them lived long enough to earn it back. Reading P = F.OPC at call
+      // time makes the code depend on the chain's SHAPE alone, so one function serves every tile.
       const src = 'return function(x0,y0,F,out)' + LB +
-        'let x=x0,y=y0,press=0;' + parts.join('') +
+        'const P=F.OPC;let x=x0,y=y0,press=0;' + parts.join('') +
         'out[0]=x;out[1]=y;out[2]=press;' + RB + ';';
-      const make = new Function('O', 'woodAtan2', 'glassUnwarp', 'rollStampAt', 'rollerAt', 'rollerHand', 'SLAB_FT', src);
-      const fn = make(ops, woodAtan2, glassUnwarp, rollStampAt, rollerAt, rollerHand, SLAB_FT);
+      const make = new Function('woodAtan2', 'glassUnwarp', 'rollStampAt', 'rollerAt', 'rollerHand', 'SLAB_FT', src);
+      const fn = make(woodAtan2, glassUnwarp, rollStampAt, rollerAt, rollerHand, SLAB_FT);
       // THE SELF-CHECK. A lattice wide enough to leave the sheet on every side, because a chain's
       // behaviour at the rim is where a spin and a roll differ most, plus the exact centre where the
       // spin's r > 1e-9 guard decides.
@@ -7072,6 +7093,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       }
       glassUnform(0, 0, F, a); fn(0, 0, F, b);
       if (!Object.is(a[0], b[0]) || !Object.is(a[1], b[1]) || !Object.is(a[2], b[2])) return null;
+      _UNFC.fn = fn;
       return fn;
     } catch (e) { return null; }                                    // no new Function under a strict CSP
   }

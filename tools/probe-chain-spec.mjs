@@ -45,11 +45,20 @@ const STUBS = `
   function rollerHand(B, s, out) { out[0] = 0.5 + 0.25 * Math.sin(s * 2.1); out[1] = 0.1 * Math.cos(s); }
 `;
 
+// THE CACHE DECLARATION IS LIFTED TOO, not re-written here. compileUnform memoises one function per
+// chain SHAPE in _UNFC, and a probe that declared its own would be testing something else. This
+// probe went red the moment unformKey and _UNFC were added and not carried, which is the behaviour
+// wanted from it — the same thing probe-glass-gradient.mjs caught when glassFormT started reading
+// the hash cache. Lifting a function means lifting every name its text reaches for.
+const UNFC_DECL = (SRC.match(/const _UNFC = [{][^;]*[}];/) || [])[0];
+if (!UNFC_DECL) { console.error('probe-chain-spec: FAIL - no _UNFC declaration in the app'); process.exit(1); }
+
 function build(mutate) {
   let bodies = liftFn('unformBodies'), comp = liftFn('compileUnform'), walk = liftFn('glassUnform');
   if (mutate) ({ bodies, comp, walk } = mutate({ bodies, comp, walk }));
-  const src = STUBS + liftFn('woodAtan2') + '\n' + walk + '\n' + bodies + '\n' + comp
-    + '\nreturn { glassUnform, unformBodies, compileUnform };';
+  const src = STUBS + liftFn('woodAtan2') + '\n' + walk + '\n' + bodies + '\n'
+    + UNFC_DECL + '\n' + liftFn('unformKey') + '\n' + comp
+    + '\nreturn { glassUnform, unformBodies, unformKey, compileUnform, peek: () => _UNFC };';
   return new Function(src)();
 }
 
@@ -121,6 +130,34 @@ for (const [what, names] of CHAINS) {
   const r = compare(APP, names);
   claim(r.built && r.bad === 0, what,
     r.built ? r.n * 3 + ' values, ' + r.bad + ' differing' + (r.bad ? ', worst ' + r.worst : '') : 'did not build');
+}
+
+console.log('\nE  one function per shape, kept — and the shape is the whole key');
+{
+  const A2 = build(null);
+  const F = F0(); F.OPC = [R.spin, R.blow, R.stir];
+  const first = A2.compileUnform(F);
+  // the same SHAPE with different scalars must reuse the function, because the generated code reads
+  // the records from F at call time and so depends on the kind sequence alone
+  const F2 = F0(); F2.OPC = [{ ...R.spin, a: 9.1 }, { ...R.blow, s: 3.3 }, R.stir];
+  const again = A2.compileUnform(F2);
+  claim(!!first && first === again, 'the same kind sequence reuses the same function object',
+    'different scalars, same shape');
+  // and reuse has to still be RIGHT for the second slab, which is the claim that makes it safe
+  const a = [0, 0, 0], b = [0, 0, 0];
+  let bad = 0;
+  if (again) for (const [x, y] of PTS) {
+    A2.glassUnform(x, y, F2, a); again(x, y, F2, b);
+    for (let i = 0; i < 3; i++) if (!Object.is(a[i], b[i])) bad++;
+  }
+  claim(!!again && bad === 0, 'and the reused function is correct for the second slab’s values',
+    PTS.length * 3 + ' values, ' + bad + ' differing');
+  const F3 = F0(); F3.OPC = [R.blow, R.spin, R.stir];
+  const other = A2.compileUnform(F3);
+  claim(!!other && other !== first, 'a different kind sequence builds a different function', 'blow and spin swapped');
+  const F4 = F0(); F4.OPC = [R.spin, { k: 9, ox: 0, oy: 0 }];
+  claim(A2.compileUnform(F4) === null, 'an unsliceable shape is remembered as null');
+  claim(A2.compileUnform(F4) === null, 'and stays null on the next tile rather than being retried');
 }
 
 console.log('\nC  a chain it cannot slice falls back rather than guessing');
