@@ -108,10 +108,38 @@ filter precision. Even halving it is worth about 1.5×.
 1.35× on the desktop. This codebase already has the move — `woodAtan2` replaced `Math.atan2` with a
 polynomial and shipped at 1.5e-3 rad — so it is available if wanted, but it is not the main event.
 
+**The inlining variants were tried, and none is adoptable.** `tools/vnoisec-variants-probe.html`
+builds eight rewrites of `vnoiseC`, each checked bit-identical against the shipped `fbm2C` before
+timing, each pitted against it interleaved A/B/B/A. Across six fresh page loads:
+
+| variant | ratio across loads | |
+|---|---|---|
+| closure variables, no typed array | 1.16 – 1.32× | **always worse** |
+| closure vars with the fill inlined | 1.21 – 1.33× | always worse — the known-bad control |
+| one shared function, offset passed | 0.92 – 0.99× | stable, and barely a win |
+| three functions, offset passed | 0.599 – 0.921× | **swings 54%** |
+| key and values in separate arrays | 0.600 – 0.908× | **swings 51%** |
+| all three octaves inlined into one | **0.564 – 0.888×** | **swings 57%** |
+
+Each is *tight inside its own run* — the inlined variant read `[16.5 16.5 16.6 16.6 16.6 16.8 16.9
+17.0 17.2 17.4]` ms on one load and sat at 26.2 on another. V8 picks a mode when it optimises the
+function and holds it for the life of the page. **That is build 2026.10.23.174 exactly**, which took
+either 87 or 110 core-seconds for the same input and held whichever it got, and which outlining
+`vnoiseCfill` is what fixed. A rewrite that is 43% faster in one session and 11% in the next is that
+defect returning, not a win.
+
+**The obvious candidate was wrong.** Plain closure variables — no typed array, no bounds check — were
+the most likely fix and are reliably 20–30% *slower*: V8 boxes mutated closure `let`s into context
+objects. Recorded so it is not tried again.
+
+**And none of it closes the 4×.** Even the inlined variant's fast mode is 22.8 ns against
+JavaScriptCore's 9.09 for the same `fbm2C`. The gap is not the computed index, not the function
+shape, and not the call structure. It remains open.
+
 **Not acted on.** A microbenchmark cannot authorise a change to `app/stone-author.html`; the standard
-here is a before/after on a real render on the real box. The next experiment is to try inlining
-variants of `vnoiseC`/`fbm2C` under V8 and watch whether the stack's 2.5×-its-parts collapses, then
-prove any winner on a live 65,535.
+here is a before/after on a real render on the real box. Since the modes live *between* page loads,
+the probe now keeps each load's ratios in `localStorage` and shows the history — several loads are
+needed before any of these numbers means anything.
 
 **One caveat on the instrument.** The `× baseline` column was meant to be the headline here and it
 misled once: the baseline is a *serial* dependency chain, so it measures floating-point latency, while
