@@ -7173,6 +7173,19 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // THE MOULD'S SHAPE. Strips are parallel compartments; radial is wedges about the centre, which
     // is what a crown roundel actually had poured into it. A wedge mould is NOT a spin - a spin
     // shears what is already there, and these compartments were radial before anything was done.
+    // AND IT BORROWS THE WOOD PATH'S TOLERANCE, which was chosen for something else. woodAtan2 says
+    // of itself that it is "good to under half a degree" and that the EYE GRID is what wants it - a
+    // budget set by a wood feature, inherited here by a glass compartment boundary. Measured against
+    // Math.atan2 over 200,000 points it is 9.70e-4 rad mean, 1.51e-3 worst, which through
+    // angle * (0.5 + r) displaces a wedge edge by 18 px at a foot and 76 px at the rim of an 8 ft
+    // slab at 65,535. The error varies SMOOTHLY with angle, so the wedges are gently warped rather
+    // than ragged, and a crown roundel's compartments were never straight to a tenth of a degree.
+    //
+    // LEFT AS IT IS, DELIBERATELY. Exactness here is Math.atan2 at 22.3 ns against woodAtan2's 2.35,
+    // which is about +19% on every radial-mould render; a 4,096-entry atan table only reaches 15.95
+    // because unlike the spin table it still needs a divide and an octant fold, so there is no cheap
+    // middle. And it would move every radial slab already authored. If that trade is ever reopened,
+    // the number to beat is 76 px and the price is 20 ns a sample.
     if (F.MR) { const r = Math.sqrt(gc * gc + ga * ga); gc = woodAtan2(ga, gc) * (0.5 + r); ga = r; }
     if (F.MB) { glassBlob(gc, ga, F, out); return; }
     // AUTHORED RIBBONS. Each has its own width, length and colour, and each is an OBLONG - so a

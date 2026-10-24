@@ -211,8 +211,21 @@ The `sl/(1+|sl|)` is a soft clamp — slope mapped into (−1, 1) without a bran
 
 ## 7. Which ribbon — `glassLay`
 
-Only when `CORD > 0`. In radial moulds the coordinates are first bent: `gc = atan2(ga, gc)·(0.5+r)`,
+Only when `CORD > 0`. In radial moulds the coordinates are first bent: `gc = woodAtan2(ga, gc)·(0.5+r)`,
 `ga = r`.
+
+**That is `woodAtan2`, not `atan2`, and the distinction is load-bearing.** `woodAtan2` describes
+itself as good to under half a degree and says the wood **eye grid** is what wants it — a tolerance
+set by a wood feature and inherited here by a glass compartment boundary. Measured against
+`Math.atan2` over 200,000 points: **9.70e-4 rad mean, 1.51e-3 worst**, which through
+`angle·(0.5+r)` displaces a wedge edge by **18 px at one foot and 76 px at the rim** of an 8 ft slab
+at 65,535. The error varies smoothly with angle, so the wedges are gently warped rather than ragged.
+
+**Left as it is, deliberately.** Exactness is `Math.atan2` at 22.3 ns against `woodAtan2`'s 2.35 —
+about **+19% on every radial-mould render** — and a 4,096-entry atan table only reaches 15.95 ns
+because, unlike the spin table, it still needs a divide and an octant fold, so there is no cheap
+middle. It would also move every radial slab already authored. The number to beat is 76 px and the
+price is 20 ns a sample.
 
 For **cells**, the nearest two compartments by a signed distance, each a rounded box:
 
