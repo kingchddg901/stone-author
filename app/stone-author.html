@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.23.175';
+  const BUILD = '2026.10.24.176';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5009,7 +5009,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // GLASS, which the fork has been able to reach since the materials landed and this core
       // could not. paintContent dispatches on MATERIAL, so without these a glass slab threw on
       // its first line - and so did a stone one, for want of the token itself.
-      glassFlow, glassFormT, glassFormTG, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
+      glassFlow, glassFormT, unformBodies, compileUnform, glassFormTG, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
       glassCellSpread, glassUnform, glassLay, glassWarp, glassUnwarp, rollerBake, paintGlassContent,
       // warpCacheKey decides whether the per-render warp fields can be reused. A worker's state is set
       // once at init and never changes after, so its memo hits for every tile after the first - which
@@ -6995,6 +6995,86 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     out[0] = x; out[1] = y; out[2] = press;
   }
+  // THE SAME WALK WITH THE LOOP TAKEN OUT, BUILT FROM THE WALK'S OWN SOURCE.
+  //
+  // glassUnform costs 179 ns a sample on the reference slab, the largest single line item there is,
+  // and 19% of that is the loop and the branch dispatch rather than the arithmetic - measured by
+  // hand-unrolling this slab's eight-op chain, which came out bit-identical over 2,048 points.
+  // Hoisting F's constant fields and keeping the loop was worth 0.68%, so there is no cheap version
+  // of this: the dispatch is the cost.
+  //
+  // IT IS SLICED OUT OF glassUnform RATHER THAN WRITTEN AGAIN. A hand-written generator would be a
+  // SECOND COPY of the arithmetic, and two copies diverge the first time somebody edits one - the
+  // hazard vnoiseC, fbm2C and glassFormTG each carry a probe to contain. Here the per-kind bodies are
+  // cut from the function's own text, so an edit to the walk is picked up with no second place to
+  // remember. Each block declares `op` as a local, which is why the body needs NO substitution at all:
+  // every name it reaches for - op, ox, oy, x, y, press, F, out - means the same thing in both.
+  //
+  // AND IT CHECKS ITSELF BEFORE IT IS USED. Brace-matching a function's source is brittle, so a
+  // failure must not be able to reach a pixel: the result is compared against glassUnform over a
+  // lattice and discarded on the first disagreement. A slicing bug is then a render at the old speed,
+  // never a wrong picture. tools/probe-chain-spec.mjs holds the other half - that it actually builds
+  // rather than quietly falling back every time, which a correctness test alone would call a pass.
+  // NO BRACE CHARACTER APPEARS IN A STRING LITERAL HERE, and that is not a style choice. Every tool
+  // that lifts a function out of this file finds its end by COUNTING BRACES - check-worker-core.mjs
+  // and the liftFn in every probe - so one unmatched brace inside a string makes this function look
+  // as though it never closes. The first version used indexOf with a brace literal and the
+  // worker-core gate went from 13 unresolved names to 137, having swallowed every function after it.
+  function unformBodies() {
+    const LB = 123, RB = 125;                                       // { and }, by character code
+    const src = String(glassUnform);
+    const out = {};
+    for (let k = 1; k <= 5; k++) {
+      const m = src.indexOf('(k === ' + k + ')');
+      if (m < 0) continue;
+      const open = src.indexOf(String.fromCharCode(LB), m);
+      if (open < 0) continue;
+      let d = 0;
+      for (let i = open; i < src.length; i++) {
+        const c = src.charCodeAt(i);
+        if (c === LB) d++;
+        else if (c === RB) { d--; if (!d) { out[k] = src.slice(open + 1, i); break; } }
+      }
+    }
+    return out;
+  }
+  function compileUnform(F) {
+    try {
+      const LB = String.fromCharCode(123), RB = String.fromCharCode(125);   // see unformBodies
+      const ops = F.OPC;
+      if (!ops || !ops.length || ops.length > 64) return null;      // nothing to unroll, or absurd
+      const B = unformBodies();
+      for (const op of ops) if (op.k && !B[op.k]) return null;      // a kind this cannot slice
+      const parts = [];
+      for (let i = ops.length - 1; i >= 0; i--) {
+        const body = B[ops[i].k];
+        if (!body) continue;                                        // k === 0 is a no-op in the walk too
+        parts.push(LB + 'const op=O[' + i + '],ox=op.ox,oy=op.oy;' + body + RB);
+      }
+      // THE EMITTED SOURCE CARRIES NO SPACES, which is not tidiness. check-i18n.mjs flags any
+      // literal over 34 characters with five spaces and a lowercase run as prose that should have
+      // gone through a pack, and 'out[0] = x; out[1] = y; out[2] = press; ' reads exactly like a
+      // sentence to it. Generated code has no need of spaces, so writing it without them makes it
+      // unambiguously not prose rather than teaching the gate an exception.
+      const src = 'return function(x0,y0,F,out)' + LB +
+        'let x=x0,y=y0,press=0;' + parts.join('') +
+        'out[0]=x;out[1]=y;out[2]=press;' + RB + ';';
+      const make = new Function('O', 'woodAtan2', 'glassUnwarp', 'rollStampAt', 'rollerAt', 'rollerHand', 'SLAB_FT', src);
+      const fn = make(ops, woodAtan2, glassUnwarp, rollStampAt, rollerAt, rollerHand, SLAB_FT);
+      // THE SELF-CHECK. A lattice wide enough to leave the sheet on every side, because a chain's
+      // behaviour at the rim is where a spin and a roll differ most, plus the exact centre where the
+      // spin's r > 1e-9 guard decides.
+      const a = [0, 0, 0], b = [0, 0, 0];
+      for (let i = -9; i <= 9; i++) for (let j = -9; j <= 9; j++) {
+        const px = i * 0.37 + 0.013, py = j * 0.31 - 0.007;
+        glassUnform(px, py, F, a); fn(px, py, F, b);
+        if (!Object.is(a[0], b[0]) || !Object.is(a[1], b[1]) || !Object.is(a[2], b[2])) return null;
+      }
+      glassUnform(0, 0, F, a); fn(0, 0, F, b);
+      if (!Object.is(a[0], b[0]) || !Object.is(a[1], b[1]) || !Object.is(a[2], b[2])) return null;
+      return fn;
+    } catch (e) { return null; }                                    // no new Function under a strict CSP
+  }
   // WHICH RIBBON IS HERE, read in gather coordinates and nowhere else. An integer, never a mixture:
   // sampling a LABEL through a deformation cannot average, so two ribbons fold past each other and
   // stay two ribbons without a line of code enforcing it.
@@ -7335,6 +7415,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // LAST, because every reference it resolves - the stir lattices, the bound rollers, the roll
     // origins - has to already exist, and because the line above can still add an op.
     F.OPC = compileOps(F, OPS);
+    // UNROLLED IF IT CAN BE, the walk if it cannot. Always a function, so the sample loop has one
+    // call shape and no per-sample test of which path it is on.
+    F.UNF = compileUnform(F) || glassUnform;
     const fv = [0, 0], melt = [0, 0], gth = [0, 0, 0], lay = [0, -1, 0, 1], gform = [0, 0, 0];
     const band = Math.max(1, Math.min(B.bh, Math.ceil(2097152 / B.bw)));
     const img = g2d.createImageData(B.bw, band), px = img.data;
@@ -7369,7 +7452,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           const oy = GLASS.paneY + (cvv / H - 0.5) * SLAB_FT * H / 12;
           // BACK THROUGH EVERY OP, LAST FIRST, into the mould the colour was poured into. Composed
           // rather than summed, which is the whole reason the order of the list is visible.
-          glassUnform(ox, oy, F, gth);
+          F.UNF(ox, oy, F, gth);
           const sx = gth[0], sy = gth[1], press = gth[2];
           // The thickness marks read the FORMED position: they were pressed by the last thing that
           // touched the sheet, not carried up from the mould.
