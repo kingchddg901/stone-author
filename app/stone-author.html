@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.205';
+  const BUILD = '2026.10.24.206';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -16092,7 +16092,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       // mark, including the first three GPU masters. A flag that cannot fire is worse than no
       // flag: those three had to be identified from poolStrain being null instead.
       const poolRan = pool ? { n: pool.workers, planned: pool.planned, strain: pool.strain,
-                               fins: pool.finishers || 0,
+                               fins: pool.finishers || 0, tex: !!pool.texReadback,
                                gpu: !!pool.gpu, own: pool.own ? pool.own : undefined } : null;
       if (pool) { pool.close(); pool = null; }
       proveTile(p.ts, W);                                  // settled: every render after this one matches it
@@ -16196,6 +16196,11 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         // HOW MANY FINISHERS RAN, which is the width `?pool=N` actually moves on a GPU render.
         // Absent on a CPU render, where `workers` already is that number.
         finishers: (poolRan && poolRan.fins) ? poolRan.fins : undefined,
+        // WHICH READBACK RAN. Absent means the buffer one - either an older master, or a device
+        // where the texture pipelines refused. Recorded because `?pool=12` taught the lesson: an
+        // experiment whose independent variable is not in the record can only be judged on a wall
+        // clock, and four renders went by before anybody noticed.
+        texReadback: (poolRan && poolRan.tex) ? true : undefined,
         poolWhy: poolRan ? undefined : poolWhy,
         poolPlanned: poolRan && poolRan.planned !== poolRan.n ? poolRan.planned : undefined,
         // HOW HARD THE RENDER FOUND IT, which is what the shed heuristic used to act on and now only
