@@ -97,12 +97,14 @@ async function liftFromApp(names) {
     }
     throw new Error('unbalanced ' + name);
   };
-  return { app: new Function(names.map(fn).join('\n') + '\nreturn {' + names.join(',') + '};')(), from };
+  const decl = (src.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0] || '';
+  return { app: new Function(decl + '\n' + names.map(fn).join('\n') + '\nreturn {' + names.join(',') + '};')(), from };
 }
 
 // ---- THE SHADER LIBRARY, growing one proven function at a time -------------------------------------
 // Each entry is the WGSL for one function plus whatever it needs. They are concatenated in order, so
 // a function may use anything declared above it.
+const NLC = String.fromCharCode(10);
 const WGSL = {};
 
 WGSL.nz = `
@@ -159,6 +161,89 @@ fn glassUnwarp(cu: f32, cvv: f32) -> vec2<f32> {
   return vec2<f32>(u, v);
 }`;
 
+
+// UNCACHED ON PURPOSE. vnoiseC is a per-thread last-cell cache and a GPU invocation has no previous
+// sample to cache from, so what gets ported is vnoise. The cache never changes the ANSWER - it only
+// skips recomputing it - so the value this has to match is the CPU's cached fbm2C all the same.
+WGSL.vnoise = `
+fn vnoise(x: f32, y: f32, s: i32) -> f32 {
+  let fx = floor(x); let fy = floor(y);
+  let xi = i32(fx); let yi = i32(fy);
+  let tx = x - fx; let ty = y - fy;
+  let sx = tx * tx * (3.0 - 2.0 * tx); let sy = ty * ty * (3.0 - 2.0 * ty);
+  let a = nz(xi, yi, s); let b = nz(xi + 1, yi, s);
+  let c = nz(xi, yi + 1, s); let d = nz(xi + 1, yi + 1, s);
+  return (a * (1.0 - sx) + b * sx) * (1.0 - sy) + (c * (1.0 - sx) + d * sx) * sy;
+}`;
+
+WGSL.fbm2 = `
+fn fbm2(x: f32, y: f32, s: i32) -> f32 {
+  return vnoise(x, y, s) * 0.6 + vnoise(x * 2.1, y * 2.1, s + 9) * 0.3
+       + vnoise(x * 4.3, y * 4.3, s + 19) * 0.1;
+}`;
+
+// THE RIBBON GEOMETRY. MEX, MHL, MD and MRIM are per-ribbon arrays; MOB and MST are scalars. The
+// app writes its own min/max and abs out longhand as ternaries - select() and min()/max() are the
+// same operations, not an improvement, and anything else would be a second implementation.
+WGSL.ribbon = `
+struct Rib { MOB: f32, MST: f32, n: i32, pad: i32 };
+@group(0) @binding(2) var<uniform> RB: Rib;
+@group(0) @binding(3) var<storage, read> MEX: array<f32>;
+@group(0) @binding(4) var<storage, read> MHL: array<f32>;
+@group(0) @binding(5) var<storage, read> MD: array<f32>;
+@group(0) @binding(6) var<storage, read> MRIM: array<f32>;
+fn glassCellSDF(gc: f32, ga: f32, i: i32) -> f32 {
+  let cx = (MEX[i] + MEX[i + 1]) * 0.5;
+  let hw = (MEX[i + 1] - MEX[i]) * 0.5;
+  let hh = MHL[i];
+  let r = min(hw, hh) * RB.MOB;
+  let ax = abs(gc - cx) - (hw - r);
+  let ay = abs(ga) - (hh - r);
+  let qx = max(ax, 0.0); let qy = max(ay, 0.0);
+  let inner = max(ax, ay);
+  return sqrt(qx * qx + qy * qy) + min(inner, 0.0) - r;
+}
+fn glassDepth(d: f32, i: i32) -> f32 {
+  let lim = MD[i]; let rim = MRIM[i];
+  if (d <= -rim) { return 1.0; }
+  var far = 1.0;
+  if (d <= 0.0) { far = 0.0; } else if (lim > 0.0) { far = d / lim; }
+  var edge = 1.0;
+  if (d <= 0.0) { if (rim > 0.0) { edge = -d / rim; } else { edge = 1.0; } }
+  let thin = 1.0 - (1.0 - 1.0 / RB.MST) * far;
+  return edge * thin;
+}`;
+
+// THE ROLLER. Two more grid reads, the same bilinear shape as glassUnwarp, plus a walk along the
+// roller's own profile. B.total of zero is the app's guard against a roller that never moved.
+WGSL.roller = `
+struct Roll { nx: i32, ny: i32, H: f32, total: f32, n: i32, pad0: i32, pad1: i32, pad2: i32 };
+@group(0) @binding(2) var<uniform> RL: Roll;
+@group(0) @binding(3) var<storage, read> BS: array<f32>;
+@group(0) @binding(4) var<storage, read> BV: array<f32>;
+@group(0) @binding(5) var<storage, read> RPR: array<f32>;
+@group(0) @binding(6) var<storage, read> RTL: array<f32>;
+fn rollerAt(cu: f32, cvv: f32) -> vec2<f32> {
+  let fx = cu * f32(RL.nx - 1); let fy = (cvv / RL.H) * f32(RL.ny - 1);
+  var i0 = i32(fx); var j0 = i32(fy);
+  if (i0 > RL.nx - 2) { i0 = RL.nx - 2; } if (i0 < 0) { i0 = 0; }
+  if (j0 > RL.ny - 2) { j0 = RL.ny - 2; } if (j0 < 0) { j0 = 0; }
+  let tx = fx - f32(i0); let ty = fy - f32(j0);
+  let k = j0 * RL.nx + i0; let k2 = k + RL.nx;
+  let s = (BS[k] * (1.0 - tx) + BS[k + 1] * tx) * (1.0 - ty) + (BS[k2] * (1.0 - tx) + BS[k2 + 1] * tx) * ty;
+  let v = (BV[k] * (1.0 - tx) + BV[k + 1] * tx) * (1.0 - ty) + (BV[k2] * (1.0 - tx) + BV[k2 + 1] * tx) * ty;
+  return vec2<f32>(s, v);
+}
+fn rollerHand(s: f32) -> vec2<f32> {
+  let n = RL.n;
+  var u = 0.0;
+  if (RL.total > 0.0) { u = s / RL.total; }
+  let f = clamp(u, 0.0, 1.0) * f32(n - 1);
+  var i = i32(f); if (i > n - 2) { i = n - 2; } if (i < 0) { i = 0; }
+  let g = f - f32(i);
+  return vec2<f32>(RPR[i] + (RPR[i + 1] - RPR[i]) * g, RTL[i] + (RTL[i + 1] - RTL[i]) * g);
+}`;
+
 // form, as an integer, in one place for both sides
 const FORM = { spun: 1, poured: 2, blown: 3, rolled: 4, flattened: 4 };
 
@@ -174,9 +259,45 @@ function makeWarp() {
   return { nx: WNX, ny: WNY, H: WH, u, v };
 }
 
+
+// SYNTHETIC, SHARED, AND DELIBERATELY AWKWARD. The ribbon edges are uneven and one ribbon is taller
+// than it is wide, so glassCellSDF's min(hw, hh) is exercised both ways round rather than always
+// taking the same arm. MD carries a zero, because glassDepth's `lim > 0` guard is the kind of branch
+// that only shows up when something has run out of budget.
+const NRIB = 6, MOB = 0.7, MST = 2.5;
+function makeRibbon() {
+  const ex = new Float32Array(NRIB + 1), hl = new Float32Array(NRIB);
+  const md = new Float32Array(NRIB), rim = new Float32Array(NRIB);
+  let x = -1.4;
+  for (let i = 0; i <= NRIB; i++) { ex[i] = x; x += 0.31 + (i % 3) * 0.17; }
+  for (let i = 0; i < NRIB; i++) {
+    hl[i] = 0.12 + (i % 4) * 0.19;
+    md[i] = i === 2 ? 0 : 0.08 + (i % 5) * 0.06;
+    rim[i] = 0.011 + (i % 3) * 0.004;
+  }
+  return { ex, hl, md, rim };
+}
+const RIBD = makeRibbon();
+
+// A SYNTHETIC ROLLER, same idea: a grid for rollerAt and a profile for rollerHand, with total > 0 so
+// the normal path runs. The total === 0 guard gets its own case rather than being hidden in this one.
+const RNX = 11, RNY = 9, RH = 0.625, RPROF = 7, RTOTAL = 3.3;
+function makeRoller() {
+  const s = new Float32Array(RNX * RNY), v = new Float32Array(RNX * RNY);
+  for (let j = 0; j < RNY; j++) for (let i = 0; i < RNX; i++) {
+    const k = j * RNX + i;
+    s[k] = Math.sin(i * 0.41 + j * 0.19) * 1.7 + i * 0.09;
+    v[k] = Math.cos(i * 0.33 - j * 0.47) * 0.8 - j * 0.05;
+  }
+  const pr = new Float32Array(RPROF), tl = new Float32Array(RPROF);
+  for (let i = 0; i < RPROF; i++) { pr[i] = 0.2 + Math.sin(i * 0.8) * 0.4; tl[i] = -0.3 + i * 0.11; }
+  return { s, v, pr, tl };
+}
+const ROLD = makeRoller();
+
 // ---- running a WGSL function over inputs -----------------------------------------------------------
-async function runWgsl(dev, S, bodies, call, N, inputs) {
-  const code = Object.values(bodies).join('\n') + `
+async function runWgsl(dev, bodies, call, N, inputs, uni, arrays) {
+  const code = Object.values(bodies).join(NLC) + `
 @group(0) @binding(0) var<storage, read> IN: array<f32>;
 @group(0) @binding(1) var<storage, read_write> OUT: array<f32>;
 @compute @workgroup_size(64)
@@ -191,24 +312,32 @@ ${call}
   if (errs.length) throw new Error('WGSL ' + errs[0].lineNum + ': ' + errs[0].message);
   const pipe = await dev.createComputePipelineAsync({ layout: 'auto', compute: { module: mod, entryPoint: 'main' } });
 
-  const inBuf = dev.createBuffer({ size: Math.max(16, inputs.byteLength), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-  dev.queue.writeBuffer(inBuf, 0, inputs);
+  const keep = [];
+  const sbuf = (data, usage) => {
+    const b = dev.createBuffer({ size: Math.max(16, data.byteLength), usage });
+    dev.queue.writeBuffer(b, 0, data); keep.push(b); return b;
+  };
+  const inBuf = sbuf(inputs, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
   const outBuf = dev.createBuffer({ size: N * 2 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
   const read = dev.createBuffer({ size: N * 2 * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
 
   const entries = [{ binding: 0, resource: { buffer: inBuf } }, { binding: 1, resource: { buffer: outBuf } }];
-  if (S) {
-    const uni = dev.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    const ub = new ArrayBuffer(16), dv = new DataView(ub);
-    dv.setInt32(0, S.nx, true); dv.setInt32(4, S.ny, true); dv.setFloat32(8, S.H, true);
-    dev.queue.writeBuffer(uni, 0, ub);
-    const ubuf = dev.createBuffer({ size: S.u.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    const vbuf = dev.createBuffer({ size: S.v.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    dev.queue.writeBuffer(ubuf, 0, S.u); dev.queue.writeBuffer(vbuf, 0, S.v);
-    entries.push({ binding: 2, resource: { buffer: uni } },
-                 { binding: 3, resource: { buffer: ubuf } },
-                 { binding: 4, resource: { buffer: vbuf } });
+  if (uni) {
+    const b = dev.createBuffer({ size: Math.max(16, uni.byteLength), usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    dev.queue.writeBuffer(b, 0, uni); keep.push(b);
+    entries.push({ binding: 2, resource: { buffer: b } });
   }
+  (arrays || []).forEach((a, n) => entries.push({ binding: 3 + n,
+    resource: { buffer: sbuf(a, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST) } }));
+
+  // ERRORS, OUT LOUD. WebGPU validation failures are asynchronous: a bind group that does not match
+  // the pipeline layout does not throw, it just leaves the output buffer untouched - and an untouched
+  // buffer reads as zeros, which is a plausible-looking answer. That is exactly how an S23 reported
+  // out[0] = 0.00 for a whole tile earlier today, and this harness reproduced it within the hour: with
+  // layout: 'auto' a binding the entry point never reaches is ELIMINATED, so passing it is invalid
+  // and every row came back 1.0 relative with nothing said. Scope it, and a silent zero becomes a
+  // sentence.
+  dev.pushErrorScope('validation');
   const grp = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries });
   const enc = dev.createCommandEncoder();
   const pass = enc.beginComputePass();
@@ -216,6 +345,8 @@ ${call}
   pass.dispatchWorkgroups(Math.ceil(N / 64)); pass.end();
   enc.copyBufferToBuffer(outBuf, 0, read, 0, N * 2 * 4);
   dev.queue.submit([enc.finish()]);
+  const err = await dev.popErrorScope();
+  if (err) throw new Error(err.message.split(String.fromCharCode(10))[0]);
   await read.mapAsync(GPUMapMode.READ);
   const out = new Float32Array(read.getMappedRange().slice(0));
   read.unmap();
@@ -226,7 +357,7 @@ ${call}
 // Each says what it needs, what it expects, and how close counts as right. `kind` is the whole point:
 // an integer port that is 1e-7 off is BROKEN, and a float port that is bit-identical is luck.
 const N = 2048;
-function cases(app, warp) {
+function cases(app) {
   const W = makeWarp();
   return [
     { name: 'nz', kind: 'EXACT', needs: ['nz'],
@@ -259,7 +390,10 @@ function cases(app, warp) {
           o[2 * i] = t[0]; o[2 * i + 1] = t[1]; } return o; },
       perForm: true },
 
-    { name: 'glassUnwarp', kind: 'f32', needs: ['glassUnwarp'], warp: W,
+    { name: 'glassUnwarp', kind: 'f32', needs: ['glassUnwarp'],
+      uni: () => { const b = new ArrayBuffer(16), d = new DataView(b);
+        d.setInt32(0, W.nx, true); d.setInt32(4, W.ny, true); d.setFloat32(8, W.H, true); return b; },
+      arrays: () => [W.u, W.v],
       call: '  let w = glassUnwarp(IN[i * 2], IN[i * 2 + 1]);\n'
           + '  OUT[i * 2] = w.x; OUT[i * 2 + 1] = w.y;',
       inputs: () => { const a = new Float32Array(N * 2);
@@ -268,8 +402,76 @@ function cases(app, warp) {
       cpu: a => { const o = new Float64Array(N * 2), t = [0, 0];
         for (let i = 0; i < N; i++) { app.glassUnwarp(W, a[2 * i], a[2 * i + 1], t);
           o[2 * i] = t[0]; o[2 * i + 1] = t[1]; } return o; } },
+
+    { name: 'fbm2', kind: 'f32', needs: ['nz', 'vnoise', 'fbm2'],
+      call: '  OUT[i * 2] = fbm2(IN[i * 2], IN[i * 2 + 1], 71); OUT[i * 2 + 1] = 0.0;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 311) * 0.0806 + 0.17);
+          a[2 * i + 1] = Math.fround(((i * 17) % 293) * 0.0045 + 0.11); } return a; },
+      // the CACHED fbm2C is what the renderer calls, and the cache is transparent - so the GPU's
+      // uncached fbm2 has to match it in VALUE, which is the only thing a cache leaves unchanged
+      cpu: a => { const o = new Float64Array(N * 2);
+        for (let i = 0; i < N; i++) o[2 * i] = app.fbm2C(a[2 * i], a[2 * i + 1], 71, 0); return o; } },
+
+    { name: 'glassCellSDF', kind: 'f32', needs: ['ribbon'],
+      uni: () => { const b = new ArrayBuffer(16), d = new DataView(b);
+        d.setFloat32(0, MOB, true); d.setFloat32(4, MST, true); d.setInt32(8, NRIB, true); return b; },
+      arrays: () => [RIBD.ex, RIBD.hl, RIBD.md, RIBD.rim],
+      call: TOUCH_RIB + '  let ri = i32(IN[i * 2 + 1] * 0.0) + i32(f32(i % ' + NRIB + '));\n'
+          + '  OUT[i * 2] = glassCellSDF(IN[i * 2], IN[i * 2 + 1], ri); OUT[i * 2 + 1] = 0.0;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 149) * 0.021 - 1.6);
+          a[2 * i + 1] = Math.fround(((i * 11) % 137) * 0.009 - 0.6); } return a; },
+      cpu: a => { const o = new Float64Array(N * 2);
+        const F = { MEX: RIBD.ex, MHL: RIBD.hl, MOB };
+        for (let i = 0; i < N; i++) o[2 * i] = app.glassCellSDF(a[2 * i], a[2 * i + 1], i % NRIB, F); return o; } },
+
+    { name: 'glassDepth', kind: 'f32', needs: ['ribbon'],
+      uni: () => { const b = new ArrayBuffer(16), d = new DataView(b);
+        d.setFloat32(0, MOB, true); d.setFloat32(4, MST, true); d.setInt32(8, NRIB, true); return b; },
+      arrays: () => [RIBD.ex, RIBD.hl, RIBD.md, RIBD.rim],
+      call: TOUCH_RIB + '  let di = i32(f32(i % ' + NRIB + '));\n'
+          + '  OUT[i * 2] = glassDepth(IN[i * 2], di); OUT[i * 2 + 1] = 0.0;',
+      // spans both sides of zero and past -rim, so every arm of the function is reached
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i / N) * 0.34 - 0.08); a[2 * i + 1] = 0; } return a; },
+      cpu: a => { const o = new Float64Array(N * 2);
+        const F = { MD: RIBD.md, MRIM: RIBD.rim, MST };
+        for (let i = 0; i < N; i++) o[2 * i] = app.glassDepth(a[2 * i], i % NRIB, F); return o; } },
+
+    { name: 'rollerAt', kind: 'f32', needs: ['roller'],
+      uni: () => { const b = new ArrayBuffer(32), d = new DataView(b);
+        d.setInt32(0, RNX, true); d.setInt32(4, RNY, true); d.setFloat32(8, RH, true);
+        d.setFloat32(12, RTOTAL, true); d.setInt32(16, RPROF, true); return b; },
+      arrays: () => [ROLD.s, ROLD.v, ROLD.pr, ROLD.tl],
+      call: TOUCH_ROLL + '  let r = rollerAt(IN[i * 2], IN[i * 2 + 1]);\n  OUT[i * 2] = r.x; OUT[i * 2 + 1] = r.y;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 223) / 222);
+          a[2 * i + 1] = Math.fround(((i * 19) % 211) / 210 * RH); } return a; },
+      cpu: a => { const o = new Float64Array(N * 2), t = [0, 0];
+        const B = { nx: RNX, ny: RNY, H: RH, s: ROLD.s, v: ROLD.v };
+        for (let i = 0; i < N; i++) { app.rollerAt(B, a[2 * i], a[2 * i + 1], t);
+          o[2 * i] = t[0]; o[2 * i + 1] = t[1]; } return o; } },
+
+    { name: 'rollerHand', kind: 'f32', needs: ['roller'],
+      uni: () => { const b = new ArrayBuffer(32), d = new DataView(b);
+        d.setInt32(0, RNX, true); d.setInt32(4, RNY, true); d.setFloat32(8, RH, true);
+        d.setFloat32(12, RTOTAL, true); d.setInt32(16, RPROF, true); return b; },
+      arrays: () => [ROLD.s, ROLD.v, ROLD.pr, ROLD.tl],
+      call: TOUCH_ROLL + '  let h = rollerHand(IN[i * 2]);\n  OUT[i * 2] = h.x; OUT[i * 2 + 1] = h.y;',
+      // deliberately runs past both ends of the profile, where the app clamps
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i / N) * RTOTAL * 1.4 - RTOTAL * 0.2); a[2 * i + 1] = 0; } return a; },
+      cpu: a => { const o = new Float64Array(N * 2), t = [0, 0];
+        const B = { R: { P: new Array(RPROF), pr: ROLD.pr, tl: ROLD.tl }, total: RTOTAL };
+        for (let i = 0; i < N; i++) { app.rollerHand(B, a[2 * i], t);
+          o[2 * i] = t[0]; o[2 * i + 1] = t[1]; } return o; } },
   ];
 }
+
+// Keeps every declared binding reachable - see the note at the ribbon and roller cases.
+const TOUCH_RIB = '  if (i == 4294967295u) { OUT[0] = MEX[0] + MHL[0] + MD[0] + MRIM[0]; }' + String.fromCharCode(10);
+const TOUCH_ROLL = '  if (i == 4294967295u) { OUT[0] = BS[0] + BV[0] + RPR[0] + RTL[0]; }' + String.fromCharCode(10);
 
 const GATE = { EXACT: 0, f32: 2e-6, branch: 0 };
 
@@ -277,7 +479,8 @@ document.getElementById('run').onclick = async () => {
   document.getElementById('run').disabled = true;
   RES.textContent = ''; TB = null; LOG.textContent = '';
   try {
-    const { app, from } = await liftFromApp(['nz', 'woodAtan2', 'glassFlow', 'glassUnwarp']);
+    const { app, from } = await liftFromApp(['nz', 'woodAtan2', 'glassFlow', 'glassUnwarp', 'vnoise', 'vnoiseC', 'vnoiseCfill',
+      'fbm2C', 'glassCellSDF', 'glassDepth', 'rollerAt', 'rollerHand']);
     if (!navigator.gpu) throw new Error('no WebGPU on this device');
     const ad = await navigator.gpu.requestAdapter();
     if (!ad) throw new Error('no adapter');
@@ -299,7 +502,7 @@ document.getElementById('run').onclick = async () => {
         let call = c.call;
         if (form) call = call.replace('FORMSEL', String(FORM[form]));
         let got;
-        try { got = await runWgsl(dev, c.warp || null, bodies, call, N, inp); }
+        try { got = await runWgsl(dev, bodies, call, N, inp, c.uni ? c.uni() : null, c.arrays ? c.arrays() : null); }
         catch (e) { row([c.name, c.kind, '—', '—', 'DID NOT COMPILE: ' + e.message], 'bad'); bad++; worst = NaN; break; }
         const want = form ? c.cpu(inp, form) : c.cpu(inp);
         const kind = (form && c.kindPerForm && c.kindPerForm[form]) || c.kind;
@@ -335,9 +538,10 @@ document.getElementById('run').onclick = async () => {
     TB = null;
     const p = document.createElement('p');
     p.style.color = 'var(--dim)';
-    p.textContent = 'Still to port: glassFormT, glassLay, glassMelt, the op chain, glassBlob, '
-      + 'glassCellSDF, glassDepth, rollStampAt, rollerAt, rollerHand, vnoiseC and fbm2C. '
-      + 'About 282 lines of app code in all.';
+    p.textContent = 'Done: nz, woodAtan2, glassFlow, glassUnwarp, vnoise, fbm2, glassCellSDF, '
+      + 'glassDepth, rollerAt, rollerHand — about 70 of the 282 lines. Still to port: '
+      + 'glassFormT (21), glassLay (31), glassMelt (22), the op chain (55), glassBlob (22) and '
+      + 'rollStampAt (18), plus glassBlobDepth and starR under them.';
     RES.appendChild(p);
   } catch (e) {
     const v = document.createElement('p');
