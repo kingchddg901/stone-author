@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.185';
+  const BUILD = '2026.10.24.186';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15514,7 +15514,13 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // Read BEFORE the close, because the close nulls it. This field spent its whole life unable to
       // appear: the metadata below asked `pool ? pool.workers : undefined` after this line had already
       // run, so every master said "painted on this thread" whatever had happened.
-      const poolRan = pool ? { n: pool.workers, planned: pool.planned, strain: pool.strain } : null;
+      // CAPTURED HERE, BECAUSE THE LINE BELOW NULLS THE POOL. The gpu flag was first written
+      // straight into the metadata object as `pool && pool.gpu`, ninety lines further down and
+      // long after this `pool = null` - so it read undefined on every render it was meant to
+      // mark, including the first three GPU masters. A flag that cannot fire is worse than no
+      // flag: those three had to be identified from poolStrain being null instead.
+      const poolRan = pool ? { n: pool.workers, planned: pool.planned, strain: pool.strain,
+                               gpu: !!pool.gpu } : null;
       if (pool) { pool.close(); pool = null; }
       proveTile(p.ts, W);                                  // settled: every render after this one matches it
       const msRender = Date.now() - tR;
@@ -15608,7 +15614,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         // census can group on. fp32 against doubles differs on about 1.4% of channels by up to 107
         // levels, so two masters of the same slab that disagree are not evidence of a bug until
         // this field has been read - and a master written before this existed simply lacks it.
-        gpu: (pool && pool.gpu) ? true : undefined,
+        gpu: (poolRan && poolRan.gpu) ? true : undefined,
         workers: poolRan ? poolRan.n : 0,
         poolWhy: poolRan ? undefined : poolWhy,
         poolPlanned: poolRan && poolRan.planned !== poolRan.n ? poolRan.planned : undefined,
