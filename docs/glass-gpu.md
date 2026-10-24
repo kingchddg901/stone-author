@@ -635,6 +635,39 @@ exists reads as complete and is not. Clamping `tx` and `ty` would make the GPU p
 on this document, and would also move the CPU’s own picture, so it is a deliberate change rather than a fix
 to be slipped in.
 
+### The readback, and why the wasted byte pays for itself
+
+**The pack writes RGBA, and three bytes a pixel was the wrong answer even though it moves less.** The
+shader's second entry point reads the f32 buffer where it already lives and writes bytes beside it, so
+only the bytes cross the bus. RGB is a quarter less again to move and it is what shipped first - but a
+canvas is RGBA, so the readback then had to spread three bytes into four, a JS loop over 4.2 million
+pixels a tile. Writing the fourth byte on the device makes that loop a single `TypedArray.set`.
+
+Measured through `gpuPool(W, p).tile(n)` on the real document, same plan both ways - 2048 px render
+tiles plus bleed 4, so 4,227,136 px a tile, W=16384, eight tiles spread across the sheet, best of three
+reps:
+
+| | the readback | `tile()` in all |
+| --- | --- | --- |
+| RGB, spread into RGBA in JS | 53.67 ms | 72.61 ms |
+| RGBA, one `set()` | **2.15 ms** | **29.54 ms** |
+
+**25× on the step and 2.46× on the GPU half of a tile**, for a third more bytes on the wire. The loop
+was 74% of that half; the memcpy is 7%.
+
+**The bytes are the same bytes.** `tools/gpu-sheet-probe.html` compares the packed output against a
+`Uint8ClampedArray` of the f32 arm - the exact question, since that is what an ImageData write applies -
+and reports **0 of 12,582,912 colour channels apart**, with **660 exact ties** in the run, so a
+disagreement about how the two round a tie would have shown up rather than being assumed away. The alpha
+is checked separately and the check was ablated: drop the `0xff000000u` and it reports all 4,194,304
+pixels non-opaque while the colour channels stay 0 apart. End to end, `tools/gpu-path-check.html`
+returns the same four rows before and after the change, channel count for channel count.
+
+**What this does not say.** On the desktop's own exporter the same loop measured 14.6 ms of a 32.5 ms
+tile, not 53.7 of 72.6. The figures above come from the hooked build in a browser pane, where a
+JS-bound step suffers more than a GPU-bound one. The ratio is the finding; the absolute belongs to the
+machine that measured it.
+
 ## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
 
 **His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,

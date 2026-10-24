@@ -573,49 +573,36 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
 // PACKING TO BYTES ON THE GPU, SO THE FLOATS NEVER CROSS THE BUS.
 //
 // main writes f32 RGB - twelve bytes a pixel - and tools/gpu-sheet-probe.html measured that moving
-// those off the GPU is 93% of a batched tile's wall clock, against 7% for the shader itself. The
-// TIFF writer wants u8 RGB, three bytes. So this reads the f32 buffer where it already lives and
-// writes the bytes beside it; only the bytes are read back, and the floats stay on the device.
+// those off the GPU is 93% of a batched tile's wall clock. The canvas wants u8 RGBA, four bytes.
+// So this reads the f32 buffer where it already lives and writes the bytes beside it; only the
+// bytes are read back, and the floats stay on the device.
+//
+// RGBA, NOT RGB, AND THE WASTED BYTE PAYS FOR ITSELF. Three bytes a pixel is a third less to move,
+// and it was what this did first - but ImageData is RGBA, so every pixel then needed a JS loop to
+// spread 3 bytes into 4. Measured in the exporter at 2048: that loop was 14.6 ms of a 32.5 ms tile,
+// 45% of it, while the extra byte costs about 3 ms of transfer. Writing RGBA makes the readback a
+// single TypedArray.set - a memcpy - instead of 4.2 million iterations.
 //
 // A SEPARATE ENTRY POINT RATHER THAN A CHANGE TO main, deliberately. main is the thing
 // gpu-port-harness.html proved function by function and gpu-tile-probe.html compares against the
-// CPU; folding the pack into it would put the verified path and an untested one in the same
-// function. This way the f32 arm stays available as the reference it is, and the pack is six lines
-// that can be checked against it.
-//
-// ONE THREAD, FOUR PIXELS, THREE WORDS. Three bytes a pixel does not divide into a u32, so a thread
-// taking one pixel would have to write across word boundaries - which needs atomics or a fourth
-// wasted byte. Four pixels is twelve bytes is exactly three words, aligned, no overlap between
-// threads, and the full 4x cut rather than RGBA8's 3x.
+// CPU; folding the pack into it would put the verified path and a new one in the same function.
 //
 // ROUNDING IS NOT A DETAIL HERE. The canvas stores through ToUint8Clamp, which rounds ties to even,
 // and WGSL's round does the same - but "the spec says so" is not a measurement, so the probe
-// compares these bytes against a Uint8ClampedArray of the f32 arm and reports any pixel where they
-// disagree rather than assuming they cannot.
+// compares these bytes against a Uint8ClampedArray of the f32 arm and counts how many exact ties
+// the run contained. 660 of them, all agreeing, the first time it was asked.
 WGSL.pack = `
 @group(0) @binding(1) var<storage, read_write> PK: array<u32>;
 @compute @workgroup_size(64)
 fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
   let n = u32(E.tileW * E.tileH);
   let gi = g.x + g.y * nw.x * 64u;          // two dimensions when needed; see the note on main
-  let base = gi * 4u;
-  if (base >= n) { return; }
-  var b: array<u32, 12>;
-  for (var k = 0u; k < 4u; k = k + 1u) {
-    let p = base + k;
-    var cr = 0.0; var cg = 0.0; var cb = 0.0;
-    if (p < n) {                       // a tile whose pixel count is not a multiple of four
-      let o = p * 3u;
-      cr = PX[o]; cg = PX[o + 1u]; cb = PX[o + 2u];
-    }
-    b[k * 3u] = u32(clamp(round(cr), 0.0, 255.0));
-    b[k * 3u + 1u] = u32(clamp(round(cg), 0.0, 255.0));
-    b[k * 3u + 2u] = u32(clamp(round(cb), 0.0, 255.0));
-  }
-  let w = gi * 3u;
-  PK[w] = b[0] | (b[1] << 8u) | (b[2] << 16u) | (b[3] << 24u);
-  PK[w + 1u] = b[4] | (b[5] << 8u) | (b[6] << 16u) | (b[7] << 24u);
-  PK[w + 2u] = b[8] | (b[9] << 8u) | (b[10] << 16u) | (b[11] << 24u);
+  if (gi >= n) { return; }
+  let o = gi * 3u;
+  let r = u32(clamp(round(PX[o]), 0.0, 255.0));
+  let gg = u32(clamp(round(PX[o + 1u]), 0.0, 255.0));
+  let b = u32(clamp(round(PX[o + 2u]), 0.0, 255.0));
+  PK[gi] = r | (gg << 8u) | (b << 16u) | 0xff000000u;
 }`;
 
 export { WGSL };

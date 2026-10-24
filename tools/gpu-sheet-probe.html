@@ -374,17 +374,23 @@ document.getElementById('run').onclick = async () => {
 
     // ---- ARM C: batched, packed to bytes on the GPU --------------------------------------------
     // Arm B showed the shader is 7% of the wall clock and the readback is the rest, so this moves
-    // four times less. main still writes f32 into PX; a second entry point reads PX where it
-    // already lives and writes three bytes a pixel into PK, and only PK comes back. The floats
+    // three times less. main still writes f32 into PX; a second entry point reads PX where it
+    // already lives and writes four bytes a pixel into PK, and only PK comes back. The floats
     // never cross the bus.
+    //
+    // FOUR BYTES, NOT THREE, AND THIS ARM HAD TO FOLLOW. The pack wrote RGB when this page was
+    // written - a quarter less again on the bus - but ImageData is RGBA, so the exporter then spent
+    // a per-pixel JS loop spreading 3 bytes into 4, measured at 14.6 ms of a 32.5 ms tile. The
+    // shader writes the alpha itself now and that readback is a memcpy. This page is the gate on
+    // those bytes, so a comparison still reading 3-byte pixels would have passed on garbage.
     //
     // TWO PASSES, NOT TWO DISPATCHES IN ONE. WebGPU does order dispatches within a pass, but a pass
     // boundary is the guarantee that does not need looking up - and it costs nothing here. Pass one
     // paints every tile, pass two packs every tile.
     head('all at once, packed to bytes');
-    const bytes3 = n * 3;
-    pair('what moves', (bytes3 / 1048576).toFixed(2) + ' MiB a tile against '
-      + (bytes / 1048576).toFixed(2) + ' — ' + (bytes / bytes3).toFixed(0) + '\u00d7 less');
+    const bytes4 = n * 4;
+    pair('what moves', (bytes4 / 1048576).toFixed(2) + ' MiB a tile against '
+      + (bytes / 1048576).toFixed(2) + ' — ' + (bytes / bytes4).toFixed(0) + '\u00d7 less');
 
     dev.pushErrorScope('validation');
     const pipeP = await dev.createComputePipelineAsync({
@@ -392,14 +398,14 @@ document.getElementById('run').onclick = async () => {
     const pErr = await dev.popErrorScope();
     if (pErr) throw new Error('pack pipeline: ' + pErr.message.split('\n')[0]);
 
-    const pk = dev.createBuffer({ size: bytes3 * N,
+    const pk = dev.createBuffer({ size: bytes4 * N,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-    const rbP = dev.createBuffer({ size: bytes3 * N,
+    const rbP = dev.createBuffer({ size: bytes4 * N,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
     const groupsP = tiles.map((_, i) => dev.createBindGroup({
       layout: pipeP.getBindGroupLayout(0), entries: [
         { binding: 0, resource: { buffer: pxB, offset: i * bytes, size: bytes } },
-        { binding: 1, resource: { buffer: pk, offset: i * bytes3, size: bytes3 } },
+        { binding: 1, resource: { buffer: pk, offset: i * bytes4, size: bytes4 } },
         { binding: 2, resource: { buffer: ubsB[i] } }] }));
 
     let wallP = Infinity, shaderP = 0, packP = 0, mapP = 0, waitP = 0, copyP = 0, outP = null;
@@ -421,9 +427,9 @@ document.getElementById('run').onclick = async () => {
       const p2 = encP.beginComputePass(qs
         ? { timestampWrites: { querySet: qs, beginningOfPassWriteIndex: 2, endOfPassWriteIndex: 3 } } : {});
       p2.setPipeline(pipeP);
-      for (let i = 0; i < N; i++) { p2.setBindGroup(0, groupsP[i]); p2.dispatchWorkgroups(Math.ceil(n / 4 / 64)); }
+      for (let i = 0; i < N; i++) { p2.setBindGroup(0, groupsP[i]); p2.dispatchWorkgroups(Math.ceil(n / 64)); }
       p2.end();
-      encP.copyBufferToBuffer(pk, 0, rbP, 0, bytes3 * N);
+      encP.copyBufferToBuffer(pk, 0, rbP, 0, bytes4 * N);
       if (qs) { encP.resolveQuerySet(qs, 0, 4, qres, 0); encP.copyBufferToBuffer(qres, 0, qmap, 0, 32); }
       dev.pushErrorScope('validation');
       dev.queue.submit([encP.finish()]);
@@ -453,7 +459,7 @@ document.getElementById('run').onclick = async () => {
     pair('waiting for the map', waitP.toFixed(1) + ' ms   (' + (waitP / N).toFixed(2) + ' a tile)');
     pair('copying out of it', copyP.toFixed(1) + ' ms   (' + (copyP / N).toFixed(2) + ' a tile)');
     pair('readback in all', mapP.toFixed(1) + ' ms   (' + (mapP / N).toFixed(2) + ' a tile), '
-      + (bytes3 / 1048576 * N / (mapP / 1000)).toFixed(0) + ' MB/s');
+      + (bytes4 / 1048576 * N / (mapP / 1000)).toFixed(0) + ' MB/s');
     pair('wall clock', wallP.toFixed(1) + ' ms   (' + (wallP / N).toFixed(2) + ' a tile)', 'good');
 
     // ---- DOES THE PACK MATCH WHAT THE CANVAS WOULD STORE? --------------------------------------
@@ -464,10 +470,19 @@ document.getElementById('run').onclick = async () => {
     head('does the pack match the canvas?');
     const ref = new Uint8ClampedArray(n * 3 * N);
     for (let i = 0; i < n * 3 * N; i++) ref[i] = outB[i];
-    let pkBad = 0, pkWorst = 0, firstBad = -1;
-    for (let i = 0; i < n * 3 * N; i++) {
-      const d = Math.abs(ref[i] - outP[i]);
-      if (d) { pkBad++; if (d > pkWorst) pkWorst = d; if (firstBad < 0) firstBad = i; }
+    // RGB AGAINST RGBA, SO THE INDEX HAS TO BE MAPPED. The f32 arm is three channels a pixel and
+    // the pack is four. A loop walking both flat would compare green against the previous pixel's
+    // blue from the second pixel on - which is not a near miss, it is a comparison of unrelated
+    // numbers, and it would read as a catastrophic mismatch rather than as a broken probe.
+    let pkBad = 0, pkWorst = 0, firstBad = -1, aBad = 0;
+    for (let q = 0, i = 0; q < n * N; q++) {
+      for (let c = 0; c < 3; c++, i++) {
+        const d = Math.abs(ref[i] - outP[q * 4 + c]);
+        if (d) { pkBad++; if (d > pkWorst) pkWorst = d; if (firstBad < 0) firstBad = i; }
+      }
+      // THE ALPHA IS THE SHADER'S NOW, not a 255 the readback loop filled in afterwards. Drop the
+      // 0xff000000 and every tile composites as fully transparent; nothing else here would notice.
+      if (outP[q * 4 + 3] !== 255) aBad++;
     }
     // COULD THIS HAVE CAUGHT A DIFFERENCE? The two roundings can only disagree on an exact tie, so
     // a clean run over values that contain no ties has not tested the thing it claims to. Counted
@@ -481,7 +496,12 @@ document.getElementById('run').onclick = async () => {
         else if (Math.abs(f - 0.5) < 1e-4) nearTies++;
       }
     }
-    pair('bytes compared', (n * 3 * N).toLocaleString());
+    pair('bytes compared', (n * 3 * N).toLocaleString() + ' colour channels of '
+      + (n * N).toLocaleString() + ' pixels');
+    pair('opaque', aBad === 0 ? 'every pixel came back with alpha 255'
+      : aBad.toLocaleString() + ' pixels of ' + (n * N).toLocaleString() + ' are not opaque — '
+        + 'the shader is not writing the alpha byte, and putImageData would composite nothing',
+      aBad === 0 ? 'good' : 'bad');
     pair('exact ties among them', ties.toLocaleString() + ', and ' + nearTies.toLocaleString()
       + ' within 1e-4 of one — ' + (ties
         ? 'so a disagreement on ties WOULD have shown up here'
@@ -566,8 +586,8 @@ document.getElementById('run').onclick = async () => {
     pair('packed to bytes, against the pool', gainP.toFixed(1) + '\u00d7',
       gainP > 2 ? 'good' : 'warn');
     pair('packing is worth', (wallB / wallP).toFixed(2) + '\u00d7 over the f32 readback — '
-      + 'predicted about ' + (bytes / bytes3).toFixed(0) + '\u00d7 if it were purely bandwidth, so '
-      + (wallB / wallP > (bytes / bytes3) * 0.7
+      + 'predicted about ' + (bytes / bytes4).toFixed(0) + '\u00d7 if it were purely bandwidth, so '
+      + (wallB / wallP > (bytes / bytes4) * 0.7
          ? 'it is'
          : 'something else is now taking the time: look at the split above'),
       wallB / wallP > 1.5 ? 'good' : 'warn');
