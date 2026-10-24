@@ -118,11 +118,31 @@ each other** at 392,459,832 image bytes, and both differ from `180` on **631 of 
 delta 106** — so almost every tile carries a few of those 17-per-million flips, which is what a
 scatter of that density looks like at 4.2 M pixels a tile.
 
-On speed the pair is honest rather than tidy: **4.769 and 4.894 min against `180`'s 5.116, so 6.8%
-and 4.3%** — against a prediction of 3–5%. They are not tight enough to pick between, and the thread
-column says why: the slower run took 0.4 threads of foreign load and shows **no compute gain at all**
-(2485 core-seconds against `180`'s 2475), while the clean run shows **8.7% less** (2260). A third run
-on a quiet box would settle it; what is already safe to say is that the floor is 4.3%.
+**On speed it is faster on average and much less predictable, and a third run is what showed that.**
+Two runs read 4.769 and 4.894 min against `180`'s 5.116, and a floor of 4.3% was recorded here. The
+third read **5.280 — slower than `180`** — on a box at 12.3% with 7.98 busy threads against `180`'s
+8.06. That floor was wrong and is withdrawn.
+
+| build | runs | tile time | spread |
+| --- | --- | --- | --- |
+| `177` | 2 | 312.1, (5.216 min pair) | **0.2%** |
+| `180` | 1 | 306.8 | — |
+| `181` | 3 | **293.5 / 286.0 / 316.6** | **10.8%** |
+
+The slow run is slower in **every fifth** — 86.4/56.5/56.2/55.5/62.1 against 79.8/50.3/50.7/50.3/54.9
+— with the same first-fifth share, so it is not a warm-up. That is build `174`'s signature returning:
+one build, two modes, each held for a whole render. Core-seconds agree, 2529 against 2260 on two runs
+both clean by thread count.
+
+So: mean 4.981 min against `177`'s 5.210, **4.4% faster on average**, covering the spin identity and
+the table together — but `181`'s worst run is **1.5% slower than `177`'s typical**. The variance went
+from 0.2% to 10.8%, which is a regression in predictability even though the mean improved.
+
+**The leading suspect is the table's footprint**, and it is a suspect rather than a finding. 16,384
+entries of two doubles is 256 KB per worker, 2 MB across the pool, accessed at an index that moves
+with `a*r` and so does not stay in cache the way a scanline does. A 4,096-entry table would be 64 KB
+with a worst error of 2.9e-7 — 0.014 px of 65,535, still five thousand times finer than `woodAtan2`
+— and is the obvious thing to measure next. Nothing here has measured a cache miss.
 
 `tools/probe-spin-identity.mjs` holds the bound at 1e-7 of the radius and ablates five ways. Two of
 its arms had to be repointed at the table, and one of them — `cos` and `sin` swapped — had silently
