@@ -44,16 +44,28 @@ function lift(name) {
   throw new Error('unbalanced: ' + name);
 }
 const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'resample', 'warpMaskAt',
-                'mix', 'moonDisp', 'glassWarp', 'glassUnwarp', 'glassUnform', 'glassLay',
+                'mix', 'moonDisp', 'glassWarp', 'glassUnwarp', 'vnoiseC', 'vnoiseCfill', 'fbm2C', 'compileOps', 'glassUnform', 'glassLay',
                 'glassBlob', 'glassBlobDepth', 'glassCellSDF', 'glassCellSpread', 'glassDepth'];
 const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
+// OPK IS LIFTED, NOT RETYPED. compileOps reads it to turn an op's kind STRING into the integer
+// glassUnform switches on, and a second copy here would drift the first time a kind is added -
+// the app's own worker core carries it across for exactly this reason.
+const OPK_SRC = (SRC.match(/const OPK = \{[^}]*};/) || [])[0];
+const NZC_DECL = (SRC.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0];
+if (!NZC_DECL) throw new Error('the app has no _NZC declaration - the corner cache cannot be lifted');
+const SPIN_DECL = (SRC.match(/const SPIN_NB = [^;]*;/) || [])[0];
+if (!SPIN_DECL) throw new Error('the app has no SPIN_NB declaration - the spin table cannot be lifted');
+if (!OPK_SRC) throw new Error('the app has no OPK table - compileOps cannot be lifted');
 // G/fam/strHue are app state rather than geometry: the current's SHAPE here is the app's, its seed
 // is not. _wmask empty means warpMaskAt returns 1, which is the real no-discs case.
 const G = { warp: 0, cloudScale: 1, cloudX: 0, cloudY: 0 };
 const api = new Function('G', 'SLAB_FT',
+  OPK_SRC + '\n' + NZC_DECL + '\n' + SPIN_DECL + '\n' +
   'let _wmask = []; let fam = "probe"; const strHue = () => 0.5;\n' +
-  NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(G, SLAB_FT);
-const { glassUnform, glassLay, glassWarp } = api;
+  NEEDED.map(lift).join('\n') + '\n'
+  + lift('spinTable') + '\nconst SPIN_T = spinTable();\n'
+  + 'return {' + NEEDED.join(',') + '};')(G, SLAB_FT);
+const { glassUnform, glassLay, glassWarp, compileOps } = api;
 // Both read out of the source, because the whole point is whether these two agree.
 const CN_MAX = +(SRC.match(/CN: Math[.]max[(]2, Math[.]min[(](\d+)/) || [, 0])[1];
 const TOKENS = (SRC.match(/key: 'glass[A-F]'/g) || []).length;
@@ -70,6 +82,7 @@ const INK = [[159, 216, 200], [47, 111, 143], [200, 146, 63], [142, 75, 110]];
 const out = [0, 0], lay = [0, -1, 0];
 function field(ops, radial) {
   const F = { ...base, OPS: ops, MR: radial };
+  F.OPC = compileOps(F, F.OPS);          // glassUnform walks the COMPILED ops, never F.OPS
   const a = new Uint8Array(TW_ * TH_);
   for (let y = 0; y < TH_; y++) for (let x = 0; x < TW_; x++) {
     const cu = x / TW_, cvv = (y / TH_) * H;

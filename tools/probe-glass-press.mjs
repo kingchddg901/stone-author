@@ -36,14 +36,22 @@ function lift(name) {
   throw new Error('unbalanced: ' + name);
 }
 const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'mix', 'resample', 'warpMaskAt',
-                'moonDisp', 'glassWarp', 'glassUnwarp', 'starR', 'rollStampAt', 'rollStamp', 'glassUnform', 'glassLay',
+                'moonDisp', 'glassWarp', 'glassUnwarp', 'starR', 'rollStampAt', 'rollStamp', 'vnoiseC', 'vnoiseCfill', 'fbm2C', 'compileOps', 'glassUnform', 'glassLay',
                 'glassCellSDF', 'glassCellSpread', 'glassDepth'];
 const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
+// OPK IS LIFTED, NOT RETYPED. compileOps reads it to turn an op's kind STRING into the integer
+// glassUnform switches on, and a second copy here would drift the first time a kind is added -
+// the app's own worker core carries it across for exactly this reason.
+const OPK_SRC = (SRC.match(/const OPK = \{[^}]*};/) || [])[0];
+const NZC_DECL = (SRC.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0];
+if (!NZC_DECL) throw new Error('the app has no _NZC declaration - the corner cache cannot be lifted');
+if (!OPK_SRC) throw new Error('the app has no OPK table - compileOps cannot be lifted');
 const G = { warp: 0, cloudScale: 1, cloudX: 0, cloudY: 0 };
 const api = new Function('G', 'SLAB_FT',
+  OPK_SRC + '\n' + NZC_DECL + '\n' +
   'let _wmask = []; let fam = "probe"; const strHue = () => 0.5;\n' +
   NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(G, SLAB_FT);
-const { glassUnform, glassLay, glassCellSpread } = api;
+const { glassUnform, glassLay, glassCellSpread, compileOps } = api;
 
 // ---- his numbers --------------------------------------------------------------------------------
 const W = 0.5, L = 1;
@@ -75,6 +83,7 @@ function resolve(F) {
     const hw = (F.MEX[i + 1] - F.MEX[i]) * 0.5, hh = F.MHL[i];
     F.MRIM.push((hw < hh ? hw : hh) * F.MOB * 0.16);
   }
+  F.OPC = compileOps(F, F.OPS || []);          // glassUnform walks the COMPILED ops, never F.OPS
   return F;
 }
 

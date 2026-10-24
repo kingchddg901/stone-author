@@ -36,13 +36,21 @@ function lift(name) {
 const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'mix', 'resample', 'warpMaskAt',
                 'moonDisp', 'glassWarp', 'glassUnwarp', 'starR', 'rollStampAt', 'rollStamp',
                 'glassBlob', 'glassBlobDepth', 'glassCellSDF', 'glassCellSpread', 'glassDepth',
-                'glassUnform', 'glassLay'];
+                'vnoiseC', 'vnoiseCfill', 'fbm2C', 'compileOps', 'glassUnform', 'glassLay'];
 const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
+// OPK IS LIFTED, NOT RETYPED. compileOps reads it to turn an op's kind STRING into the integer
+// glassUnform switches on, and a second copy here would drift the first time a kind is added -
+// the app's own worker core carries it across for exactly this reason.
+const OPK_SRC = (SRC.match(/const OPK = \{[^}]*};/) || [])[0];
+const NZC_DECL = (SRC.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0];
+if (!NZC_DECL) throw new Error('the app has no _NZC declaration - the corner cache cannot be lifted');
+if (!OPK_SRC) throw new Error('the app has no OPK table - compileOps cannot be lifted');
 const G = { warp: 0, cloudScale: 1, cloudX: 0, cloudY: 0 };
 const api = new Function('G', 'SLAB_FT',
+  OPK_SRC + '\n' + NZC_DECL + '\n' +
   'let _wmask = []; let fam = "probe"; const strHue = () => 0.5;\n' +
   NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(G, SLAB_FT);
-const { glassLay, glassUnform } = api;
+const { glassLay, glassUnform, compileOps } = api;
 
 const INK = [[196, 48, 43], [46, 139, 87], [47, 111, 143], [122, 59, 142], [217, 131, 36], [142, 75, 110]];
 const W = 0.5, H = 0.62;
@@ -70,6 +78,7 @@ function render(px, { start, jit, stamped, paneX = 0, paneY = 0 }) {
   const F = { ...base, MST: start, MSQ: Math.sqrt(start), MJ: jit, PX: paneX, PY: paneY,
               OPS: stamped ? [ROLL] : [] };
   F.RU0 = stamped ? [touchdown(ROLL, paneX, paneY)] : [];
+  F.OPC = compileOps(F, F.OPS);          // glassUnform walks the COMPILED ops, never F.OPS
   const buf = new Uint8Array(PW * PH * 3);
   let bare = 0, star = 0, lap = 0;
   const starRows = new Set();

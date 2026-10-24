@@ -36,17 +36,25 @@ function lift(name) {
   throw new Error('unbalanced: ' + name);
 }
 const NEEDED = ['woodHash', 'woodAtan2', 'nz', 'vnoise', 'fbm2', 'mix', 'glassLay',
-                'resample', 'warpMaskAt', 'moonDisp', 'glassWarp', 'glassUnwarp', 'glassUnform'];
+                'resample', 'warpMaskAt', 'moonDisp', 'glassWarp', 'glassUnwarp', 'vnoiseC', 'vnoiseCfill', 'fbm2C', 'compileOps', 'glassUnform'];
 // _wmask empty => warpMaskAt returns 1, which is the real no-discs case. G/fam/strHue are app
 // state rather than geometry, so the current's SHAPE here is the app's and its SEED is not.
 const G = { warp: 0, cloudScale: 1, cloudX: 0, cloudY: 0 };
 // Read out of the source rather than typed: a constant copied into a probe is a second place for
 // it to be wrong, and the probe would keep agreeing with itself.
 const SLAB_FT = +(SRC.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
+// OPK IS LIFTED, NOT RETYPED. compileOps reads it to turn an op's kind STRING into the integer
+// glassUnform switches on, and a second copy here would drift the first time a kind is added -
+// the app's own worker core carries it across for exactly this reason.
+const OPK_SRC = (SRC.match(/const OPK = \{[^}]*};/) || [])[0];
+const NZC_DECL = (SRC.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0];
+if (!NZC_DECL) throw new Error('the app has no _NZC declaration - the corner cache cannot be lifted');
+if (!OPK_SRC) throw new Error('the app has no OPK table - compileOps cannot be lifted');
 const api = new Function('G', 'SLAB_FT',
+  OPK_SRC + '\n' + NZC_DECL + '\n' +
   'let _wmask = []; let fam = "probe"; const strHue = () => 0.5;\n' +
   NEEDED.map(lift).join('\n') + '\nreturn {' + NEEDED.join(',') + '};')(G, SLAB_FT);
-const { glassUnform, glassLay, moonDisp, glassWarp, glassUnwarp, warpMaskAt } = api;
+const { glassUnform, glassLay, moonDisp, glassWarp, glassUnwarp, warpMaskAt, compileOps } = api;
 
 const H = 0.62, PANEX = 0, PANEY = 0;
 
@@ -88,6 +96,7 @@ for (const [label, radial] of CASES) {
   for (const stirred of [false, true]) {
     const F = { OPS: stirred ? [{ k: 'stir' }] : [], MR: radial, PX: PANEX, PY: PANEY, H, S,
                 SST: 4, CS: 3, CN: 3, CW: 0.25, RS: 6, LC: 1, LS: 0, TW: 0, LP: 0 };
+    F.OPC = compileOps(F, F.OPS);          // glassUnform walks the COMPILED ops, never F.OPS
     let firstEdgeMid = null, prev = -1;
     for (let y = 0; y < TH; y++) {
       for (let x = 0; x < TW; x++) {
@@ -143,18 +152,42 @@ console.log('wrote', out, W + 'x' + HT);
 console.log('mask at an unmasked point   ', warpMaskAt(0.5, H * 0.5), '(1 = no discs down, as declared)');
 console.log('peak displacement           ', maxField.toFixed(5), 'slab units =',
             (maxField * SLAB_FT / 12).toFixed(5), 'ft');
+const fineEnough = pct < 2;          // NOT !(pct >= 2): NaN must read as a failure, not a pass
 console.log('bake vs direct, worst       ', maxErr.toFixed(6), `(${pct.toFixed(2)}% of peak)`,
-            !(pct < 2) ? '<-- TOO COARSE' : 'ok');
+            fineEnough ? 'ok' : '<-- TOO COARSE');
 console.log('under the stick, back[]     ', on.map(v => v.toFixed(4)).join(', '),
             signOK ? '(came from the LEFT of a rightward drag: correct)' : '<-- SIGN IS BACKWARDS');
+const noLeak = Math.hypot(...off) === 0;
 console.log('0.40 outside the ball       ', off.map(v => v.toFixed(4)).join(', '),
-            Math.hypot(...off) === 0 ? '(no reach, as a finite ball must)' : '<-- LEAKS BEYOND ITS RADIUS');
+            noLeak ? '(no reach, as a finite ball must)' : '<-- LEAKS BEYOND ITS RADIUS');
 for (const s of shifts) console.log(`  ${s.label.padEnd(26)} ${s.stirred ? 'stirred  ' : 'unstirred'} first band edge at x=${s.firstEdgeMid}`);
+const currentInField = bothMax > moonOnly;
 console.log('current ON, peak warp       ', bothMax.toFixed(5),
-            bothMax > moonOnly ? `(> ${moonOnly.toFixed(5)} with moons alone: the current is IN the field)`
-                               : '<-- THE CURRENT IS NOT REACHING THE FIELD');
+            currentInField ? `(> ${moonOnly.toFixed(5)} with moons alone: the current is IN the field)`
+                           : '<-- THE CURRENT IS NOT REACHING THE FIELD');
+const currentReaches = farOnly > 0;
 console.log('current ON, outside the ball', farOnly.toFixed(5),
-            farOnly > 0 ? '(the current reaches where no moon does)' : '<-- current absent out there');
-console.log('current alone, no moons     ', S3 ? 'a field is returned (G.warp alone is enough)' : '<-- NULL: warp-only never renders');
+            currentReaches ? '(the current reaches where no moon does)' : '<-- current absent out there');
+const warpOnlyRenders = !!S3;
+console.log('current alone, no moons     ', warpOnlyRenders ? 'a field is returned (G.warp alone is enough)' : '<-- NULL: warp-only never renders');
 const moved = shifts[0].firstEdgeMid !== shifts[1].firstEdgeMid;
 console.log(moved ? 'the stir MOVED the lay-up.' : 'THE STIR CHANGED NOTHING - the probe is blind or the wiring is dead.');
+
+// AND THE EXIT CODE SAYS WHAT THE LINES SAY. This probe computed every one of these checks and
+// printed '<-- SIGN IS BACKWARDS' and the rest, then exited 0 whatever happened - so it could be
+// run in CI forever and never stop anything. Found by ablation: disabling the stir arm of
+// glassUnform entirely left it green while it printed that the stir had changed nothing.
+const CLAIMS = [
+  ['the bake tracks the direct field', fineEnough],
+  ['the drag pushes from behind', signOK],
+  ['a finite ball does not reach past its radius', noLeak],
+  ['the current is in the field', currentInField],
+  ['the current reaches where no moon does', currentReaches],
+  ['a warp with no moons still renders', warpOnlyRenders],
+  ['the stir moves the lay-up', moved],
+];
+const bad = CLAIMS.filter(c => !c[1]);
+console.log('');
+console.log(bad.length ? 'FAIL ' + bad.length + ' of ' + CLAIMS.length + ': ' + bad.map(c => c[0]).join('; ')
+                       : CLAIMS.length + ' of ' + CLAIMS.length + ' claims hold');
+process.exit(bad.length ? 1 : 0);

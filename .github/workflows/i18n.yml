@@ -103,3 +103,38 @@ jobs:
         run: node tools/check-pool-trace.mjs
       - name: A saturated pool and a starved one are told apart, from one completion log
         run: node tools/probe-pool-trace.mjs
+
+      # PROBES THAT HAD NEVER BEEN RUN BY CI. Fourteen of them, four of which did not run at all:
+      # the glass probes still built F with OPS and the walk has read the COMPILED F.OPC for some
+      # time, and two of them had not been taught the corner cache or the spin table either. Each
+      # was ablated against the app before being listed here - a probe nobody has seen go red is a
+      # preference, and probe-glass-stir was exactly that: it computed seven checks, printed them,
+      # and exited 0 whatever they said.
+      - name: The canvas probe takes a budget and consults it between surfaces
+        run: node tools/check-probe-budget.mjs
+      - name: The unrolled op chain agrees with the walk it was sliced from, or falls back
+        run: node tools/probe-chain-spec.mjs
+      - name: The corner cache returns exactly what the uncached hash would
+        run: node tools/probe-hash-cache.mjs
+      - name: A spin is the rotation it claims to be, within the table's own bound
+        run: node tools/probe-spin-identity.mjs
+      - name: The analytic gradient matches the field it is a gradient of
+        run: node tools/probe-glass-gradient.mjs
+      - name: Ribbons laid in a mould reach every colour, and a mould is not a warp
+        run: node tools/probe-glass-lay.mjs
+      - name: A pressed ribbon spends a budget of material, not of size
+        run: node tools/probe-glass-press.mjs
+      - name: Blobs scatter, and a roller leaves stamps where it touched down
+        run: node tools/probe-glass-blobs.mjs
+      - name: A stir moves the lay-up and a finite ball stays inside its radius
+        run: node tools/probe-glass-stir.mjs
+      - name: The roller's phase is pinned to the pass, not to the origin
+        run: node tools/probe-glass-roller.mjs
+      - name: A chevron reads as one direction, not two
+        run: node tools/probe-chevron.mjs
+      - name: A cut section exposes the material it was cut from
+        run: node tools/probe-cut-section.mjs
+      - name: A rosette closes on itself
+        run: node tools/probe-rosette.mjs
+      - name: The calibrator reports back the pen it was handed
+        run: node tools/probe-pen-calibration.mjs
