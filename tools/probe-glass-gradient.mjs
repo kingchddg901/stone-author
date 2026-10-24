@@ -44,8 +44,15 @@ function liftFn(name) {
 // below - instrumented with the edge flags the scoring needs, which the shipped one has no business
 // carrying - and section D asserts the two agree. Without that, the probe would go on proving a COPY
 // correct while the app drifted away from it, which is the failure mode a probe is supposed to catch.
-const lifted = ['nz', 'vnoise', 'fbm2', 'glassFormT', 'vnoiseG', 'fbm2G', 'glassFormTG'].map(liftFn).join('\n');
-const APP = new Function(lifted + '\nreturn { nz, vnoise, fbm2, glassFormT, glassFormTG };')();
+// glassFormT READS THE CORNER CACHE as of build 2026.10.23.174, so the cache has to come across
+// with it or this probe cannot call the function it exists to check. It threw on exactly that:
+// lifting a function pulls its TEXT, so every name that text reaches for has to be lifted beside
+// it - the rule check-worker-core.mjs enforces on the worker core, and a probe is a second place
+// it applies. The declaration is lifted from the app too rather than written again here.
+const NZC_DECL = (SRC.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0];
+if (!NZC_DECL) { console.error('probe-glass-gradient: FAIL - the app has no _NZC declaration'); process.exit(1); }
+const lifted = NZC_DECL + ['nz', 'vnoise', 'fbm2', 'vnoiseC', 'vnoiseCfill', 'fbm2C', 'glassFormT', 'vnoiseG', 'fbm2G', 'glassFormTG'].map(liftFn).join('\n');
+const APP = new Function(lifted + '\nreturn { nz, vnoise, fbm2, fbm2C, glassFormT, glassFormTG };')();
 const { nz, fbm2, glassFormT } = APP;
 const shippedFormTG = APP.glassFormTG;
 
