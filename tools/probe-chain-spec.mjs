@@ -53,10 +53,18 @@ const STUBS = `
 const UNFC_DECL = (SRC.match(/const _UNFC = [{][^;]*[}];/) || [])[0];
 if (!UNFC_DECL) { console.error('probe-chain-spec: FAIL - no _UNFC declaration in the app'); process.exit(1); }
 
+// THE SPIN'S TABLE TRAVELS WITH THE WALK. glassUnform reads SPIN_T, SPIN_NB and SPIN_TURN, so all
+// three have to be lifted beside it - the same rule that caught three probes in one afternoon. The
+// declaration and the builder come from the app rather than being written again here.
+const SPIN_DECL = (SRC.match(/const SPIN_NB = [^;]*;/) || [])[0];
+if (!SPIN_DECL) { console.error('FAIL - no SPIN_NB declaration in the app'); process.exit(1); }
+const SPIN_ENV = SPIN_DECL + String.fromCharCode(10) + liftFn('spinTable')
+  + String.fromCharCode(10) + 'const SPIN_T = spinTable();' + String.fromCharCode(10);
+
 function build(mutate) {
   let bodies = liftFn('unformBodies'), comp = liftFn('compileUnform'), walk = liftFn('glassUnform');
   if (mutate) ({ bodies, comp, walk } = mutate({ bodies, comp, walk }));
-  const src = STUBS + liftFn('woodAtan2') + '\n' + walk + '\n' + bodies + '\n'
+  const src = STUBS + SPIN_ENV + liftFn('woodAtan2') + '\n' + walk + '\n' + bodies + '\n'
     + UNFC_DECL + '\n' + liftFn('unformKey') + '\n' + comp
     + '\nreturn { glassUnform, unformBodies, unformKey, compileUnform, peek: () => _UNFC };';
   return new Function(src)();

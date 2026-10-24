@@ -41,10 +41,18 @@ const STUBS = `
   function rollerHand(B, s, out) { out[0] = 0; out[1] = 0; }
 `;
 
+// THE SPIN'S TABLE TRAVELS WITH THE WALK. glassUnform reads SPIN_T, SPIN_NB and SPIN_TURN, so all
+// three have to be lifted beside it - the same rule that caught three probes in one afternoon. The
+// declaration and the builder come from the app rather than being written again here.
+const SPIN_DECL = (SRC.match(/const SPIN_NB = [^;]*;/) || [])[0];
+if (!SPIN_DECL) { console.error('FAIL - no SPIN_NB declaration in the app'); process.exit(1); }
+const SPIN_ENV = SPIN_DECL + String.fromCharCode(10) + liftFn('spinTable')
+  + String.fromCharCode(10) + 'const SPIN_T = spinTable();' + String.fromCharCode(10);
+
 function build(mutate) {
   let walk = liftFn('glassUnform');
   if (mutate) walk = mutate(walk);
-  return new Function(STUBS + liftFn('woodAtan2') + '\n' + walk
+  return new Function(STUBS + SPIN_ENV + liftFn('woodAtan2') + '\n' + walk
     + '\nreturn { glassUnform, woodAtan2 };')();
 }
 
@@ -89,7 +97,7 @@ const claim = (ok, what, detail) => { if (!ok) fails++; console.log('  ' + (ok ?
 // Measuring against the radius is the honest scale: it is the size of the thing being rotated.
 const dev = (p, q, r) => Math.abs(p - q) / Math.max(1e-9, r);
 
-console.log('\nA  the shipped spin is the exact rotation');
+console.log('\nA  the shipped spin is the rotation, to the table’s bound');
 for (const [name, ox, oy, a] of CASES) {
   let worst = 0, worstAbs = 0;
   for (const [x, y] of PTS) {
@@ -98,7 +106,12 @@ for (const [name, ox, oy, a] of CASES) {
     worst = Math.max(worst, dev(S[0], E[0], r), dev(S[1], E[1], r));
     worstAbs = Math.max(worstAbs, Math.abs(S[0] - E[0]), Math.abs(S[1] - E[1]));
   }
-  claim(worst < 1e-13, name, 'worst ' + worst.toExponential(2) + ' of the radius, '
+  // THE BOUND IS THE TABLE'S, NOT THE ARITHMETIC'S. Until build 2026.10.24.181 this read 1e-13,
+  // because the rotation was computed with Math.cos and Math.sin and was exact to a few ULPs. The
+  // spin now reads cos and sin off a 16,384-entry table over one turn and interpolates, so it is
+  // accurate to about 1.8e-8 in cos and sin — 5.2e-4 px of 65,535 at the rim, against the 70.5 px
+  // woodAtan2 was costing until the same afternoon. Tighten this and the TABLE is what has to change.
+  claim(worst < 1e-7, name, 'worst ' + worst.toExponential(2) + ' of the radius, '
     + worstAbs.toExponential(2) + ' ft = ' + (worstAbs / 8 * 65535).toExponential(1)
     + ' px of 65,535, over ' + PTS.length.toLocaleString() + ' points');
 }
@@ -141,11 +154,29 @@ console.log('\nB  what the change cost, measured — renderer-determinism.md quo
 
 if (process.argv.includes('--ablate')) {
   console.log('\nC  ablations — each must go red');
+  // EVERY MUTATION BELOW IS ASSERTED TO LAND, by requiring the text it replaces to be present. The
+  // 'cos and sin are swapped' arm targeted Math.cos(ar)/Math.sin(ar), which build 181 replaced with a
+  // table read — so it quietly stopped corrupting anything, and it still reported ok because its
+  // threshold was 1e-13 while the table's own error is 1.8e-8. It would have passed on any build.
+  const must = (w, from, to) => {
+    if (w.indexOf(from) < 0) throw new Error('the spin no longer contains: ' + from.slice(0, 48)
+      + ' — repoint this ablation rather than leaving it matching nothing');
+    return w.replace(from, to);
+  };
   const ABL = [
-    ['the rotation turns the wrong way', w => w.replace('x = ox + px * c1 + py * s1; y = oy - px * s1 + py * c1;',
-                                                        'x = ox + px * c1 - py * s1; y = oy + px * s1 + py * c1;')],
-    ['the radius is dropped from the angle', w => w.replace('ar = op.a * Math.sqrt(px * px + py * py)', 'ar = op.a')],
-    ['cos and sin are swapped', w => w.replace('const c1 = Math.cos(ar), s1 = Math.sin(ar);', 'const c1 = Math.sin(ar), s1 = Math.cos(ar);')],
+    ['the rotation turns the wrong way', w => must(w,
+      'x = ox + px * c1 + py * s1; y = oy - px * s1 + py * c1;',
+      'x = ox + px * c1 - py * s1; y = oy + px * s1 + py * c1;')],
+    ['the radius is dropped from the angle', w => must(w,
+      'ar = op.a * Math.sqrt(px * px + py * py)', 'ar = op.a')],
+    ['the table rows are swapped, so cos reads sin', w => must(w,
+      'const c1 = SPIN_T[sj] + sf * (SPIN_T[sj + 2] - SPIN_T[sj]);',
+      'const c1 = SPIN_T[sj + 1] + sf * (SPIN_T[sj + 3] - SPIN_T[sj + 1]);')],
+    ['the interpolation is dropped, leaving the nearest entry', w => must(w,
+      'const si = su | 0, sf = su - si, sj = si << 1;', 'const si = su | 0, sf = 0, sj = si << 1;')],
+    ['the turn reduction is dropped, so the index runs off the table', w => must(w,
+      'const sq = ar * SPIN_TURN, su = (sq - Math.floor(sq)) * SPIN_NB;',
+      'const sq = ar * SPIN_TURN, su = sq * SPIN_NB;')],
   ];
   for (const [what, mut] of ABL) {
     let red = false, why = '';
@@ -155,7 +186,7 @@ if (process.argv.includes('--ablate')) {
       let worst = 0;
       for (const [x, y] of PTS) { const S = sh(x, y, 0, 0, 1.2), E = exact(x, y, 0, 0, 1.2);
         const r = Math.hypot(x, y); worst = Math.max(worst, dev(S[0], E[0], r), dev(S[1], E[1], r)); }
-      red = !(worst < 1e-13); why = 'worst ' + worst.toExponential(2) + ' of the radius';
+      red = !(worst < 1e-7); why = 'worst ' + worst.toExponential(2) + ' of the radius';
     } catch (e) { red = true; why = 'threw: ' + e.message; }
     claim(red, 'caught: ' + what, why);
   }
@@ -163,4 +194,4 @@ if (process.argv.includes('--ablate')) {
 
 console.log('');
 if (fails) { console.error('probe-spin-identity: ' + fails + ' FAILED'); process.exit(1); }
-console.log('probe-spin-identity: OK — the spin is the exact rotation, and the cost of getting there is measured above');
+console.log('probe-spin-identity: OK — the spin is the rotation within the table’s bound, and what it cost is measured above');

@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.180';
+  const BUILD = '2026.10.24.181';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5009,7 +5009,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // GLASS, which the fork has been able to reach since the materials landed and this core
       // could not. paintContent dispatches on MATERIAL, so without these a glass slab threw on
       // its first line - and so did a stone one, for want of the token itself.
-      glassFlow, glassFormT, unformBodies, unformKey, compileUnform, glassFormTG, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
+      glassFlow, glassFormT, spinTable, unformBodies, unformKey, compileUnform, glassFormTG, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
       glassCellSpread, glassUnform, glassLay, glassWarp, glassUnwarp, rollerBake, paintGlassContent,
       // warpCacheKey decides whether the per-render warp fields can be reused. A worker's state is set
       // once at init and never changes after, so its memo hits for every tile after the first - which
@@ -5083,6 +5083,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // every slot MISSING rather than with slot 0 answering for seed 0 at cell (0,0) - which a
     // zero-filled array would do, and which is a wrong picture rather than a slow one.
     s += `var _NZC=new Float64Array(12*7).fill(NaN);\n`;
+    // SPIN_T and its two constants, in this order because spinTable reads SPIN_NB. One table per
+    // worker rather than one shared across the wire: 256 KB, built once, and a worker's slab cannot
+    // change under it.
+    s += `var SPIN_NB=${SPIN_NB},SPIN_TURN=${SPIN_TURN};
+`;
+    s += `var SPIN_T=spinTable();
+`;
     // _UNFC, the one specialised chain compileUnform keeps. Per worker, so nothing crosses the wire
     // and each core optimises its own copy ONCE rather than once per tile.
     s += `var _UNFC={key:'',fn:null};\n`;
@@ -6928,6 +6935,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     return out;
   }
+  // COS AND SIN OF a*r, OFF A TABLE. A spin's cos and sin are 69% of its cost and the sqrt is 20%,
+  // measured by removal. Indexing by the ANGLE rather than by the radius makes one table serve every
+  // spin on every slab - cos and sin are periodic, so there is no Rmax to bound, no fallback branch
+  // and no per-op array sized by `a`. Reducing in TURNS rather than radians keeps a divide out of the
+  // hot path, which was worth 9 points on its own: 38.0% off a spin with the divide, 47.3% without.
+  const SPIN_NB = 16384, SPIN_TURN = 1 / (Math.PI * 2);
+  function spinTable() {
+    const n = SPIN_NB, t = new Float64Array((n + 2) * 2);
+    for (let i = 0; i <= n + 1; i++) { const a = i * (Math.PI * 2) / n; t[2 * i] = Math.cos(a); t[2 * i + 1] = Math.sin(a); }
+    return t;                                            // two guard entries so the lerp never reads past the end
+  }
+  const SPIN_T = spinTable();
   function glassUnform(x0, y0, F, out) {
     let x = x0, y = y0, press = 0;
     const ops = F.OPC;                                       // compiled once per tile; see compileOps
@@ -6957,7 +6976,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // geometry does. This form has no approximation in it at all. renderer-determinism.md records
         // the change, what it cost to look at, and that it was accepted.
         const px = x - ox, py = y - oy, ar = op.a * Math.sqrt(px * px + py * py);
-        const c1 = Math.cos(ar), s1 = Math.sin(ar);
+        // REDUCED IN TURNS, not radians: a multiply, a floor and a subtract where the obvious spelling
+        // wants a divide. Worth 9 points of the 47 - 38.0% off a spin with the divide, 47.3% without.
+        // Math.floor carries negative angles the right way round, checked out to -40 rad.
+        const sq = ar * SPIN_TURN, su = (sq - Math.floor(sq)) * SPIN_NB;
+        const si = su | 0, sf = su - si, sj = si << 1;
+        const c1 = SPIN_T[sj] + sf * (SPIN_T[sj + 2] - SPIN_T[sj]);
+        const s1 = SPIN_T[sj + 1] + sf * (SPIN_T[sj + 3] - SPIN_T[sj + 1]);
         x = ox + px * c1 + py * s1; y = oy - px * s1 + py * c1;
       } else if (k === 2) {                                    // blow
         const s = op.s; x = ox + (x - ox) / s; y = oy + (y - oy) / s;
@@ -7094,8 +7119,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const src = 'return function(x0,y0,F,out)' + LB +
         'const P=F.OPC;let x=x0,y=y0,press=0;' + parts.join('') +
         'out[0]=x;out[1]=y;out[2]=press;' + RB + ';';
-      const make = new Function('woodAtan2', 'glassUnwarp', 'rollStampAt', 'rollerAt', 'rollerHand', 'SLAB_FT', src);
-      const fn = make(woodAtan2, glassUnwarp, rollStampAt, rollerAt, rollerHand, SLAB_FT);
+      // THE PARAMETER LIST IS A REPLICA OF WHAT THE WALK REACHES FOR, and new Function bodies see
+      // nothing else - the same rule check-worker-core.mjs enforces on the worker core, one level
+      // down. A name added to the walk has to be added here too, and the spin's table was missed
+      // exactly once: ReferenceError: SPIN_TURN is not defined, from inside the generated function.
+      // probe-chain-spec.mjs catches that, because a throw in compileUnform's own self-check sends
+      // it down the catch and section A goes red on 'it builds'.
+      const make = new Function('woodAtan2', 'glassUnwarp', 'rollStampAt', 'rollerAt', 'rollerHand',
+        'SLAB_FT', 'SPIN_NB', 'SPIN_TURN', 'SPIN_T', src);
+      const fn = make(woodAtan2, glassUnwarp, rollStampAt, rollerAt, rollerHand,
+        SLAB_FT, SPIN_NB, SPIN_TURN, SPIN_T);
       // THE SELF-CHECK. A lattice wide enough to leave the sheet on every side, because a chain's
       // behaviour at the rim is where a spin and a roll differ most, plus the exact centre where the
       // spin's r > 1e-9 guard decides.

@@ -86,6 +86,38 @@ it saves **9.4% of one spin** — a ceiling of about 2.3% off a render, since fo
 4096 tile. Gated by `tools/probe-spin-identity.mjs`, which asserts the exactness and *prints* the
 accepted cost rather than asserting it, so the figures above cannot drift out of this page unnoticed.
 
+### Build `2026.10.24.181` moved it again, by four orders of magnitude less
+
+`cos` and `sin` of `a*r` are **69% of a spin's cost** and the `sqrt` is 20%, measured by removal. They
+now come off a **16,384-entry table over one turn**, interpolated. Indexing by the *angle* rather than
+the radius makes one table serve every spin on every slab — `cos` and `sin` are periodic, so there is
+no maximum radius to bound, no fallback branch and no per-op array sized by `a`. Reducing in **turns**
+rather than radians keeps a divide out of the hot path and was worth 9 of the 47 points on its own:
+38.0% off a spin with the divide, **47.3%** without.
+
+| | worst coordinate error | as px of 65,535 |
+| --- | --- | --- |
+| `woodAtan2`, shipping until `179` | 8.60e-3 ft | **70.5** |
+| the table, from `181` | 9.26e-8 ft | **7.6e-4** |
+
+**So this build moves the picture away from a form that was itself 90,000 times less accurate.** What
+it costs, measured on 1024 tiles at 65,535 against exact `cos`/`sin`:
+
+| where | pixels moved of 1,048,576 | worst level | over 16 levels |
+| --- | --- | --- | --- |
+| near the spin centre | **49 — 0.0047%** | 66 | 3 |
+| mid-sheet | 7 — 0.0007% | 64 | 3 |
+| at the corner | 46 — 0.0044% | 66 | 11 |
+
+About **17 pixels per million**, each one a ribbon label flipping where a sample sat within 5e-4 px of
+a boundary — a label cannot average, so a flip is large when it happens. Against `179`'s 53.9% at a
+mean of 45 levels, this is four orders of magnitude smaller, and it is the mechanism rather than noise.
+
+`tools/probe-spin-identity.mjs` holds the bound at 1e-7 of the radius and ablates five ways. Two of
+its arms had to be repointed at the table, and one of them — `cos` and `sin` swapped — had silently
+stopped corrupting anything while still reporting green, because its threshold was tighter than the
+table's own error. Every mutation now **throws** if the text it replaces is absent.
+
 **Still open, and the same defect.** The radial mould reads `woodAtan2(ga, gc) * (0.5 + r)`, which
 amplifies the same error by radius in the same way. It is untouched: there the angle is genuinely
 wanted, so the choice is the approximation or `Math.atan2`'s cost, and that is a separate look
