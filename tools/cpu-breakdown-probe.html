@@ -1,0 +1,318 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CPU breakdown probe</title>
+<!--
+  WHERE DOES THE FIELD'S TIME GO, AND WHY DOES ONE ENGINE DISAGREE BY THREE?
+.
+  tools/gpu-native-probe.html timed the shipped field on three devices and got 28.5 ms a pass on a
+  desktop (Chrome 152), 25.8 on an S23 (Chrome 155) and 9.0 on an iPhone 14 Pro (Safari 26.1), all on
+  the same lifted arithmetic, every ladder exactly linear, the accumulator gate ruling out a JIT that
+  deletes work. Two Chromium engines agreeing with each other and disagreeing with JavaScriptCore by
+  three suggests the engine rather than the silicon - but that is a hypothesis, and an A16 may simply
+  be that far ahead.
+
+  A TOTAL CANNOT ANSWER IT. Three numbers from three machines localise nothing: the gap could be one
+  expensive call or every line at once, and those two findings lead opposite ways. So this probe times
+  the PIECES, and every piece is expressed against a BASELINE of plain float arithmetic measured on
+  the same device in the same run. That ratio is the whole instrument:
+
+    baseline 3x too  -> the core is faster, there is nothing to fix and the question is closed
+    baseline 1x, one piece 10x -> that piece is what V8 compiles badly, and it is probably cheap
+
+  THE SUSPECTS, in the order they are worth doubting.
+    Math.exp        three per sample, and engine implementations of it differ by more than anything
+                    else in this list. First suspect because it is also the easiest to replace.
+    the corner cache _NZC is a Float64Array holding its key as doubles - s, xi, yi - read with three
+                    !== comparisons per call. Worth 13.3% of a real render on V8, so it pays there;
+                    but if V8 is not keeping those reads unboxed it could be paying far less than it
+                    should, which a benchmark without a cache cannot see.
+    Math.imul / nz  the hash is integer multiply and xor, and imul is a different code path again.
+    Math.floor      two per vnoise, and it is sometimes a call and sometimes an instruction.
+
+  AND THE PARTS ARE CHECKED AGAINST THE WHOLE. An isolated microbenchmark inlines differently from
+  the same code inside the renderer's sample loop, so a breakdown that does not add up to the real
+  figure is measuring something other than the renderer. The probe computes the sum and prints the
+  discrepancy rather than hiding it; a large one voids the attribution, not just the arithmetic.
+
+  WHAT THIS CANNOT DO. It cannot authorise a change to app/stone-author.html. The project's standard
+  is a before/after on a real render on the real box - see docs/master-timing.md - and a green bench
+  has been wrong here before.
+-->
+<style>
+  :root { --bg:#faf9f7; --fg:#1b1a19; --dim:#6b6864; --rule:#dcd8d2; --good:#1d6b3a; --warn:#8a5a00; --bad:#9b2420; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; } }
+  :root[data-theme="dark"] { --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; }
+  body { background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin:0; padding:16px; }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; }
+  p.sub { color:var(--dim); margin:0 0 14px; max-width:64ch; }
+  button { font:inherit; padding:7px 15px; border:1px solid var(--rule); border-radius:5px;
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  button:disabled { color:var(--dim); cursor:default; }
+  table { border-collapse:collapse; margin:12px 0; font-size:13px; }
+  td, th { border-bottom:1px solid var(--rule); padding:4px 14px 4px 0; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  td.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  pre { color:var(--dim); font-size:12px; white-space:pre-wrap; margin:10px 0 0; }
+  h2 { font-size:14px; margin:18px 0 0; font-weight:600; }
+</style>
+
+<h1>CPU breakdown probe</h1>
+<p class="sub">An iPhone does this renderer’s noise field three times faster per core than the desktop,
+on identical arithmetic. This times the pieces separately and prints each against a baseline of plain
+float arithmetic on the same device — the ratio between those two is what says whether a core is fast
+or an engine is slow.</p>
+<button id="run">Run</button>
+<div id="res"></div>
+<pre id="log"></pre>
+
+<script>
+const LOG = document.getElementById('log');
+const log = m => { LOG.textContent += (LOG.textContent ? '\n' : '') + m; };
+const RES = document.getElementById('res');
+let TB = null, RUN = 0;
+function table(cols) {
+  TB = document.createElement('table');
+  const tr = document.createElement('tr');
+  for (const c of cols) { const th = document.createElement('th'); th.textContent = c; tr.appendChild(th); }
+  TB.appendChild(tr); RES.appendChild(TB); return TB;
+}
+function row(cells, cls) {
+  const tr = document.createElement('tr');
+  cells.forEach((c, i) => { const td = document.createElement('td'); td.textContent = c;
+    if (i) td.className = 'n'; tr.appendChild(td); });
+  if (cls) tr.lastChild.className += ' ' + cls;
+  TB.appendChild(tr);
+}
+function head(t) { TB = null; const h = document.createElement('h2'); h.textContent = t; RES.appendChild(h); }
+function pair(k, v, cls) {
+  if (!TB || TB.dataset.kind !== 'pair') { TB = document.createElement('table'); TB.dataset.kind = 'pair'; RES.appendChild(TB); }
+  const tr = document.createElement('tr');
+  const a = document.createElement('th'); a.textContent = k;
+  const b = document.createElement('td'); b.textContent = v; if (cls) b.className = cls;
+  tr.appendChild(a); tr.appendChild(b); TB.appendChild(tr);
+}
+
+// ---- the arithmetic comes out of the app, it is not written again here --------------------------
+const APP_PATHS = ['../app/stone-author.html', 'app/stone-author.html', './stone-author.html'];
+async function liftFromApp() {
+  let src = null, from = null, tried = [];
+  for (const u of APP_PATHS) {
+    try { const r = await fetch(u); if (r.ok) { src = await r.text(); from = u; break; } tried.push(u + ' ' + r.status); }
+    catch (e) { tried.push(u + ' ' + (e && e.message || 'failed')); }
+  }
+  if (src === null) throw new Error('could not find the app — tried ' + tried.join(', '));
+  const fn = name => {
+    const i = src.indexOf('function ' + name + '(');
+    if (i < 0) throw new Error('the app has no function ' + name);
+    let d = 0;
+    for (let k = src.indexOf('{', i); k < src.length; k++) {
+      if (src[k] === '{') d++;
+      else if (src[k] === '}') { d--; if (!d) return src.slice(i, k + 1); }
+    }
+    throw new Error('unbalanced ' + name);
+  };
+  const decl = (src.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0];
+  if (!decl) throw new Error('the app has no _NZC declaration');
+  const names = ['nz', 'vnoise', 'fbm2', 'vnoiseC', 'vnoiseCfill', 'fbm2C'];
+  return { app: new Function(decl + '\n' + names.map(fn).join('\n')
+    + '\nreturn { ' + names.join(', ') + ' };')(), from, lifted: names.length };
+}
+
+// ---- the harness, carried over from the GPU probe because it was wrong four times there ---------
+// Rep ladder, cleanest rung rather than a least-squares slope, spread printed, warm-up at the TOP of
+// the ladder, and an accumulator that must scale with the rep count or the piece is not reported.
+const REPS = [1, 2, 4, 8];
+const N = 270400, W = 520;
+const med = v => { const s = [...v].sort((a, b) => a - b); return s[(s.length - 1) >> 1]; };
+
+// EVERY PIECE IS CALIBRATED TO RUN LONG ENOUGH TO BE SEEN. The first version ran one pass of 270,400
+// for every piece and asked performance.now() about it, which Chrome clamps to roughly 0.1 ms. Math.imul
+// came back at 0.1 ms a pass - ONE TICK - with a 25% spread, Math.floor and nz at 0.4 ms, and the
+// uncached vnoise swung 4.7 / 3.1 / 2.3 / 2.0 for a 135% spread. Those are not measurements of
+// arithmetic, they are measurements of a clock's granularity and a JIT still tiering up.
+//
+// So each piece first finds its own multiplier: how many passes it takes to reach TARGET_MS. A cheap
+// row then runs hundreds of passes and an expensive one runs one, and both land in the same part of
+// the clock's range. It calibrates PER DEVICE for the same reason the ratio is the instrument - the
+// iPhone is three times faster and would otherwise be measured three times closer to the floor.
+const TARGET_MS = 25;
+function measure(fn, opsPerPass) {
+  let M = 1;
+  for (let i = 0; i < 14; i++) {                              // find the unit, growing geometrically
+    const t0 = performance.now(); fn(M); const dt = performance.now() - t0;
+    if (dt >= TARGET_MS) break;
+    M = Math.max(M + 1, Math.ceil(M * Math.max(1.7, TARGET_MS / Math.max(dt, 0.05))));
+  }
+  fn(M * REPS[REPS.length - 1]);                              // warm at the top, never the bottom
+  const xs = [], ys = [], accs = [];
+  for (const r of REPS) {
+    const n = r * M, ts = []; let acc = 0;
+    for (let k = 0; k < 5; k++) { const t0 = performance.now(); acc = fn(n); ts.push(performance.now() - t0); }
+    xs.push(n); ys.push(med(ts)); accs.push(acc);
+  }
+  const per = xs.map((n, i) => ys[i] / n);
+  const ms = Math.min(...per);
+  const spread = (Math.max(...per) / ms - 1) * 100;
+  const span = REPS[REPS.length - 1] / REPS[0];
+  // the accumulator has to scale, or the loop was deleted and the number is a fiction
+  const ran = Math.abs(accs[accs.length - 1] / (accs[0] || 1e-9) - span) < span * 0.02;
+  return { ms, ns: ms * 1e6 / opsPerPass, spread, ran, per, M,
+    note: 'unit=' + M + ' passes  ' + ys.map(v => v.toFixed(0)).join(' / ') + ' ms' };
+}
+
+document.getElementById('run').onclick = async () => {
+  document.getElementById('run').disabled = true;
+  RES.textContent = ''; TB = null; LOG.textContent = ''; RUN++;
+  try {
+    head('this device');
+    pair('run', RUN === 1 ? '1 since this page loaded — the figure to quote'
+      : RUN + ' since this page loaded — RELOAD BEFORE QUOTING; this arithmetic degrades within a page session',
+      RUN === 1 ? 'good' : 'warn');
+    pair('user agent', navigator.userAgent);
+    pair('cores reported', String(navigator.hardwareConcurrency || '?'));
+    const { app, from, lifted } = await liftFromApp();
+    pair('lifted', lifted + ' functions from ' + from, 'good');
+
+    const SX = 0.0031, SY = 0.0029;
+
+    // ---- THE BASELINE. Plain float multiply-add, no calls, no memory. This is the device's own
+    // speed, and every row below is read against it. Without it a uniform 3x and a single slow call
+    // are the same two numbers.
+    // The first version of this returned `a * 0 + r`, which scales with the rep count whether the
+    // loop ran or not - a gate that cannot fail, written into the one row every other row is divided
+    // by. It sums a value that changes every iteration instead, so the accumulator check applies to
+    // the baseline on the same terms as everything else.
+    const base = measure(r => {
+      let s = 0;
+      for (let k = 0; k < r; k++) {
+        let a = 0.5;
+        for (let i = 0; i < N; i++) { a = a * 1.0000001 + 0.0000003; if (a > 2) a -= 1.5; s += a; }
+      }
+      return s;
+    }, N);
+
+    // ---- the pieces ---------------------------------------------------------------------------
+    const nz = app.nz, vnoise = app.vnoise, vnoiseC = app.vnoiseC, fbm2C = app.fbm2C;
+    const EXP = Math.exp, FLOOR = Math.floor, IMUL = Math.imul;
+
+    const pieces = [
+      ['baseline  a*b+c', 'plain float multiply-add, no call, no memory', base],
+      ['Math.exp', 'three a sample, and the likeliest place for engines to differ',
+        measure(r => { let s = 0; for (let k = 0; k < r; k++) for (let i = 0; i < N; i++)
+          s += EXP(-0.011 - i * 1e-9); return s; }, N)],
+      ['Math.floor', 'two inside every vnoise',
+        measure(r => { let s = 0; for (let k = 0; k < r; k++) for (let i = 0; i < N; i++)
+          s += FLOOR(i * SX + 0.17); return s; }, N)],
+      ['Math.imul', 'three inside every nz',
+        measure(r => { let s = 0; for (let k = 0; k < r; k++) for (let i = 0; i < N; i++)
+          s += IMUL(i, 374761393) & 7; return s; }, N)],
+      ['nz', 'the hash itself — three imul, two shifts, two xor',
+        measure(r => { let s = 0; for (let k = 0; k < r; k++) for (let i = 0; i < N; i++)
+          s += nz(i & 511, (i >> 9) & 511, 71); return s; }, N)],
+      // AT THE RENDERER'S OWN SCALE. The first version walked these at x * 0.0031, so the lattice cell
+      // changed once in about 322 samples and the cache hit 99.7% - a rate the renderer never sees.
+      // fbm2C's dominant call is fbm2C(x * 26, ...), which is the scale used here, and it is why the
+      // first run's fbm2C came out at 3.6x three vnoiseC instead of 3x.
+      ['vnoise', 'four nz and the smoothstep interpolation, UNCACHED, at the renderer’s scale',
+        measure(r => { let s = 0; for (let k = 0; k < r; k++)
+          for (let j = 0; j < W; j++) { const y = j * SY * 1.56 + 0.11;
+            for (let i = 0; i < W; i++) s += vnoise(i * SX * 26 + 0.17, y, 71); } return s; }, N)],
+      ['vnoiseC', 'the same, through the corner cache, in scanline order',
+        measure(r => { let s = 0; for (let k = 0; k < r; k++)
+          for (let j = 0; j < W; j++) { const y = j * SY * 1.56 + 0.11;
+            for (let i = 0; i < W; i++) s += vnoiseC(i * SX * 26 + 0.17, y, 71, 0); } return s; }, N)],
+      ['fbm2C', 'three vnoiseC — one octave stack',
+        measure(r => { let s = 0; for (let k = 0; k < r; k++)
+          for (let j = 0; j < W; j++) { const y = j * SY * 1.56 + 0.11;
+            for (let i = 0; i < W; i++) s += fbm2C(i * SX * 26 + 0.17, y, 71, 0); } return s; }, N)],
+      // THE DECISIVE ROW. The standalone vnoiseC came out at twice the uncached vnoise, which cannot be
+      // squared with the corner cache being worth 13.3% of a real render - so one of the two is wrong,
+      // and a per-call microbenchmark is far likelier to be wrong than a live differential. fbm2 is the
+      // app's own uncached octave stack, called at identical coordinates to fbm2C. If fbm2C beats it
+      // the cache pays and the vnoiseC row is an artifact of measuring it alone; if fbm2 wins, the
+      // 13.3% needs re-opening. Nothing else in this table settles that.
+      ['fbm2', 'the SAME octave stack with no cache — the app’s own fbm2',
+        measure(r => { let s = 0; for (let k = 0; k < r; k++)
+          for (let j = 0; j < W; j++) { const y = j * SY * 1.56 + 0.11;
+            for (let i = 0; i < W; i++) s += app.fbm2(i * SX * 26 + 0.17, y, 71); } return s; }, N)],
+      ['the whole sample', 'two fbm2C and three exp — what the renderer actually does',
+        measure(r => { let s = 0;
+          for (let k = 0; k < r; k++) for (let j = 0; j < W; j++) { const y = j * SY + 0.11;
+            for (let i = 0; i < W; i++) { const x = i * SX + 0.17;
+              const th = 4.2 * (1 + 0.30 * (fbm2C(x * 26, y * 1.56, 71, 0) - 0.5) * 2);
+              const lay = fbm2C(x * 9.1, y * 9.1, 311, 6);
+              s += EXP(-0.011 * th) + EXP(-0.008 * th) + EXP(-0.006 * th) + lay * 1e-6; } }
+          return s; }, N)],
+    ];
+
+    head('per operation, and against this device’s own baseline');
+    table(['piece', 'ns an op', '× baseline', 'spread', 'what it is']);
+    const by = {};
+    for (const [name, what, m] of pieces) {
+      by[name.split(' ')[0]] = m;
+      const bad = !m.ran;
+      row([name, bad ? 'NOT MEASURED' : m.ns.toFixed(2),
+        bad ? '—' : (m.ns / base.ns).toFixed(1) + '×',
+        m.spread.toFixed(1) + '%', bad ? 'the accumulator did not scale — the loop was deleted' : what],
+        bad ? 'bad' : m.spread > 8 ? 'warn' : '');
+      log(name + ': ' + m.note);
+    }
+
+    // ---- do the parts add up to the whole? -----------------------------------------------------
+    head('do the parts add up?');
+    const whole = by['the'].ns, parts = 2 * by['fbm2C'].ns + 3 * by['Math.exp'].ns;
+    const off = (parts / whole - 1) * 100;
+    pair('the whole sample', whole.toFixed(2) + ' ns');
+    pair('2 × fbm2C + 3 × exp', parts.toFixed(2) + ' ns');
+    pair('discrepancy', off.toFixed(0) + '%'
+      + (Math.abs(off) < 25 ? ' — the breakdown describes the renderer'
+        : ' — TOO LARGE: isolated pieces inline differently from the sample loop, so the '
+          + 'attribution below is not safe to act on'),
+      Math.abs(off) < 25 ? 'good' : 'bad');
+    const cRatio = by['fbm2C'].ns / by['fbm2'].ns;
+    pair('the cache, stack against stack', 'fbm2C ' + by['fbm2C'].ns.toFixed(1) + ' ns vs fbm2 '
+      + by['fbm2'].ns.toFixed(1) + ' ns — ' + cRatio.toFixed(2) + '×. '
+      + (cRatio < 1 ? 'The cache pays, so the vnoiseC row below 1x is the artifact.'
+        : 'The cache COSTS on this engine, which the 13.3% live measurement contradicts — one of '
+          + 'the two is wrong and it is not settled here.'),
+      cRatio < 1 ? 'good' : 'bad');
+    pair('call by call', 'vnoiseC ' + by['vnoiseC'].ns.toFixed(1) + ' ns vs uncached vnoise '
+      + by['vnoise'].ns.toFixed(1) + ' ns — measured ALONE, where the surrounding loop inlines '
+      + 'differently. Trust the stack-against-stack row above it.');
+
+    // WHAT FIXING ANY ONE PIECE COULD BUY, which is the only reason to know a share. A piece that is a
+    // quarter of the sample caps at a third faster even if it becomes free, and that ceiling is what
+    // decides whether to chase it. The same arithmetic also bounds what the whole gap can be blamed on:
+    // if this device's sample is 107.7 ns and another's is 33.3, then making the 26% exp share FREE
+    // still leaves 79 ns against 33 - so a single call cannot be the explanation, and the answer has to
+    // be broad. That subtraction is printed rather than argued.
+    head('what fixing one piece could buy');
+    table(['piece', 'share of a sample', 'if it were free', 'ns left']);
+    const wh = by['the'].ns;
+    for (const [nm, count, m] of [['Math.exp', 3, by['Math.exp']], ['fbm2C', 2, by['fbm2C']],
+                                  ['nz (inside fbm2C)', 24, by['nz']]]) {
+      const share = count * m.ns / wh, left = wh - count * m.ns;
+      row([nm, (share * 100).toFixed(0) + '%',
+        left > 0 ? (wh / left).toFixed(2) + '× the sample' : 'the whole thing',
+        left > 0 ? left.toFixed(1) + ' ns' : '0'],
+        share > 0.5 ? 'good' : share > 0.2 ? 'warn' : '');
+    }
+
+    head('what to compare across devices');
+    pair('read the × baseline column, not the ns', 'a device with a faster core moves every row '
+      + 'together; an engine that compiles one thing badly moves ONE row. Those are the two answers, '
+      + 'and only this column tells them apart.');
+    pair('measured 2026-10-24', 'desktop Chrome 152: 28.5 ms a pass · S23 Chrome 155: 25.8 · '
+      + 'iPhone 14 Pro Safari 26.1: 9.0');
+  } catch (e) {
+    head('failed');
+    pair('error', String(e && e.message || e), 'bad');
+    log(String(e && e.stack || e));
+  } finally {
+    document.getElementById('run').disabled = false;
+  }
+};
+</script>

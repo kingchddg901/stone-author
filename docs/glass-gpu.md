@@ -62,10 +62,38 @@ ladder. Anything that measures a phone GPU over a short burst is measuring the g
 
 **The iPhone's CPU arm is 9.0 ms a pass against this desktop's 28.5 and the S23's 25.8** — three
 times faster per core on identical lifted arithmetic. Its ladder is 9.0 / 18.0 / 36.0 / 73.0, exactly
-linear, and the accumulator gate proves the loop ran, so it is not a JIT deleting work. Either an A16
-core really is that far ahead on this code, or V8 is compiling the field badly on the desktop. **If it
-is the second, it is a larger and far cheaper win than any GPU port**, and it applies to the renderer
-that exists today rather than one that does not. This has not been investigated.
+linear, and the accumulator gate proves the loop ran, so it is not a JIT deleting work.
+
+`tools/cpu-breakdown-probe.html` takes the field apart on the desktop, each piece against a baseline
+of plain float multiply-add measured on the same device in the same run — a faster *core* moves every
+row together, a badly compiled *call* moves one row:
+
+| piece | ns an op | × baseline | share of a sample |
+|---|---|---|---|
+| baseline `a*b+c` | 1.42 | 1.0× | — |
+| `Math.imul` | 0.45 | 0.3× | — |
+| `Math.floor` | 0.80 | 0.6× | — |
+| `nz` | 1.34 | 0.9× | 29% |
+| `vnoise`, uncached | 5.99 | 4.2× | — |
+| **`Math.exp`** | **9.55** | **6.7×** | **26%** |
+| `fbm2C` | 40.0 | 28.1× | 72% |
+| the whole sample | 110.9 | 77.9× | 100% |
+
+Parts to whole within 2%, so the breakdown describes the renderer rather than nine microbenchmarks.
+
+**And it already bounds the answer.** The desktop sample is 110.9 ns, the iPhone's is 33.3. Three
+`Math.exp` are 26% of the sample — the largest single oddity in the table at 6.7× baseline — but
+making them **free** leaves 82.3 ns against the iPhone's 33.3, still 2.5×. **No single call can
+explain the gap**; whatever it is has to be broad. That points at the core rather than at one
+pathological intrinsic, which would close the question — but the phones have not run this probe yet,
+and the `× baseline` column is what decides it.
+
+**The corner cache was re-tested here and it holds.** Measured call by call, `vnoiseC` came out at
+12.7 ns against the uncached `vnoise`'s 6.0 — twice the cost, which cannot be squared with the cache
+being worth 13.3% of a live render. Stack against stack it is `fbm2C` 40.0 ns against `fbm2` 45.5 —
+**0.88×, the cache paying 12%**, consistent with the live figure. The per-call number is the artifact:
+a function measured alone inlines differently from the same function inside the sample loop. The
+established measurement was right and the new derivation was the suspect.
 
 The CPU arm is **lifted out of `app/stone-author.html` at run time** — `nz`, `vnoise`, `vnoiseC`,
 `vnoiseCfill`, `fbm2C` and the `_NZC` declaration, fetched and sliced — so it is the shipped
