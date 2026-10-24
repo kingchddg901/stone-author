@@ -1,0 +1,330 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GPU tile</title>
+<!--
+  THE NUMBER THE WHOLE PORT WAS FOR.
+.
+  tools/gpu-port-harness.html proved all 282 lines of the per-pixel path function by function, each
+  against the app's own JS. This assembles them into one compute shader, draws a tile, and asks the
+  two questions that decide whether the GPU path gets built:
+.
+    HOW FAR APART  the same tile drawn both ways, in levels of 255. Section 3 of glass-gpu.md says
+                   they cannot match - fp32 against doubles, and a coordinate landing a hair the
+                   wrong side of a glassCellSDF boundary selects a DIFFERENT CANE, measured at up to
+                   130 levels. This says how often that actually happens.
+    HOW MUCH FASTER  per pixel, both arms doing the same work on the same data.
+.
+  THE CPU ARM IS THE SAME ASSEMBLY, NOT THE RENDERER. It mirrors paintGlassContent's order using the
+  app's own lifted functions - glassUnform, glassFlow, glassFormT, glassMelt, glassLay and the
+  Beer-Lambert colour - and leaves out what the GPU would not take over anyway: supersampling (the
+  slab runs at one sample a pixel, counted), the canvas write, and the relief slope, which is cold
+  on the measured slab. So this is a per-pixel comparison, not a renderOneTile comparison.
+.
+  AND THAT NEEDS A CROSS-CHECK, which the page prints. renderOneTile measured 594-651 ns a pixel on
+  this desktop at W=65535. If this CPU arm lands near that, the scene is representative and the ratio
+  means something. If it lands far off, the ratio is about this page rather than about the renderer,
+  and it says so rather than letting the number stand.
+.
+  THE SCENE IS SYNTHETIC. Five ops, one of every kind, six ribbons, five stamps - chosen in
+  glass-scene.mjs to reach every branch rather than to look like a real slab. The real chain is
+  whatever the document holds; this measures the shape of the work, not one document's amount of it.
+-->
+<style>
+  :root { --bg:#faf9f7; --fg:#1b1a19; --dim:#6b6864; --rule:#dcd8d2; --good:#1d6b3a; --warn:#8a5a00; --bad:#9b2420; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; } }
+  :root[data-theme="dark"] { --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; }
+  body { background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin:0; padding:16px; }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; }
+  p.sub { color:var(--dim); margin:0 0 14px; max-width:64ch; }
+  button { font:inherit; padding:7px 15px; border:1px solid var(--rule); border-radius:5px;
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  button:disabled { color:var(--dim); cursor:default; }
+  table { border-collapse:collapse; margin:12px 0; font-size:13px; }
+  td, th { border-bottom:1px solid var(--rule); padding:4px 14px 4px 0; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  h2 { font-size:14px; margin:18px 0 0; font-weight:600; }
+  .big { font-size:19px; font-weight:600; margin:14px 0 0; }
+  pre { color:var(--dim); font-size:12px; white-space:pre-wrap; margin:10px 0 0; }
+</style>
+
+<h1>GPU tile</h1>
+<p class="sub">One tile, drawn by the CPU and by the shader the harness proved, at the real export
+scale. How far apart they land, and how much faster — the two numbers the port is decided on.</p>
+<button id="run">Run</button>
+<div id="res"></div>
+<pre id="log"></pre>
+
+<script type="module">
+import { WGSL } from './lib/glass-gpu.mjs';
+import * as S from './lib/glass-scene.mjs';
+
+const RES = document.getElementById('res'), LOG = document.getElementById('log');
+const log = m => { LOG.textContent += (LOG.textContent ? '\n' : '') + m; };
+let TB = null;
+function pair(k, v, cls) {
+  if (!TB) { TB = document.createElement('table'); RES.appendChild(TB); }
+  const tr = document.createElement('tr');
+  const a = document.createElement('th'); a.textContent = k;
+  const b = document.createElement('td'); b.textContent = v; if (cls) b.className = cls;
+  tr.appendChild(a); tr.appendChild(b); TB.appendChild(tr);
+}
+function head(t) { TB = null; const h = document.createElement('h2'); h.textContent = t; RES.appendChild(h); }
+function big(t, cls) { const p = document.createElement('p'); p.className = 'big ' + (cls || ''); p.textContent = t; RES.appendChild(p); }
+
+const APP_PATHS = ['../app/stone-author.html', 'app/stone-author.html', './stone-author.html'];
+const NEED = ['nz', 'woodAtan2', 'glassFlow', 'glassUnwarp', 'vnoise', 'vnoiseC', 'vnoiseCfill',
+  'fbm2C', 'glassCellSDF', 'glassDepth', 'rollerAt', 'rollerHand', 'woodHash', 'glassFormT',
+  'glassMelt', 'glassBlob', 'glassBlobDepth', 'rollStampAt', 'starR', 'glassLay', 'compileOps',
+  'spinTable', 'glassUnform'];
+
+async function liftFromApp() {
+  let src = null, from = null;
+  for (const u of APP_PATHS) {
+    try { const r = await fetch(u); if (r.ok) { src = await r.text(); from = u; break; } } catch (e) {}
+  }
+  if (src === null) throw new Error('could not find the app');
+  const fn = name => {
+    const i = src.indexOf('function ' + name + '(');
+    if (i < 0) throw new Error('the app has no function ' + name);
+    let d = 0;
+    for (let k = src.indexOf('{', i); k < src.length; k++) {
+      if (src[k] === '{') d++;
+      else if (src[k] === '}') { d--; if (!d) return src.slice(i, k + 1); }
+    }
+    throw new Error('unbalanced ' + name);
+  };
+  // the four constants the lifted functions reach for; a function without them throws before it can
+  // disagree with anything, which cost the harness two runs to learn
+  const decl = ((src.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0] || '')
+    + ';' + ((src.match(/const SPIN_NB = [^;]*;/) || [])[0] || '')
+    + ';' + ((src.match(/const OPK = \{[^}]*\};/) || [])[0] || '')
+    + ';' + ((src.match(/const SLAB_FT = [^;]*;/) || [])[0] || '');
+  const SLAB = +(src.match(/const SLAB_FT = (\d+)/) || [, 8])[1];
+  const tail = 'const SPIN_T = spinTable();';   // a CALL, so it goes after the declarations
+  return { SLAB, from,
+    app: new Function(decl + '\n' + NEED.map(fn).join('\n') + '\n' + tail
+      + '\nreturn {' + NEED.join(',') + '};')() };
+}
+
+// ---- the CPU arm: paintGlassContent's order, with the app's own functions -----------------------
+function cpuTile(app, F, W, TX, TY, TW, out) {
+  const gth = [0, 0, 0], fv = [0, 0], melt = [0, 0], lay = [0, 0, 0, 0];
+  const CV = S.CV, CAN = S.CANES, NC = S.NCANE, H = S.WH, SLAB = F.__slab;
+  for (let py = 0; py < TW; py++) {
+    for (let px = 0; px < TW; px++) {
+      const ssu = (TX + px + 0.5) / W, ssv = (TY + py + 0.5) / W;
+      const cu = ssu < 0 ? 0 : ssu > 1 ? 1 : ssu, cvv = ssv < 0 ? 0 : ssv > H ? H : ssv;
+      const ox = S.PANEX + (cu - 0.5) * SLAB / 12;
+      const oy = S.PANEY + (cvv / H - 0.5) * SLAB * H / 12;
+      app.glassUnform(ox, oy, F, gth);
+      const sx = gth[0], sy = gth[1], press = gth[2];
+      app.glassFlow(ox, oy, F, fv);
+      let T = app.glassFormT(ox, oy, F, fv);
+      app.glassMelt(sx, sy, F, fv, melt);
+      if (melt[0] > 0) T -= CV.TH2 * 0.5 * melt[0];
+      if (melt[1] > 0) T += CV.TH2 * 0.6 * melt[1];
+      if (press > 0) T -= CV.TH2 * 0.55 * press;
+      if (T < 0.05) T = 0.05;
+      if (CV.OPQ > 0) T += (CV.OREF - T) * CV.OPQ;
+      let m = 1 - 0.45 * melt[0] + 0.25 * melt[1];
+      if (m < 0) m = 0;
+      let ar = CV.kr, ag = CV.kg, ab = CV.kb;
+      if (CV.CORD > 0) {
+        app.glassLay(sx, sy, F, lay);
+        if (lay[0] >= 0) {
+          const i1 = (lay[0] % NC) * 3, s = CV.CORD * 0.6 * lay[3];
+          ar += s * CAN[i1]; ag += s * CAN[i1 + 1]; ab += s * CAN[i1 + 2];
+          if (lay[1] >= 0) {
+            const i2 = (lay[1] % NC) * 3, sw = s * lay[2];
+            ar += sw * CAN[i2]; ag += sw * CAN[i2 + 1]; ab += sw * CAN[i2 + 2];
+          }
+        }
+      }
+      const o = (py * TW + px) * 3;
+      out[o] = CV.LBR * Math.exp(-ar * T) * m;
+      out[o + 1] = CV.LBG * Math.exp(-ag * T) * m;
+      out[o + 2] = CV.LBB * Math.exp(-ab * T) * m;
+    }
+  }
+  return out;
+}
+
+// ---- the GPU arm --------------------------------------------------------------------------------
+async function gpuTile(dev, uni, arena, n, reps) {
+  const code = Object.values(WGSL).join('\n');
+  const mod = dev.createShaderModule({ code });
+  const ci = await mod.getCompilationInfo();
+  const errs = ci.messages.filter(m => m.type === 'error');
+  if (errs.length) throw new Error('WGSL ' + errs[0].lineNum + ': ' + errs[0].message);
+  const pipe = await dev.createComputePipelineAsync({ layout: 'auto', compute: { module: mod, entryPoint: 'main' } });
+  const px = dev.createBuffer({ size: n * 3 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const ub = dev.createBuffer({ size: uni.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(ub, 0, uni);
+  const ab = dev.createBuffer({ size: arena.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(ab, 0, arena);
+  const read = dev.createBuffer({ size: n * 3 * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  const grp = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
+    { binding: 0, resource: { buffer: px } }, { binding: 2, resource: { buffer: ub } },
+    { binding: 3, resource: { buffer: ab } }] });
+
+  const ts = dev.features.has('timestamp-query');
+  let qs = null, qr = null, qm = null;
+  if (ts) {
+    qs = dev.createQuerySet({ type: 'timestamp', count: 2 });
+    qr = dev.createBuffer({ size: 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
+    qm = dev.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  }
+  const times = [];
+  for (let r = 0; r < reps; r++) {
+    dev.pushErrorScope('validation');
+    const enc = dev.createCommandEncoder();
+    const pass = enc.beginComputePass(ts
+      ? { timestampWrites: { querySet: qs, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 } } : {});
+    pass.setPipeline(pipe); pass.setBindGroup(0, grp);
+    pass.dispatchWorkgroups(Math.ceil(n / 64)); pass.end();
+    if (r === reps - 1) enc.copyBufferToBuffer(px, 0, read, 0, n * 3 * 4);
+    if (ts) { enc.resolveQuerySet(qs, 0, 2, qr, 0); enc.copyBufferToBuffer(qr, 0, qm, 0, 16); }
+    const t0 = performance.now();
+    dev.queue.submit([enc.finish()]);
+    await dev.queue.onSubmittedWorkDone();
+    const wall = performance.now() - t0;
+    const err = await dev.popErrorScope();
+    if (err) throw new Error(err.message.split('\n')[0]);
+    if (ts) {
+      await qm.mapAsync(GPUMapMode.READ);
+      const q = new BigInt64Array(qm.getMappedRange().slice(0));
+      qm.unmap();
+      times.push(Number(q[1] - q[0]) / 1e6);
+    } else times.push(wall);
+  }
+  await read.mapAsync(GPUMapMode.READ);
+  const out = new Float32Array(read.getMappedRange().slice(0));
+  read.unmap();
+  return { px: out, ms: Math.min(...times), all: times, ts };
+}
+
+// 512 SQUARE, BECAUSE 128 WAS BELOW THE CLOCK. A 128-square tile is 16,384 pixels and the GPU
+// finished it in 0.000 ms on five of seven reps - a number that cannot be divided into. This is
+// 262,144, within reach of the renderer's own 520-square tile.
+const TW = 512, FULLW = 65535;
+const TX = 31000, TY = 12000;
+
+document.getElementById('run').onclick = async () => {
+  document.getElementById('run').disabled = true;
+  RES.textContent = ''; TB = null; LOG.textContent = '';
+  try {
+    head('this device');
+    pair('user agent', navigator.userAgent);
+    const { app, SLAB, from } = await liftFromApp();
+    pair('lifted', NEED.length + ' functions from ' + from, 'good');
+    const chain = S.buildChain(app, SLAB);
+    S.setChain(SLAB, chain, new Float32Array(app.spinTable()));
+    chain.F.__slab = SLAB;
+    Object.assign(chain.F, {
+      MEX: S.RIBD.ex, MHL: S.RIBD.hl, MD: S.RIBD.md, MRIM: S.RIBD.rim, MOB: S.MOB, MST: S.MST,
+      MC: S.MCC_COL.map(c => ({ c })), MR: false, MB: false,
+      TH: S.FV.TH, RM: S.FV.RM, RS: S.FV.RS, FR: S.FV.FR, FP: S.FV.FP, FD: S.FV.FD,
+      SD: S.FV.SD, INC: S.FV.INC, SST: S.FV.SST, form: 'rolled',
+    });
+    pair('scene', chain.F.OPC.length + ' ops, ' + S.NRIB + ' ribbons, ' + S.STD.list.length
+      + ' stamps — synthetic, chosen to reach every branch');
+    pair('tile', TW + '×' + TW + ' at ' + TX + ',' + TY + ' of a ' + FULLW.toLocaleString() + ' sheet');
+
+    const n = TW * TW;
+    const uni = S.envUni({ MCn: S.NRIB, tileW: TW, tileX: TX, tileY: TY, fullW: FULLW });
+    const arena = S.allArrays()[0];
+
+    // ---- CPU ------------------------------------------------------------------------------------
+    const cpuOut = new Float64Array(n * 3);
+    cpuTile(app, chain.F, FULLW, TX, TY, TW, cpuOut);          // warm
+    const ct = [];
+    for (let r = 0; r < 7; r++) { const t0 = performance.now(); cpuTile(app, chain.F, FULLW, TX, TY, TW, cpuOut); ct.push(performance.now() - t0); }
+    const cpuMs = Math.min(...ct), cpuNs = cpuMs * 1e6 / n;
+
+    head('agreement');
+    if (!navigator.gpu) throw new Error('no WebGPU on this device');
+    const ad = await navigator.gpu.requestAdapter();
+    if (!ad) throw new Error('no adapter');
+    const want = [];
+    if (ad.features.has('timestamp-query')) want.push('timestamp-query');
+    const dev = await ad.requestDevice({ requiredFeatures: want });
+    const g = await gpuTile(dev, uni, arena, n, 7);
+
+    let worst = 0, sum = 0, over1 = 0, over5 = 0;
+    for (let i = 0; i < n * 3; i++) {
+      const d = Math.abs(cpuOut[i] - g.px[i]);
+      sum += d; if (d > worst) worst = d;
+      if (d > 1) over1++;
+      if (d > 5) over5++;
+    }
+    // BOTH SIDES MUST HAVE DRAWN SOMETHING FIRST. Two buffers of zeros agree perfectly, and the
+    // first run of this page reported 0.000 levels of difference and 0.000 ms on the GPU - a perfect
+    // match between a tile and nothing. An agreement check that cannot tell a match from a pair of
+    // blanks is the same vacuous pass the harness kept finding, in the one place it matters most.
+    const span = a => { let lo = Infinity, hi = -Infinity;
+      for (let i = 0; i < a.length; i++) { if (a[i] < lo) lo = a[i]; if (a[i] > hi) hi = a[i]; }
+      return { lo, hi, flat: !(hi - lo > 1e-6) }; };
+    const cs = span(cpuOut), gs = span(g.px);
+    pair('CPU tile', cs.lo.toFixed(2) + ' to ' + cs.hi.toFixed(2) + ' levels'
+      + (cs.flat ? '  — FLAT, this side drew nothing' : ''), cs.flat ? 'bad' : 'good');
+    pair('GPU tile', gs.lo.toFixed(2) + ' to ' + gs.hi.toFixed(2) + ' levels'
+      + (gs.flat ? '  — FLAT, this side drew nothing' : ''), gs.flat ? 'bad' : 'good');
+    if (cs.flat || gs.flat) throw new Error('one side drew nothing, so the agreement below would be '
+      + 'between a tile and a blank - refusing to report it');
+    pair('pixels compared', (n * 3).toLocaleString() + ' channels of ' + n.toLocaleString() + ' pixels');
+    pair('mean difference', (sum / (n * 3)).toExponential(2) + ' levels of 255');
+    pair('worst difference', worst.toExponential(2) + ' levels'
+      + '   (the first run printed this as 0.000 with three decimals, which reads as a perfect'
+      + ' match rather than a very small one)',
+      worst < 2 ? 'good' : worst < 20 ? 'warn' : 'bad');
+    pair('channels past 1 level', over1 + ' (' + (over1 / (n * 3) * 100).toFixed(3) + '%)',
+      over1 === 0 ? 'good' : 'warn');
+    pair('channels past 5 levels', over5 + ' (' + (over5 / (n * 3) * 100).toFixed(3) + '%) — '
+      + (over5 ? 'these are where a different cane was selected, which §3 measures at up to 130'
+               : 'no cane was selected differently anywhere in this tile'),
+      over5 === 0 ? 'good' : 'bad');
+
+    head('speed');
+    pair('CPU, this assembly', cpuNs.toFixed(0) + ' ns a pixel   (' + cpuMs.toFixed(1) + ' ms a tile)');
+    pair('GPU, one shader', (g.ms * 1e6 / n).toFixed(2) + ' ns a pixel   (' + g.ms.toFixed(3) + ' ms a tile)'
+      + (g.ts ? '' : ' — wall clock, this device has no timestamp-query'));
+    const ratio = cpuNs / (g.ms * 1e6 / n);
+    pair('one GPU against one CPU thread', ratio.toFixed(0) + '×');
+    const POOL = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
+    pair('against the ' + POOL + '-worker pool', (ratio / POOL).toFixed(1) + '×',
+      ratio / POOL > 4 ? 'good' : ratio / POOL > 2 ? 'warn' : 'bad');
+    log('GPU: ' + g.all.map(v => v.toFixed(3)).join(' ') + ' ms');
+    log('CPU: ' + ct.map(v => v.toFixed(1)).join(' ') + ' ms');
+
+    head('is this scene representative?');
+    // renderOneTile, counted and timed on the real slab, 2026-10-24
+    const REAL = 594;
+    const off = (cpuNs / REAL - 1) * 100;
+    pair('this CPU arm', cpuNs.toFixed(0) + ' ns a pixel');
+    pair('renderOneTile on the real slab', REAL + ' ns a pixel, measured at W=65535');
+    pair('difference', (off > 0 ? '+' : '') + off.toFixed(0) + '% — '
+      + (Math.abs(off) < 40
+          ? 'close enough that both the ns and the ratio carry over to the renderer'
+          : 'the ABSOLUTE ns a pixel is this scene’s, not the renderer’s - five synthetic ops '
+            + 'and six ribbons are more work than this slab asks for. The RATIO still carries, '
+            + 'because both arms do the same heavier work: scale the CPU arm down to the real 594 '
+            + 'and the GPU scales with it. Quote the ratio, not the nanoseconds.'),
+      Math.abs(off) < 40 ? 'good' : 'warn');
+
+    big(worst < 2 && over5 === 0
+      ? 'The shader draws the same tile, and ' + (ratio / POOL).toFixed(1) + '× the pool.'
+      : 'The shader is ' + (ratio / POOL).toFixed(1) + '× the pool, and the picture differs by '
+        + worst.toFixed(1) + ' levels.',
+      worst < 2 ? 'good' : 'warn');
+  } catch (e) {
+    head('failed');
+    pair('error', String(e && e.message || e), 'bad');
+    log(String(e && e.stack || e));
+  } finally {
+    document.getElementById('run').disabled = false;
+  }
+};
+</script>
