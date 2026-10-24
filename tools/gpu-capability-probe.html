@@ -1,0 +1,301 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GPU capability</title>
+<!--
+  CAN THIS DEVICE RUN THE GPU PATH? If not, there is no toggle.
+.
+  The ruling is that the GPU path is a hard toggle with its trade-offs plain, and that a device which
+  cannot run it SAYS SO rather than falling back silently. This is the check behind that sentence, and
+  it is deliberately not a feature test.
+.
+  WHY NOT A FEATURE TEST. On 2026-10-24 an S23 reported WebGPU present, granted an adapter, granted a
+  device, compiled the shader, dispatched it, and returned out[0] = 0.00 for every pixel - because the
+  r32float texture it was handed is not filterable without a feature it does not have, and sampling it
+  yields nothing rather than an error. An iPhone 14 Pro failed the same way QUIETLY, returning
+  plausible numbers that were wrong by 81 levels of 255. `navigator.gpu` was true on both. A check that
+  asks what the device CLAIMS would have offered the toggle to two devices that could not draw.
+.
+  SO IT ASKS WHAT THE DEVICE DOES.
+.
+    1  a secure context, because navigator.gpu is absent without one - and http://192.168.x.x is not
+       one, which is why a LAN URL cannot run this path at all
+    2  an adapter, a device, and the limits the port actually needs
+    3  THE HASH IS EXACT. nz is integer multiply, xor and shift; WGSL wraps u32 the same way
+       Math.imul does, so this must agree BIT FOR BIT with the app's own nz. Anything else means the
+       integer path differs and no amount of tolerance covers it.
+    4  THE FILTER IS CLOSE ENOUGH. vnoise IS bilinear interpolation of a hash lattice, so a filtered
+       texture should reproduce it. Measured: 0.368 levels of 255 on an RDNA-2 desktop with f32,
+       0.425 on an iPhone with f16, 0.822 on an S23 with f16 - the texture unit's own weight precision
+       differs by vendor and nothing in a shader controls it. The gate is 2 levels: loose enough for
+       hardware nobody here has seen, tight enough that the 81-level failure cannot pass.
+.
+  WHAT IT DOES NOT DECIDE. Whether the path is worth using - that is the port's measurement and the
+  toggle's copy. This only answers whether the toggle appears at all.
+-->
+<style>
+  :root { --bg:#faf9f7; --fg:#1b1a19; --dim:#6b6864; --rule:#dcd8d2; --good:#1d6b3a; --warn:#8a5a00; --bad:#9b2420; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; } }
+  :root[data-theme="dark"] { --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; }
+  body { background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin:0; padding:16px; }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; }
+  p.sub { color:var(--dim); margin:0 0 14px; max-width:62ch; }
+  button { font:inherit; padding:7px 15px; border:1px solid var(--rule); border-radius:5px;
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  button:disabled { color:var(--dim); cursor:default; }
+  table { border-collapse:collapse; margin:12px 0; font-size:13px; }
+  td, th { border-bottom:1px solid var(--rule); padding:4px 14px 4px 0; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  .verdict { font-size:15px; font-weight:600; margin:16px 0 0; }
+  pre { color:var(--dim); font-size:12px; white-space:pre-wrap; margin:10px 0 0; }
+</style>
+
+<h1>GPU capability</h1>
+<p class="sub">Whether the GPU path’s toggle should appear on this device. It asks what the hardware
+<em>does</em>, not what it claims — two phones passed every feature test today and drew nothing.</p>
+<button id="run">Check</button>
+<div id="res"></div>
+<pre id="log"></pre>
+
+<script>
+const RES = document.getElementById('res'), LOG = document.getElementById('log');
+const log = m => { LOG.textContent += (LOG.textContent ? '\n' : '') + m; };
+let TB = null;
+function row(k, v, cls) {
+  if (!TB) { TB = document.createElement('table'); RES.appendChild(TB); }
+  const tr = document.createElement('tr');
+  const a = document.createElement('th'); a.textContent = k;
+  const b = document.createElement('td'); b.textContent = v; if (cls) b.className = cls;
+  tr.appendChild(a); tr.appendChild(b); TB.appendChild(tr);
+}
+
+// ---- THE CHECK ITSELF -------------------------------------------------------------------------
+// Written to move into app/stone-author.html unchanged: it takes the app's own nz so it cannot drift
+// from the hash it is verifying, returns a plain verdict object, and throws nothing. A capability
+// check that can throw is a capability check that breaks the app on an unusual device.
+const LEVEL_GATE = 2 / 255;              // see the header: measured 0.368-0.822 levels across three devices
+const LATTICE = 256;                     // enough to prove filtering; the port sizes its own
+
+async function gpuCapability(nz) {
+  const step = [];
+  const no = (why, how) => ({ usable: false, why, how, step });
+
+  if (!self.isSecureContext) return no('not a secure context', 'WebGPU needs https or localhost');
+  if (!navigator.gpu) return no('no WebGPU', 'this browser or device does not provide navigator.gpu');
+  step.push('secure context and navigator.gpu');
+
+  let adapter;
+  try { adapter = await navigator.gpu.requestAdapter(); }
+  catch (e) { return no('requestAdapter threw', String(e && e.message || e)); }
+  if (!adapter) return no('no adapter', 'WebGPU is present but granted no adapter');
+  step.push('adapter');
+
+  const filterable = adapter.features.has('float32-filterable');
+  let dev;
+  try { dev = await adapter.requestDevice({ requiredFeatures: filterable ? ['float32-filterable'] : [] }); }
+  catch (e) { return no('requestDevice threw', String(e && e.message || e)); }
+  if (!dev) return no('no device', 'the adapter granted no device');
+  step.push('device');
+
+  // the limits the port actually needs, not every limit there is
+  const L = dev.limits;
+  const need = [
+    ['maxComputeInvocationsPerWorkgroup', 256],
+    ['maxStorageBufferBindingSize', 16 * 1024 * 1024],
+    ['maxTextureDimension2D', 2048],
+  ];
+  for (const [k, min] of need)
+    if (!(L[k] >= min)) return no('limit too small: ' + k, L[k] + ' < ' + min);
+  step.push('limits');
+
+  // ---- 3. the hash, bit for bit -----------------------------------------------------------------
+  const FMT = filterable ? 'r32float' : 'r16float';
+  const HASH = `
+fn nz(xi: i32, yi: i32, s: i32) -> f32 {
+  var h: u32 = (u32(xi) * 374761393u) ^ (u32(yi) * 668265263u) ^ (u32(s) * 2246822519u);
+  h = (h ^ (h >> 13u)) * 1274126177u;
+  return f32(h ^ (h >> 16u)) / 4294967296.0;
+}
+@group(0) @binding(0) var<storage, read_write> outb: array<f32>;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3<u32>) {
+  let i = i32(g.x);
+  outb[g.x] = nz(i - 37, i * 3 - 11, 71);
+}`;
+  const M = 1024;
+  let got;
+  try { got = await runCompute(dev, HASH, M, 64); }
+  catch (e) { return no('the hash shader would not run', String(e && e.message || e)); }
+  let hashBad = 0;
+  for (let i = 0; i < M; i++) if (Math.fround(nz(i - 37, i * 3 - 11, 71)) !== got[i]) hashBad++;
+  if (hashBad) return no('the integer hash does not agree', hashBad + ' of ' + M
+    + ' values differ from the CPU, so this device computes nz differently');
+  step.push('hash exact over ' + M);
+
+  // ---- 4. the filter, against the CPU's own bilinear ---------------------------------------------
+  const lat = new Float32Array(LATTICE * LATTICE);
+  for (let j = 0; j < LATTICE; j++) for (let i = 0; i < LATTICE; i++) lat[j * LATTICE + i] = nz(i, j, 71);
+  let dev2;
+  try { dev2 = await filterCheck(dev, FMT, lat, nz); }
+  catch (e) { return no('the filtered-texture shader would not run', String(e && e.message || e)); }
+  if (!(dev2.worst <= LEVEL_GATE)) return no('the texture filter is too far from the CPU',
+    (dev2.worst * 255).toFixed(2) + ' levels of 255, gate is ' + (LEVEL_GATE * 255).toFixed(0));
+  step.push('filter within ' + (dev2.worst * 255).toFixed(3) + ' levels');
+
+  const info = adapter.info || {};
+  return { usable: true, step, format: FMT,
+    adapter: { vendor: info.vendor || '', architecture: info.architecture || '',
+               device: info.device || '', description: info.description || '' },
+    filterLevels: dev2.worst * 255, filterable };
+}
+
+async function runCompute(dev, code, n, wgs) {
+  const mod = dev.createShaderModule({ code });
+  const ci = await mod.getCompilationInfo();
+  const errs = ci.messages.filter(m => m.type === 'error');
+  if (errs.length) throw new Error('WGSL: ' + errs[0].message);
+  const pipe = await dev.createComputePipelineAsync({ layout: 'auto', compute: { module: mod, entryPoint: 'main' } });
+  const buf = dev.createBuffer({ size: n * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const read = dev.createBuffer({ size: n * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  const grp = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0),
+    entries: [{ binding: 0, resource: { buffer: buf } }] });
+  const enc = dev.createCommandEncoder();
+  const pass = enc.beginComputePass();
+  pass.setPipeline(pipe); pass.setBindGroup(0, grp);
+  pass.dispatchWorkgroups(Math.ceil(n / wgs)); pass.end();
+  enc.copyBufferToBuffer(buf, 0, read, 0, n * 4);
+  dev.queue.submit([enc.finish()]);
+  await read.mapAsync(GPUMapMode.READ);
+  const out = new Float32Array(read.getMappedRange().slice(0));
+  read.unmap();
+  return out;
+}
+
+async function filterCheck(dev, fmt, lat, nz) {
+  const f16 = fmt === 'r16float';
+  let data = lat, bpp = 4;
+  if (f16) {                                            // f32 -> IEEE half, flushing subnormals
+    const u = new Uint16Array(lat.length), dv = new DataView(new ArrayBuffer(4));
+    for (let i = 0; i < lat.length; i++) {
+      dv.setFloat32(0, lat[i]);
+      const b = dv.getUint32(0), s = (b >>> 16) & 0x8000, e = ((b >>> 23) & 0xff) - 112, m = b & 0x7fffff;
+      u[i] = e <= 0 ? s : e >= 31 ? s | 0x7c00 : s | (e << 10) | (m >>> 13);
+    }
+    data = u; bpp = 2;
+  }
+  const tex = dev.createTexture({ size: [LATTICE, LATTICE], format: fmt,
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+  dev.queue.writeTexture({ texture: tex }, data, { bytesPerRow: LATTICE * bpp }, [LATTICE, LATTICE]);
+  const smp = dev.createSampler({ magFilter: 'linear', minFilter: 'linear',
+    addressModeU: 'repeat', addressModeV: 'repeat' });
+  const M = 1024;
+  const pts = new Float32Array(M * 2);
+  for (let i = 0; i < M; i++) {                          // spread across cells AND across the fraction
+    pts[2 * i] = (i % 37) * 1.31 + (i / M) * 0.91 + 0.017;
+    pts[2 * i + 1] = ((i * 7) % 41) * 1.17 + ((i * 13) % 83) / 83 + 0.029;
+  }
+  const code = `
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var smp: sampler;
+@group(0) @binding(2) var<storage, read_write> outb: array<f32>;
+@group(0) @binding(3) var<storage, read> pts: array<vec2<f32>>;
+const LAT: f32 = ${LATTICE}.0;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3<u32>) {
+  let p = pts[g.x];
+  let fx = floor(p.x); let fy = floor(p.y);
+  let tx = p.x - fx; let ty = p.y - fy;
+  let sx = tx * tx * (3.0 - 2.0 * tx); let sy = ty * ty * (3.0 - 2.0 * ty);
+  outb[g.x] = textureSampleLevel(tex, smp, vec2<f32>((fx + sx + 0.5) / LAT, (fy + sy + 0.5) / LAT), 0.0).r;
+}`;
+  const mod = dev.createShaderModule({ code });
+  const ci = await mod.getCompilationInfo();
+  const errs = ci.messages.filter(m => m.type === 'error');
+  if (errs.length) throw new Error('WGSL: ' + errs[0].message);
+  const pipe = await dev.createComputePipelineAsync({ layout: 'auto', compute: { module: mod, entryPoint: 'main' } });
+  const pbuf = dev.createBuffer({ size: pts.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  dev.queue.writeBuffer(pbuf, 0, pts);
+  const obuf = dev.createBuffer({ size: M * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const read = dev.createBuffer({ size: M * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  const grp = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
+    { binding: 0, resource: tex.createView() }, { binding: 1, resource: smp },
+    { binding: 2, resource: { buffer: obuf } }, { binding: 3, resource: { buffer: pbuf } }] });
+  const enc = dev.createCommandEncoder();
+  const pass = enc.beginComputePass();
+  pass.setPipeline(pipe); pass.setBindGroup(0, grp);
+  pass.dispatchWorkgroups(Math.ceil(M / 64)); pass.end();
+  enc.copyBufferToBuffer(obuf, 0, read, 0, M * 4);
+  dev.queue.submit([enc.finish()]);
+  await read.mapAsync(GPUMapMode.READ);
+  const got = new Float32Array(read.getMappedRange().slice(0));
+  read.unmap();
+  // the CPU's own vnoise, written here once rather than lifted, because the check must stand alone
+  let worst = 0;
+  for (let i = 0; i < M; i++) {
+    const x = pts[2 * i] % LATTICE, y = pts[2 * i + 1] % LATTICE;
+    const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi;
+    const a = nz(xi, yi, 71), b = nz(xi + 1, yi, 71), c = nz(xi, yi + 1, 71), d = nz(xi + 1, yi + 1, 71);
+    const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+    const want = (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy;
+    const e = Math.abs(want - got[i]);
+    if (e > worst) worst = e;
+  }
+  return { worst };
+}
+
+// ---- the page ---------------------------------------------------------------------------------
+const APP_PATHS = ['../app/stone-author.html', 'app/stone-author.html', './stone-author.html'];
+async function liftNz() {
+  for (const u of APP_PATHS) {
+    try {
+      const r = await fetch(u); if (!r.ok) continue;
+      const src = await r.text();
+      const i = src.indexOf('function nz(');
+      if (i < 0) continue;
+      let d = 0;
+      for (let k = src.indexOf('{', i); k < src.length; k++) {
+        if (src[k] === '{') d++;
+        else if (src[k] === '}') { d--; if (!d) return { nz: new Function(src.slice(i, k + 1) + 'return nz;')(), from: u }; }
+      }
+    } catch (e) { /* try the next path */ }
+  }
+  throw new Error('could not lift nz from the app');
+}
+
+document.getElementById('run').onclick = async () => {
+  document.getElementById('run').disabled = true;
+  RES.textContent = ''; TB = null; LOG.textContent = '';
+  try {
+    const { nz, from } = await liftNz();
+    row('nz lifted from', from, 'good');
+    row('user agent', navigator.userAgent);
+    const v = await gpuCapability(nz);
+    for (const s of v.step) row('passed', s, 'good');
+    const h = document.createElement('p');
+    h.className = 'verdict ' + (v.usable ? 'good' : 'bad');
+    h.textContent = v.usable ? 'USABLE — the toggle should appear on this device'
+                             : 'NOT USABLE — no toggle: ' + v.why;
+    RES.appendChild(h);
+    TB = null;
+    if (v.usable) {
+      row('adapter', v.adapter ? (v.adapter.vendor + ' / ' + v.adapter.architecture) : 'reported no info');
+      row('lattice format', v.format + (v.filterable ? '' : ' — this device cannot filter r32float'));
+      row('filter error', v.filterLevels.toFixed(3) + ' levels of 255, gate is 2.000',
+        v.filterLevels < 1 ? 'good' : 'warn');
+    } else {
+      row('how', v.how || '—', 'bad');
+      row('what the app does', 'offers no GPU toggle, and says why if asked — never a silent fallback');
+    }
+    log(JSON.stringify(v, null, 1));
+  } catch (e) {
+    const h = document.createElement('p');
+    h.className = 'verdict bad'; h.textContent = 'the check itself failed: ' + (e && e.message || e);
+    RES.appendChild(h);
+    log(String(e && e.stack || e));
+  } finally {
+    document.getElementById('run').disabled = false;
+  }
+};
+</script>
