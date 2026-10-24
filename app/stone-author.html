@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.191';
+  const BUILD = '2026.10.24.192';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15589,6 +15589,14 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // harness and left the real export at 192, and this is the only term in the loop between
       // those two numbers. Per tile, so a slow disk shows as a ramp rather than an average.
       const tileSink = [];
+      // AND THE OTHER TWO TERMS, so a tile is fully accounted rather than mostly. `fin` is getting
+      // the painted tile - the shader, the readback, and whatever finishes it; `row` is the resume
+      // record, which is awaited once per tile and was not in the harness loop that measured 82 ms
+      // against this loop's 168. Whatever is left after these three is the loop's own overhead.
+      //
+      // Measured because the last three guesses at where the time went were all wrong: readback,
+      // then the serial pipeline, then sink.add, which came back at 0.0 ms.
+      const tileFin = [], tileRow = [];
       // SEEDED FROM THE RECORD, not from zero. These are what light.mean and the perTile arrays are
       // built from, so a resume that restored only the tiles would publish a provenance block
       // describing the part rendered after the crash - a master that looks finished and is not.
@@ -15601,7 +15609,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         // per row and nothing else; adding a third would change a persisted format for the sake of
         // a diagnostic, and a zero here would read as "the disk was instant" rather than "this was
         // not measured". Keeps the three arrays the same length, which is what a reader assumes.
-        for (let q = 0; q < prior.state.tileMs.length; q++) tileSink.push(-1);
+        for (let q = 0; q < prior.state.tileMs.length; q++) { tileSink.push(-1); tileFin.push(-1); tileRow.push(-1); }
         bytes = prior.state.at - 16;
       }
       for (let gy = 0; gy < p.rDown; gy++) for (let gx = 0; gx < p.rAcross; gx++) {
@@ -15610,6 +15618,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         const tTile = performance.now();
         let tb = 0;                                        // this render tile's share of the file
         let ts = 0;                                        // and how much of its time went to the disk
+        let tf = 0, tw = 0;                                // the painter, and the resume row
         // This tile's SHARE of the light, not the running total. The record carries deltas so a resume
         // adds them back up; a row holding the total would make every replay count the same pixels
         // again, and light.mean is what every sidecar table quotes.
@@ -15637,13 +15646,17 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
           // drops into exactly the branch below, where renderOneTile runs on this thread and the
           // original tilePainted still examines a real surface. The second line never moved.
           if (pool && attempt === 1 && p.fin) {
+            const tF = performance.now();
             fin = await pool.finish(n);
+            tf += performance.now() - tF;
             tCons = performance.now();
             if (fin.painted) break;
             fin = null;                                    // fall through to the main-thread retry
           } else {
+            const tF = performance.now();
             c = (pool && attempt === 1) ? await pool.tile(n)
                                         : (layTiles ? renderFloorTile : renderOneTile)(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
+            tf += performance.now() - tF;
             tCons = performance.now();        // HANDED OVER. Not the same instant as finished - see below.
             if (tilePainted(c)) break;
             c.width = 1; c.height = 1;                     // hand the failed allocation back first
@@ -15713,7 +15726,10 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
             if (trI.length >= TRACE_ROWS) traceThin();   // widen the stride, drop every other run
           }
         }
+        const tR0 = performance.now();
         await sink.row(n, msT, tb, litSum - lit0, litUp - litUp0, litN - litN0);
+        tw = performance.now() - tR0;
+        tileFin.push(Math.round(tf)); tileRow.push(Math.round(tw));
       }
       // Read BEFORE the close, because the close nulls it. This field spent its whole life unable to
       // appear: the metadata below asked `pool ? pool.workers : undefined` after this line had already
@@ -15842,7 +15858,10 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         // anomaly gets read off the file instead of re-measured.
         // `sink` is the OPFS write, the one term a tile's cost was never broken down into. Against
         // `ms` it says whether a slow render was the picture, the machine, or the disk.
-        perTile: { ms: tileMs, bytes: tileBytes, sink: tileSink },
+        // ms is the whole tile; fin is getting it painted and finished, sink is the data write and
+        // row is the resume record. What the four do not add up to is this loop's own overhead -
+        // the status line, the yield, and the trace - which is the only part never named.
+        perTile: { ms: tileMs, bytes: tileBytes, sink: tileSink, fin: tileFin, row: tileRow },
         // THE FOUR TIMESTAMPS, absent when nothing was pooled. `busy` is a uniform series at `tick`
         // milliseconds from `t0`; the three per-pass arrays are indexed by `i` rather than positional,
         // so a resumed render carries only the passes it actually painted and cannot silently
