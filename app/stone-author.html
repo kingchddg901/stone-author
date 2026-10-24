@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.195';
+  const BUILD = '2026.10.24.196';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -11127,7 +11127,16 @@ self.onmessage = async (e) => {
   // What makes that acceptable is the asymmetry - a verification that is WRONG costs a resume and
   // nothing else, because the only thing it can do is refuse one. Being generous here is cheap and
   // being strict here is free.
-  async function resumeVerified(prior, p, W) {
+  // `paint` IS THE PAINTER THAT WROTE THE RECORD, and leaving it out was a resume that could never
+  // succeed. This re-rendered with renderOneTile unconditionally - the CPU path - and compared the
+  // result byte for byte against tiles the GPU had written. They are not the same picture: fp32
+  // against doubles differs on about 1.4% of channels, which is a different deflate and a different
+  // length, so every GPU render reported "tile 0 is 603869 bytes, re-rendered 530229" and started
+  // over. An hour of rendering, refused by a check that was comparing two renderers.
+  //
+  // The record's renderer is known: renderSig carries it, so a record only matches when the toggle
+  // is where it was. If the GPU is painting now, the GPU painted that record.
+  async function resumeVerified(prior, p, W, paint) {
     const want = resumeCheckCount(prior.state.tileMs, 10000, 100);
     let seed = 0; for (const ch of prior.job.sig) seed = (seed * 31 + ch.charCodeAt(0)) | 0;
     const picks = resumeSample(prior.rows, want, seed);
@@ -11137,7 +11146,8 @@ self.onmessage = async (e) => {
     for (const n of picks) {
       const row = byN.get(n); if (!row) return { ok: false, why: 'row ' + n + ' vanished' };
       const gx = n % p.rAcross, gy = (n / p.rAcross) | 0;
-      const c = (layTiles ? renderFloorTile : renderOneTile)(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
+      const c = paint ? await paint(n)
+                      : (layTiles ? renderFloorTile : renderOneTile)(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed);
       if (!tilePainted(c)) { c.width = 1; c.height = 1; return { ok: false, why: 'blank re-render at ' + n }; }
       const cx = c.getContext('2d');
       const fresh = [];
@@ -15424,7 +15434,11 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         // threw took the whole export down with it. A verification is allowed to be wrong, confused, or
         // broken; it is not allowed to cost a render.
         try {
-          const v = await resumeVerified(prior, p, W);
+          // The GPU pool is already in hand here - it is chosen before the signature is taken - and
+          // it is not yet carrying finishers, so tile() hands back a canvas exactly as the CPU path
+          // would. Verifying with the other painter is what refused every GPU resume.
+          const v = await resumeVerified(prior, p, W,
+                                         (pool && pool.gpu) ? (n => pool.tile(n)) : null);
           if (!v.ok) { prior = null; resumeWhy = v.why; }
         } catch (ex) { prior = null; resumeWhy = String((ex && ex.message) || ex).slice(0, 120); }
       }
