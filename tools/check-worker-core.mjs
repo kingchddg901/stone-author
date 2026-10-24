@@ -56,6 +56,52 @@ for (const m of preamble.matchAll(/s \+= (\w+)\(\);/g)) {
   const body = bodyOf(m[1]);
   if (body) preamble += String.fromCharCode(10) + body;
 }
+let ORDER_OK = 0;
+// ---- ORDER, NOT ONLY PRESENCE --------------------------------------------------------------------
+// A name can be carried and still be unusable where the preamble uses it. The lifted functions are
+// emitted as `var name = function...` - an ASSIGNMENT, which declares early and assigns late - so a
+// preamble line that CALLS one of them runs while it is still undefined.
+//
+// That shipped once. `var SPIN_T=spinTable();` sat fifty lines above the function list and every
+// worker threw `spinTable is not a function`, while the main thread - where the same table is a
+// module const declared after the function - worked perfectly. Nothing caught it: this gate checked
+// that spinTable was carried, which it was; every probe and every local measurement went through
+// renderOneTile, which is the MAIN THREAD and never builds a core at all.
+//
+// So: no preamble line may call a lifted function. Allocations and built-ins only.
+{
+  const emitAt = SRC.indexOf('for (const n in fns)', fnsAt);
+  const before = emitAt < 0 ? '' : SRC.slice(SRC.indexOf('let s = `var H=', fnsAt), emitAt);
+  // SCANNED, NOT MATCHED. A RegExp built from a string needs its backslashes doubled, and the first
+  // version of this line lost them through a generator - `[^\w$.]` became `[^w$.]` and the pattern
+  // would not even compile. Plain indexOf cannot be mangled that way.
+  const NLC = String.fromCharCode(10);
+  const wordish = c => c === '_' || c === '$' || (c >= '0' && c <= '9')
+    || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+  const bad = [];
+  for (const n of listed) {
+    for (let at = before.indexOf(n); at >= 0; at = before.indexOf(n, at + 1)) {
+      const pre = at > 0 ? before[at - 1] : ' ';
+      if (wordish(pre) || pre === '.') continue;          // part of a longer name, or a property
+      let k = at + n.length;
+      while (before[k] === ' ') k++;
+      if (before[k] !== '(') continue;                    // a mention, not a call
+      // and only inside an emitted template, which is what becomes worker source
+      const ls = before.lastIndexOf(NLC, at) + 1;
+      const line = before.slice(ls, before.indexOf(NLC, at));
+      if (line.trimStart().startsWith('s +=') && !bad.includes(n)) { bad.push(n); break; }
+    }
+  }
+  if (bad.length) {
+    console.error('worker core: ' + bad.length + ' preamble line(s) CALL a lifted function before the');
+    console.error('function list is emitted, so the name is declared but still undefined when it runs:');
+    for (const n of bad) console.error('  TOO EARLY   ' + n + '()');
+    console.error('Move the line below `for (const n in fns)`. The preamble may use built-ins only.');
+    process.exit(1);
+  }
+  ORDER_OK = listed.length;
+}
+
 const carried = new Set(listed);
 for (const m of preamble.matchAll(/var ([A-Za-z_$][\w$,]*)/g))
   for (const n of m[1].split(',')) if (n) carried.add(n);
@@ -239,6 +285,7 @@ const fresh = [...unresolved].filter(([n]) => !(n in DECLARED));
 const known = [...unresolved].filter(([n]) => n in DECLARED);
 
 console.log(`worker core: ${listed.length} functions carried, ${unresolved.size} names reached and not carried`);
+console.log(`  preamble order: ${ORDER_OK} carried names checked, none called before the function list`);
 for (const [n, callers] of known.sort())
   console.log(`  known  ${n.padEnd(22)} <- ${callers.join(', ')}   ${DECLARED[n]}`);
 if (!fresh.length) {

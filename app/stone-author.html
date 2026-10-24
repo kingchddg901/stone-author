@@ -5083,12 +5083,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // every slot MISSING rather than with slot 0 answering for seed 0 at cell (0,0) - which a
     // zero-filled array would do, and which is a wrong picture rather than a slow one.
     s += `var _NZC=new Float64Array(12*7).fill(NaN);\n`;
-    // SPIN_T and its two constants, in this order because spinTable reads SPIN_NB. One table per
-    // worker rather than one shared across the wire: 256 KB, built once, and a worker's slab cannot
-    // change under it.
+    // SPIN_NB and SPIN_TURN are plain numbers and belong here. SPIN_T DOES NOT: building it calls
+    // spinTable, and the lifted functions are emitted below as `var name = function...` — an
+    // ASSIGNMENT, which does not hoist. A preamble line may use built-ins and nothing else. This one
+    // read `spinTable is not a function` in every worker while the main thread, where the same table
+    // is a module const declared after the function, worked perfectly — so nothing on this machine
+    // saw it until a real render did. The table is built after the function list instead.
     s += `var SPIN_NB=${SPIN_NB},SPIN_TURN=${SPIN_TURN};
-`;
-    s += `var SPIN_T=spinTable();
 `;
     // _UNFC, the one specialised chain compileUnform keeps. Per worker, so nothing crosses the wire
     // and each core optimises its own copy ONCE rather than once per tile.
@@ -5139,6 +5140,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // anything that read the list.
     s += `var document={createElement:()=>new OffscreenCanvas(1,1)};\n`;
     for (const n in fns) s += `var ${n}=${fns[n].toString()};\n`;
+    // NOW spinTable exists. One table per worker, 256 KB, built once at core start: nothing crosses
+    // the wire and a worker's slab cannot change under it.
+    s += `var SPIN_T=spinTable();
+`;
     // ASYNC because finish mode awaits deflateBytes. The bitmap path has no await in it, so its body
     // still runs synchronously to completion exactly as before - an async function only yields at its
     // first await, and that path never reaches one.
