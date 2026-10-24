@@ -1,0 +1,170 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>where a tile's time goes</title>
+<!--
+  THE EXPORTER'S TILE IS 159 ms AND THE SHADER IS ABOUT 2 OF THEM.
+  Run: node tools/make-probe-builds.mjs, python tools/serve-studio.py, then open this page.
+
+  tools/gpu-sheet-probe.html measured the GPU half of a tile - dispatch, pack, readback - and found
+  the readback was 93% of it. That number got carried into a claim about the EXPORTER, where it is
+  simply wrong: the probe's tile was 0.58 ms and the exporter's is 159, because almost everything
+  the exporter does to a tile is work the probe never performed.
+
+  So this times the real steps, on real tiles, through the functions the export loop actually calls:
+
+    gpu.tile(n)        the shader, the readback, and renderOneTile's ground, coat and windows
+    storedTilePixels   cutting the stored tile out, applying the marks, and the light sample
+    deflateBytes       the compression
+    sink.add           not timed here - it is OPFS, and this page has no sink
+
+  Everything is called through window.__sa, so the paths are the exporter's own rather than a
+  reimplementation of them. That distinction is what made the earlier number wrong.
+-->
+<style>
+  :root { --bg:#faf9f7; --fg:#1b1a19; --dim:#6b6864; --rule:#dcd8d2; --good:#1d6b3a; --warn:#8a5a00; --bad:#9b2420; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; } }
+  body { background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin:0; padding:16px; }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; }
+  p.sub { color:var(--dim); margin:0 0 14px; max-width:66ch; }
+  button { font:inherit; padding:7px 15px; border:1px solid var(--rule); border-radius:5px;
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  table { border-collapse:collapse; margin:12px 0; font-size:13px; }
+  td, th { border-bottom:1px solid var(--rule); padding:4px 14px 4px 0; text-align:left; }
+  th { color:var(--dim); font-weight:600; }
+  .n { text-align:right; font-variant-numeric:tabular-nums; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  h2 { font-size:14px; margin:18px 0 0; font-weight:600; }
+  .big { font-size:19px; font-weight:600; margin:14px 0 0; }
+  .bar { display:inline-block; height:11px; background:var(--fg); vertical-align:middle; }
+</style>
+
+<h1>where a tile's time goes</h1>
+<p class="sub">The exporter's tile is ~159 ms. The shader is about 2 of them. This times the steps
+the export loop actually calls, through the app's own functions, so the split is the exporter's
+rather than a reimplementation's.</p>
+<label>width <select id="w"><option>16384</option><option selected>65535</option></select></label>
+<label>tiles <input id="n" type="number" value="8" min="1" max="40" style="width:4em"></label>
+<button id="run">Run</button>
+<div id="res"></div>
+
+<script type="module">
+const RES = document.getElementById('res');
+let TB = null;
+function row(k, v, cls) {
+  if (!TB) { TB = document.createElement('table'); RES.appendChild(TB); }
+  const tr = document.createElement('tr');
+  const a = document.createElement('th'); a.textContent = k;
+  const b = document.createElement('td'); b.textContent = v; if (cls) b.className = cls;
+  tr.appendChild(a); tr.appendChild(b); TB.appendChild(tr);
+}
+function head(t) { TB = null; const h = document.createElement('h2'); h.textContent = t; RES.appendChild(h); }
+function big(t, cls) { const p = document.createElement('p'); p.className = 'big ' + (cls || ''); p.textContent = t; RES.appendChild(p); }
+
+function load() {
+  return new Promise((res, rej) => {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0';
+    fr.src = '../harness/dist/stone-author.hooked.html';
+    fr.onerror = () => rej(new Error('could not load the hooked build'));
+    fr.onload = async () => {
+      const w = fr.contentWindow;
+      for (let i = 0; i < 150 && !w.__sa; i++) await new Promise(r => setTimeout(r, 100));
+      if (!w.__sa) return rej(new Error('no __sa'));
+      if (!w.__sa.gpuPool) return rej(new Error('this build predates the GPU hook - rebuild it'));
+      res(w);
+    };
+    document.body.appendChild(fr);
+  });
+}
+
+document.getElementById('run').onclick = async () => {
+  const btn = document.getElementById('run');
+  btn.disabled = true; RES.textContent = ''; TB = null;
+  try {
+    const W = +document.getElementById('w').value;
+    const N = Math.max(1, Math.min(40, +document.getElementById('n').value | 0));
+    const w = await load(), sa = w.__sa;
+    const slab = await (await fetch('/harness/dist/slab.json')).json();
+    sa.deserialize(slab); sa.render();
+
+    head('setup');
+    const cap = await sa.gpuCapability();
+    if (!cap.ok) { big('no GPU here: ' + cap.why, 'bad'); return; }
+    const was = sa.gpuPrefGet(); sa.gpuPrefSet(true);
+    const why = sa.gpuWhyNot();
+    if (why) { sa.gpuPrefSet(was); big('the predicate refuses this slab: ' + why, 'warn'); return; }
+    const p = await sa.tiffPlan(W);
+    row('plan', p.ts + ' px render tiles, store ' + p.store + ', bleed ' + p.bleed
+      + ', k ' + p.k + ', ' + p.rAcross + ' x ' + p.rDown);
+    const gpu = await sa.gpuPool(W, p);
+    if (!gpu) { sa.gpuPrefSet(was); big('gpuPool returned null', 'bad'); return; }
+    const markSig = sa.markSigNow();
+
+    // SPREAD, not the first N. The first quarter of this sheet is its cheapest - measured on the
+    // 262,144 master, where quarter four cost 2.6x quarter one - so N tiles from the top would
+    // describe the easy end of the picture and nothing else.
+    const total = p.rAcross * p.rDown;
+    const step = Math.max(1, Math.floor(total / N));
+    const picks = [];
+    for (let i = 0; i < N && i * step < total; i++) picks.push(i * step);
+
+    head('per tile, averaged over ' + picks.length + ' spread across the sheet');
+    const acc = { tile: 0, stored: 0, deflate: 0, bytes: 0 };
+    await gpu.tile(picks[0]);                                     // warm
+    for (const i of picks) {
+      const t0 = performance.now();
+      const c = await gpu.tile(i);
+      const t1 = performance.now();
+      const cx = c.getContext('2d');
+      const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
+      let st = 0, df = 0, by = 0;
+      for (let sy = 0; sy < p.k; sy++) for (let sx = 0; sx < p.k; sx++) {
+        const tx = gx * p.k + sx, ty = gy * p.k + sy;
+        if (tx >= p.across || ty >= p.down) continue;
+        const a = performance.now();
+        const prep = sa.storedTilePixels(cx, p, sx, sy, tx, ty, W, markSig);
+        const b = performance.now();
+        const px = prep.px;
+        const z = await sa.deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength));
+        const d = performance.now();
+        st += b - a; df += d - b; by += z.length;
+      }
+      c.width = c.height = 1;
+      acc.tile += t1 - t0; acc.stored += st; acc.deflate += df; acc.bytes += by;
+    }
+    gpu.close(); sa.gpuPrefSet(was);
+
+    const n = picks.length;
+    const parts = [['gpu.tile  (shader, readback, ground, coat, windows)', acc.tile / n],
+                   ['storedTilePixels  (cut, marks, light sample)', acc.stored / n],
+                   ['deflateBytes  (compression)', acc.deflate / n]];
+    const sum = parts.reduce((a, b) => a + b[1], 0);
+    const wide = 240;
+    for (const [k, v] of parts) {
+      const tr = document.createElement('tr');
+      const a = document.createElement('th'); a.textContent = k;
+      const b = document.createElement('td');
+      b.innerHTML = '<span class="bar" style="width:' + Math.round(wide * v / sum) + 'px"></span> '
+        + v.toFixed(1) + ' ms  (' + (100 * v / sum).toFixed(1) + '%)';
+      tr.appendChild(a); tr.appendChild(b);
+      (TB || (RES.appendChild(TB = document.createElement('table')), TB)).appendChild(tr);
+    }
+    row('measured here, in all', sum.toFixed(1) + ' ms a tile');
+    row('deflated to', (acc.bytes / n / 1024).toFixed(0) + ' KB a tile');
+    row('NOT measured here', 'sink.add - the OPFS write. This page has no sink, so the exporter’s '
+      + 'real tile is this plus that.', 'warn');
+
+    head('what it means for the GPU path');
+    const gpuShare = 100 * (acc.tile / n) / sum;
+    big(gpuShare < 25
+      ? 'The GPU half is ' + gpuShare.toFixed(0) + '% of a tile. Overlapping it perfectly caps out '
+        + 'there - the rest is CPU work the pool used to spread over eight cores.'
+      : 'The GPU half is ' + gpuShare.toFixed(0) + '% of a tile, so overlap is worth having.',
+      gpuShare < 25 ? 'warn' : 'good');
+  } catch (e) {
+    head('failed'); row('error', String(e && e.message || e), 'bad'); console.error(e);
+  } finally { btn.disabled = false; }
+};
+</script>
