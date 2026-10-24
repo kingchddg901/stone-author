@@ -70,6 +70,13 @@ const LOG = document.getElementById('log');
 const log = m => { LOG.textContent += (LOG.textContent ? '\n' : '') + m; };
 const RES = document.getElementById('res');
 let TB = null;
+// WHICH RUN THIS IS, because the CPU arm's level depends on it and nothing inside a run can tell.
+// A fresh load measured 23.45 ms a pass at a 2.0% spread; clicking Run again on the same page gave
+// 28.60 ms at 1.4%. Both internally tight, 22% apart - the same within-session degradation already
+// recorded for whole renders in docs/master-timing.md, which the spread gate cannot see because each
+// run is self-consistent. A real 65,535 render is one long run after a load, so RUN 1 is the analogue
+// and the only run whose ratio is comparable to a render timing.
+let RUN = 0;
 function row(k, v, cls) {
   if (!TB) { TB = document.createElement('table'); RES.appendChild(TB); }
   const tr = document.createElement('tr');
@@ -120,10 +127,30 @@ async function liftFromApp() {
 // this slab uses, so 512 is far past wrapping; the texture arm addresses it with repeat so a stray
 // coordinate is periodic rather than clamped, which is wrong in a way that would show as a flat band.
 const LAT = 512, SEED = 71;
-function buildLattice(nz, seed) {
-  const a = new Float32Array(LAT * LAT);
-  for (let j = 0; j < LAT; j++) for (let i = 0; i < LAT; i++) a[j * LAT + i] = nz(i, j, seed);
-  return a;
+// r32float IS NOT FILTERABLE WITHOUT A FEATURE, and the S23 does not have it. The probe detected that,
+// warned, and then built the native arm from an r32float texture with a linear sampler anyway - which
+// that device cannot sample, so out[0] came back 0.00 at every rep count and the probe blamed a folded
+// loop. Wrong diagnosis from a real defect: a format the device will not filter reads exactly like a
+// dead shader.
+//
+// r16float is filterable in CORE WebGPU, no feature required, on every device that has WebGPU at all.
+// Half precision on a value in [0,1) costs about 5e-4 - the same order as the filter error already
+// being measured, and a tenth of what an 8-bit texture would cost. So the native arm uses f32 where it
+// can and f16 where it must, and SAYS WHICH, because the accuracy arm is measuring a different thing
+// in each case.
+function buildLattice(nz, seed, fmt) {
+  const n = LAT * LAT;
+  const f32 = new Float32Array(n);
+  for (let j = 0; j < LAT; j++) for (let i = 0; i < LAT; i++) f32[j * LAT + i] = nz(i, j, seed);
+  if (fmt === 'r32float') return f32;
+  const u16 = new Uint16Array(n);                      // f32 -> IEEE half, through the DataView pair
+  const dv = new DataView(new ArrayBuffer(4));
+  for (let i = 0; i < n; i++) {
+    dv.setFloat32(0, f32[i]);
+    const b = dv.getUint32(0), s = (b >>> 16) & 0x8000, e = ((b >>> 23) & 0xff) - 112, m = b & 0x7fffff;
+    u16[i] = e <= 0 ? s : e >= 31 ? s | 0x7c00 : s | (e << 10) | (m >>> 13);
+  }
+  return u16;
 }
 
 const WGSL_HASH = `
@@ -300,6 +327,12 @@ async function gpuOnce(dev, code, binds, n, wgs, reps, ts) {
 }
 async function gpuCost(dev, codeFor, binds, n, wgs, ts) {
   const xs = [], ys = [], note = [], vals = [], walls = [];
+  // WARM THE PIPELINE FIRST. The S23 returned 27.7 / 16.9 / 33.8 / 67.5 ms for 64 / 128 / 256 / 512
+  // passes - the last three exactly linear, the first inflated to three times its place - and the
+  // monotonicity gate correctly refused the lot. All five readings at 64x were identical at 27.7, so
+  // it was not noise: it was the first dispatch paying for shader compile and allocation. The CPU arm
+  // had already been given a top-of-ladder warm-up for the same reason; the GPU arm had not.
+  await gpuOnce(dev, codeFor(GPU_REPS[0]), binds, n, wgs, 1, ts);
   for (const r of GPU_REPS) {
     const o = await gpuOnce(dev, codeFor(r), binds, n, wgs, ts ? 5 : 9, ts);
     xs.push(r); ys.push(o.ms); vals.push(o.first); walls.push(o.wall - o.ms);
@@ -317,7 +350,9 @@ async function gpuCost(dev, codeFor, binds, n, wgs, ts) {
   const ran = Math.abs(vals[vals.length - 1] / Math.max(vals[0], 1e-9) - span) < span * 0.02;
   const grew = ys[ys.length - 1] > ys[0] * 1.8;
   return { ...f, note: note.join('   '), ran, grew, round: Math.min(...walls),
-    why: !mono ? 'the readings do not rise with the work (' + ys.map(v => v.toFixed(1)).join(' ')
+    why: vals.every(v => v === 0) ? 'every out[0] came back exactly 0 — that is a dead binding or '
+          + 'an unfilterable texture format, not a folded loop'
+      : !mono ? 'the readings do not rise with the work (' + ys.map(v => v.toFixed(1)).join(' ')
           + ' ms) - something other than the arithmetic is setting the clock'
       : !ran ? 'out[0] did not scale with the rep count (' + vals[0].toFixed(2) + ' then '
           + vals[vals.length - 1].toFixed(2) + ', wanted ' + span + 'x) - the loop was folded away'
@@ -335,11 +370,22 @@ document.getElementById('run').onclick = async () => {
   document.getElementById('run').disabled = true;
   RES.textContent = ''; TB = null; LOG.textContent = '';
   try {
+    RUN++;
     head('this device');
+    row('run', RUN === 1 ? '1 since this page loaded — the figure to quote'
+      : RUN + ' since this page loaded — RELOAD BEFORE QUOTING. The CPU arm degrades within a '
+        + 'page session (23.45 then 28.60 ms a pass, measured), so this run understates the GPU ratio.',
+      RUN === 1 ? 'good' : 'warn');
     row('user agent', navigator.userAgent);
     row('cores reported', String(navigator.hardwareConcurrency || '?'));
-    const POOL = 8;                        // the pool the renderer actually runs, measured at 7.8-8.2 busy threads
-    row('pool the renderer uses', POOL + ' workers (measured 7.8-8.2 busy threads at 65,535)');
+    // THE POOL IS THIS DEVICE'S, NOT THE DESKTOP'S. Hardcoding 8 divided an iPhone 14 Pro's ratios by
+    // twice its real pool and understated them by half - it reports four cores, so the renderer runs
+    // four workers there, not eight. The rule is the app's own, at app/stone-author.html:11316 and
+    // :5221; it is short enough to restate and too far inside a statement to lift, so it is written
+    // here with its source named rather than lifted silently.
+    const POOL = Math.max(1, Math.min(navigator.hardwareConcurrency || 4, 8));
+    row('pool the renderer uses', POOL + ' workers — min(hardwareConcurrency, 8), the app’s own '
+      + 'rule at stone-author.html:11316');
 
     log('lifting the CPU arm out of the app...');
     const { app, lifted, from } = await liftFromApp();
@@ -370,12 +416,18 @@ document.getElementById('run').onclick = async () => {
       }
       return acc;
     };
-    cpuOnce(2); cpuOnce(2);
-    const cx = [], cy = [], cnote = [];
+    // WARM UP AT THE TOP OF THE LADDER, NOT THE BOTTOM. The first rung came back systematically slow -
+    // 29.4 / 28.9 / 28.9 / 28.5, then 33.5 / 29.4 / 30.8 / 30.6, then 35.4 / 25.5 / 25.0 / 24.7 a pass -
+    // and that last one tripped the noise gate at 43.2% and voided a perfectly good GPU measurement.
+    // Two passes of warm-up is not enough to settle the JIT on a function this size, so the spread gate
+    // was reading my own warm-up as a dirty box. A false NOT MEASURED is worse than a loose gate: a
+    // loose gate prints a number you can sanity-check, a false red hides one you already have.
+    cpuOnce(CPU_REPS[CPU_REPS.length - 1]);
+    const cx = [], cy = [], cnote = [], cacc = [];
     for (const r of CPU_REPS) {
-      const ts = [];
-      for (let k = 0; k < 5; k++) { const t0 = performance.now(); cpuOnce(r); ts.push(performance.now() - t0); }
-      cx.push(r); cy.push(med(ts)); cnote.push(r + 'x ' + med(ts).toFixed(1) + ' ms');
+      const ts = []; let acc = 0;
+      for (let k = 0; k < 5; k++) { const t0 = performance.now(); acc = cpuOnce(r); ts.push(performance.now() - t0); }
+      cx.push(r); cy.push(med(ts)); cacc.push(acc); cnote.push(r + 'x ' + med(ts).toFixed(1) + ' ms');
     }
     // THE CLEANEST RUNG, NOT A LEAST-SQUARES SLOPE. A fit is only as good as its worst rung, and on a
     // box that is not perfectly quiet one slow reading rotates the whole line: a run that read
@@ -385,6 +437,19 @@ document.getElementById('run').onclick = async () => {
     // disturbed, since noise can only ever add. Across the two runs the slope gave 28.5 then 32.9 ms
     // while the minimum gave 28.5 then 28.8 - stable to 1%. The SPREAD is printed because it is the
     // only visible measure of how quiet the box was, and a ratio off a noisy box is not quoted at all.
+    // THE SAME PROOF THE GPU ARM CARRIES. cpuOnce returns an accumulator the call site was throwing
+    // away, which leaves a JIT free to delete the work: an iPhone 14 Pro came back at 9.00 ms a pass
+    // against 28.4 on a desktop and 26.0 on an S23, three times faster on the same arithmetic, and
+    // nothing in the probe could tell a very fast core from a very clever one. Now the accumulator has
+    // to scale with the rep count or the arm is not reported, exactly as out[0] must on the GPU side.
+    const cspan = CPU_REPS[CPU_REPS.length - 1] / CPU_REPS[0];
+    const cran = Math.abs(cacc[cacc.length - 1] / Math.max(cacc[0], 1e-9) - cspan) < cspan * 0.02;
+    if (!cran) {
+      row('NOT MEASURED', 'the CPU accumulator did not scale with the rep count ('
+        + cacc[0].toFixed(1) + ' then ' + cacc[cacc.length - 1].toFixed(1) + ', wanted ' + cspan
+        + 'x) — the loop was optimised away, so nothing below is a measurement', 'bad');
+      NOISY = true;
+    }
     const per = cx.map((r, i) => cy[i] / r);
     const cpuMs = Math.min(...per);
     const spread = (Math.max(...per) / cpuMs - 1) * 100;
@@ -435,18 +500,28 @@ document.getElementById('run').onclick = async () => {
     log('GPU transliterated: ' + t2.note);
 
     head('arm 3 — GPU native, noise out of a filtered texture');
-    const lat = buildLattice(app.nz, SEED);
-    const tex = dev.createTexture({ size: [LAT, LAT], format: 'r32float',
+    // ?f16 FORCES THE FALLBACK. Without it the half-precision path could only ever run on a device
+    // that cannot run the other one, which means shipping it to the S23 untested. This is the switch
+    // that lets the two be compared on one machine, which is the only way to price the precision.
+    const FORCE16 = new URLSearchParams(location.search).has('f16');
+    const FMT = filterable && !FORCE16 ? 'r32float' : 'r16float';
+    if (FORCE16 && filterable) row('forced', '?f16 — using the half-precision lattice although this '
+      + 'device can filter r32float, so the two can be compared here', 'warn');
+    const BPP = FMT === 'r32float' ? 4 : 2;
+    const lat = buildLattice(app.nz, SEED, FMT);
+    const tex = dev.createTexture({ size: [LAT, LAT], format: FMT,
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
-    dev.queue.writeTexture({ texture: tex }, lat, { bytesPerRow: LAT * 4 }, [LAT, LAT]);
+    dev.queue.writeTexture({ texture: tex }, lat, { bytesPerRow: LAT * BPP }, [LAT, LAT]);
     const smp = dev.createSampler({ magFilter: 'linear', minFilter: 'linear',
       addressModeU: 'repeat', addressModeV: 'repeat' });
     const natBinds = () => [
       { binding: 0, resource: tex.createView() }, { binding: 1, resource: smp },
       { binding: 2, resource: { buffer: outBuf } }];
     const t3 = await gpuCost(dev, WGSL_NATIVE, natBinds, N, 256, TS);
-    row('lattice', LAT + ' × ' + LAT + ' r32float = ' + (LAT * LAT * 4 / 1048576).toFixed(1)
-      + ' MB, repeat-addressed');
+    row('lattice', LAT + ' × ' + LAT + ' ' + FMT + ' = ' + (LAT * LAT * BPP / 1048576).toFixed(1)
+      + ' MB, repeat-addressed'
+      + (FMT === 'r32float' ? '' : ' — half precision'
+        + (filterable ? ', forced by ?f16' : ', because this device cannot filter r32float')));
     if (t3.why) row('NOT MEASURED', t3.why, 'bad');
     else {
       row('one pass', t3.m.toFixed(3) + ' ms   ' + (N / t3.m / 1000).toFixed(0) + ' Mpx/s');
@@ -497,7 +572,8 @@ document.getElementById('run').onclick = async () => {
       sum += d; if (d > worst) { worst = d; worstAt = i; }
     }
     const mean = sum / M;
-    row('points compared', M.toLocaleString() + ', spread across cells and across the fraction');
+    row('points compared', M.toLocaleString() + ', spread across cells and across the fraction'
+      + ' — against a ' + FMT + ' lattice');
     row('mean deviation from the CPU vnoise', mean.toExponential(2));
     row('worst deviation', worst.toExponential(2),
       worst < 1e-5 ? 'good' : worst < 1e-3 ? 'warn' : 'bad');
