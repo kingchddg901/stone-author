@@ -138,3 +138,5 @@ jobs:
         run: node tools/probe-rosette.mjs
       - name: The calibrator reports back the pen it was handed
         run: node tools/probe-pen-calibration.mjs
+      - name: The spin table holds its accuracy whatever the spin, which indexing by radius would not
+        run: node tools/probe-spin-table-ab.mjs
