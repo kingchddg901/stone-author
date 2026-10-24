@@ -24,6 +24,34 @@ written to run on the S23 and the iPhone and has not yet.
 | GPU, the same hashing transliterated | 0.048 ms | 597× | **74.6×** |
 | GPU native, filtered texture | 0.014 ms | 1,970× | **246×** |
 
+### Three devices, and only one of them measured cleanly first time
+
+| device | pool | CPU a pass | native arm | vs its own pool |
+|---|---|---|---|---|
+| desktop, AMD RDNA-2 | 8 | 28.5 ms | 0.014 ms | **246×**, reproducible across four runs |
+| S23 Ultra, Adreno 7xx | 8 | 26.0 ms (0.3% spread) | — | not measured; probe defect, now fixed |
+| iPhone 14 Pro, A16, iOS 18.7 | **4** | 9.0 ms | 0.042 ms | ~53×, **provisional** |
+
+**The phones broke the probe in four places and every one was a real defect**, which is the more
+useful result. `POOL` was hardcoded to this desktop's 8, so the iPhone's figures were divided by twice
+its real pool and printed at half their size — it reported 6.76× and 26.54× where the numbers are
+13.5× and 53×. `r32float` is **not filterable without a feature and neither phone has it**; the probe
+warned and then built the native arm from one anyway, which the S23 failed loudly (`out[0]` exactly
+0.00, misdiagnosed as a folded loop) and the iPhone failed **quietly** — plausible values wrong by
+**81 levels of 255**. Nothing but the accuracy arm could see that. The GPU ladder had no warm-up, so
+the S23's first rung read three times its place. And the CPU arm had no proof of its own work: the
+iPhone's 9.0 ms a pass is three times this desktop on identical arithmetic, and until the accumulator
+was gated the probe could not tell a very fast core from a very clever JIT.
+
+**So the iPhone row is provisional and the S23 row is absent, deliberately.** Both need a re-run on
+the fixed probe. The desktop row is the only one standing.
+
+**Mobile needs `r16float`, and it is nearly free.** It is filterable in core WebGPU on every device
+that has WebGPU at all. Forced on this desktop with `?f16`, it costs **0.427 levels against f32's
+0.368**, and 245.26× against 247.85× — so the half-precision lattice a phone must use is not a
+compromise worth arguing about. That switch exists so the mobile path cannot ship having only ever
+run on devices that cannot run the other one.
+
 The CPU arm is **lifted out of `app/stone-author.html` at run time** — `nz`, `vnoise`, `vnoiseC`,
 `vnoiseCfill`, `fbm2C` and the `_NZC` declaration, fetched and sliced — so it is the shipped
 arithmetic and not a second copy of it. That is the discipline that caught three drifts in a day.
