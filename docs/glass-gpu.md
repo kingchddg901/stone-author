@@ -536,6 +536,36 @@ uniforms. The compiled op list is a small uniform buffer or a 1D texture.
 
 ---
 
+## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
+
+**His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,
+not a mode the renderer chooses, and what it costs is stated where they throw it.
+
+**What that removes from scope.** No auto-detection, no “use the GPU when it looks faster”, no
+per-pixel hybrid, no silent fallback to the CPU when a device lacks a feature — a device that cannot
+run the path says so and the toggle stays off. None of those should be built, and none of the
+measurement effort should go into making the two paths agree: §3 already establishes they cannot, and
+the ruling accepts that rather than fighting it.
+
+**What it adds.** The toggle needs honest copy, and honest copy is blocked on measurement — “plain”
+means a number, not an adjective. It cannot be written until the port has been built far enough to
+say how much faster, how much CPU it gives back, and how far the picture moves. That is what
+milestone 1 is for, and the toggle’s own text is one of its outputs. Every string of it routes
+through i18n at creation, as everything user-facing here does.
+
+**A consequence worth naming early: resume.** An unfinished render on disk is offered back to be
+continued, and a GPU-drawn partial continued by the CPU would seam — not slightly, but at the
+§3 class of error, where a coordinate on the wrong side of a boundary selects a different cane. The
+renderer has to be part of what resume matches on, beside the existing signature, or the offer has to
+be withheld across a toggle change. This is a correctness requirement, not a nicety.
+
+**And the preview follows the toggle.** Authoring on one renderer and mastering on the other means
+what you saw is not what you get. A hard toggle is coherent precisely because it can switch the whole
+app, editor included; a toggle that moved only the export would reintroduce the mismatch it exists to
+make visible.
+
+**Left undecided:** where the toggle lives, and whether it is per-document or per-install.
+
 ## 3. What breaks: the ribbon label
 
 This is the whole of the risk and it is specific.

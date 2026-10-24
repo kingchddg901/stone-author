@@ -58,7 +58,13 @@ if (!existsSync(SRC)) {
 // WHICH FUNCTIONS. The two noise entry points on the per-sample path, plus the three callers, so the
 // counts cross-check each other: fbm2C must come out at exactly twice glassFormT on a slab whose
 // cord wander is on, and glassFormT must equal the pixel count unless something supersamples.
-const WANT = ['fbm2C', 'fbm2G', 'glassFormT', 'glassFormTG', 'glassLay'];
+// EXTENDED 2026-10-24 for the GPU-port scoping: the question stopped being "how big is the field"
+// and became "how much of a pixel could leave the CPU at all", which needs every per-sample callee,
+// not just the noise. glassUnform is reached through F.UNF when the chain specialises, so both names
+// are counted and either may be zero.
+const WANT = ['fbm2C', 'fbm2G', 'glassFormT', 'glassFormTG', 'glassLay',
+              'glassUnform', 'glassMelt', 'glassFlow', 'glassBlob', 'glassCellSDF',
+              'glassDepth', 'glassUnwarp', 'rollStampAt'];
 
 const src = readFileSync(SRC, 'utf8');
 const LB = 123, RB = 125;                                  // { and }, by code - see check-worker-core
