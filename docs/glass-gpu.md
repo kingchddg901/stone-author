@@ -104,9 +104,26 @@ bimodal per-render behaviour until it was.
 roughly 3× faster, on the renderer that ships today, with no second code path and no device-dependent
 filter precision. Even halving it is worth about 1.5×.
 
-**`Math.exp` is real but second.** 3.02× between the engines and 26–29% of a sample; free, it buys
-1.35× on the desktop. This codebase already has the move — `woodAtan2` replaced `Math.atan2` with a
-polynomial and shipped at 1.5e-3 rad — so it is available if wanted, but it is not the main event.
+**`Math.exp` was tried and there is nothing to take.** It is 3.02× between the engines and 26–29% of
+a *sample*, but a sample is not a render: **3 exps a pixel** (counted, by wrapping `Math.exp` during a
+real tile) at 9.20 ns is **27.6 ns of 625 — 4.4% of paint**, so even a free one buys 1.046×. And
+nothing is free. The arguments live in **−1.1667 to −0.1603**, a range narrow enough that a table
+should have walked it, and every replacement measured *slower* than the intrinsic on V8:
+
+| | ns a call | worst, in levels of 255 |
+|---|---|---|
+| **`Math.exp`** | **9.20** | 0 |
+| quarter-range + two squarings | 10.75 | 0.007 |
+| Taylor 5 | 11.25 | 0.764 |
+| 4,096-entry table over [−8, 0] | 11.45 | 0.0001 |
+| Taylor 7 | 12.38 | 0.019 |
+
+Accuracy was never the obstacle — the table is 0.0001 levels. V8’s `Math.exp` is a native intrinsic
+and no JS beats it, and the table pays the same typed-array cost that makes `vnoiseC` slow here. The
+`woodAtan2` precedent does not carry: `Math.atan2` costs 22.3 ns, which left room for an
+approximation, and `Math.exp` at 9.20 does not. The three call sites are
+`paintGlassContent`’s Beer-Lambert on `ar`, `ag`, `ab` — per-pixel accumulated absorptions, not
+constants, so they share no base and cannot be folded into one exp and a few multiplies either.
 
 **The inlining variants were tried, and none is adoptable.** `tools/vnoisec-variants-probe.html`
 builds eight rewrites of `vnoiseC`, each checked bit-identical against the shipped `fbm2C` before
