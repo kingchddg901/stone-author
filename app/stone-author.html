@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.186';
+  const BUILD = '2026.10.24.187';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9959,6 +9959,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // which is the failure that actually misleads.
   //
   // stateSig is kept alongside, unchanged, so every master already on disk still reads.
+  // WHICH RENDERER IS ABOUT TO DRAW, as a signature input. Set by exportTiff once the painter is
+  // actually in hand, cleared when it finishes - never read from the toggle, because a toggle that
+  // is ON and a predicate that refuses means the CPU draws it, and a signature claiming otherwise
+  // would be the exact lie this field exists to prevent.
+  let drewOnGpu = false;
   const renderSig = () => {
     try {
       const s = serialize();
@@ -9975,6 +9980,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // byte-identical; wood starts its own. This is also why the wood settings are not in G: G is
         // hashed wholesale, so one key added there would have moved every master that exists.
         ...(s.material === 'wood' ? { material: s.material, wood: s.wood } : {}),
+        // THE RENDERER REACHES THE PIXELS, so it belongs here with the rest. The shader and the CPU
+        // painter disagree on about 111 levels across a 32,768 master - fp32 against doubles, a cane
+        // picked differently - and without this two masters that differ by that much carry the same
+        // `inputs` and claim to be the same picture. Measured, not argued: five masters of this slab
+        // on one afternoon, four GPU and one CPU, all hashing to cefe5c.
+        //
+        // UNCHANGED WHEN OFF, the same shape light, wood and glass use above, so every master
+        // already on disk keeps its signature and the GPU simply starts its own.
+        //
+        // IT ALSO KEYS THE RESUME RECORD. jobSig is built from this, so before it was here a
+        // half-finished CPU render could be picked up with the toggle on and finished by the
+        // shader - a master that is two renderers down the middle, with nothing on its face to say
+        // so. Now the records simply do not match and the render starts over, which is the right
+        // answer and costs only time.
+        ...(drewOnGpu ? { renderer: 'gpu' } : {}),
         // Glass the same way: unchanged when off, so no stone or wood master re-dates.
         ...(s.material === 'glass' ? { material: s.material, glass: s.glass } : {}),
       }))).toString(16);
@@ -15157,6 +15177,26 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // them down. That outranks a suspicion raised by the same event.
       await resumePin(W);
       const p = await tiffPlan(W);
+      // THE GPU IS DECIDED HERE, BEFORE THE SIGNATURE IS TAKEN, because renderSig now includes the
+      // renderer and a signature has to describe what actually drew the file rather than what was
+      // asked for. gpuPool can still refuse after the predicate passes - a pipeline that will not
+      // build, a document packReal will not pack - so the only honest moment is once the painter is
+      // in hand.
+      //
+      // gpuWhyNot IS ASKED EVEN WHEN THE ANSWER IS NO, and only when the toggle is on, so the panel
+      // can name the clause that refused. A switch reading ON while the CPU quietly paints is the
+      // disagreement this whole path exists to avoid, and the person who turned it on would
+      // otherwise wait out the whole render to find out.
+      let gpuWhy = null;
+      if (!layTiles && gpuPrefGet()) {
+        await gpuCapability();                           // resolve the device before the predicate
+        gpuWhy = gpuWhyNot();
+        if (!gpuWhy) {
+          pool = await gpuPool(W, p);
+          if (!pool) gpuWhy = 'exp.gpu.failed';          // the console carries why; the panel must not swallow it
+        }
+      }
+      drewOnGpu = !!(pool && pool.gpu);
       // The job identity goes to the sink so the record can say WHAT it is a record of. resumeSig is
       // the same signature a master publishes as `inputs`, plus the geometry the file was written with.
       // The key a marked tile carries: renderSig as a number, the same value the master publishes as
@@ -15322,26 +15362,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // every pass and neither may be re-derived at the far end: the signature is taken once for the
     // whole render, and whether the worker finishes decides the shape of what it sends back.
     p.markSig = markSig; p.fin = FINISH_WORKER;
-    // THE GPU FIRST when it is both wanted and possible, then the worker pool, then this thread.
-    //
-    // gpuWhyNot IS ASKED EVEN WHEN THE ANSWER IS NO, and only when the toggle is on, so the status
-    // can name the clause that refused. A switch reading ON while the CPU quietly paints is exactly
-    // the disagreement between state and behaviour this whole path exists to avoid - and the person
-    // who turned it on has six minutes to wait before anything else would tell them.
-    let gpuWhy = null;
-    if (!layTiles && gpuPrefGet()) {
-      await gpuCapability();                             // resolve the device before the predicate
-      gpuWhy = gpuWhyNot();
-      if (!gpuWhy) {
-        pool = await gpuPool(W, p);
-        // IT CAN STILL FAIL AFTER PASSING. A pipeline that will not build, or a document packReal
-        // refuses, both come back as null here - and null is not "no reason", it is a reason the
-        // console already carries and the panel must not swallow.
-        if (!pool) gpuWhy = 'exp.gpu.failed';
-      }
-    }
-    // THE GPU HANDS BACK A CANVAS, NOT PARTS. FINISH_WORKER is a contract with the worker core -
-    // the far end cuts, marks, samples and deflates its own tile - and there is no far end here.
+    // THE GPU WAS DECIDED ABOVE, before the signature was taken. The worker pool is the fallback.
     if (pool) p.fin = false;
     else pool = layTiles ? null : await tilePool(W, p);
     // SAY WHETHER IT POOLED, in the trail and on the panel. Both, because they answer different
@@ -15683,6 +15704,9 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       expStat(TR('hint.export-failed-msg', { err: errWhere(e) }), -1);
     } finally {
       if (pool) { pool.close(); pool = null; }             // idempotent: the success path closes it too
+      // CLEARED, or every signature taken after a GPU export would claim the GPU drew it - including
+      // the one the NEXT export takes before it has decided anything.
+      drewOnGpu = false;
       btn.disabled = selW.disabled = selF.disabled = false; exporting = false; wakeOff(); expFreeze();
       resumeOffer();   // whatever this render left behind - finished, refused or killed - say so now
     }

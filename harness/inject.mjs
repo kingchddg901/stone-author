@@ -33,6 +33,11 @@ const hook = `
     // composites reality windows. Those three are exactly where a port goes wrong quietly, and
     // without these there is no way to ask.
     gpuPool, gpuWhyNot, gpuCapability, gpuPrefGet, gpuPrefSet, glassScene, packReal, tiffPlan,
+    // drewOnGpu is what renderSig reads to decide whether the renderer belongs in the hash, and
+    // exportTiff is the only thing that sets it. A gate has to be able to take BOTH signatures
+    // without running a six-minute export, or the claim that an existing master keeps its hash is
+    // an assertion rather than a measurement.
+    get drewOnGpu() { return drewOnGpu; }, set drewOnGpu(v) { drewOnGpu = !!v; },
     get T() { return T; },
     get layTiles() { return layTiles; }, set layTiles(v) { layTiles = !!v; },
     // the spectral resolver, so a gate can ask what an artifact glows at a given light without rendering
