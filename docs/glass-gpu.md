@@ -86,7 +86,19 @@ measured with no model in it, and a floor rather than a point, since `173` had l
 than `171` did. The guard accounts for about 1.1% of that, so the gradient has the rest — and because
 the guard is small the split hardly moves even if its own figure is wrong by double.
 
-On a 1,048,576 that is **four and a half hours**, and it remains the only item on §7's list that paid.
+On a 1,048,576 that is **four and a half hours**, and it was the first item on §7's list to pay.
+
+**It is no longer the only one, and the CPU side has now overtaken this whole document's premise.**
+The corner cache of build `2026.10.23.175` took a further **13.34%** off a 65,535, measured as 18.6%
+less compute (`glass-one-pixel.md`). Together with the gradient, a 65,535 has gone from 7.645 min on
+build `171` to 5.349 on `175` — **30.0% in one day, no second renderer, no toggle, no capability
+matrix, every master byte-identical.**
+
+That cuts at the table above from both ends. The partial port was priced at 1.24-1.44×, which is 19
+to 31% off a render; the CPU work has already delivered 30% and carries none of the port's risk. And
+because the GPU ratio applies to whatever compute remains, taking 19% of the work out of the CPU path
+takes the same share off the port's absolute saving. **The case for building a second renderer is
+weaker than when this was reopened, and the reason is that the cheap path was not finished.**
 
 **What the closing argument got wrong, recorded because the shape of it will recur.** The measurement
 was right and the inference was not. A ratio was compared against an intuition about whether a

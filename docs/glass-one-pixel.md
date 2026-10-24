@@ -303,7 +303,8 @@ removed work that was being **repeated**, not work that was being done.
 
 ## The corner cache, and what it taught about where the cost is
 
-A third piece of repeated work, found on 2026-10-23 and shipped in build `2026.10.23.174`.
+A third piece of repeated work, found on 2026-10-23, shipped in build `2026.10.23.174` and made to
+pay in `2026.10.23.175` — the gap between those two is the instructive part and is kept below.
 
 `fbm2` is three `vnoise` octaves and each `vnoise` reads four lattice-corner hashes, so twelve `nz`
 calls per `fbm2`. There are **two `fbm2` call sites per sample** on this slab — `glassFormT`'s ream
@@ -361,3 +362,31 @@ variance.
 threads fall from 8.3–8.6 to about 8.0: the workers now finish a tile faster than the serial
 consumer can take them, so a 32,768 is becoming consumer-bound rather than compute-bound. Further
 per-sample savings will show up fully at 65,535 and 1,048,576 and only partly here.
+
+**That prediction was then tested, and it held.** The same two builds at 65,535, where there is four
+times the compute behind each unit of consumer work:
+
+| build | runs | mean wall | spread | core-seconds |
+| --- | --- | --- | --- | --- |
+| `173` (no cache) | 2 | 6.172 min | 0.2% | 3176 |
+| `174` (cache, inlined miss) | 2 | 6.019 min | 0.4% | 3141 |
+| `175` (cache, outlined miss) | 2 | **5.349 min** | 1.3% | **2586** |
+
+**13.34% off the wall and 18.6% off the work** — three times the gain the 32,768 showed, from the
+same code, because the smaller render had already run out of room to put the saving.
+
+**And it corrects what `174` looked like.** Its 65,535 pair read 2.47% faster than `173` and that was
+reported as a clean result; it was not. Its core-seconds were 1.1% below `173`'s, inside noise, while
+it happened to run on clocks 1.6% higher and effective clocks 2.2% higher. The wall gain and the
+clock advantage are the same number, so `174`'s cache delivered approximately nothing at either
+width — the inlining failure was eating all of it. **Core-seconds caught that and wall time did not**,
+which is the argument for recording both; `master-timing.md` has the table.
+
+`175` meanwhile ran on *lower* effective clocks than `173` — 2908/2889 against 3075/3071, a less
+saturated pool — so its 13.34% is if anything understated.
+
+**Since build `171`, which took the gradient by finite difference, a 65,535 has gone 7.645 min to
+5.349: 30.0% in one day, every master byte-identical throughout.** At 1,048,576 the cache's hit rate
+is 99.3% rather than 93%, and 512 tiles a worker puts it nowhere near the consumer ceiling, so the
+share there should be at least this. That is an extrapolation and not a measurement: the only honest
+figure is a day of machine time away.
