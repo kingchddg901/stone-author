@@ -107,6 +107,41 @@ async function liftFromApp(names) {
 const NLC = String.fromCharCode(10);
 const WGSL = {};
 
+WGSL.env = `
+struct Env {
+  // the melt and the form
+  TH: f32, RM: f32, RS: f32, FR: f32,
+  FP: f32, FD: f32, SD: f32, INC: f32,
+  SST: f32, MOB: f32, MST: f32, MW: f32,
+  MSQ: f32, MJ: f32, CN: f32, TW: f32,
+  LC: f32, LS: f32, CW: f32, CS: f32,
+  LP: f32, STC: f32, WPH: f32, RLH: f32,
+  RLtotal: f32, pad0: f32, pad1: f32, pad2: f32,
+  // the integers
+  form: i32, MR: i32, MB: i32, MCn: i32,
+  STn: i32, WPnx: i32, WPny: i32, RLnx: i32,
+  RLny: i32, RLn: i32, pad3: i32, pad4: i32,
+  oWU: i32, oWV: i32, oMEX: i32, oMHL: i32,
+  oMD: i32, oMRIM: i32, oBS: i32, oBV: i32,
+  oRPR: i32, oRTL: i32, oSTS: i32, oMCC: i32,
+};
+@group(0) @binding(2) var<uniform> E: Env;
+@group(0) @binding(3) var<storage, read> ARR: array<f32>;
+fn aWU(k: i32) -> f32 { return ARR[E.oWU + k]; }
+fn aWV(k: i32) -> f32 { return ARR[E.oWV + k]; }
+fn aMEX(k: i32) -> f32 { return ARR[E.oMEX + k]; }
+fn aMHL(k: i32) -> f32 { return ARR[E.oMHL + k]; }
+fn aMD(k: i32) -> f32 { return ARR[E.oMD + k]; }
+fn aMRIM(k: i32) -> f32 { return ARR[E.oMRIM + k]; }
+fn aBS(k: i32) -> f32 { return ARR[E.oBS + k]; }
+fn aBV(k: i32) -> f32 { return ARR[E.oBV + k]; }
+fn aRPR(k: i32) -> f32 { return ARR[E.oRPR + k]; }
+fn aRTL(k: i32) -> f32 { return ARR[E.oRTL + k]; }
+fn aSTS(k: i32) -> vec4<f32> { let o = E.oSTS + k * 4; return vec4<f32>(ARR[o], ARR[o + 1], ARR[o + 2], ARR[o + 3]); }
+fn aMCC(k: i32) -> f32 { return ARR[E.oMCC + k]; }
+const PINF: f32 = 1e30;`;
+
+
 WGSL.nz = `
 fn nz(xi: i32, yi: i32, s: i32) -> f32 {
   var h: u32 = (u32(xi) * 374761393u) ^ (u32(yi) * 668265263u) ^ (u32(s) * 2246822519u);
@@ -145,19 +180,15 @@ fn glassFlow(ox: f32, oy: f32, form: i32) -> vec2<f32> {
 // `fx | 0`, which truncates toward zero; i32() does the same, and cu is bounded to [0,1] so the two
 // cannot part company on a negative.
 WGSL.glassUnwarp = `
-struct Warp { nx: i32, ny: i32, H: f32, pad: f32 };
-@group(0) @binding(2) var<uniform> WP: Warp;
-@group(0) @binding(3) var<storage, read> WU: array<f32>;
-@group(0) @binding(4) var<storage, read> WV: array<f32>;
 fn glassUnwarp(cu: f32, cvv: f32) -> vec2<f32> {
-  let fx = cu * f32(WP.nx - 1); let fy = (cvv / WP.H) * f32(WP.ny - 1);
+  let fx = cu * f32(E.WPnx - 1); let fy = (cvv / E.WPH) * f32(E.WPny - 1);
   var i0 = i32(fx); var j0 = i32(fy);
-  if (i0 > WP.nx - 2) { i0 = WP.nx - 2; } if (i0 < 0) { i0 = 0; }
-  if (j0 > WP.ny - 2) { j0 = WP.ny - 2; } if (j0 < 0) { j0 = 0; }
+  if (i0 > E.WPnx - 2) { i0 = E.WPnx - 2; } if (i0 < 0) { i0 = 0; }
+  if (j0 > E.WPny - 2) { j0 = E.WPny - 2; } if (j0 < 0) { j0 = 0; }
   let tx = fx - f32(i0); let ty = fy - f32(j0);
-  let k = j0 * WP.nx + i0; let k2 = k + WP.nx;
-  let u = -((WU[k] * (1.0 - tx) + WU[k + 1] * tx) * (1.0 - ty) + (WU[k2] * (1.0 - tx) + WU[k2 + 1] * tx) * ty);
-  let v = -((WV[k] * (1.0 - tx) + WV[k + 1] * tx) * (1.0 - ty) + (WV[k2] * (1.0 - tx) + WV[k2 + 1] * tx) * ty);
+  let k = j0 * E.WPnx + i0; let k2 = k + E.WPnx;
+  let u = -((aWU(k) * (1.0 - tx) + aWU(k + 1) * tx) * (1.0 - ty) + (aWU(k2) * (1.0 - tx) + aWU(k2 + 1) * tx) * ty);
+  let v = -((aWV(k) * (1.0 - tx) + aWV(k + 1) * tx) * (1.0 - ty) + (aWV(k2) * (1.0 - tx) + aWV(k2 + 1) * tx) * ty);
   return vec2<f32>(u, v);
 }`;
 
@@ -186,17 +217,11 @@ fn fbm2(x: f32, y: f32, s: i32) -> f32 {
 // app writes its own min/max and abs out longhand as ternaries - select() and min()/max() are the
 // same operations, not an improvement, and anything else would be a second implementation.
 WGSL.ribbon = `
-struct Rib { MOB: f32, MST: f32, n: i32, pad: i32 };
-@group(0) @binding(2) var<uniform> RB: Rib;
-@group(0) @binding(3) var<storage, read> MEX: array<f32>;
-@group(0) @binding(4) var<storage, read> MHL: array<f32>;
-@group(0) @binding(5) var<storage, read> MD: array<f32>;
-@group(0) @binding(6) var<storage, read> MRIM: array<f32>;
 fn glassCellSDF(gc: f32, ga: f32, i: i32) -> f32 {
-  let cx = (MEX[i] + MEX[i + 1]) * 0.5;
-  let hw = (MEX[i + 1] - MEX[i]) * 0.5;
-  let hh = MHL[i];
-  let r = min(hw, hh) * RB.MOB;
+  let cx = (aMEX(i) + aMEX(i + 1)) * 0.5;
+  let hw = (aMEX(i + 1) - aMEX(i)) * 0.5;
+  let hh = aMHL(i);
+  let r = min(hw, hh) * E.MOB;
   let ax = abs(gc - cx) - (hw - r);
   let ay = abs(ga) - (hh - r);
   let qx = max(ax, 0.0); let qy = max(ay, 0.0);
@@ -204,44 +229,38 @@ fn glassCellSDF(gc: f32, ga: f32, i: i32) -> f32 {
   return sqrt(qx * qx + qy * qy) + min(inner, 0.0) - r;
 }
 fn glassDepth(d: f32, i: i32) -> f32 {
-  let lim = MD[i]; let rim = MRIM[i];
+  let lim = aMD(i); let rim = aMRIM(i);
   if (d <= -rim) { return 1.0; }
   var far = 1.0;
   if (d <= 0.0) { far = 0.0; } else if (lim > 0.0) { far = d / lim; }
   var edge = 1.0;
   if (d <= 0.0) { if (rim > 0.0) { edge = -d / rim; } else { edge = 1.0; } }
-  let thin = 1.0 - (1.0 - 1.0 / RB.MST) * far;
+  let thin = 1.0 - (1.0 - 1.0 / E.MST) * far;
   return edge * thin;
 }`;
 
 // THE ROLLER. Two more grid reads, the same bilinear shape as glassUnwarp, plus a walk along the
 // roller's own profile. B.total of zero is the app's guard against a roller that never moved.
 WGSL.roller = `
-struct Roll { nx: i32, ny: i32, H: f32, total: f32, n: i32, pad0: i32, pad1: i32, pad2: i32 };
-@group(0) @binding(2) var<uniform> RL: Roll;
-@group(0) @binding(3) var<storage, read> BS: array<f32>;
-@group(0) @binding(4) var<storage, read> BV: array<f32>;
-@group(0) @binding(5) var<storage, read> RPR: array<f32>;
-@group(0) @binding(6) var<storage, read> RTL: array<f32>;
 fn rollerAt(cu: f32, cvv: f32) -> vec2<f32> {
-  let fx = cu * f32(RL.nx - 1); let fy = (cvv / RL.H) * f32(RL.ny - 1);
+  let fx = cu * f32(E.RLnx - 1); let fy = (cvv / E.RLH) * f32(E.RLny - 1);
   var i0 = i32(fx); var j0 = i32(fy);
-  if (i0 > RL.nx - 2) { i0 = RL.nx - 2; } if (i0 < 0) { i0 = 0; }
-  if (j0 > RL.ny - 2) { j0 = RL.ny - 2; } if (j0 < 0) { j0 = 0; }
+  if (i0 > E.RLnx - 2) { i0 = E.RLnx - 2; } if (i0 < 0) { i0 = 0; }
+  if (j0 > E.RLny - 2) { j0 = E.RLny - 2; } if (j0 < 0) { j0 = 0; }
   let tx = fx - f32(i0); let ty = fy - f32(j0);
-  let k = j0 * RL.nx + i0; let k2 = k + RL.nx;
-  let s = (BS[k] * (1.0 - tx) + BS[k + 1] * tx) * (1.0 - ty) + (BS[k2] * (1.0 - tx) + BS[k2 + 1] * tx) * ty;
-  let v = (BV[k] * (1.0 - tx) + BV[k + 1] * tx) * (1.0 - ty) + (BV[k2] * (1.0 - tx) + BV[k2 + 1] * tx) * ty;
+  let k = j0 * E.RLnx + i0; let k2 = k + E.RLnx;
+  let s = (aBS(k) * (1.0 - tx) + aBS(k + 1) * tx) * (1.0 - ty) + (aBS(k2) * (1.0 - tx) + aBS(k2 + 1) * tx) * ty;
+  let v = (aBV(k) * (1.0 - tx) + aBV(k + 1) * tx) * (1.0 - ty) + (aBV(k2) * (1.0 - tx) + aBV(k2 + 1) * tx) * ty;
   return vec2<f32>(s, v);
 }
 fn rollerHand(s: f32) -> vec2<f32> {
-  let n = RL.n;
+  let n = E.RLn;
   var u = 0.0;
-  if (RL.total > 0.0) { u = s / RL.total; }
+  if (E.RLtotal > 0.0) { u = s / E.RLtotal; }
   let f = clamp(u, 0.0, 1.0) * f32(n - 1);
   var i = i32(f); if (i > n - 2) { i = n - 2; } if (i < 0) { i = 0; }
   let g = f - f32(i);
-  return vec2<f32>(RPR[i] + (RPR[i + 1] - RPR[i]) * g, RTL[i] + (RTL[i + 1] - RTL[i]) * g);
+  return vec2<f32>(aRPR(i) + (aRPR(i + 1) - aRPR(i)) * g, aRTL(i) + (aRTL(i + 1) - aRTL(i)) * g);
 }`;
 
 
@@ -257,12 +276,7 @@ fn woodHash(a: i32, b: i32) -> f32 {
 
 // THE FORM BLOCK, shared by glassFormT and glassMelt. Scalars only; neither reaches an array.
 WGSL.form = `
-struct Form {
-  TH: f32, RM: f32, RS: f32, FR: f32,
-  FP: f32, FD: f32, SD: f32, INC: f32,
-  SST: f32, form: i32, pad0: i32, pad1: i32,
-};
-@group(0) @binding(2) var<uniform> FM: Form;`;
+`;
 
 // FIRST FUNCTION HERE WITH TRANSCENDENTALS IN IT. exp and sin are not IEEE-exact on a GPU and vary by
 // vendor inside the allowed ULP budget - section 3 of glass-gpu.md is explicit that this is why the
@@ -270,26 +284,26 @@ struct Form {
 // ones, and HOW MUCH looser is a thing to measure rather than wave at.
 WGSL.glassFormT = `
 fn glassFormT(ox: f32, oy: f32, fv: vec2<f32>) -> f32 {
-  var T = FM.TH;
-  if (FM.RM > 0.0 && (fv.x != 0.0 || fv.y != 0.0)) {
+  var T = E.TH;
+  if (E.RM > 0.0 && (fv.x != 0.0 || fv.y != 0.0)) {
     let a = ox * fv.x + oy * fv.y;
     let c = -ox * fv.y + oy * fv.x;
-    T = T * (1.0 + FM.RM * 0.30 * (fbm2(c * FM.RS, a * FM.RS * 0.06, 71) - 0.5) * 2.0);
-  } else if (FM.RM > 0.0) {
-    T = T * (1.0 + FM.RM * 0.18 * (fbm2(ox * FM.RS * 0.5, oy * FM.RS * 0.5, 11) - 0.5) * 2.0);
+    T = T * (1.0 + E.RM * 0.30 * (fbm2(c * E.RS, a * E.RS * 0.06, 71) - 0.5) * 2.0);
+  } else if (E.RM > 0.0) {
+    T = T * (1.0 + E.RM * 0.18 * (fbm2(ox * E.RS * 0.5, oy * E.RS * 0.5, 11) - 0.5) * 2.0);
   }
-  if (FM.form == 1) {
+  if (E.form == 1) {
     let r = sqrt(ox * ox + oy * oy);
     var k = 1.0;
-    if (r < FM.FR) { k = r / FM.FR; }
+    if (r < E.FR) { k = r / E.FR; }
     T = T * (1.0 - 0.45 * k);
-    let b = r / (FM.FR * 0.07);
-    T = T + FM.TH * 2.0 * exp(-b * b);
-    T = T + FM.TH * FM.RM * 0.14 * sin(r * FM.RS * 7.0);
-  } else if (FM.form == 4) {
-    let u = ox * FM.FP;
+    let b = r / (E.FR * 0.07);
+    T = T + E.TH * 2.0 * exp(-b * b);
+    T = T + E.TH * E.RM * 0.14 * sin(r * E.RS * 7.0);
+  } else if (E.form == 4) {
+    let u = ox * E.FP;
     let f = u - floor(u);
-    T = T + FM.TH * FM.FD * (1.0 - abs(2.0 * f - 1.0));
+    T = T + E.TH * E.FD * (1.0 - abs(2.0 * f - 1.0));
   }
   return max(T, 0.05);
 }`;
@@ -300,10 +314,10 @@ fn glassFormT(ox: f32, oy: f32, fv: vec2<f32>) -> f32 {
 WGSL.glassMelt = `
 fn glassMelt(ox: f32, oy: f32, fv: vec2<f32>) -> vec2<f32> {
   var o = vec2<f32>(0.0, 0.0);
-  if (FM.SD <= 0.0 && FM.INC <= 0.0) { return o; }
+  if (E.SD <= 0.0 && E.INC <= 0.0) { return o; }
   let flowing = fv.x != 0.0 || fv.y != 0.0;
   var ux = 1.0; var uy = 0.0; var drawn = 1.0;
-  if (flowing) { ux = fv.x; uy = fv.y; drawn = FM.SST; }
+  if (flowing) { ux = fv.x; uy = fv.y; drawn = E.SST; }
   let a0 = ox * ux + oy * uy;
   let c0 = -ox * uy + oy * ux;
   let cs = 0.06;
@@ -322,8 +336,8 @@ fn glassMelt(ox: f32, oy: f32, fv: vec2<f32>) -> vec2<f32> {
       let d2 = dx * dx + dy * dy;
       if (d2 < 1.0) {
         let q = 1.0 - d2;
-        if (h < FM.SD) { o.x = max(o.x, q); }
-        else if (h > 1.0 - FM.INC) { o.y = max(o.y, q); }
+        if (h < E.SD) { o.x = max(o.x, q); }
+        else if (h > 1.0 - E.INC) { o.y = max(o.y, q); }
       }
     }
   }
@@ -335,39 +349,36 @@ fn glassMelt(ox: f32, oy: f32, fv: vec2<f32>) -> vec2<f32> {
 // Infinity and also returns it when sp <= 0; 1e30 stands in for both, and the p1 > 1 test that
 // decides "every blob near here ran out first" behaves the same against either.
 WGSL.blob = `
-struct Blob { MW: f32, MSQ: f32, MJ: f32, CN: f32, MST: f32, pad0: f32, pad1: f32, pad2: f32 };
-@group(0) @binding(2) var<uniform> BL: Blob;
-const PINF: f32 = 1e30;
 fn glassBlobDepth(d: f32, rr: f32) -> f32 {
-  let lim = rr * (BL.MSQ - 1.0); let rim = rr * 0.16;
+  let lim = rr * (E.MSQ - 1.0); let rim = rr * 0.16;
   if (d <= -rim) { return 1.0; }
   var far = 1.0;
   if (d <= 0.0) { far = 0.0; } else if (lim > 0.0) { far = d / lim; }
   var edge = 1.0;
   if (d <= 0.0) { if (rim > 0.0) { edge = -d / rim; } else { edge = 1.0; } }
-  return edge * (1.0 - (1.0 - 1.0 / BL.MST) * far);
+  return edge * (1.0 - (1.0 - 1.0 / E.MST) * far);
 }
 // TWENTY-FIVE NEIGHBOURS AND A RUNNING BEST TWO. Every thread does the same count of iterations here
 // - the app's loop has no a continue - so this one does not diverge; glassLay is where that starts.
 fn glassBlob(gc: f32, ga: f32) -> vec4<f32> {
-  let s = BL.MW; let sq = BL.MSQ - 1.0;
+  let s = E.MW; let sq = E.MSQ - 1.0;
   let gx = floor(gc / s); let gy = floor(ga / s);
   var p1 = PINF; var d1 = 0.0; var c1 = -1.0; var b1 = 0.0;
   var p2 = PINF; var d2 = 0.0; var c2 = -1.0; var b2 = 0.0;
   var R = 1;
-  if (BL.MSQ > 2.0) { R = 2; }
+  if (E.MSQ > 2.0) { R = 2; }
   for (var j = -R; j <= R; j = j + 1) {
     for (var i = -R; i <= R; i = i + 1) {
       let cx = i32(gx) + i; let cy = i32(gy) + j;
-      let jx = (f32(cx) + 0.5 + (woodHash(cx, cy) - 0.5) * BL.MJ) * s;
-      let jy = (f32(cy) + 0.5 + (woodHash(cy, cx + 31) - 0.5) * BL.MJ) * s;
+      let jx = (f32(cx) + 0.5 + (woodHash(cx, cy) - 0.5) * E.MJ) * s;
+      let jy = (f32(cy) + 0.5 + (woodHash(cy, cx + 31) - 0.5) * E.MJ) * s;
       let rr = s * 0.5 * (0.62 + 0.3 * woodHash(cx + 5, cy + 11));
       let dx = gc - jx; let dy = ga - jy;
       let d = sqrt(dx * dx + dy * dy) - rr;
       let sp = rr * sq;
       var pp = PINF;
       if (d <= 0.0) { pp = d; } else if (sp > 0.0) { pp = d / sp; }
-      let col = f32(i32(floor(woodHash(cx + 101, cy + 211) * BL.CN)) % i32(BL.CN));
+      let col = f32(i32(floor(woodHash(cx + 101, cy + 211) * E.CN)) % i32(E.CN));
       if (pp < p1) { p2 = p1; d2 = d1; c2 = c1; b2 = b1; p1 = pp; d1 = d; c1 = col; b1 = rr; }
       else if (pp < p2) { p2 = pp; d2 = d; c2 = col; b2 = rr; }
     }
@@ -382,9 +393,6 @@ fn glassBlob(gc: f32, ga: f32) -> vec4<f32> {
 // THE REAL atan2 HERE, not woodAtan2 - the app calls Math.atan2 in rollStampAt and the wood
 // approximation elsewhere, and a port that tidied that away would draw a different star.
 WGSL.stamp = `
-struct Stamp { C: f32, nst: i32, pad0: i32, pad1: i32 };
-@group(0) @binding(2) var<uniform> ST: Stamp;
-@group(0) @binding(3) var<storage, read> STS: array<vec4<f32>>;   // a, x, r, rot
 fn starR(th: f32, R: f32) -> f32 {
   let s = 0.6283185307;                                           // pi / 5
   let r2 = R * 0.42;
@@ -396,12 +404,12 @@ fn starR(th: f32, R: f32) -> f32 {
 // A VARIABLE-LENGTH LOOP WITH FOUR EARLY EXITS AND A RETURN FROM THE MIDDLE. Threads take different
 // numbers of iterations, so this is the first genuinely divergent function in the port.
 fn rollStampAt(s: f32, v: f32) -> f32 {
-  if (ST.nst <= 0) { return 0.0; }
-  let C = ST.C;
+  if (E.STn <= 0) { return 0.0; }
+  let C = E.STC;
   var u = s % C;
   if (u < 0.0) { u = u + C; }
-  for (var i = 0; i < ST.nst; i = i + 1) {
-    let st = STS[i];
+  for (var i = 0; i < E.STn; i = i + 1) {
+    let st = aSTS(i);
     let R = st.z / 24.0;
     var du = u - (((st.x / 360.0) % 1.0 + 1.0) % 1.0) * C;
     if (du > C * 0.5) { du = du - C; } else if (du < -C * 0.5) { du = du + C; }
@@ -417,6 +425,61 @@ fn rollStampAt(s: f32, v: f32) -> f32 {
     }
   }
   return 0.0;
+}`;
+
+
+// THE FUNCTION THE WHOLE RATIO RESTS ON. Three paths out of one entry: a blob delegation, a walk
+// over every ribbon with a skip in it, and the procedural strips. Neighbouring pixels can take
+// different ones, and on a GPU that is warp divergence - every thread in the group pays for the
+// slowest path any of them takes. This is the first ported function where the SHAPE of the control
+// flow, not its arithmetic, is what the measurement is about.
+//
+// out.x and out.y are cane INDICES and out.z, out.w their depths - the same split glassBlob has, and
+// the same reason: section 3's dangerous class is the index, not the shade.
+WGSL.glassLay = `
+fn glassLay(gc0: f32, ga0: f32) -> vec4<f32> {
+  var gc = gc0; var ga = ga0;
+  if (E.MR != 0) {
+    let r = sqrt(gc * gc + ga * ga);
+    gc = woodAtan2(ga, gc) * (0.5 + r);
+    ga = r;
+  }
+  if (E.MB != 0) { return glassBlob(gc, ga); }
+  if (E.MCn > 0) {
+    var i1 = -1; var p1 = PINF; var d1 = 0.0;
+    var i2 = -1; var p2 = PINF; var d2 = 0.0;
+    for (var i = 0; i < E.MCn; i = i + 1) {
+      // the app writes !(md[i] >= 0), which also skips a NaN; >= 0.0 keeps that sense
+      if (aMD(i) >= 0.0) {
+        let d = glassCellSDF(gc, ga, i);
+        var pp = PINF;
+        if (d <= 0.0) { pp = d; } else if (aMD(i) > 0.0) { pp = d / aMD(i); }
+        if (pp < p1) { p2 = p1; i2 = i1; d2 = d1; p1 = pp; i1 = i; d1 = d; }
+        else if (pp < p2) { p2 = pp; i2 = i; d2 = d; }
+      }
+    }
+    var o = vec4<f32>(-1.0, -1.0, 0.0, 0.0);
+    if (i1 < 0 || p1 > 1.0) { return o; }
+    o.x = f32(i32(aMCC(i1)));
+    o.w = glassDepth(d1, i1);
+    if (i2 >= 0 && d2 <= 0.0) { o.y = f32(i32(aMCC(i2))); o.z = glassDepth(d2, i2); }
+    return o;
+  }
+  let c = gc + E.TW * ga;
+  var pp = c * E.LC - ga * E.LS;
+  pp = pp + E.CW * 0.25 * (fbm2(gc * E.RS * 0.35, ga * E.RS * 0.35, 311) - 0.5) * 2.0;
+  let ph = pp * E.CS;
+  let fl = floor(ph);
+  let f = ph - fl;
+  let cn = i32(E.CN);
+  var i = i32(fl) % cn;
+  if (i < 0) { i = i + cn; }
+  var o = vec4<f32>(f32(i), -1.0, 0.0, 1.0);
+  if (E.LP > 0.0) {
+    if (f < E.LP) { o.y = f32((i + cn - 1) % cn); o.z = (E.LP - f) / E.LP; }
+    else if (f > 1.0 - E.LP) { o.y = f32((i + 1) % cn); o.z = (f - 1.0 + E.LP) / E.LP; }
+  }
+  return o;
 }`;
 
 // form, as an integer, in one place for both sides
@@ -453,6 +516,7 @@ function makeRibbon() {
   return { ex, hl, md, rim };
 }
 const RIBD = makeRibbon();
+const W = makeWarp();
 
 // A SYNTHETIC ROLLER, same idea: a grid for rollerAt and a profile for rollerHand, with total > 0 so
 // the normal path runs. The total === 0 guard gets its own case rather than being hidden in this one.
@@ -475,23 +539,11 @@ const ROLD = makeRoller();
 // both > 0 so glassMelt does not take its early return, and FR small enough that r < FR is false for
 // most of the sweep and true near the centre - the pontil boss is the interesting part.
 const FV = { TH: 4.2, RM: 0.55, RS: 26, FR: 2.1, FP: 3.3, FD: 0.18, SD: 0.12, INC: 0.07, SST: 4 };
-function formUni(form) {
-  const b = new ArrayBuffer(48), d = new DataView(b);
-  const f = [FV.TH, FV.RM, FV.RS, FV.FR, FV.FP, FV.FD, FV.SD, FV.INC, FV.SST];
-  f.forEach((v, i) => d.setFloat32(i * 4, v, true));
-  d.setInt32(36, FORM[form], true);
-  return b;
-}
 
 
 // BLOB SCALARS. MSQ above 2 so the search radius is the wider 5x5 one, and CN small enough that the
 // colour modulo wraps rather than never firing.
 const BLV = { MW: 0.5, MSQ: 3.2, MJ: 0.7, CN: 6, MST: 2.5 };
-function blobUni() {
-  const b = new ArrayBuffer(32), d = new DataView(b);
-  [BLV.MW, BLV.MSQ, BLV.MJ, BLV.CN, BLV.MST].forEach((v, i) => d.setFloat32(i * 4, v, true));
-  return b;
-}
 
 // STAMPS, deliberately overlapping and spread around the circumference, with one rotated off-axis so
 // starR's angle argument is not always near zero. D is in inches; the app turns it into a
@@ -503,17 +555,54 @@ const STD = { D: 6, list: [
   { a: 250, x: -0.1, r: 0.7, rot: 0 },
   { a: 330, x: 0.2,  r: 1.2, rot: 199 },
 ] };
-function stampUni() {
-  const b = new ArrayBuffer(16), d = new DataView(b);
-  d.setFloat32(0, Math.PI * STD.D / 12, true);
-  d.setInt32(4, STD.list.length, true);
-  return b;
-}
 function stampArr() {
   const a = new Float32Array(STD.list.length * 4);
   STD.list.forEach((s, i) => { a[4 * i] = s.a; a[4 * i + 1] = s.x; a[4 * i + 2] = s.r; a[4 * i + 3] = s.rot; });
   return a;
 }
+
+
+// ONE BUILDER, so no case can describe the environment slightly differently from another. The layout
+// mirrors the Env struct exactly: twenty-eight floats then twelve integers, 160 bytes, which is a
+// multiple of sixteen as the uniform address space requires.
+const MCC_COL = [2, 0, 5, 1, 4, 3];                      // the cane index each ribbon carries
+function envUni(o) {
+  o = o || {};
+  const b = new ArrayBuffer(208), d = new DataView(b);
+  const F = [FV.TH, FV.RM, FV.RS, FV.FR, FV.FP, FV.FD, FV.SD, FV.INC,
+             FV.SST, MOB, MST, BLV.MW,
+             BLV.MSQ, BLV.MJ, BLV.CN, o.TW !== undefined ? o.TW : 0.21,
+             o.LC !== undefined ? o.LC : 0.83, o.LS !== undefined ? o.LS : 0.42,
+             o.CW !== undefined ? o.CW : 0.6, o.CS !== undefined ? o.CS : 1.7,
+             o.LP !== undefined ? o.LP : 0.18, Math.PI * STD.D / 12, WH, RH,
+             RTOTAL, 0, 0, 0];
+  F.forEach((v, i) => d.setFloat32(i * 4, v, true));
+  const I = [FORM[o.form || 'rolled'], o.MR ? 1 : 0, o.MB ? 1 : 0,
+             o.MCn !== undefined ? o.MCn : 0,
+             STD.list.length, WNX, WNY, RNX, RNY, RPROF, 0, 0]
+    .concat(arenaOffsets().offs);   // all float offsets; aSTS does its own x4 for the vec4 stride
+  I.forEach((v, i) => d.setInt32(112 + i * 4, v, true));
+  return b;
+}
+const MCCARR = new Float32Array(MCC_COL);
+// one arena, packed in the order the Env's offsets name
+function arenaParts() {
+  return [W.u, W.v, RIBD.ex, RIBD.hl, RIBD.md, RIBD.rim,
+          ROLD.s, ROLD.v, ROLD.pr, ROLD.tl, stampArr(), MCCARR];
+}
+function arenaOffsets() {
+  const parts = arenaParts(), offs = []; let at = 0;
+  for (const a of parts) { offs.push(at); at += a.length; }
+  return { offs, total: at };
+}
+function allArrays() {
+  const parts = arenaParts(), { total } = arenaOffsets();
+  const arena = new Float32Array(total); let at = 0;
+  for (const a of parts) { arena.set(a, at); at += a.length; }
+  return [arena];
+}
+// every binding referenced once, so none is eliminated - see the note where this was first needed
+const TOUCH_ALL = '  if (i == 4294967295u) { OUT[0] = ARR[0] + f32(E.MCn); }' + String.fromCharCode(10);
 
 // ---- running a WGSL function over inputs -----------------------------------------------------------
 async function runWgsl(dev, bodies, call, N, inputs, uni, arrays, outs) {
@@ -579,7 +668,6 @@ ${call}
 // an integer port that is 1e-7 off is BROKEN, and a float port that is bit-identical is luck.
 const N = 2048;
 function cases(app) {
-  const W = makeWarp();
   return [
     { name: 'nz', kind: 'EXACT', needs: ['nz'],
       call: '  let xi = i32(IN[i * 2]); let yi = i32(IN[i * 2 + 1]);\n'
@@ -611,11 +699,9 @@ function cases(app) {
           o[2 * i] = t[0]; o[2 * i + 1] = t[1]; } return o; },
       perForm: true },
 
-    { name: 'glassUnwarp', kind: 'f32', needs: ['glassUnwarp'],
-      uni: () => { const b = new ArrayBuffer(16), d = new DataView(b);
-        d.setInt32(0, W.nx, true); d.setInt32(4, W.ny, true); d.setFloat32(8, W.H, true); return b; },
-      arrays: () => [W.u, W.v],
-      call: '  let w = glassUnwarp(IN[i * 2], IN[i * 2 + 1]);\n'
+    { name: 'glassUnwarp', kind: 'f32', needs: ['env', 'glassUnwarp'],
+      uni: () => envUni(), arrays: allArrays,
+      call: TOUCH_ALL + '  let w = glassUnwarp(IN[i * 2], IN[i * 2 + 1]);\n'
           + '  OUT[i * 2] = w.x; OUT[i * 2 + 1] = w.y;',
       inputs: () => { const a = new Float32Array(N * 2);
         for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 211) / 210);
@@ -624,8 +710,9 @@ function cases(app) {
         for (let i = 0; i < N; i++) { app.glassUnwarp(W, a[2 * i], a[2 * i + 1], t);
           o[2 * i] = t[0]; o[2 * i + 1] = t[1]; } return o; } },
 
-    { name: 'fbm2', kind: 'f32', needs: ['nz', 'vnoise', 'fbm2'],
-      call: '  OUT[i * 2] = fbm2(IN[i * 2], IN[i * 2 + 1], 71); OUT[i * 2 + 1] = 0.0;',
+    { name: 'fbm2', kind: 'f32', needs: ['env', 'nz', 'vnoise', 'fbm2'],
+      uni: () => envUni(), arrays: allArrays,
+      call: TOUCH_ALL + '  OUT[i * 2] = fbm2(IN[i * 2], IN[i * 2 + 1], 71); OUT[i * 2 + 1] = 0.0;',
       inputs: () => { const a = new Float32Array(N * 2);
         for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 311) * 0.0806 + 0.17);
           a[2 * i + 1] = Math.fround(((i * 17) % 293) * 0.0045 + 0.11); } return a; },
@@ -634,11 +721,9 @@ function cases(app) {
       cpu: a => { const o = new Float64Array(N * 2);
         for (let i = 0; i < N; i++) o[2 * i] = app.fbm2C(a[2 * i], a[2 * i + 1], 71, 0); return o; } },
 
-    { name: 'glassCellSDF', kind: 'f32', needs: ['ribbon'],
-      uni: () => { const b = new ArrayBuffer(16), d = new DataView(b);
-        d.setFloat32(0, MOB, true); d.setFloat32(4, MST, true); d.setInt32(8, NRIB, true); return b; },
-      arrays: () => [RIBD.ex, RIBD.hl, RIBD.md, RIBD.rim],
-      call: TOUCH_RIB + '  let ri = i32(IN[i * 2 + 1] * 0.0) + i32(f32(i % ' + NRIB + '));\n'
+    { name: 'glassCellSDF', kind: 'f32', needs: ['env', 'ribbon'],
+      uni: () => envUni(), arrays: allArrays,
+      call: TOUCH_ALL + '  let ri = i32(IN[i * 2 + 1] * 0.0) + i32(f32(i % ' + NRIB + '));\n'
           + '  OUT[i * 2] = glassCellSDF(IN[i * 2], IN[i * 2 + 1], ri); OUT[i * 2 + 1] = 0.0;',
       inputs: () => { const a = new Float32Array(N * 2);
         for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 149) * 0.021 - 1.6);
@@ -647,11 +732,9 @@ function cases(app) {
         const F = { MEX: RIBD.ex, MHL: RIBD.hl, MOB };
         for (let i = 0; i < N; i++) o[2 * i] = app.glassCellSDF(a[2 * i], a[2 * i + 1], i % NRIB, F); return o; } },
 
-    { name: 'glassDepth', kind: 'f32', needs: ['ribbon'],
-      uni: () => { const b = new ArrayBuffer(16), d = new DataView(b);
-        d.setFloat32(0, MOB, true); d.setFloat32(4, MST, true); d.setInt32(8, NRIB, true); return b; },
-      arrays: () => [RIBD.ex, RIBD.hl, RIBD.md, RIBD.rim],
-      call: TOUCH_RIB + '  let di = i32(f32(i % ' + NRIB + '));\n'
+    { name: 'glassDepth', kind: 'f32', needs: ['env', 'ribbon'],
+      uni: () => envUni(), arrays: allArrays,
+      call: TOUCH_ALL + '  let di = i32(f32(i % ' + NRIB + '));\n'
           + '  OUT[i * 2] = glassDepth(IN[i * 2], di); OUT[i * 2 + 1] = 0.0;',
       // spans both sides of zero and past -rim, so every arm of the function is reached
       inputs: () => { const a = new Float32Array(N * 2);
@@ -660,12 +743,9 @@ function cases(app) {
         const F = { MD: RIBD.md, MRIM: RIBD.rim, MST };
         for (let i = 0; i < N; i++) o[2 * i] = app.glassDepth(a[2 * i], i % NRIB, F); return o; } },
 
-    { name: 'rollerAt', kind: 'f32', needs: ['roller'],
-      uni: () => { const b = new ArrayBuffer(32), d = new DataView(b);
-        d.setInt32(0, RNX, true); d.setInt32(4, RNY, true); d.setFloat32(8, RH, true);
-        d.setFloat32(12, RTOTAL, true); d.setInt32(16, RPROF, true); return b; },
-      arrays: () => [ROLD.s, ROLD.v, ROLD.pr, ROLD.tl],
-      call: TOUCH_ROLL + '  let r = rollerAt(IN[i * 2], IN[i * 2 + 1]);\n  OUT[i * 2] = r.x; OUT[i * 2 + 1] = r.y;',
+    { name: 'rollerAt', kind: 'f32', needs: ['env', 'roller'],
+      uni: () => envUni(), arrays: allArrays,
+      call: TOUCH_ALL + '  let r = rollerAt(IN[i * 2], IN[i * 2 + 1]);\n  OUT[i * 2] = r.x; OUT[i * 2 + 1] = r.y;',
       inputs: () => { const a = new Float32Array(N * 2);
         for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 223) / 222);
           a[2 * i + 1] = Math.fround(((i * 19) % 211) / 210 * RH); } return a; },
@@ -674,12 +754,9 @@ function cases(app) {
         for (let i = 0; i < N; i++) { app.rollerAt(B, a[2 * i], a[2 * i + 1], t);
           o[2 * i] = t[0]; o[2 * i + 1] = t[1]; } return o; } },
 
-    { name: 'rollerHand', kind: 'f32', needs: ['roller'],
-      uni: () => { const b = new ArrayBuffer(32), d = new DataView(b);
-        d.setInt32(0, RNX, true); d.setInt32(4, RNY, true); d.setFloat32(8, RH, true);
-        d.setFloat32(12, RTOTAL, true); d.setInt32(16, RPROF, true); return b; },
-      arrays: () => [ROLD.s, ROLD.v, ROLD.pr, ROLD.tl],
-      call: TOUCH_ROLL + '  let h = rollerHand(IN[i * 2]);\n  OUT[i * 2] = h.x; OUT[i * 2 + 1] = h.y;',
+    { name: 'rollerHand', kind: 'f32', needs: ['env', 'roller'],
+      uni: () => envUni(), arrays: allArrays,
+      call: TOUCH_ALL + '  let h = rollerHand(IN[i * 2]);\n  OUT[i * 2] = h.x; OUT[i * 2 + 1] = h.y;',
       // deliberately runs past both ends of the profile, where the app clamps
       inputs: () => { const a = new Float32Array(N * 2);
         for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i / N) * RTOTAL * 1.4 - RTOTAL * 0.2); a[2 * i + 1] = 0; } return a; },
@@ -695,9 +772,9 @@ function cases(app) {
       cpu: a => { const o = new Float64Array(N * 2);
         for (let i = 0; i < N; i++) o[2 * i] = app.woodHash(a[2 * i], a[2 * i + 1]); return o; } },
 
-    { name: 'glassFormT', kind: 'f32', needs: ['nz', 'vnoise', 'fbm2', 'form', 'glassFormT'],
-      uni: () => formUni(CURFORM), perForm: true, gpuTranscendental: true,
-      call: '  let fv = vec2<f32>(IN[i * 4 + 2], IN[i * 4 + 3]);\n'
+    { name: 'glassFormT', kind: 'f32', needs: ['env', 'nz', 'vnoise', 'fbm2', 'glassFormT'],
+      uni: () => envUni({ form: CURFORM }), arrays: allArrays, perForm: true, gpuTranscendental: true,
+      call: TOUCH_ALL + '  let fv = vec2<f32>(IN[i * 4 + 2], IN[i * 4 + 3]);\n'
           + '  OUT[i * 2] = glassFormT(IN[i * 4], IN[i * 4 + 1], fv); OUT[i * 2 + 1] = 0.0;',
       inputs: () => { const a = new Float32Array(N * 4);
         for (let i = 0; i < N; i++) { a[4 * i] = Math.fround((i % 181) * 0.031 - 2.8);
@@ -709,12 +786,12 @@ function cases(app) {
         for (let i = 0; i < N; i++) o[2 * i] = app.glassFormT(a[4 * i], a[4 * i + 1], F, [a[4 * i + 2], a[4 * i + 3]]);
         return o; } },
 
-    { name: 'glassMelt', kind: 'f32', needs: ['woodHash', 'form', 'glassMelt'],
-      uni: () => formUni(CURFORM), perForm: true,
+    { name: 'glassMelt', kind: 'f32', needs: ['env', 'woodHash', 'glassMelt'],
+      uni: () => envUni({ form: CURFORM }), arrays: allArrays, perForm: true,
       // divides by cs * 0.32 = 0.0192 and squares, so f32 epsilon arrives about 2,700x larger. The
       // outputs are bounded to [0,1], so the figure is absolute: 2e-5 is 0.005 levels of 255.
       gate: 2e-5, gateWhy: 'amplifies f32 epsilon ~2700x; 2e-5 is 0.005 levels',
-      call: '  let fv = vec2<f32>(IN[i * 4 + 2], IN[i * 4 + 3]);\n'
+      call: TOUCH_ALL + '  let fv = vec2<f32>(IN[i * 4 + 2], IN[i * 4 + 3]);\n'
           + '  let m = glassMelt(IN[i * 4], IN[i * 4 + 1], fv);\n'
           + '  OUT[i * 2] = m.x; OUT[i * 2 + 1] = m.y;',
       inputs: () => { const a = new Float32Array(N * 4);
@@ -729,13 +806,13 @@ function cases(app) {
           o[2 * i] = t[0]; o[2 * i + 1] = t[1];
         } return o; } },
 
-    { name: 'glassBlob', kind: 'f32', needs: ['woodHash', 'blob'], outs: 4,
+    { name: 'glassBlob', kind: 'f32', needs: ['env', 'woodHash', 'blob'], outs: 4,
       // channels 0 and 1 are the two cane INDICES - section 3's dangerous class, where being close is
       // being wrong - and 2 and 3 are their depths, which only shade. Gated accordingly.
       channelKinds: ['EXACT', 'EXACT', 'custom', 'custom'], gate: 1e-5,
       gateWhy: 'indices bit-exact; depths within 1e-5 (0.003 levels)',
-      uni: () => blobUni(),
-      call: '  let b = glassBlob(IN[i * 2], IN[i * 2 + 1]);\n'
+      uni: () => envUni(), arrays: allArrays,
+      call: TOUCH_ALL + '  let b = glassBlob(IN[i * 2], IN[i * 2 + 1]);\n'
           + '  OUT[i * 4] = b.x; OUT[i * 4 + 1] = b.y; OUT[i * 4 + 2] = b.z; OUT[i * 4 + 3] = b.w;',
       inputs: () => { const a = new Float32Array(N * 2);
         for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 173) * 0.037 - 3.2);
@@ -745,9 +822,9 @@ function cases(app) {
         for (let i = 0; i < N; i++) { app.glassBlob(a[2 * i], a[2 * i + 1], F, t);
           o[4 * i] = t[0]; o[4 * i + 1] = t[1]; o[4 * i + 2] = t[2]; o[4 * i + 3] = t[3]; } return o; } },
 
-    { name: 'rollStampAt', kind: 'f32', needs: ['stamp'], gpuTranscendental: true,
-      uni: () => stampUni(), arrays: () => [stampArr()],
-      call: '  OUT[i * 2] = rollStampAt(IN[i * 2], IN[i * 2 + 1]); OUT[i * 2 + 1] = 0.0;',
+    { name: 'rollStampAt', kind: 'f32', needs: ['env', 'stamp'], gpuTranscendental: true,
+      uni: () => envUni(), arrays: allArrays,
+      call: TOUCH_ALL + '  OUT[i * 2] = rollStampAt(IN[i * 2], IN[i * 2 + 1]); OUT[i * 2 + 1] = 0.0;',
       // s sweeps several circumferences so the modulo wraps; v spans past the stamps both ways
       inputs: () => { const a = new Float32Array(N * 2);
         for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i / N) * 5.3 - 1.1);
@@ -755,13 +832,64 @@ function cases(app) {
       cpu: a => { const o = new Float64Array(N * 2);
         const op = { st: STD.list, D: STD.D };
         for (let i = 0; i < N; i++) o[2 * i] = app.rollStampAt(a[2 * i], a[2 * i + 1], op); return o; } },
+
+    // THREE ROWS FOR ONE FUNCTION, because glassLay has three bodies and a pixel takes whichever its
+    // slab asks for. Testing only the one this slab uses would leave the other two unported and
+    // unnoticed until somebody changed a mould.
+    { name: 'glassLay strips', kind: 'f32', needs: ['env', 'nz', 'vnoise', 'fbm2', 'woodHash', 'woodAtan2', 'ribbon', 'blob', 'glassLay'], outs: 4,
+      channelKinds: ['EXACT', 'EXACT', 'custom', 'custom'], gate: 1e-5,
+      gateWhy: 'cane indices bit-exact; depths within 1e-5',
+      uni: () => envUni({ MCn: 0 }), arrays: allArrays,
+      call: TOUCH_ALL + '  let L = glassLay(IN[i * 2], IN[i * 2 + 1]);' + NLC
+          + '  OUT[i * 4] = L.x; OUT[i * 4 + 1] = L.y; OUT[i * 4 + 2] = L.z; OUT[i * 4 + 3] = L.w;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 191) * 0.027 - 2.5);
+          a[2 * i + 1] = Math.fround(((i * 7) % 179) * 0.021 - 1.8); } return a; },
+      cpu: a => { const o = new Float64Array(N * 4), v = [0, 0, 0, 0];
+        const F = { MR: false, MB: false, MC: null, TW: 0.21, LC: 0.83, LS: 0.42, CW: 0.6,
+                    RS: FV.RS, CS: 1.7, CN: BLV.CN, LP: 0.18 };
+        for (let i = 0; i < N; i++) { app.glassLay(a[2 * i], a[2 * i + 1], F, v);
+          for (let k = 0; k < 4; k++) o[4 * i + k] = v[k]; } return o; } },
+
+    { name: 'glassLay cells', kind: 'f32', needs: ['env', 'nz', 'vnoise', 'fbm2', 'woodHash', 'woodAtan2', 'ribbon', 'blob', 'glassLay'], outs: 4,
+      channelKinds: ['EXACT', 'EXACT', 'custom', 'custom'], gate: 1e-5,
+      gateWhy: 'the divergent path - a skip inside a per-ribbon loop',
+      uni: () => envUni({ MCn: NRIB }), arrays: allArrays,
+      call: TOUCH_ALL + '  let L = glassLay(IN[i * 2], IN[i * 2 + 1]);' + NLC
+          + '  OUT[i * 4] = L.x; OUT[i * 4 + 1] = L.y; OUT[i * 4 + 2] = L.z; OUT[i * 4 + 3] = L.w;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 149) * 0.021 - 1.6);
+          a[2 * i + 1] = Math.fround(((i * 11) % 137) * 0.009 - 0.6); } return a; },
+      cpu: a => { const o = new Float64Array(N * 4), v = [0, 0, 0, 0];
+        const F = { MR: false, MB: false, MC: MCC_COL.map(c => ({ c })), MD: RIBD.md, MRIM: RIBD.rim,
+                    MEX: RIBD.ex, MHL: RIBD.hl, MOB, MST };
+        for (let i = 0; i < N; i++) { app.glassLay(a[2 * i], a[2 * i + 1], F, v);
+          for (let k = 0; k < 4; k++) o[4 * i + k] = v[k]; } return o; } },
+
+    { name: 'glassLay blob + radial', kind: 'f32', needs: ['env', 'nz', 'vnoise', 'fbm2', 'woodHash', 'woodAtan2', 'ribbon', 'blob', 'glassLay'], outs: 4,
+      channelKinds: ['EXACT', 'EXACT', 'custom', 'custom'], gate: 1e-5,
+      // TWO AMPLIFIERS IN SERIES. woodAtan2's f32 error is multiplied by (0.5 + r) - the same
+      // amplification measured on the CPU this morning, 1.51e-3 rad becoming 76 px at the rim -
+      // and the displaced coordinate then runs through glassBlob's d / sp. 2.5e-5 on a depth in
+      // [0,1] is 0.006 levels. The INDICES remain bit-exact, which is the part section 3 cares
+      // about: the cane chosen is the same cane.
+      gate: 5e-5,
+      gateWhy: 'radial pre-transform compounds woodAtan2 then glassBlob; 5e-5 is 0.013 levels',
+      uni: () => envUni({ MB: true, MR: true }), arrays: allArrays,
+      call: TOUCH_ALL + '  let L = glassLay(IN[i * 2], IN[i * 2 + 1]);' + NLC
+          + '  OUT[i * 4] = L.x; OUT[i * 4 + 1] = L.y; OUT[i * 4 + 2] = L.z; OUT[i * 4 + 3] = L.w;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 173) * 0.037 - 3.2);
+          a[2 * i + 1] = Math.fround(((i * 9) % 163) * 0.029 - 2.4); } return a; },
+      cpu: a => { const o = new Float64Array(N * 4), v = [0, 0, 0, 0];
+        const F = { MR: true, MB: true, MW: BLV.MW, MSQ: BLV.MSQ, MJ: BLV.MJ, CN: BLV.CN, MST };
+        for (let i = 0; i < N; i++) { app.glassLay(a[2 * i], a[2 * i + 1], F, v);
+          for (let k = 0; k < 4; k++) o[4 * i + k] = v[k]; } return o; } },
   ];
 }
 
 // Keeps every declared binding reachable - see the note at the ribbon and roller cases.
 let CURFORM = 'rolled';
-const TOUCH_RIB = '  if (i == 4294967295u) { OUT[0] = MEX[0] + MHL[0] + MD[0] + MRIM[0]; }' + String.fromCharCode(10);
-const TOUCH_ROLL = '  if (i == 4294967295u) { OUT[0] = BS[0] + BV[0] + RPR[0] + RTL[0]; }' + String.fromCharCode(10);
 
 // GPU exp and sin are not IEEE-exact and vary by vendor inside the ULP budget, so a function
 // carrying them gets its own gate. Loosening the shared one instead would quietly excuse every
@@ -774,7 +902,7 @@ document.getElementById('run').onclick = async () => {
   try {
     const { app, from } = await liftFromApp(['nz', 'woodAtan2', 'glassFlow', 'glassUnwarp', 'vnoise', 'vnoiseC', 'vnoiseCfill',
       'fbm2C', 'glassCellSDF', 'glassDepth', 'rollerAt', 'rollerHand', 'woodHash', 'glassFormT',
-      'glassMelt', 'glassBlob', 'glassBlobDepth', 'rollStampAt', 'starR']);
+      'glassMelt', 'glassBlob', 'glassBlobDepth', 'rollStampAt', 'starR', 'glassLay']);
     if (!navigator.gpu) throw new Error('no WebGPU on this device');
     const ad = await navigator.gpu.requestAdapter();
     if (!ad) throw new Error('no adapter');
@@ -852,10 +980,9 @@ document.getElementById('run').onclick = async () => {
     TB = null;
     const p = document.createElement('p');
     p.style.color = 'var(--dim)';
-    p.textContent = 'Fourteen functions through — about 175 of the 282 lines. Still to port: '
-      + 'glassLay (31) and the op chain (55). glassLay is the one that answers the divergence '
-      + 'question: it loops over ribbons with per-pixel branches, and neighbouring pixels taking '
-      + 'different paths is the thing a GPU is worst at.';
+    p.textContent = 'Seventeen rows, fifteen functions — about 206 of the 282 lines, and all '
+      + 'three of glassLay’s paths. Still to port: the op chain (55), which walks the slab’s '
+      + 'ops backwards per pixel and is the last piece before a whole tile can be drawn.';
     RES.appendChild(p);
   } catch (e) {
     const v = document.createElement('p');
