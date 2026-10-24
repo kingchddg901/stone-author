@@ -583,6 +583,58 @@ uniforms. The compiled op list is a small uniform buffer or a 1D texture.
 
 ---
 
+## 2b. The port, measured on the real document
+
+All 282 lines of the per-pixel path are ported and verified function by function in
+`tools/gpu-port-harness.html` - eighteen rows, each against the app’s own JS. `tools/gpu-tile-probe.html`
+then assembles them into one shader and draws a 512-square tile at W=65535, both ways, from the F that
+`paintGlassContent` actually built (captured by `tools/capture-scene.mjs`, read across a same-origin iframe).
+
+**The real document is nothing like a synthetic one, which is why this had to be done twice.** The glass
+master carries **eight ops** - stir, blow, blow, spin, stir, blow, stir, roll - **no ribbons at all** (so
+`glassLay` takes the procedural strips, not the per-ribbon walk), no roller, no stamps, and the radial
+mould on. The invented scene had five ops, six ribbons and five stamps, and measured **67% more work a
+pixel** than the renderer does.
+
+### Speed
+
+**97.7× the eight-worker pool** on the real document: 391 ns a pixel on the CPU against 0.50 on the GPU.
+The CPU arm lands within 34% of `renderOneTile`’s measured 594 ns a pixel, the remainder being the canvas
+write, the tile setup and the band loop, which this does not do and a GPU would not take over.
+
+That is lower than the 247× the synthetic scene gave, for the obvious reason: the real document is less
+CPU work per pixel while the GPU time did not move. **It is also a floor rather than a figure** - the GPU
+finished the tile in 0.131 ms seven times running, which is close enough to the clock that the ratio is
+bounded by the measurement rather than by the hardware.
+
+### And §3’s failure is real, with exactly one cause
+
+| | worst | channels past 5 levels |
+|---|---|---|
+| all eight ops | **64.5 levels** | **3.10%** |
+| the same tile, roll dropped | **0.000 levels** | **0** |
+
+Not general fp32 fuzz. **One op, and through it one line of the app.** The roll multiplies y by 2.5, which
+puts every pixel of the tile at `cvv ≈ −0.685` - outside the warp grid’s [0, 0.625]. `glassUnwarp` then
+clamps the grid INDEX and not the INTERPOLANT:
+
+```
+let i0 = fx | 0, j0 = fy | 0;
+if (j0 > S.ny - 2) j0 = S.ny - 2; if (j0 < 0) j0 = 0;   // the index is clamped
+const ty = fy - j0;                                      // ty is NOT
+```
+
+With `fy = −109.6` the index clamps to 0 and `ty` stays at −109.6, so the bilinear blend becomes
+`u[k]·110.6 − u[k2]·109.6` - a difference of two numbers a hundred times larger than the answer.
+**f64 absorbs that and f32 cannot.** The grid’s own values span [−0.452, 0.660]; the extrapolation returns
+−1.123, a 0.75 ft displacement the stir never authored.
+
+**This is a property of the CPU renderer, not of the port**, and it is in every master with a stir and a
+roll in it. It is deterministic, so nothing on disk is wrong in the sense of varying - but the guard that
+exists reads as complete and is not. Clamping `tx` and `ty` would make the GPU path agree to **zero levels**
+on this document, and would also move the CPU’s own picture, so it is a deliberate change rather than a fix
+to be slipped in.
+
 ## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
 
 **His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,

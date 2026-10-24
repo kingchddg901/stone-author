@@ -60,6 +60,7 @@ scale. How far apart they land, and how much faster — the two numbers the port
 <script type="module">
 import { WGSL } from './lib/glass-gpu.mjs';
 import * as S from './lib/glass-scene.mjs';
+import { packReal } from './lib/glass-real.mjs';
 
 const RES = document.getElementById('res'), LOG = document.getElementById('log');
 const log = m => { LOG.textContent += (LOG.textContent ? '\n' : '') + m; };
@@ -73,6 +74,40 @@ function pair(k, v, cls) {
 }
 function head(t) { TB = null; const h = document.createElement('h2'); h.textContent = t; RES.appendChild(h); }
 function big(t, cls) { const p = document.createElement('p'); p.className = 'big ' + (cls || ''); p.textContent = t; RES.appendChild(p); }
+
+
+// THE REAL SCENE, READ ACROSS A SAME-ORIGIN IFRAME. The alternative was serialising F to JSON, and
+// the warp grid alone is 16,261 floats twice over - large, slow, and a second description of data
+// that already exists. The capture build sets window.__F once a tile has been painted, so the frame
+// is told to paint one and then simply read.
+//
+// F IS BUILT PER TILE, so a tile must be painted before __F exists. The 64-square one here is only
+// to make the app assemble the scene; the measurement uses its own geometry afterwards.
+const CAPTURE = '../harness/dist/scene-capture.html';
+const SLABJSON = '/harness/dist/slab.json';
+function loadRealScene() {
+  return new Promise((resolve, reject) => {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0';
+    fr.src = CAPTURE;
+    const fail = m => { fr.remove(); reject(new Error(m)); };
+    fr.onerror = () => fail('the capture build would not load - run: node harness/inject.mjs && node tools/capture-scene.mjs');
+    fr.onload = async () => {
+      try {
+        const w = fr.contentWindow;
+        for (let i = 0; i < 100 && !w.__sa; i++) await new Promise(r => setTimeout(r, 100));
+        if (!w.__sa) return fail('the capture build never exposed __sa');
+        const slab = await (await fetch(SLABJSON)).json();
+        w.__sa.deserialize(slab); w.__sa.render();
+        const c = w.__sa.renderOneTile(65535, 0, 0, 64, 64, 0); c.width = 1; c.height = 1;
+        if (!w.__F) return fail('a tile was painted but __F was never set - the capture is stale');
+        resolve({ F: w.__F, canes: w.__CANES, light: w.__LIGHT, tint: w.__TINT, mix: w.__MIX,
+                  frame: fr, slabName: slab.name || 'the slab' });
+      } catch (e) { fail(String(e && e.message || e)); }
+    };
+    document.body.appendChild(fr);
+  });
+}
 
 const APP_PATHS = ['../app/stone-author.html', 'app/stone-author.html', './stone-author.html'];
 const NEED = ['nz', 'woodAtan2', 'glassFlow', 'glassUnwarp', 'vnoise', 'vnoiseC', 'vnoiseCfill',
@@ -110,15 +145,15 @@ async function liftFromApp() {
 }
 
 // ---- the CPU arm: paintGlassContent's order, with the app's own functions -----------------------
-function cpuTile(app, F, W, TX, TY, TW, out) {
+function cpuTile(app, F, W, TX, TY, TW, out, CV, CAN, NC, H) {
   const gth = [0, 0, 0], fv = [0, 0], melt = [0, 0], lay = [0, 0, 0, 0];
-  const CV = S.CV, CAN = S.CANES, NC = S.NCANE, H = S.WH, SLAB = F.__slab;
+  const SLAB = F.__slab;
   for (let py = 0; py < TW; py++) {
     for (let px = 0; px < TW; px++) {
       const ssu = (TX + px + 0.5) / W, ssv = (TY + py + 0.5) / W;
       const cu = ssu < 0 ? 0 : ssu > 1 ? 1 : ssu, cvv = ssv < 0 ? 0 : ssv > H ? H : ssv;
-      const ox = S.PANEX + (cu - 0.5) * SLAB / 12;
-      const oy = S.PANEY + (cvv / H - 0.5) * SLAB * H / 12;
+      const ox = F.PX + (cu - 0.5) * SLAB / 12;
+      const oy = F.PY + (cvv / H - 0.5) * SLAB * H / 12;
       app.glassUnform(ox, oy, F, gth);
       const sx = gth[0], sy = gth[1], press = gth[2];
       app.glassFlow(ox, oy, F, fv);
@@ -220,28 +255,42 @@ document.getElementById('run').onclick = async () => {
     pair('user agent', navigator.userAgent);
     const { app, SLAB, from } = await liftFromApp();
     pair('lifted', NEED.length + ' functions from ' + from, 'good');
-    const chain = S.buildChain(app, SLAB);
-    S.setChain(SLAB, chain, new Float32Array(app.spinTable()));
-    chain.F.__slab = SLAB;
-    Object.assign(chain.F, {
-      MEX: S.RIBD.ex, MHL: S.RIBD.hl, MD: S.RIBD.md, MRIM: S.RIBD.rim, MOB: S.MOB, MST: S.MST,
-      MC: S.MCC_COL.map(c => ({ c })), MR: false, MB: false,
-      TH: S.FV.TH, RM: S.FV.RM, RS: S.FV.RS, FR: S.FV.FR, FP: S.FV.FP, FD: S.FV.FD,
-      SD: S.FV.SD, INC: S.FV.INC, SST: S.FV.SST, form: 'rolled',
+    const real = await loadRealScene();
+    const F = real.F;
+    F.__slab = SLAB;
+    // the colour stage, as the app computed it for this document
+    const CV = { TH2: F.TH, CORD: real.mix[0], OPQ: real.mix[1], OREF: real.mix[2],
+                 kr: real.tint[0], kg: real.tint[1], kb: real.tint[2],
+                 LBR: real.light[0], LBG: real.light[1], LBB: real.light[2] };
+    const CAN = new Float32Array([].concat(...real.canes));
+    const NC = real.canes.length;
+
+    const packed = packReal(F, {
+      SLAB, spin: app.spinTable(), canes: real.canes,
+      CORD: CV.CORD, OPQ: CV.OPQ, OREF: CV.OREF,
+      kr: CV.kr, kg: CV.kg, kb: CV.kb, LBR: CV.LBR, LBG: CV.LBG, LBB: CV.LBB,
+      tileW: TW, tileX: TX, tileY: TY, fullW: FULLW,
     });
-    pair('scene', chain.F.OPC.length + ' ops, ' + S.NRIB + ' ribbons, ' + S.STD.list.length
-      + ' stamps — synthetic, chosen to reach every branch');
-    pair('tile', TW + '×' + TW + ' at ' + TX + ',' + TY + ' of a ' + FULLW.toLocaleString() + ' sheet');
+    const s = packed.summary;
+    pair('the document', s.ops + ' ops (' + s.kinds + '), ' + s.ribbons + ' ribbons, ' + s.stamps
+      + ' stamps, ' + s.form + (s.radial ? ', radial mould' : '') + (s.blobs ? ', blobs' : ''));
+    pair('grids', 'warp ' + s.warp + ', roller ' + s.roller + '  \u2014 '
+      + s.arenaFloats.toLocaleString() + ' floats in the arena');
+    pair('what it does NOT exercise', (s.ribbons ? '' : 'the per-ribbon walk (no ribbons: glassLay '
+      + 'takes the procedural strips here) ') + (s.stamps ? '' : 'and the stamp path (no stamps). ')
+      + 'Those are proven function by function in gpu-port-harness.html; this measures what THIS '
+      + 'document costs.', 'warn');
+    pair('tile', TW + '\u00d7' + TW + ' at ' + TX + ',' + TY + ' of a ' + FULLW.toLocaleString() + ' sheet');
 
     const n = TW * TW;
-    const uni = S.envUni({ MCn: S.NRIB, tileW: TW, tileX: TX, tileY: TY, fullW: FULLW });
-    const arena = S.allArrays()[0];
+    const uni = packed.uni;
+    const arena = packed.arena;
 
     // ---- CPU ------------------------------------------------------------------------------------
     const cpuOut = new Float64Array(n * 3);
-    cpuTile(app, chain.F, FULLW, TX, TY, TW, cpuOut);          // warm
+    cpuTile(app, F, FULLW, TX, TY, TW, cpuOut, CV, CAN, NC, F.H);          // warm
     const ct = [];
-    for (let r = 0; r < 7; r++) { const t0 = performance.now(); cpuTile(app, chain.F, FULLW, TX, TY, TW, cpuOut); ct.push(performance.now() - t0); }
+    for (let r = 0; r < 7; r++) { const t0 = performance.now(); cpuTile(app, F, FULLW, TX, TY, TW, cpuOut, CV, CAN, NC, F.H); ct.push(performance.now() - t0); }
     const cpuMs = Math.min(...ct), cpuNs = cpuMs * 1e6 / n;
 
     head('agreement');
@@ -299,11 +348,11 @@ document.getElementById('run').onclick = async () => {
     log('GPU: ' + g.all.map(v => v.toFixed(3)).join(' ') + ' ms');
     log('CPU: ' + ct.map(v => v.toFixed(1)).join(' ') + ' ms');
 
-    head('is this scene representative?');
+    head('against the renderer itself');
     // renderOneTile, counted and timed on the real slab, 2026-10-24
     const REAL = 594;
     const off = (cpuNs / REAL - 1) * 100;
-    pair('this CPU arm', cpuNs.toFixed(0) + ' ns a pixel');
+    pair('this CPU arm, on the real document', cpuNs.toFixed(0) + ' ns a pixel');
     pair('renderOneTile on the real slab', REAL + ' ns a pixel, measured at W=65535');
     pair('difference', (off > 0 ? '+' : '') + off.toFixed(0) + '% — '
       + (Math.abs(off) < 40
