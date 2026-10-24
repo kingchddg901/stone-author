@@ -1,0 +1,342 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>vnoiseC gap</title>
+<!--
+  WHERE DO THE NINE NANOSECONDS GO?
+.
+  vnoiseC costs 12.67 ns on this desktop's V8, 10.97 on an S23's V8 and 3.13 on an iPhone's
+  JavaScriptCore. Everything around it is near equal between the engines - Math.imul 1.29x,
+  Math.floor 1.23x, nz 1.52x - and the UNCACHED vnoise is only 1.71x. The gap is in the cache and
+  nowhere else, and tools/vnoisec-variants-probe.html already ruled out the shapes it is not: eight
+  rewrites, none better than 0.89x stably, plain closure variables 20-30% WORSE, and full inlining
+  bimodal in the way build 174 was.
+.
+  SO STOP REWRITING IT AND TAKE IT APART. vnoiseC is five things, and only one of them can be worth
+  nine nanoseconds:
+.
+    floors      two Math.floor and two subtractions
+    key         three Float64Array reads and three !== comparisons
+    values      four more Float64Array reads
+    maths       the two smoothsteps and the bilinear - no memory at all
+    miss        the call to vnoiseCfill, taken about 8% of the time at the renderer's scale
+.
+  Each is timed alone and the sum is checked against the whole, because a decomposition that does not
+  add up is measuring something other than the function. Then the SAME page runs on a JavaScriptCore
+  device, and the piece whose ratio between the two engines is far from the others is the answer.
+  Nothing here can be concluded from one device - this page is half an instrument until it has run on
+  both.
+.
+  WHAT WOULD FOLLOW. If it is the typed-array reads, the fix is a different storage shape and the
+  variants probe already says which ones do not work. If it is the comparisons, the key could be an
+  integer rather than three doubles. If the pieces are all equal and only the WHOLE is slow, then V8
+  is failing to optimise the assembled function and no rearrangement of its parts will help - which
+  is a real answer too, and the one that closes the question.
+-->
+<style>
+  :root { --bg:#faf9f7; --fg:#1b1a19; --dim:#6b6864; --rule:#dcd8d2; --good:#1d6b3a; --warn:#8a5a00; --bad:#9b2420; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; } }
+  :root[data-theme="dark"] { --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; }
+  body { background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin:0; padding:16px; }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; }
+  p.sub { color:var(--dim); margin:0 0 14px; max-width:64ch; }
+  button { font:inherit; padding:7px 15px; border:1px solid var(--rule); border-radius:5px;
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  button:disabled { color:var(--dim); cursor:default; }
+  table { border-collapse:collapse; margin:12px 0; font-size:13px; }
+  td, th { border-bottom:1px solid var(--rule); padding:4px 14px 4px 0; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  td.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  pre { color:var(--dim); font-size:12px; white-space:pre-wrap; margin:10px 0 0; }
+  h2 { font-size:14px; margin:18px 0 0; font-weight:600; }
+</style>
+
+<h1>vnoiseC gap</h1>
+<p class="sub">The cached noise lookup costs four times as much on V8 as on JavaScriptCore while
+everything around it is near equal. This times its five parts separately, so the one carrying the gap
+can be named rather than guessed at. Run it on both engines — one device proves nothing here.</p>
+<button id="run">Run</button>
+<div id="res"></div>
+<pre id="log"></pre>
+
+<script>
+const LOG = document.getElementById('log');
+const log = m => { LOG.textContent += (LOG.textContent ? '\n' : '') + m; };
+const RES = document.getElementById('res');
+let TB = null, RUN = 0;
+function table(cols) {
+  TB = document.createElement('table'); TB.dataset.kind = 'grid';
+  const tr = document.createElement('tr');
+  for (const c of cols) { const th = document.createElement('th'); th.textContent = c; tr.appendChild(th); }
+  TB.appendChild(tr); RES.appendChild(TB); return TB;
+}
+function row(cells, cls) {
+  const tr = document.createElement('tr');
+  cells.forEach((c, i) => { const td = document.createElement('td'); td.textContent = c;
+    if (i && i < cells.length - 1) td.className = 'n'; tr.appendChild(td); });
+  if (cls) tr.children[0].className = cls;
+  TB.appendChild(tr);
+}
+function head(t) { TB = null; const h = document.createElement('h2'); h.textContent = t; RES.appendChild(h); }
+function pair(k, v, cls) {
+  if (!TB || TB.dataset.kind !== 'pair') { TB = document.createElement('table'); TB.dataset.kind = 'pair'; RES.appendChild(TB); }
+  const tr = document.createElement('tr');
+  const a = document.createElement('th'); a.textContent = k;
+  const b = document.createElement('td'); b.textContent = v; if (cls) b.className = cls;
+  tr.appendChild(a); tr.appendChild(b); TB.appendChild(tr);
+}
+
+const APP_PATHS = ['../app/stone-author.html', 'app/stone-author.html', './stone-author.html'];
+async function liftFromApp() {
+  let src = null, from = null, tried = [];
+  for (const u of APP_PATHS) {
+    try { const r = await fetch(u); if (r.ok) { src = await r.text(); from = u; break; } tried.push(u + ' ' + r.status); }
+    catch (e) { tried.push(u + ' ' + (e && e.message || 'failed')); }
+  }
+  if (src === null) throw new Error('could not find the app — tried ' + tried.join(', '));
+  const fn = name => {
+    const i = src.indexOf('function ' + name + '(');
+    if (i < 0) throw new Error('the app has no function ' + name);
+    let d = 0;
+    for (let k = src.indexOf('{', i); k < src.length; k++) {
+      if (src[k] === '{') d++;
+      else if (src[k] === '}') { d--; if (!d) return src.slice(i, k + 1); }
+    }
+    throw new Error('unbalanced ' + name);
+  };
+  const decl = (src.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0];
+  if (!decl) throw new Error('the app has no _NZC declaration');
+  const names = ['nz', 'vnoise', 'vnoiseC', 'vnoiseCfill'];
+  return { app: new Function(decl + '\n' + names.map(fn).join('\n')
+    + '\nreturn { ' + names.join(', ') + ', _NZC };')(), from };
+}
+
+// the harness, as corrected across today's probes: calibrate per piece, warm at the top of the
+// ladder, take the cleanest rung, and refuse any piece whose accumulator did not scale
+const REPS = [1, 2, 4, 8], N = 270400, W = 520, TARGET_MS = 25;
+const SX = 0.0031 * 26, SY = 0.0029 * 1.56, X0 = 0.17, Y0 = 0.11;   // the renderer's own walk scale
+const med = v => { const s = [...v].sort((a, b) => a - b); return s[(s.length - 1) >> 1]; };
+function measure(fn) {
+  let M = 1;
+  for (let i = 0; i < 14; i++) {
+    const t0 = performance.now(); fn(M); const dt = performance.now() - t0;
+    if (dt >= TARGET_MS) break;
+    M = Math.max(M + 1, Math.ceil(M * Math.max(1.7, TARGET_MS / Math.max(dt, 0.05))));
+  }
+  fn(M * REPS[REPS.length - 1]);
+  const xs = [], ys = [], accs = [];
+  for (const r of REPS) {
+    const n = r * M, ts = []; let acc = 0;
+    for (let k = 0; k < 5; k++) { const t0 = performance.now(); acc = fn(n); ts.push(performance.now() - t0); }
+    xs.push(n); ys.push(med(ts)); accs.push(acc);
+  }
+  const per = xs.map((n, i) => ys[i] / n);
+  const ms = Math.min(...per), spread = (Math.max(...per) / ms - 1) * 100;
+  const span = REPS[REPS.length - 1] / REPS[0];
+  const ran = Math.abs(accs[accs.length - 1] / (accs[0] || 1e-9) - span) < span * 0.02;
+  return { ns: ms * 1e6 / N, spread, ran, M };
+}
+
+document.getElementById('run').onclick = async () => {
+  document.getElementById('run').disabled = true;
+  RES.textContent = ''; TB = null; LOG.textContent = ''; RUN++;
+  try {
+    head('this device');
+    pair('run', RUN === 1 ? '1 since this page loaded — the figure to quote'
+      : RUN + ' since this page loaded — RELOAD BEFORE QUOTING', RUN === 1 ? 'good' : 'warn');
+    pair('user agent', navigator.userAgent);
+    const { app, from } = await liftFromApp();
+    const { nz, vnoise, vnoiseC, vnoiseCfill, _NZC } = app;
+    pair('lifted', 'nz, vnoise, vnoiseC, vnoiseCfill and _NZC from ' + from, 'good');
+
+    // EACH PIECE CARRIES ITS OWN LOOP, and the first version of this did not. It had one `walk(body)`
+    // helper shared by every piece, so the single `body(x, y)` call site inside it saw seven different
+    // functions and went MEGAMORPHIC - every row then measured an indirect call rather than its own
+    // body. The tells were loud once looked at: nz read 12.17 ns where the breakdown probe measures
+    // 1.34, and "the arithmetic", which is a dozen flops and no memory, came out costing more than the
+    // whole of vnoiseC. Written out long-hand instead, so each loop is monomorphic and inlinable, the
+    // way cpu-breakdown-probe writes them.
+    //
+    // AND THE CACHE IS PRIMED FIRST. _NZC is NaN-filled until something populates it, so the four
+    // value reads summed to NaN and the accumulator gate correctly refused the row. One real vnoiseC
+    // pass fills the slot this probe reads.
+    for (let j = 0; j < W; j++) { const y = j * SY + Y0; for (let i = 0; i < W; i++) vnoiseC(i * SX + X0, y, 71, 0); }
+
+    const SLOT = 0, O = SLOT * 7;
+    const pFloors = reps => { let s = 0;
+      for (let k = 0; k < reps; k++) for (let j = 0; j < W; j++) { const y = j * SY + Y0;
+        for (let i = 0; i < W; i++) { const x = i * SX + X0;
+          const xi = Math.floor(x), yi = Math.floor(y); s += (x - xi) + (y - yi); } }
+      return s; };
+
+    const pKey = reps => { let s = 0;
+      for (let k = 0; k < reps; k++) for (let j = 0; j < W; j++) { const y = j * SY + Y0;
+        for (let i = 0; i < W; i++) { const x = i * SX + X0;
+          const xi = Math.floor(x), yi = Math.floor(y);
+          s += (_NZC[O] !== 71 || _NZC[O + 1] !== xi || _NZC[O + 2] !== yi) ? 1 : 2; } }
+      return s; };
+
+    const pVals = reps => { let s = 0;
+      for (let k = 0; k < reps; k++) for (let j = 0; j < W; j++)
+        for (let i = 0; i < W; i++) s += _NZC[O + 3] + _NZC[O + 4] + _NZC[O + 5] + _NZC[O + 6];
+      return s; };
+
+    const pMaths = reps => { let s = 0;
+      for (let k = 0; k < reps; k++) for (let j = 0; j < W; j++) { const y = j * SY + Y0;
+        for (let i = 0; i < W; i++) { const x = i * SX + X0;
+          const xi = Math.floor(x), yi = Math.floor(y);
+          const tx = x - xi, ty = y - yi;
+          const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+          const a = 0.1, b = 0.2, c = 0.3, d = 0.4;
+          s += (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy; } }
+      return s; };
+
+    const pNz = reps => { let s = 0;
+      for (let k = 0; k < reps; k++) for (let j = 0; j < W; j++) { const y = j * SY + Y0;
+        for (let i = 0; i < W; i++) { const x = i * SX + X0; s += nz(x | 0, y | 0, 71); } }
+      return s; };
+
+    const pWhole = reps => { let s = 0;
+      for (let k = 0; k < reps; k++) for (let j = 0; j < W; j++) { const y = j * SY + Y0;
+        for (let i = 0; i < W; i++) s += vnoiseC(i * SX + X0, y, 71, 0); }
+      return s; };
+
+    // THE DECIDING PIECE: vnoiseC's OWN BODY, character for character, inlined into the loop rather
+    // than called. Every row above is inlined code and the whole is a call, so if the difference
+    // between them is the call, this lands on the parts and not on the function.
+    const pInline = reps => { let s = 0;
+      for (let k = 0; k < reps; k++) for (let j = 0; j < W; j++) { const y = j * SY + Y0;
+        for (let i = 0; i < W; i++) { const x = i * SX + X0;
+          const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi;
+          const o = 0;
+          if (_NZC[o] !== 71 || _NZC[o + 1] !== xi || _NZC[o + 2] !== yi) vnoiseCfill(xi, yi, 71, o);
+          const a = _NZC[o + 3], b = _NZC[o + 4], c = _NZC[o + 5], d = _NZC[o + 6];
+          const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+          s += (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy; } }
+      return s; };
+
+    const _F = new Float64Array(12 * 7).fill(Number.NaN);
+    function vnoiseCfilled(x, y, s, slot) {
+      const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi;
+      const o = slot * 7;
+      if (_F[o] !== s || _F[o + 1] !== xi || _F[o + 2] !== yi) {
+        const fa = nz(xi, yi, s), fb = nz(xi + 1, yi, s), fc = nz(xi, yi + 1, s), fd = nz(xi + 1, yi + 1, s);
+        _F[o] = s; _F[o + 1] = xi; _F[o + 2] = yi;
+        _F[o + 3] = fa; _F[o + 4] = fb; _F[o + 5] = fc; _F[o + 6] = fd;
+      }
+      const a = _F[o + 3], b = _F[o + 4], c = _F[o + 5], d = _F[o + 6];
+      const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+      return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy;
+    }
+    const pFilled = reps => { let s = 0;
+      for (let k = 0; k < reps; k++) for (let j = 0; j < W; j++) { const y = j * SY + Y0;
+        for (let i = 0; i < W; i++) s += vnoiseCfilled(i * SX + X0, y, 71, 0); }
+      return s; };
+
+    const _P = new Float64Array(12 * 7).fill(Number.NaN);
+    function nzP(xi, yi, s) {
+      let h = (Math.imul(xi, 374761393) ^ Math.imul(yi, 668265263) ^ Math.imul(s, 2246822519)) >>> 0;
+      h = Math.imul(h ^ (h >>> 13), 1274126177);
+      return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    }
+    function nzPfill(xi, yi, s, o) {
+      const a = nzP(xi, yi, s), b = nzP(xi + 1, yi, s), c = nzP(xi, yi + 1, s), d = nzP(xi + 1, yi + 1, s);
+      _P[o] = s; _P[o + 1] = xi; _P[o + 2] = yi;
+      _P[o + 3] = a; _P[o + 4] = b; _P[o + 5] = c; _P[o + 6] = d;
+    }
+    function vnoisePlain(x, y, s, slot) {
+      const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi;
+      const o = slot * 7;
+      if (_P[o] !== s || _P[o + 1] !== xi || _P[o + 2] !== yi) nzPfill(xi, yi, s, o);
+      const a = _P[o + 3], b = _P[o + 4], c = _P[o + 5], d = _P[o + 6];
+      const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+      return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy;
+    }
+    const pPlain = reps => { let s = 0;
+      for (let k = 0; k < reps; k++) for (let j = 0; j < W; j++) { const y = j * SY + Y0;
+        for (let i = 0; i < W; i++) s += vnoisePlain(i * SX + X0, y, 71, 0); }
+      return s; };
+
+    const pUnc = reps => { let s = 0;
+      for (let k = 0; k < reps; k++) for (let j = 0; j < W; j++) { const y = j * SY + Y0;
+        for (let i = 0; i < W; i++) s += vnoise(i * SX + X0, y, 71); }
+      return s; };
+
+    const pieces = [
+      ['floors', 'two Math.floor and two subtractions', pFloors],
+      ['key read + compare', 'three Float64Array reads and three !== against a number', pKey],
+      ['four value reads', 'the four corner hashes, read back even on a hit', pVals],
+      ['the arithmetic', 'two smoothsteps and the bilinear \u2014 no memory at all', pMaths],
+      ['nz, for the miss path', 'one hash \u2014 a miss costs four, about 8% of the time here', pNz],
+    ];
+
+    head('the pieces');
+    table(['piece', 'ns a call', 'spread', 'what it is']);
+    const by = {};
+    for (const [name, what, fn] of pieces) {
+      const m = measure(fn); by[name] = m;
+      row([name, m.ran ? m.ns.toFixed(2) : 'NOT MEASURED', m.spread.toFixed(1) + '%',
+        m.ran ? what : 'the accumulator did not scale — the loop was deleted'],
+        !m.ran ? 'bad' : m.spread > 8 ? 'warn' : '');
+      log(name + ': unit=' + m.M + ' spread=' + m.spread.toFixed(1) + '%');
+    }
+
+    head('the whole, and whether the parts explain it');
+    const whole = measure(pWhole);
+    const unc = measure(pUnc);
+    pair('vnoiseC', whole.ns.toFixed(2) + ' ns');
+    pair('vnoise, uncached', unc.ns.toFixed(2) + ' ns — four nz and the same arithmetic, no cache');
+    const inl = measure(pInline);
+    pair("vnoiseC's body, inlined into the loop", inl.ns.toFixed(2)
+      + ' ns \u2014 the same code, not called. '
+      + (inl.ns < whole.ns * 0.75
+          ? 'So the cost is the CALL: V8 is not inlining vnoiseC, and the body itself is cheap.'
+          : 'So it is not the call - the body costs this much however it is reached.'),
+      inl.ns < whole.ns * 0.75 ? 'good' : 'warn');
+    const fil = measure(pFilled);
+    pair('called, with the miss path inlined into it', fil.ns.toFixed(2)
+      + ' ns \u2014 typed array kept, only the fill folded in. This is build 174\u2019s shape, and the '
+      + 'variants probe never tested it apart from a storage change that was independently worse. '
+      + (fil.ns < whole.ns * 0.75
+          ? 'It IS inlined: a call-free body is what V8 would take.'
+          : 'Still not inlined, so the call is not what blocks it.'),
+      fil.ns < whole.ns * 0.75 ? 'good' : 'warn');
+    const pl = measure(pPlain);
+    const sameAsLifted = Math.abs(pl.ns - whole.ns) < whole.ns * 0.2;
+    pair('CONTROL: the same function, declared normally', pl.ns.toFixed(2)
+      + ' ns \u2014 not lifted through new Function, so this is what an ordinary nested function costs. '
+      + (sameAsLifted
+          ? 'It matches the lifted one, so new Function is NOT the confound and every figure here stands.'
+          : 'IT DOES NOT MATCH THE LIFTED ONE. new Function is the confound, and every lifted number on '
+            + 'this page and in the other probes is about the probe rather than the renderer.'),
+      sameAsLifted ? 'good' : 'bad');
+    const sum = by['floors'].ns + by['key read + compare'].ns + by['four value reads'].ns
+      + by['the arithmetic'].ns;
+    // the floors are counted inside the key and the arithmetic rows too, so take them out twice
+    const adj = sum - 2 * by['floors'].ns;
+    pair('the four pieces, double-counted floors removed', adj.toFixed(2) + ' ns');
+    const gap = whole.ns - adj;
+    pair('unexplained', gap.toFixed(2) + ' ns — '
+      + (Math.abs(gap) < whole.ns * 0.25
+          ? 'the pieces account for the whole, so the slow part is one of them'
+          : 'THE PIECES DO NOT ADD UP. The function costs more than its parts, which means the cost is '
+            + 'in the assembled function and not in any piece — no rearrangement of these will help.'),
+      Math.abs(gap) < whole.ns * 0.25 ? 'good' : 'bad');
+
+    head('what to carry to the other engine');
+    pair('compare the ns column, piece by piece', 'every row here is near equal between two V8 '
+      + 'devices on different instruction sets. The row whose ratio against a JavaScriptCore device is '
+      + 'far from the others is the one carrying the 4×. If no row is, the answer is the line above.');
+    pair('measured 2026-10-24', 'vnoiseC 12.67 ns desktop V8 · 10.97 S23 V8 · 3.13 iPhone JSC; '
+      + 'uncached vnoise 5.99 · 6.03 · 3.50');
+  } catch (e) {
+    head('failed');
+    pair('error', String(e && e.message || e), 'bad');
+    log(String(e && e.stack || e));
+  } finally {
+    document.getElementById('run').disabled = false;
+  }
+};
+</script>

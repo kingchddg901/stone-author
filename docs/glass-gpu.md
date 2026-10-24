@@ -99,6 +99,43 @@ budget. **This project has already met that exact failure**: `vnoiseCfill` was o
 precisely because a hot function carrying calls can fall out of V8's inlining budget, and it produced
 bimodal per-render behaviour until it was.
 
+### Answered again, one level down: V8 does not inline `vnoiseC`
+
+`tools/vnoisec-gap-probe.html` takes the function apart instead of rewriting it. Each piece gets its
+own loop, because a first version shared one `walk(body)` helper whose single call site went
+megamorphic across seven bodies and measured an indirect call every time — `nz` read 12.17 ns there
+against the 1.34 it actually costs.
+
+| | ns a call |
+|---|---|
+| floors, key reads, value reads, arithmetic — **summed** | **3.94** |
+| `vnoiseC` as shipped | 12.26 |
+| `vnoiseC` made call-free, typed array kept — build 174's shape | 12.41 |
+| `vnoiseC` declared normally rather than lifted — **control** | 12.47 |
+| **`vnoiseC`'s body inlined into the loop** | **3.54** |
+| JavaScriptCore's `vnoiseC` | **3.13** |
+
+**The body costs 3.5 ns and the call costs 9.** JSC's 3.13 is the inlined-body figure, so JSC inlines
+this function and V8 does not — and that is the whole 4×. It also explains the rest at a stroke:
+uncached `vnoise` is inlined by both, so those sit 1.71× apart; the primitives are all inlined, so
+they are near equal; and the variants probe's full-inline arm swinging between 0.564× and 0.888× was
+V8 *sometimes* inlining.
+
+**Shape does not move it.** Folding the miss path in — build 174's actual arrangement, which the
+variants probe only ever tested alongside a storage change that was independently 20–30% worse —
+gives 12.41 ns. The call to `vnoiseCfill` is not what blocks inlining.
+
+**And the probe was controlled against itself.** Everything here is lifted through `new Function`, and
+a dynamically compiled closure need not be inlined like an ordinary nested one. Declared normally it
+costs 12.47 against the lifted 12.26, so `new Function` is not the confound and every lifted figure
+measured today stands — including the `fbm2C` cost the field-share ruling rests on.
+
+**Closed, with no fix.** The only arrangement that reaches 3.5 ns is one inlined copy in a small
+function, and `fbm2C` needs three — which makes the enclosing function large enough that V8
+flip-flops. There is no stable win available from JS here. What is worth carrying away is the general
+figure: **a per-sample helper V8 declines to inline costs about 9 ns a call**, which is why unrolling
+the op walk was worth doing and why new per-sample functions should be viewed with suspicion.
+
 **The size of the prize.** `vnoiseC` runs six times a sample, so its 12.67 ns is 76 of the desktop's
 110.9. Bringing it to the iPhone's 3.13 would make the sample 27.7 ns — and the whole desktop render
 roughly 3× faster, on the renderer that ships today, with no second code path and no device-dependent
