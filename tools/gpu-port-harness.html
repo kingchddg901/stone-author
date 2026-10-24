@@ -294,7 +294,7 @@ fn glassFormT(ox: f32, oy: f32, fv: vec2<f32>) -> f32 {
   return max(T, 0.05);
 }`;
 
-// A NINE-CELL WALK with an early `continue` in it - the first ported function whose threads can take
+// A NINE-CELL WALK with an early a continue in it - the first ported function whose threads can take
 // different numbers of iterations. On a CPU that is a branch; in a warp it is divergence, and this is
 // a small taste of what glassLay will do at a much larger scale.
 WGSL.glassMelt = `
@@ -328,6 +328,95 @@ fn glassMelt(ox: f32, oy: f32, fv: vec2<f32>) -> vec2<f32> {
     }
   }
   return o;
+}`;
+
+
+// NO INFINITY IN WGSL, so the sentinel is a number no real p can reach. The app seeds p1 and p2 with
+// Infinity and also returns it when sp <= 0; 1e30 stands in for both, and the p1 > 1 test that
+// decides "every blob near here ran out first" behaves the same against either.
+WGSL.blob = `
+struct Blob { MW: f32, MSQ: f32, MJ: f32, CN: f32, MST: f32, pad0: f32, pad1: f32, pad2: f32 };
+@group(0) @binding(2) var<uniform> BL: Blob;
+const PINF: f32 = 1e30;
+fn glassBlobDepth(d: f32, rr: f32) -> f32 {
+  let lim = rr * (BL.MSQ - 1.0); let rim = rr * 0.16;
+  if (d <= -rim) { return 1.0; }
+  var far = 1.0;
+  if (d <= 0.0) { far = 0.0; } else if (lim > 0.0) { far = d / lim; }
+  var edge = 1.0;
+  if (d <= 0.0) { if (rim > 0.0) { edge = -d / rim; } else { edge = 1.0; } }
+  return edge * (1.0 - (1.0 - 1.0 / BL.MST) * far);
+}
+// TWENTY-FIVE NEIGHBOURS AND A RUNNING BEST TWO. Every thread does the same count of iterations here
+// - the app's loop has no a continue - so this one does not diverge; glassLay is where that starts.
+fn glassBlob(gc: f32, ga: f32) -> vec4<f32> {
+  let s = BL.MW; let sq = BL.MSQ - 1.0;
+  let gx = floor(gc / s); let gy = floor(ga / s);
+  var p1 = PINF; var d1 = 0.0; var c1 = -1.0; var b1 = 0.0;
+  var p2 = PINF; var d2 = 0.0; var c2 = -1.0; var b2 = 0.0;
+  var R = 1;
+  if (BL.MSQ > 2.0) { R = 2; }
+  for (var j = -R; j <= R; j = j + 1) {
+    for (var i = -R; i <= R; i = i + 1) {
+      let cx = i32(gx) + i; let cy = i32(gy) + j;
+      let jx = (f32(cx) + 0.5 + (woodHash(cx, cy) - 0.5) * BL.MJ) * s;
+      let jy = (f32(cy) + 0.5 + (woodHash(cy, cx + 31) - 0.5) * BL.MJ) * s;
+      let rr = s * 0.5 * (0.62 + 0.3 * woodHash(cx + 5, cy + 11));
+      let dx = gc - jx; let dy = ga - jy;
+      let d = sqrt(dx * dx + dy * dy) - rr;
+      let sp = rr * sq;
+      var pp = PINF;
+      if (d <= 0.0) { pp = d; } else if (sp > 0.0) { pp = d / sp; }
+      let col = f32(i32(floor(woodHash(cx + 101, cy + 211) * BL.CN)) % i32(BL.CN));
+      if (pp < p1) { p2 = p1; d2 = d1; c2 = c1; b2 = b1; p1 = pp; d1 = d; c1 = col; b1 = rr; }
+      else if (pp < p2) { p2 = pp; d2 = d; c2 = col; b2 = rr; }
+    }
+  }
+  var o = vec4<f32>(-1.0, -1.0, 0.0, 0.0);
+  if (c1 < 0.0 || p1 > 1.0) { return o; }
+  o.x = c1; o.w = glassBlobDepth(d1, b1);
+  if (c2 >= 0.0 && d2 <= 0.0) { o.y = c2; o.z = glassBlobDepth(d2, b2); }
+  return o;
+}`;
+
+// THE REAL atan2 HERE, not woodAtan2 - the app calls Math.atan2 in rollStampAt and the wood
+// approximation elsewhere, and a port that tidied that away would draw a different star.
+WGSL.stamp = `
+struct Stamp { C: f32, nst: i32, pad0: i32, pad1: i32 };
+@group(0) @binding(2) var<uniform> ST: Stamp;
+@group(0) @binding(3) var<storage, read> STS: array<vec4<f32>>;   // a, x, r, rot
+fn starR(th: f32, R: f32) -> f32 {
+  let s = 0.6283185307;                                           // pi / 5
+  let r2 = R * 0.42;
+  var a = th % (2.0 * s);
+  if (a < 0.0) { a = a + 2.0 * s; }
+  if (a > s) { a = 2.0 * s - a; }
+  return R * r2 * sin(s) / (R * sin(a) + r2 * sin(s - a));
+}
+// A VARIABLE-LENGTH LOOP WITH FOUR EARLY EXITS AND A RETURN FROM THE MIDDLE. Threads take different
+// numbers of iterations, so this is the first genuinely divergent function in the port.
+fn rollStampAt(s: f32, v: f32) -> f32 {
+  if (ST.nst <= 0) { return 0.0; }
+  let C = ST.C;
+  var u = s % C;
+  if (u < 0.0) { u = u + C; }
+  for (var i = 0; i < ST.nst; i = i + 1) {
+    let st = STS[i];
+    let R = st.z / 24.0;
+    var du = u - (((st.x / 360.0) % 1.0 + 1.0) % 1.0) * C;
+    if (du > C * 0.5) { du = du - C; } else if (du < -C * 0.5) { du = du + C; }
+    if (du <= R && du >= -R) {
+      let dv = v - st.y;
+      if (dv <= R && dv >= -R) {
+        let d2 = du * du + dv * dv;
+        if (d2 <= R * R) {
+          let rr = starR(atan2(dv, du) - st.w * 0.0174532925, R);
+          if (d2 <= rr * rr) { return 1.0; }
+        }
+      }
+    }
+  }
+  return 0.0;
 }`;
 
 // form, as an integer, in one place for both sides
@@ -394,8 +483,41 @@ function formUni(form) {
   return b;
 }
 
+
+// BLOB SCALARS. MSQ above 2 so the search radius is the wider 5x5 one, and CN small enough that the
+// colour modulo wraps rather than never firing.
+const BLV = { MW: 0.5, MSQ: 3.2, MJ: 0.7, CN: 6, MST: 2.5 };
+function blobUni() {
+  const b = new ArrayBuffer(32), d = new DataView(b);
+  [BLV.MW, BLV.MSQ, BLV.MJ, BLV.CN, BLV.MST].forEach((v, i) => d.setFloat32(i * 4, v, true));
+  return b;
+}
+
+// STAMPS, deliberately overlapping and spread around the circumference, with one rotated off-axis so
+// starR's angle argument is not always near zero. D is in inches; the app turns it into a
+// circumference in feet, and that conversion is part of what is being checked.
+const STD = { D: 6, list: [
+  { a: 0,   x: -0.4, r: 1.1, rot: 0 },
+  { a: 37,  x: 0.0,  r: 0.9, rot: 23 },
+  { a: 140, x: 0.35, r: 1.4, rot: 71 },
+  { a: 250, x: -0.1, r: 0.7, rot: 0 },
+  { a: 330, x: 0.2,  r: 1.2, rot: 199 },
+] };
+function stampUni() {
+  const b = new ArrayBuffer(16), d = new DataView(b);
+  d.setFloat32(0, Math.PI * STD.D / 12, true);
+  d.setInt32(4, STD.list.length, true);
+  return b;
+}
+function stampArr() {
+  const a = new Float32Array(STD.list.length * 4);
+  STD.list.forEach((s, i) => { a[4 * i] = s.a; a[4 * i + 1] = s.x; a[4 * i + 2] = s.r; a[4 * i + 3] = s.rot; });
+  return a;
+}
+
 // ---- running a WGSL function over inputs -----------------------------------------------------------
-async function runWgsl(dev, bodies, call, N, inputs, uni, arrays) {
+async function runWgsl(dev, bodies, call, N, inputs, uni, arrays, outs) {
+  const OW = outs || 2;
   const code = Object.values(bodies).join(NLC) + `
 @group(0) @binding(0) var<storage, read> IN: array<f32>;
 @group(0) @binding(1) var<storage, read_write> OUT: array<f32>;
@@ -417,8 +539,8 @@ ${call}
     dev.queue.writeBuffer(b, 0, data); keep.push(b); return b;
   };
   const inBuf = sbuf(inputs, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
-  const outBuf = dev.createBuffer({ size: N * 2 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-  const read = dev.createBuffer({ size: N * 2 * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  const outBuf = dev.createBuffer({ size: N * OW * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const read = dev.createBuffer({ size: N * OW * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
 
   const entries = [{ binding: 0, resource: { buffer: inBuf } }, { binding: 1, resource: { buffer: outBuf } }];
   if (uni) {
@@ -442,7 +564,7 @@ ${call}
   const pass = enc.beginComputePass();
   pass.setPipeline(pipe); pass.setBindGroup(0, grp);
   pass.dispatchWorkgroups(Math.ceil(N / 64)); pass.end();
-  enc.copyBufferToBuffer(outBuf, 0, read, 0, N * 2 * 4);
+  enc.copyBufferToBuffer(outBuf, 0, read, 0, N * OW * 4);
   dev.queue.submit([enc.finish()]);
   const err = await dev.popErrorScope();
   if (err) throw new Error(err.message.split(String.fromCharCode(10))[0]);
@@ -606,6 +728,33 @@ function cases(app) {
           app.glassMelt(a[4 * i], a[4 * i + 1], F, [a[4 * i + 2], a[4 * i + 3]], t);
           o[2 * i] = t[0]; o[2 * i + 1] = t[1];
         } return o; } },
+
+    { name: 'glassBlob', kind: 'f32', needs: ['woodHash', 'blob'], outs: 4,
+      // channels 0 and 1 are the two cane INDICES - section 3's dangerous class, where being close is
+      // being wrong - and 2 and 3 are their depths, which only shade. Gated accordingly.
+      channelKinds: ['EXACT', 'EXACT', 'custom', 'custom'], gate: 1e-5,
+      gateWhy: 'indices bit-exact; depths within 1e-5 (0.003 levels)',
+      uni: () => blobUni(),
+      call: '  let b = glassBlob(IN[i * 2], IN[i * 2 + 1]);\n'
+          + '  OUT[i * 4] = b.x; OUT[i * 4 + 1] = b.y; OUT[i * 4 + 2] = b.z; OUT[i * 4 + 3] = b.w;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 173) * 0.037 - 3.2);
+          a[2 * i + 1] = Math.fround(((i * 9) % 163) * 0.029 - 2.4); } return a; },
+      cpu: a => { const o = new Float64Array(N * 4), t = [0, 0, 0, 0];
+        const F = { MW: BLV.MW, MSQ: BLV.MSQ, MJ: BLV.MJ, CN: BLV.CN, MST: BLV.MST };
+        for (let i = 0; i < N; i++) { app.glassBlob(a[2 * i], a[2 * i + 1], F, t);
+          o[4 * i] = t[0]; o[4 * i + 1] = t[1]; o[4 * i + 2] = t[2]; o[4 * i + 3] = t[3]; } return o; } },
+
+    { name: 'rollStampAt', kind: 'f32', needs: ['stamp'], gpuTranscendental: true,
+      uni: () => stampUni(), arrays: () => [stampArr()],
+      call: '  OUT[i * 2] = rollStampAt(IN[i * 2], IN[i * 2 + 1]); OUT[i * 2 + 1] = 0.0;',
+      // s sweeps several circumferences so the modulo wraps; v spans past the stamps both ways
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i / N) * 5.3 - 1.1);
+          a[2 * i + 1] = Math.fround(((i * 23) % 211) / 210 * 1.4 - 0.7); } return a; },
+      cpu: a => { const o = new Float64Array(N * 2);
+        const op = { st: STD.list, D: STD.D };
+        for (let i = 0; i < N; i++) o[2 * i] = app.rollStampAt(a[2 * i], a[2 * i + 1], op); return o; } },
   ];
 }
 
@@ -625,7 +774,7 @@ document.getElementById('run').onclick = async () => {
   try {
     const { app, from } = await liftFromApp(['nz', 'woodAtan2', 'glassFlow', 'glassUnwarp', 'vnoise', 'vnoiseC', 'vnoiseCfill',
       'fbm2C', 'glassCellSDF', 'glassDepth', 'rollerAt', 'rollerHand', 'woodHash', 'glassFormT',
-      'glassMelt']);
+      'glassMelt', 'glassBlob', 'glassBlobDepth', 'rollStampAt', 'starR']);
     if (!navigator.gpu) throw new Error('no WebGPU on this device');
     const ad = await navigator.gpu.requestAdapter();
     if (!ad) throw new Error('no adapter');
@@ -638,7 +787,7 @@ document.getElementById('run').onclick = async () => {
       // PER FORM, RESET EACH TIME. The first version carried `worst` across the whole loop, so one
       // computing arm marked every form as failing and the note read "spun! poured! blown!" when only
       // spun had anything to answer for.
-      let worst = 0, note = [], anyBad = false, overCount = 0;
+      let worst = 0, note = [], anyBad = false, overCount = 0; const chBad = [];
       for (const form of forms) {
         let fWorst = 0;
         const inp = c.inputs();
@@ -647,21 +796,23 @@ document.getElementById('run').onclick = async () => {
         let call = c.call;
         if (form) { CURFORM = form; call = call.replace('FORMSEL', String(FORM[form])); }
         let got;
-        try { got = await runWgsl(dev, bodies, call, N, inp, c.uni ? c.uni() : null, c.arrays ? c.arrays() : null); }
+        try { got = await runWgsl(dev, bodies, call, N, inp, c.uni ? c.uni() : null, c.arrays ? c.arrays() : null, c.outs); }
         catch (e) { row([c.name, c.kind, '—', '—', 'DID NOT COMPILE: ' + e.message], 'bad'); bad++; worst = NaN; break; }
         const want = form ? c.cpu(inp, form) : c.cpu(inp);
         let kind = (form && c.kindPerForm && c.kindPerForm[form]) || c.kind;
         if (c.gpuTranscendental && kind === 'f32') kind = 'trig';
         if (c.gate) { GATE.custom = c.gate; kind = 'custom'; }
-        for (let i = 0; i < N * 2; i++) {
+        for (let i = 0; i < N * (c.outs || 2); i++) {
           const w = want[i], g = got[i];
-          const d = kind === 'EXACT' ? (Math.fround(w) === g ? 0 : 1)
+          const ck = c.channelKinds ? c.channelKinds[i % (c.outs || 2)] : kind;
+          const d = ck === 'EXACT' ? (Math.fround(w) === g ? 0 : 1)
                   : Math.abs(w - g) / Math.max(1, Math.abs(w));
+          if (d > GATE[ck]) chBad[i % (c.outs || 2)] = (chBad[i % (c.outs || 2)] || 0) + 1;
           if (d > fWorst) fWorst = d;
         }
-        const fOk = fWorst <= GATE[kind];
+        const fOk = c.channelKinds ? !chBad.some(v => v > 0) : fWorst <= GATE[kind];
         if (!fOk) { let over = 0;
-          for (let i = 0; i < N * 2; i++) {
+          for (let i = 0; i < N * (c.outs || 2); i++) {
             const w = want[i], g = got[i];
             const d = kind === 'EXACT' ? (Math.fround(w) === g ? 0 : 1)
                     : Math.abs(w - g) / Math.max(1, Math.abs(w));
@@ -674,7 +825,11 @@ document.getElementById('run').onclick = async () => {
       }
       if (Number.isNaN(worst)) continue;
       done++;
-      const ok = c.perForm ? !anyBad : worst <= GATE[c.kind];
+      // ONE VERDICT, THE ONE ALREADY COMPUTED. This re-tested the worst against the case's generic
+      // kind, so a row that passed its own per-channel or per-case gate failed here anyway -
+      // glassBlob cleared four channel gates and was then marked not-ready against a 2e-6 it was
+      // never held to. anyBad carries the real per-arm answer; nothing else should second-guess it.
+      const ok = !anyBad;
       if (!ok) bad++;
       row([c.name, c.gateWhy ? c.gateWhy : c.kind === 'EXACT' ? 'bit-identical'
             : c.kind === 'branch' ? 'exact where it selects, 2e-6 where it computes'
@@ -682,8 +837,9 @@ document.getElementById('run').onclick = async () => {
         c.kind === 'EXACT' ? (worst ? 'DIFFERS' : 'identical') : worst.toExponential(1),
         c.gate ? c.gate.toExponential(0) : c.perForm ? 'per arm'
           : c.gpuTranscendental ? '5e-5' : c.kind === 'f32' ? '2e-6' : '0',
-        (note.length ? 'forms: ' + note.join(' ') : '')
-          + (overCount ? '   ' + overCount + ' of ' + (N * 2) + ' past the gate'
+        (c.channelKinds ? c.channelKinds.map((k, n) => 'ch' + n + ':' + k + (chBad[n] ? ' ' + chBad[n] + ' BAD' : ' ok')).join('  ') : '')
+          + (note.length ? 'forms: ' + note.join(' ') : '')
+          + (overCount ? '   ' + overCount + ' of ' + (N * (c.outs || 2)) + ' past the gate'
               + (overCount < 8 ? ' — discrete, not rounding' : '') : '')], ok ? 'good' : 'bad');
       log(c.name + ': worst ' + worst);
     }
@@ -696,11 +852,10 @@ document.getElementById('run').onclick = async () => {
     TB = null;
     const p = document.createElement('p');
     p.style.color = 'var(--dim)';
-    p.textContent = 'Done: nz, woodHash, woodAtan2, glassFlow, glassUnwarp, vnoise, fbm2, '
-      + 'glassCellSDF, glassDepth, rollerAt, rollerHand, glassFormT, glassMelt — about 115 of '
-      + 'the 282 lines. Still to port: glassLay (31), the op chain (55), glassBlob (22) and '
-      + 'rollStampAt (18), plus glassBlobDepth and starR under them. glassLay is the one that '
-      + 'answers the divergence question.';
+    p.textContent = 'Fourteen functions through — about 175 of the 282 lines. Still to port: '
+      + 'glassLay (31) and the op chain (55). glassLay is the one that answers the divergence '
+      + 'question: it loops over ribbons with per-pixel branches, and neighbouring pixels taking '
+      + 'different paths is the thing a GPU is worst at.';
     RES.appendChild(p);
   } catch (e) {
     const v = document.createElement('p');
