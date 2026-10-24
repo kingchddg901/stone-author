@@ -215,6 +215,30 @@ and the block sums were slow in every fifth rather than only the first, so it wa
 either. It was the optimiser declining to inline a function that had grown — see
 `glass-one-pixel.md`. Outlining the cold path took the spread from 17.2% to 0.8%.
 
+### How quiet the box has to be, and it is quieter than it looks
+
+Core-seconds only measure the render when nothing else runs, because the thread sum counts every
+thread on the machine. Under foreign load it measures the machine.
+
+**Measured the hard way: a build was reverted as a 3.7% loss and the same build later came back 3.4%
+faster.** The runs that condemned it sat at **8.25 and 8.23 busy threads** against the comparison
+set's **8.02–8.09**, and that 0.2 was read as noise. It is 2.5% of eight workers — comparable to the
+effect being measured, and it inverted the sign. Free memory was 1,000 MB lower in the same rows and
+that was read past too.
+
+| effect being measured | the box has to be held to |
+| --- | --- |
+| 10% or more | eyeballing the CPU trace is enough |
+| ~3% | **better than 1% of the pool — 0.08 threads of 8** |
+| under 1% | not resolvable on this machine; use more runs or a longer render |
+
+Two practical rules fall out. **Record the busy-thread count beside every timing and compare it to the
+baseline's, not to an idea of idle** — a window that reads 12% CPU can still be 0.2 threads above the
+run it is being compared with. And **a build must not be handed over for rendering in the minutes
+after a gate sweep**: 37 node processes at 90% CPU were still clearing when the next render started,
+and the triplet that followed trended 1.722, 1.686, 1.620 as they drained — monotonic improvement is
+the shape of decaying contamination, not of a build warming up.
+
 **A falling core-second count with a flatter wall gain is the signal that a render has stopped being
 compute-bound.** At 32,768 the same change took 9.4% off the work and 4.5% off the clock, with busy
 threads dropping from 8.3–8.6 to 8.0 — the workers outran the consumer. That is a real ceiling and it
