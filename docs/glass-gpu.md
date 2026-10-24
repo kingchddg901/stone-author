@@ -121,6 +121,23 @@ uncached `vnoise` is inlined by both, so those sit 1.71× apart; the primitives 
 they are near equal; and the variants probe's full-inline arm swinging between 0.564× and 0.888× was
 V8 *sometimes* inlining.
 
+**Confirmed on a second V8 device, 2026-10-24.** An S23 re-ran the breakdown and shows the same
+signature: `vnoiseC` 10.80 ns against an uncached `vnoise` of 6.03 — the cached form costing MORE
+than the uncached one, which is backwards for a cache and only possible if the call is not inlined.
+The iPhone is the only device where it goes the right way round, 3.13 against 3.50. Two V8 builds on
+different instruction sets agree with each other; JavaScriptCore does not. The run reproduces across
+sessions too: 96.25 ns a sample against 95.74 earlier the same day, 0.5% apart.
+
+| | `vnoiseC` | uncached `vnoise` | cached / uncached | the call, over a 3.54 ns body |
+|---|---|---|---|---|
+| desktop, V8 | 12.26 | 5.99 | 2.05× | 8.72 ns — **8.4% of a 625 ns pixel** |
+| S23, V8 | 10.80 | 6.03 | 1.79× | 7.26 ns — **7.3% of a 594 ns pixel** |
+| iPhone, JSC | 3.13 | 3.50 | 0.89× | none — the cache pays, as it should |
+
+There are six `vnoiseC` a pixel, so **roughly 8% of every pixel on V8 is one function not being
+inlined**. A shader pays none of it, which is a small part of the GPU path's case and the first part
+of it that is measured on two devices rather than argued.
+
 **Shape does not move it.** Folding the miss path in — build 174's actual arrangement, which the
 variants probe only ever tested alongside a storage change that was independently 20–30% worse —
 gives 12.41 ns. The call to `vnoiseCfill` is not what blocks inlining.
