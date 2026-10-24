@@ -156,9 +156,25 @@ nudged until it passed. Against `181`, measured on 1024 tiles at 65,535: **601 p
 changed near the spin centre, 627 at the corner, 91 mid-sheet**, worst 105 levels. Still three orders
 of magnitude below `179`'s 53.9%.
 
-**Whether it fixes the bimodality is unmeasured.** The footprint is a suspect, not a finding — nothing
-here has counted a cache miss, and a 65,535 **triplet** is what decides it. A pair will not do: two
-runs on `181` agreed at 4.769 and 4.894 and were both wrong about the build.
+**It fixed the bimodality, and that makes the footprint a finding rather than a suspect.** Four
+65,535 runs on the quietest box of the day — 8.9% cpu, 1.07 threads beforehand:
+
+| build | runs | wall | spread | sd | core-seconds |
+| --- | --- | --- | --- | --- | --- |
+| `180` | 1 | 5.116 min | — | — | 2475 |
+| `181` | 3 | 4.981 mean | **10.3%** | 0.2664 | 2260 **and** 2529, both clean |
+| `182` | 4 | **4.743 mean** | **2.3%** | **0.0493** | 2251 / 2213 / 2253 / 2291 |
+
+`182` lands on `181`'s **good** mode and the bad one is gone: 2213–2291 against 181's 2260-or-2529 on
+two runs that were equally clean by thread count. So the fast mode was the table working and the slow
+mode was it falling out of cache, which is what a 256 KB array read at a scattered index does and a
+64 KB one does not. **9.0% less compute than `180`** and 7.3% off the wall, with the variance 5.4×
+tighter — and all four masters are **byte-identical** at 392,466,320, so the renderer is deterministic
+again from `182`.
+
+Worth keeping from the shape of it: the accuracy-for-speed trade everyone reaches for first was not
+the lever. The table was already five thousand times finer than what it replaced, and making it
+*coarser* made it faster **and** more predictable, because the binding constraint was never precision.
 
 **The leading suspect is the table's footprint**, and it is a suspect rather than a finding. 16,384
 entries of two doubles is 256 KB per worker, 2 MB across the pool, accessed at an index that moves
