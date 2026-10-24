@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.194';
+  const BUILD = '2026.10.24.195';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14971,7 +14971,11 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         for (let k = 0; k < depth; k++) pump(i + k);
         const rec = await jobs.get(i);
         jobs.delete(i);
-        for (let k = 0; k < depth; k++) pump(i + k);
+        // NEVER HAND BACK UNDEFINED. The caller reads rec.painted immediately, so a missing record
+        // has to say what went wrong here rather than become "cannot read properties of undefined"
+        // four frames away.
+        if (!rec) throw new Error('gpu finish: no record for tile ' + i);
+        for (let k = i + 1; k < i + 1 + depth; k++) pump(k);
         return rec;
       },
       async tile(i) {
@@ -15322,7 +15326,22 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // can hand this straight to the branch that already consumes pool.finish().
       async finishBitmap(idx, bmp) {
         if (!p.fin) throw new Error('finishBitmap without p.fin');
-        start(idx, bmp);
+        // START REFUSES WHEN EVERY WORKER IS BUSY - silently, by design, because its caller is a
+        // scheduler that will offer the same index again a moment later. This caller is not: it
+        // holds a bitmap that exists nowhere else, and the GPU's lookahead pumps deeper than the
+        // pool is wide on purpose. A dropped dispatch left inflight with no entry, so the await
+        // below was `await undefined` and the export died on `fin.painted` with the tile already
+        // drawn and thrown away.
+        //
+        // So it waits for a slot instead of being dropped. Waiting on the passes already in flight
+        // rather than on a timer, because a worker going free is exactly what unblocks this.
+        while (!inflight.has(idx)) {
+          start(idx, bmp);
+          if (inflight.has(idx)) break;
+          const pend = [...inflight.values()];
+          if (!pend.length) { await new Promise(r => setTimeout(r, 1)); continue; }
+          await Promise.race(pend).catch(() => {});
+        }
         const rec = await inflight.get(idx);
         inflight.delete(idx);
         return rec;
