@@ -82,8 +82,21 @@ function head(t) { TB = null; const h = document.createElement('h2'); h.textCont
 // ---- the CPU arm comes out of the app, it is not written again here -------------------------------
 // Fetched over the studio server and sliced the way every probe in tools/ slices it. If the app's
 // arithmetic changes, this arm changes with it; a hand-copy would quietly stop being the renderer.
+// THE APP IS FOUND, NOT ASSUMED. This has to run on three devices and the probe cannot be served the
+// same way on all of them: beside the repo it is one level up, published as a page it sits alongside.
+// Trying each in turn costs one failed request and saves a second copy of the probe.
+const APP_PATHS = ['../app/stone-author.html', 'app/stone-author.html', './stone-author.html'];
+async function fetchApp() {
+  const tried = [];
+  for (const u of APP_PATHS) {
+    try { const r = await fetch(u); if (r.ok) return { text: await r.text(), from: u }; tried.push(u + ' ' + r.status); }
+    catch (e) { tried.push(u + ' ' + (e && e.message || 'failed')); }
+  }
+  throw new Error('could not find the app to lift the CPU arm from — tried ' + tried.join(', '));
+}
 async function liftFromApp() {
-  const src = await (await fetch('../app/stone-author.html')).text();
+  const found = await fetchApp();
+  const src = found.text;
   const fn = name => {
     const i = src.indexOf('function ' + name + '(');
     if (i < 0) throw new Error('the app has no function ' + name);
@@ -99,7 +112,7 @@ async function liftFromApp() {
   const names = ['nz', 'vnoise', 'fbm2', 'vnoiseC', 'vnoiseCfill', 'fbm2C'];
   const body = decl + '\n' + names.map(fn).join('\n')
     + '\nreturn { ' + names.join(', ') + ' };';
-  return { app: new Function(body)(), lifted: names.length };
+  return { app: new Function(body)(), lifted: names.length, from: found.from };
 }
 
 // ---- the lattice, built once on the CPU and shared by both GPU arms ------------------------------
@@ -329,8 +342,8 @@ document.getElementById('run').onclick = async () => {
     row('pool the renderer uses', POOL + ' workers (measured 7.8-8.2 busy threads at 65,535)');
 
     log('lifting the CPU arm out of the app...');
-    const { app, lifted } = await liftFromApp();
-    row('CPU arm', lifted + ' functions lifted from app/stone-author.html, corner cache included', 'good');
+    const { app, lifted, from } = await liftFromApp();
+    row('CPU arm', lifted + ' functions lifted from ' + from + ', corner cache included', 'good');
 
     // ---- arm 1: the CPU as it ships ------------------------------------------------------------
     // SCANLINE ORDER, because that is what makes the corner cache hit. Walking randomly would
@@ -378,9 +391,12 @@ document.getElementById('run').onclick = async () => {
     row('one thread, one pass', cpuMs.toFixed(2) + ' ms   ' + (N / cpuMs / 1000).toFixed(2) + ' Mpx/s');
     row('agreement across the ladder', per.map(v => v.toFixed(1)).join(' / ') + ' ms a pass — '
       + spread.toFixed(1) + '% spread'
-      + (spread > 15 ? ', TOO NOISY: the ratios below are not quotable' : ''),
-      spread > 15 ? 'bad' : spread > 6 ? 'warn' : 'good');
-    NOISY = spread > 15;
+      + (spread > 8 ? ', TOO NOISY: the ratios below are not quotable' : ''),
+      spread > 8 ? 'bad' : spread > 4 ? 'warn' : 'good');
+    // 8%, because 15% let a visibly bad run through. Three quiet runs gave 3.2% and under and agreed
+    // on 245.8-246.3x; a 14.1% run quoted 253.2x. The decision does not turn on that difference - the
+    // Amdahl column reads 3.30x at either - but a divisor nobody can reproduce must not print as one.
+    NOISY = spread > 8;
     log('CPU: ' + cnote.join('   '));
 
     // ---- the GPU ------------------------------------------------------------------------------
@@ -518,6 +534,9 @@ document.getElementById('run').onclick = async () => {
         whole > 3 ? 'good' : whole > 1.8 ? 'warn' : 'bad');
     }
     row('the share is not measured here', 'it is the next thing to measure, and it is the whole decision');
+    row('and this column is insensitive to the headline', 'at 246× or 283× the 70% row still '
+      + 'reads 3.30×. Past about 50× the field stops being what limits the render, so a '
+      + 'better field ratio buys nothing — only a larger share does.');
   } catch (e) {
     head('failed');
     row('error', String(e && e.message || e), 'bad');
