@@ -363,6 +363,56 @@ threads fall from 8.3–8.6 to about 8.0: the workers now finish a tile faster t
 consumer can take them, so a 32,768 is becoming consumer-bound rather than compute-bound. Further
 per-sample savings will show up fully at 65,535 and 1,048,576 and only partly here.
 
+## Unrolling the op chain: measured, built twice, and dropped
+
+Kept because the measurements are sound and the conclusion is the opposite of what they predict, which
+is the part worth not paying for twice.
+
+`glassUnform` is the largest single line item in a sample at **179 ns**, and hand-unrolling this
+slab's eight-op chain ran **19.0% faster** — bit-identical over 2,048 points. A third arm placed the
+cost precisely: hoisting `F`'s constant fields while keeping the loop was worth **0.68%**, so the
+19% is the loop and the branch dispatch, not data access. There is no cheap version.
+
+It was then built twice, both exact, both gated, both **slower on a real render**:
+
+| | wall at 32,768 | core-seconds | against `175` |
+| --- | --- | --- | --- |
+| `175`, the plain walk | 1.402 min | 672 | — |
+| generated per tile | 1.453 min | 705 | **+4.7% compute** |
+| generated once per chain shape | 1.409 min | 697 | **+3.7% compute** |
+
+Every master byte-identical throughout — 124,011,320 image bytes at 32,768 across all three. The
+generator was correct. It was just slower.
+
+**What it was not.** The obvious explanation is lost inlining: a direct call to `glassUnform` can be
+inlined into the sample loop and a `new Function` body reached through a variable cannot. Measured,
+that is false — the walk costs **276.7 ns called directly and 268.6 ns through a variable**, the same
+number, while the generated function runs **227.9 ns**. There is no inlining penalty to find, and the
+unrolled code really is faster when called in a tight loop.
+
+**The leading candidate is code size,** and it is a candidate rather than a finding. The unrolled
+chain is roughly eight times the code of the loop body it replaces, placed inside a sample loop that
+is already large. A tight-loop bench cannot see that, because there the unrolled code is the only
+thing competing for the instruction cache. Nothing here measured cache misses, so this is where the
+evidence stops.
+
+**Two measurement traps were paid for on the way, and only the second one bit.** Pricing the walk
+through a lambda turned out not to matter. Pricing a function whose **lifetime** differs from
+production did: the first build generated per tile, so eight workers by twenty tiles made 160
+brand-new functions, each gathering its own type feedback, none living long enough to earn it back —
+while the bench built one and called it four hundred thousand times. Memoising per chain shape fixed
+that and recovered the wall time, and the compute cost stayed.
+
+**Do not retry this without a way to measure code size.** The arithmetic that says it should win is
+correct and has been checked three ways; what defeats it is not visible to any bench in this repo.
+
+One hazard found while writing it, which outlives the code and applies to anything lifted out of
+`app/stone-author.html`: **a function must not contain an unmatched brace inside a string literal.**
+Every tool here finds a function's end by counting braces — `check-worker-core.mjs` and the `liftFn`
+in every probe — so one `'{'` in a string makes the function look as though it never closes. The
+first version of this used `indexOf('{')` and took the worker-core gate from 13 unresolved names to
+**137**, having swallowed every function after it. Braces go through character codes.
+
 **That prediction was then tested, and it held.** The same two builds at 65,535, where there is four
 times the compute behind each unit of consumer work:
 
