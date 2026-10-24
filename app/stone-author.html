@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.190';
+  const BUILD = '2026.10.24.191';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15582,6 +15582,13 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // hand here for the deflate, so the same statistic tiff-meta computes (every 100th pixel, so the
       // two numbers are directly comparable) costs one pass over data already read.
       let litSum = 0, litUp = 0, litN = 0;
+      // THE DISK, WHICH NOTHING HAS EVER TIMED. Every other term in a tile is accounted for -
+      // gpu.tile, storedTilePixels and deflate were measured by tools/gpu-tile-budget.html - and
+      // sink.add was left out of that table because the page has no sink. It is now the suspect:
+      // moving the deflate to the finishing workers took a 2048 tile from 198 ms to 82 in the
+      // harness and left the real export at 192, and this is the only term in the loop between
+      // those two numbers. Per tile, so a slow disk shows as a ramp rather than an average.
+      const tileSink = [];
       // SEEDED FROM THE RECORD, not from zero. These are what light.mean and the perTile arrays are
       // built from, so a resume that restored only the tiles would publish a provenance block
       // describing the part rendered after the crash - a master that looks finished and is not.
@@ -15590,6 +15597,11 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         litSum = prior.state.litSum; litUp = prior.state.litUp; litN = prior.state.litN;
         for (const v of prior.state.tileMs) tileMs.push(v);
         for (const v of prior.state.tileBytes) tileBytes.push(v);
+        // -1, NOT ZERO, for a tile this run did not write. The resume record carries ms and bytes
+        // per row and nothing else; adding a third would change a persisted format for the sake of
+        // a diagnostic, and a zero here would read as "the disk was instant" rather than "this was
+        // not measured". Keeps the three arrays the same length, which is what a reader assumes.
+        for (let q = 0; q < prior.state.tileMs.length; q++) tileSink.push(-1);
         bytes = prior.state.at - 16;
       }
       for (let gy = 0; gy < p.rDown; gy++) for (let gx = 0; gx < p.rAcross; gx++) {
@@ -15597,6 +15609,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         if (skip && skip.has(n)) continue;                 // on disk already, and verified
         const tTile = performance.now();
         let tb = 0;                                        // this render tile's share of the file
+        let ts = 0;                                        // and how much of its time went to the disk
         // This tile's SHARE of the light, not the running total. The record carries deltas so a resume
         // adds them back up; a row holding the total would make every replay count the same pixels
         // again, and light.mean is what every sidecar table quotes.
@@ -15648,7 +15661,9 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
           litSum += fin.litSum; litUp += fin.litUp; litN += fin.litN;
           for (const part of fin.parts) {
             const zl = part.z.length;                      // length first - see the note below
+            const tS = performance.now();
             await sink.add(part.idx, part.z); bytes += zl; tb += zl;
+            ts += performance.now() - tS;
           }
         } else {
         const cx = c.getContext('2d');
@@ -15668,12 +15683,14 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
           // zeroed `bytes` and every perTile row, which is a master that looks finished and whose
           // provenance block is wrong.
           const zl = z.length;
+          const tS = performance.now();
           await sink.add(ty * p.across + tx, z); bytes += zl; tb += zl;   // straight to disk under OPFS
+          ts += performance.now() - tS;
         }
         c.width = 1; c.height = 1;                         // only now: every quarter has been read
         }
         const msT = Math.round(performance.now() - tTile);
-        tileMs.push(msT); tileBytes.push(tb);
+        tileMs.push(msT); tileBytes.push(tb); tileSink.push(Math.round(ts));
         // READ ONCE, then gone from the pool's map - and only for the runs this stride keeps, so a
         // 40,960-pass master carries coverage of the WHOLE render rather than 160,000 numbers or a
         // detailed account of its first tenth.
@@ -15823,7 +15840,9 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         // can -- time that tracks bytes is the picture being dense, time that spikes where bytes did
         // not is the machine stalling. Two arrays of 40 numbers, under a kilobyte, and the next
         // anomaly gets read off the file instead of re-measured.
-        perTile: { ms: tileMs, bytes: tileBytes },
+        // `sink` is the OPFS write, the one term a tile's cost was never broken down into. Against
+        // `ms` it says whether a slow render was the picture, the machine, or the disk.
+        perTile: { ms: tileMs, bytes: tileBytes, sink: tileSink },
         // THE FOUR TIMESTAMPS, absent when nothing was pooled. `busy` is a uniform series at `tick`
         // milliseconds from `t0`; the three per-pass arrays are indexed by `i` rather than positional,
         // so a resumed render carries only the passes it actually painted and cannot silently
