@@ -668,6 +668,64 @@ tile, not 53.7 of 72.6. The figures above come from the hooked build in a browse
 JS-bound step suffers more than a GPU-bound one. The ratio is the finding; the absolute belongs to the
 machine that measured it.
 
+### What a tile is actually made of, and the three answers that were wrong
+
+**Five timers, because four guesses in a row missed.** `gpuOwn` now carries `wait`, `asm`, `sub`,
+`map` and `err` beside `copy`, and they partition a tile with the remainder visible. Every design
+below was argued from arithmetic first and the arithmetic was wrong every time.
+
+Per tile on the desktop, 2048 render tiles, `?pool=12`, four runs of a 65,535:
+
+| | | |
+| --- | --- | --- |
+| `map` — awaiting `mapAsync` | 15.85 – 16.04 ms | shader + pack + the readback |
+| `err` — `popErrorScope` | **7.80 – 9.41 ms** | **28% of a 28.5 ms tile** |
+| `asm` — ground, blit, coat, windows | 1.62 – 1.77 ms | |
+| `copy` — the memcpy | 1.17 – 1.29 ms | |
+| `sub` — encode and submit | 0.06 ms | |
+| outside `draw` — loop, OPFS, handoff | 4.58 – 5.86 ms | |
+
+**The composite is 1.7 ms, not 13.** It was going to be moved into the finish workers on the
+strength of a 13.4 ms figure that came from subtracting `copy` from `draw` and assuming the
+remainder was `renderOneTile`. With the coat off - and this slab has `specular 0, subsurface 0,
+lens 0, backlight 0, sigma 0`, so `applyCoat` returns early - the composite is nothing. Turn three
+coat tokens up to 0.6 and the same tile goes from 27 ms to 239, so the work is real and this slab
+simply does not ask for it: **the GPU path is fast on bare slabs and has never been measured on a
+coat-bearing one.** That is a hole in the toggle rather than a shave on a benchmark.
+
+**Submit batching is dead.** `sub` is 0.06 ms, and a bare 16.1 MB readback batched four into one
+submit measured 1.19× against one at a time - 6.1 ms a tile against 7.25. The sheet probe says the
+same thing in its own words at this size: *1.09×, nothing.*
+
+**And `popErrorScope` is 28% of a tile on one machine and 8% on another.** 7.8-9.4 ms on the
+desktop against 1.3-2.5 ms in the harness, while `map` is 16 ms on both - so it is not the bus and
+it is not the shader. Ablating the await in the harness moved the number into `map` and left the
+wall clock alone, which is the same lesson the RGBA readback taught: removing a serial await does
+not remove the device's latency, it relocates which await is holding it. With the lookahead running,
+tile *i*'s pop is waiting on tile *i+1*'s submitted work as well.
+
+What the scope was costing it was not buying, though. Every band of every tile pushed one, and
+validation can only newly fail when the dispatch geometry changes - which comes from `rows`, and
+`rows` takes two values in a whole render. So the scope is kept for an unseen row count and
+`dev.onuncapturederror` carries the rest. **That handler did not exist**: errors raised outside the
+scope went to the console and nothing could fail a render on them.
+
+**And the replacement did not bite, which only a probe caught.** It threw at the end of `paintOne` -
+the producer - and the producer runs ahead of the consumer: tile 1 drew cleanly after a validation
+error was raised on the device, because its paint had already completed as tile 0's prefetch. One
+tile late with a single prefetch, up to thirteen with the finisher lookahead, and those tiles are
+written to OPFS and the TIFF rather than discarded. The gate belongs at the handoff, so
+`pool.tile()` and `pool.finish()` both refuse once a fault is visible, and
+[`tools/check-gpu-fault.mjs`](../tools/check-gpu-fault.mjs) reads those two call sites rather than
+the handler - ablated three ways, each one red.
+
+**`?pool=12` is worth 1.11×** and costs nothing: `?pool=N` already existed. Four 65,535 runs at
+18.2-19.3 s against 20.3-21.4 at the default 8, and the richer build they ran on carries timers that
+cost time rather than save it, so it is a floor. The finisher width is also recorded now - the GPU
+pool pins `workers: 1` because the GPU paints and one thread drives it, so `?pool=12` produced a
+record byte-identical to `?pool=8` in every field and the experiment could only be judged on a wall
+clock with its own variable unrecorded.
+
 ## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
 
 **His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,

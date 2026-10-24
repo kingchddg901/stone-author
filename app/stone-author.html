@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.197';
+  const BUILD = '2026.10.24.202';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14703,7 +14703,20 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         return no('exp.gpu.noshader');
       }
       dev.lost.then(() => { gpuCap = null; });              // a lost device is re-asked next time
-      return (gpuCap = { ok: true, why: null, dev, mod });
+      // THE BACKSTOP THAT WAS MISSING. Every error this device reports outside an explicit scope
+      // went to the console and nowhere else, so nothing could fail a render on it - and the one
+      // path that did scope, paintOne, charged 7.8-9.4 ms a tile on the desktop for the privilege.
+      // Recorded here, on the capability, because it outlives any one pool: a fault raised while
+      // tile 400 is in flight must still be visible to the export that is writing tile 402.
+      //
+      // FIRST ONE WINS. A device that has gone wrong tends to report the same thing repeatedly, and
+      // the first error is the one with a cause attached.
+      const cap = { ok: true, why: null, dev, mod, fault: null };
+      dev.onuncapturederror = e => {
+        if (!cap.fault) cap.fault = (e && e.error && e.error.message) || 'unknown WebGPU error';
+        console.error('gpu: uncaptured error', e && e.error);
+      };
+      return (gpuCap = cap);
     } catch (e) {
       console.warn('gpu: the capability check threw', e);
       return no('exp.gpu.nodevice');
@@ -14852,7 +14865,13 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     //
     //   copy    the readback loop - 4.2M pixels a tile at 2048, byte by byte into ImageData
     //   bitmap  createImageBitmap, which copies ~16.9 MB before the transfer costs nothing
-    const own = { copy: 0, bitmap: 0, draw: 0, n: 0 };
+    //   wait    blocked in tile() on a paint that the prefetch had not finished
+    //   asm     renderOneTile: the ground, the blit, the coat and the windows
+    //
+    // THESE TWO PARTITION draw WITH copy, and the remainder is what nothing accounts for. Needed
+    // because the parts I could name summed to 20.7 of a 22.6 ms tile, which would mean the
+    // prefetch overlaps nothing - and the prefetch is the reason this pool has two slots.
+    const own = { copy: 0, bitmap: 0, draw: 0, wait: 0, asm: 0, sub: 0, map: 0, err: 0, n: 0 };
     // the one prefetch in flight, if any: { i, slot, p }
     let ahead = null;
     // THE POOL, DEMOTED TO FINISHING. Attached after the fact because it needs p.markSig, which the
@@ -14871,17 +14890,42 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const jobs = new Map();            // i -> Promise of the finish record
     let chain = Promise.resolve();     // the GPU, which does one tile at a time
 
+    // WHAT CAN NEWLY FAIL VALIDATION, and it is not the pixels. Every band encodes the same two
+    // passes against the same bind groups; the only thing that varies is the uniform's CONTENTS,
+    // which validation does not read, and the dispatch size, which comes from `rows`. So a band
+    // whose row count this pool has already encoded cannot fail in a way an earlier one did not -
+    // and `rows` takes exactly two values in a whole render, the full band and the short last one.
+    //
+    // MEASURED, WHICH IS WHY THIS IS HERE: popErrorScope cost 7.8-9.4 ms a tile on the desktop and
+    // 1.3-2.5 in the harness, against a map wait of 16 ms on both. Whatever it is doing, it is not
+    // the same on every machine, and it was doing it 640 times for two distinct encodings.
+    const scoped = new Set();
+    // WHERE A FAULT HAS TO STOP THINGS, and it is not where the fault happens.
+    //
+    // The first version of this threw at the end of paintOne, and the bite test said it did not
+    // bite: tile 1 drew cleanly after a validation error was raised on the device, because its
+    // paint had already finished as tile 0's prefetch. One tile late with a single prefetch - and
+    // the lookahead that feeds the finishers runs up to thirteen deep, so thirteen tiles could
+    // reach OPFS and the TIFF after the device said it had gone wrong.
+    //
+    // So the gate is at the HANDOFF, both of them: nothing is given to the consumer that writes to
+    // disk once a fault is visible. Tiles drawn before it are sound and keep their place; the check
+    // at the end of paintOne stays, because catching it in the producer is still earlier when the
+    // producer is what notices.
+    const faultCheck = () => { if (cap.fault) throw new Error(cap.fault); };
     async function paintOne(ex0, ey0, s) {
       const d = s.img.data, uni = s.uni, uniView = s.view;
       for (let y0 = 0; y0 < ew; y0 += rowsMax) {
         const rows = Math.min(rowsMax, ew - y0), cells = ew * rows;
+        const tS = performance.now();
         uniView.setInt32(OFF_TX, ex0, true);
         uniView.setInt32(OFF_TY, ey0 + y0, true);     // the band's own origin on the sheet
         uniView.setInt32(OFF_TH, rows, true);         // and its own height: the last one is short
         dev.queue.writeBuffer(s.ub, 0, uni);
         const [dX, dY] = split(Math.ceil(cells / 64));
         const [pX, pY] = split(Math.ceil(cells / 64));   // one thread a pixel now, not one per four
-        dev.pushErrorScope('validation');
+        const check = !scoped.has(rows);
+        if (check) { scoped.add(rows); dev.pushErrorScope('validation'); }
         const enc = dev.createCommandEncoder();
         const a = enc.beginComputePass();
         a.setPipeline(pipe); a.setBindGroup(0, s.grp);
@@ -14893,7 +14937,10 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         b.dispatchWorkgroups(pX, pY); b.end();
         enc.copyBufferToBuffer(s.pk, 0, s.rb, 0, cells * 4);
         dev.queue.submit([enc.finish()]);
+        own.sub += performance.now() - tS;
+        const tM = performance.now();
         await s.rb.mapAsync(GPUMapMode.READ, 0, cells * 4);
+        own.map += performance.now() - tM;
         const src = new Uint8Array(s.rb.getMappedRange(0, cells * 4));
         // ONE set(), NOT 4.2 MILLION ITERATIONS. The shader writes RGBA in the order ImageData
         // wants, so this is a memcpy. It was a per-pixel loop spreading 3 bytes into 4 and it
@@ -14903,7 +14950,17 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         d.set(src, y0 * ew * 4);
         own.copy += performance.now() - tC;
         s.rb.unmap();
-        const e = await dev.popErrorScope();
+        // POPERRORSCOPE IS AN AWAIT ON THE DEVICE, not a local read, so it is timed like any other
+        // round trip. The bus moves a tile in 7.25 ms measured bare, and the pool's paint takes 15.
+        const tE = performance.now();
+        const e = check ? await dev.popErrorScope() : null;
+        own.err += performance.now() - tE;
+        // AND THE UNSCOPED BANDS ARE NOT UNCHECKED. onuncapturederror above records the first fault
+        // on the capability; this is where a render stops because of it, with the same throw the
+        // scope would have produced. Without this the handler would be a console message and the
+        // export would carry on writing tiles - which is the failure this whole path has a history
+        // of: plausible, wrong, and four gigabytes.
+        if (!e && cap.fault) throw new Error(cap.fault);
         if (e) throw new Error(e.message.split(String.fromCharCode(10))[0]);
       }
     }
@@ -14947,7 +15004,12 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // writes `workers: undefined` into the master's provenance and a trace whose target is
       // undefined, on a file that cannot afterwards say what drew it. Which matters more here than
       // for any other painter, because a GPU master is NOT byte-identical to a CPU one.
-      planned: 1, workers: 1, shed: 0, strain: null, gpu: true, pipelined: SETS > 1,
+      // workers IS 1 AND THAT IS HONEST: the GPU paints, and one thread drives it. The finishers
+      // are a SECOND pool and their width lived nowhere - not in workers, which the GPU pins at 1,
+      // and not in the metadata, which never carried the trail. So `?pool=12` produced a record
+      // byte-identical to `?pool=8` in every field, and the experiment could only be judged on a
+      // wall clock with its own independent variable unrecorded.
+      planned: 1, workers: 1, finishers: 0, shed: 0, strain: null, gpu: true, pipelined: SETS > 1,
       get busy() { return busyN; },
       get tiles() { return held; },
       // READ ONCE AT THE END, by the metadata. Totals rather than per tile: these are main-thread
@@ -14964,6 +15026,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // to the main thread's renderOneTile, where the lost-canvas guard runs as it always did.
       async finish(i) {
         if (!fin) throw new Error('gpu finish without finishers');
+        faultCheck();
         // ONE DEEPER THAN THE POOL IS WIDE, so there is always a tile being drawn while every
         // worker has one to finish.
         const depth = Math.max(2, (fin.planned || 2) + 1);
@@ -14979,6 +15042,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       },
       async tile(i) {
         if (closed) throw new Error('gpu pool used after close');
+        faultCheck();
         busyN = 1;
         try {
           // THE PREFETCH IS SPECULATIVE, so a caller that skips is not a correctness problem. A
@@ -14988,11 +15052,15 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
           if (ahead && ahead.i === i) {
             slot = ahead.slot;
             const pending = ahead; ahead = null;
+            const tW = performance.now();
             await pending.p;                        // rethrows here, where a caller can see it
+            own.wait += performance.now() - tW;
           } else {
             if (ahead) { const stale = ahead; ahead = null; try { await stale.p; } catch (_) {} }
             slot = 0;
+            const tW = performance.now();
             await start(i, slot);
+            own.wait += performance.now() - tW;
           }
           held++;
           // AND THE NEXT ONE GOES NOW, before this tile's canvas is built and long before the
@@ -15009,6 +15077,8 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
           }
           const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
           const img = set[slot].img;
+          const tA = performance.now();
+          try {
           return renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed, cx => {
             // ONLY WHERE THE SLAB IS. paintGlassContent writes through
             // g2d.putImageData(img, B.x0, by, ...) for the band rows inside woodRect() and nowhere
@@ -15025,9 +15095,10 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
             cx.putImageData(img, 0, 0, B.x0, B.y0, B.bw, B.bh);
             cx.restore();
           });
+          } finally { own.asm += performance.now() - tA; }
         } finally { busyN = 0; }
       },
-      useFinishers(f) { fin = f; },
+      useFinishers(f) { fin = f; api.finishers = (f && f.planned) || 0; },
       close() {
         if (closed) return;
         closed = true;
@@ -15792,6 +15863,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // mark, including the first three GPU masters. A flag that cannot fire is worse than no
       // flag: those three had to be identified from poolStrain being null instead.
       const poolRan = pool ? { n: pool.workers, planned: pool.planned, strain: pool.strain,
+                               fins: pool.finishers || 0,
                                gpu: !!pool.gpu, own: pool.own ? pool.own : undefined } : null;
       if (pool) { pool.close(); pool = null; }
       proveTile(p.ts, W);                                  // settled: every render after this one matches it
@@ -15892,6 +15964,9 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         // readback loop and `bitmap` is createImageBitmap. `n` is how many tiles that covers.
         gpuOwn: (poolRan && poolRan.own) ? poolRan.own : undefined,
         workers: poolRan ? poolRan.n : 0,
+        // HOW MANY FINISHERS RAN, which is the width `?pool=N` actually moves on a GPU render.
+        // Absent on a CPU render, where `workers` already is that number.
+        finishers: (poolRan && poolRan.fins) ? poolRan.fins : undefined,
         poolWhy: poolRan ? undefined : poolWhy,
         poolPlanned: poolRan && poolRan.planned !== poolRan.n ? poolRan.planned : undefined,
         // HOW HARD THE RENDER FOUND IT, which is what the shed heuristic used to act on and now only
