@@ -244,6 +244,48 @@ compute-bound.** At 32,768 the same change took 9.4% off the work and 4.5% off t
 threads dropping from 8.3–8.6 to 8.0 — the workers outran the consumer. That is a real ceiling and it
 arrives at small sizes first.
 
+## Comparing two designs: build both, interleave, keep the best of each
+
+Chris's protocol, adopted 2026-10-24 after a day of picking designs by microbench and having the
+renders disagree. **Build both candidates, measure each on real renders, then combine.** Not: reason
+about which ought to win.
+
+The bench had earned no such trust. On that one day it priced a radius-indexed spin table 8 points
+above an angle-indexed one and that choice was never tested on a render; it said unrolling the op
+chain was worth 19% where the render said 2-3%; it preferred a generated chain built per tile that
+was slower in production; and it could not see the cache effect that made a 256 KB table bimodal.
+Four design calls, and in every one the only number that settled anything came from a master.
+
+**Stage both as two copies of THE APP; do not revert between them.** The app, not a harness page:
+the harness has no export and never writes a master, so it cannot produce the only number that
+settles anything. `app/stone-author.html` is self-contained, so two copies with two filenames
+coexist and either can be opened. No dirty tree, no revert step, no chance of measuring a
+half-reverted mixture, and the pair is still re-runnable a week later - which a revert is not.
+
+**Each copy carries its own build marker, so every master self-identifies its arm.** That is what
+makes interleaving free: render in any order, keep no notes, and the pairing is reconstructed
+afterwards from the `build` field the files already record. It is also the only version of this that
+survives a mistake - a master cannot be filed under the wrong arm, because nobody files it.
+
+**Interleave, do not block.** `A B A B A B`, not `AAA` then `BBB`. The box drifts: a gate sweep at
+90% CPU was still clearing when a triplet started and sent it 1.722 -> 1.686 -> 1.620 as it drained,
+and two runs of one build on a nominally quiet box came in 12% apart in core-seconds. Blocking lets
+that drift land entirely on one arm; interleaving splits it across both at the same machine cost.
+
+**Three runs an arm, not two.** Two runs on build `181` agreed at 4.769 and 4.894 and were both
+wrong about the build; the third read 5.280 and exposed a 10.8% spread. A pair that agrees is not
+evidence of a tight build - it can be two samples from one mode of a bimodal one.
+
+**And read core-seconds, not only the wall.** Interleaving removes drift between the arms; it does
+not say whether a difference is work or scheduling. The table above does.
+
+**Combining is usually available, and is the reason to build both rather than choose.** The spin
+tables are the live example: the angle form won on simplicity - one universal table, no maximum
+radius to bound, no fallback branch - while the radius form measured faster by skipping the turn
+reduction. That read as a straight trade until the 64 KB finding showed entry count was never the
+constraint, which means a 4,096-entry **radius** table would be the same 64 KB and keep the speed.
+The best of both was reachable and the bench could not see it, because what decided it was cache.
+
 ## What this does not recover
 
 `trace.busy` exists on 50% of the long renders and `poolStrain` on 25% — both are newer than the
