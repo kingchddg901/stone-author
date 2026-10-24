@@ -842,6 +842,47 @@ buffer path too. Both shapes write the same tile, and the chain underneath is by
 link - texture bytes against the f32 reference (0 of 12,582,912), the byte pack against the same
 reference (0 of 12,582,912), and the worker's composite against the main thread's (0 of 67,108,864).
 
+### The fourth channel was always 255, and it was being compressed
+
+With the readback off the main thread the render is worker-bound, and 78% of a worker's tile is the
+deflate - 384 ms of a 601 ms tile at 4096, measured. The deflate is bytes-bound at about 120 MB/s
+whatever shape it is given, so the only lever is fewer bytes, and there was a free quarter: the TIFF
+declared `SamplesPerPixel 4` with `ExtraSamples 2`, unassociated alpha, every byte 255.
+
+**Measured before changing anything, across the cases where it might not have been constant:**
+daylight on the GPU path, daylight and black light on the CPU path, tiles that are half ground where
+the picture ends, and specular, subsurface and lens all at 0.6. About 151 million pixels. Alpha min
+255, max 255, not one pixel otherwise.
+
+| a real 2048 stored tile | deflate | size |
+| --- | --- | --- |
+| four channels | 137.0 ms | 744 KB |
+| three channels | **108.5 ms** | **663 KB** |
+| three channels + predictor 2 | 93.8 ms | **700 KB** |
+
+**1.26× on the deflate and 10.9% off every master**, which is 11% off the OPFS write volume with it -
+and that is the figure behind the storage warning's "49 GB of writes for a 23 GB file".
+
+**Predictor 2 is a loss here and the textbook says otherwise.** Horizontal differencing assumes
+neighbouring pixels are similar; glass at this scale is high-frequency, so it measures faster and
+BIGGER. Written down so nobody tries it twice.
+
+The cost is the mirror of the loop the RGBA direct write removed - about 12 ms a tile against 30 of
+deflate - and it runs in the finish worker on the pooled paths, which is what the render is bound by,
+so twelve of them share it.
+
+**`samples` goes in the resume key and NOT in `renderSig`.** A record written when a stored tile was
+four channels describes bytes this build no longer produces; without this the verification would
+refuse on an 11% length difference rather than on anything structural. It stays out of `renderSig`
+deliberately: that hash identifies the picture, the picture is unchanged to the level, and putting it
+there would re-date every master on disk for a channel that was always 255.
+
+**And the gate is ground truth on the compaction, which it could not have been by accident.**
+`gpu-worker-composite.html` compares arm A's raw RGBA against arm B's three-channel bytes by stride -
+0 apart over 50,331,648 channels, with every A pixel's alpha checked at 255. Comparing B against
+another B would have proved nothing: a helper that dropped the wrong channel would be wrong
+identically in both arms and read as agreement.
+
 ## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
 
 **His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,

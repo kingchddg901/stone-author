@@ -173,23 +173,38 @@ document.getElementById('run').onclick = async () => {
 
     // ---- and are they the same bytes? ----------------------------------------------------------
     head('do the two arms write the same tile?');
+    // ARM A IS RGBA AND ARM B IS RGB, SO THE STRIDES ARE WALKED SEPARATELY - and that is the point
+    // rather than an inconvenience. The stored tile dropped its alpha channel: every byte of it was
+    // 255, measured over 151 million pixels across both spectra, both paths, half-ground tiles and
+    // three coat effects at 0.6. B goes through the shipped rgbFromRGBA; A is the raw RGBA out of
+    // storedTilePixels. Comparing them by stride makes this gate GROUND TRUTH on that helper, which
+    // comparing B against another B could never be - a helper that dropped the wrong channel would
+    // be wrong identically in both arms and read as agreement.
     let missing = 0, lenBad = 0, chanBad = 0, worst = 0, firstIdx = -1, cmp = 0, flat = true;
-    const first = A.get(picks.length ? [...A.keys()][0] : 0);
+    let alphaBad = 0;
+    const first = A.size ? A.get([...A.keys()][0]) : null;
     for (const [idx, a] of A) {
       const b = B.get(idx);
       if (!b) { missing++; continue; }
-      if (a.length !== b.length) { lenBad++; continue; }
-      for (let j = 0; j < a.length; j++) {
-        const d = Math.abs(a[j] - b[j]);
-        if (d) { chanBad++; if (d > worst) worst = d; if (firstIdx < 0) firstIdx = idx; }
-        if (first && a[j] !== first[0]) flat = false;
+      if (b.length !== (a.length / 4) * 3) { lenBad++; continue; }
+      for (let q = 0, o = 0; o < b.length; q += 4, o += 3) {
+        for (let ch = 0; ch < 3; ch++) {
+          const d = Math.abs(a[q + ch] - b[o + ch]);
+          if (d) { chanBad++; if (d > worst) worst = d; if (firstIdx < 0) firstIdx = idx; }
+        }
+        // AND THE CHANNEL THAT WENT had better have been the constant one.
+        if (a[q + 3] !== 255) alphaBad++;
+        if (first && a[q] !== first[0]) flat = false;
+        cmp += 3;
       }
-      cmp += a.length;
     }
     // A FLAT ARM AGREES WITH ANYTHING. If every byte of A is the same value then equality is not
     // evidence of anything, and this page would be reporting that two blank tiles match.
     pair('tiles in A but not in B', missing, missing ? 'bad' : 'good');
-    pair('tiles whose length differs', lenBad, lenBad ? 'bad' : 'good');
+    pair('tiles whose length is not three quarters of A', lenBad, lenBad ? 'bad' : 'good');
+    pair('A pixels whose alpha was not 255', alphaBad.toLocaleString()
+      + (alphaBad ? ' — the dropped channel was carrying something' : ''),
+      alphaBad === 0 ? 'good' : 'bad');
     pair('bytes compared', cmp.toLocaleString());
     pair('is arm A flat?', flat ? 'YES - every byte the same value, so an agreement means nothing'
       : 'no, it varies', flat ? 'bad' : 'good');
@@ -197,10 +212,12 @@ document.getElementById('run').onclick = async () => {
       + (chanBad ? '   (worst ' + worst + ' level' + (worst === 1 ? '' : 's')
           + ', first in stored tile ' + firstIdx + ')' : ''),
       chanBad === 0 ? 'good' : 'bad');
-    big(!missing && !lenBad && !flat && chanBad === 0
-      ? 'The worker writes the same bytes. The composite can move, so the readback can follow.'
-      : 'The two arms differ - the composite cannot move until this reads zero.',
-      !missing && !lenBad && !flat && chanBad === 0 ? 'good' : 'bad');
+    const clean = !missing && !lenBad && !flat && chanBad === 0 && alphaBad === 0;
+    big(clean
+      ? 'The worker writes the same picture, three channels where there were four, and the fourth '
+        + 'was 255 in every pixel compared.'
+      : 'The two arms differ - nothing here should ship until this reads zero.',
+      clean ? 'good' : 'bad');
   } catch (e) {
     head('failed'); pair('error', String(e && e.message || e), 'bad'); console.error(e);
   } finally { btn.disabled = false; }

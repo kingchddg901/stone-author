@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.206';
+  const BUILD = '2026.10.24.207';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5283,7 +5283,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `    var pr=storedTilePixels(tcx,{bleed:d.bleed,store:d.store,FH:d.finalH},sx,sy,tx,ty,d.finalW,d.markSig);\n`;
     s += `    var px=pr.px;mk+=pr.marked;\n`;
     s += `    for(var q=0;q<px.length;q+=400){var l=(px[q]+px[q+1]+px[q+2])/3;lS+=l;if(l>40)lU++;lN++;}\n`;
-    s += `    var z=await deflateBytes(new Uint8Array(px.buffer,px.byteOffset,px.byteLength));\n`;
+    s += `    var z=await deflateBytes(rgbFromRGBA(px));\n`;
     s += `    parts.push({idx:ty*d.across+tx,z:z});xfer.push(z.buffer);\n`;
     s += `  }}\n`;
     s += `  self.postMessage({i:d.i,fin:true,painted:okP,parts:parts,marked:mk,litSum:lS,litUp:lU,litN:lN},xfer);\n`;
@@ -10331,21 +10331,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const short1 = v => p => iv.setUint16(p, v, true);
     const long1 = v => p => iv.setUint32(p, v, true);
     const far = v => p => u64(iv, p, v);                   // a value of 8 bytes or less sits here inline
-    const shorts = v => p => { for (let i = 0; i < 4; i++) iv.setUint16(p + i * 2, v, true); };
+    // COUNT-AWARE, because the sample count is 3 now and was 4. Three shorts is six bytes, which
+    // still fits the eight the entry holds inline.
+    const shorts = (v, k) => p => { for (let i = 0; i < (k || 4); i++) iv.setUint16(p + i * 2, v, true); };
     entry(256, 4, 1, long1(W));                            // ImageWidth
     entry(257, 4, 1, long1(H));                            // ImageLength
-    entry(258, 3, 4, shorts(8));                           // BitsPerSample — 8 bits, four samples
+    entry(258, 3, 3, shorts(8, 3));                        // BitsPerSample — 8 bits, three samples
     entry(259, 3, 1, short1(8));                           // Compression — Adobe Deflate, what CompressionStream emits
     entry(262, 3, 1, short1(2));                           // PhotometricInterpretation — RGB
     if (dsc) entry(270, 2, dsc.length, far(dscAt));        // ImageDescription — the provenance the PNG puts in tEXt
-    entry(277, 3, 1, short1(4));                           // SamplesPerPixel
+    entry(277, 3, 1, short1(3));                           // SamplesPerPixel
     entry(284, 3, 1, short1(1));                           // PlanarConfiguration — chunky
     entry(322, 4, 1, long1(tileW));                        // TileWidth
     entry(323, 4, 1, long1(tileH));                        // TileLength
     entry(324, 16, N, N === 1 ? far(offs[0]) : far(offsAt));   // TileOffsets (LONG8)
     entry(325, 16, N, N === 1 ? far(cnts[0]) : far(cntsAt));   // TileByteCounts (LONG8)
-    entry(338, 3, 1, short1(2));                           // ExtraSamples — unassociated alpha
-    entry(339, 3, 4, shorts(1));                           // SampleFormat — unsigned integer
+    // NO ExtraSamples. There is no extra sample any more, and a tag claiming one over three
+    // channels is a file that disagrees with itself.
+    entry(339, 3, 3, shorts(1, 3));                        // SampleFormat — unsigned integer
     u64(iv, e, 0);                                         // no second IFD
 
     const tail = [];
@@ -11175,7 +11178,7 @@ self.onmessage = async (e) => {
         if (tx >= p.across || ty >= p.down) continue;
         const px = storedTilePixels(cx, p, sx, sy, tx, ty, W, markSigNow()).px;
         fresh.push({ i: ty * p.across + tx,
-                     bytes: await deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength)) });
+                     bytes: await deflateBytes(rgbFromRGBA(px)) });
       }
       c.width = 1; c.height = 1;
       const stored = [];
@@ -11354,6 +11357,34 @@ self.onmessage = async (e) => {
   // Deflate a tile's raw RGBA the way TIFF's compression tag 8 expects: the zlib stream itself, with no
   // per-row filter byte. PNG's writer puts a filter byte in front of every row; TIFF has no such thing,
   // so the same CompressionStream serves both and only the input differs.
+  // THREE BYTES A PIXEL, BECAUSE THE FOURTH WAS ALWAYS 255.
+  //
+  // The TIFF declared SamplesPerPixel 4 with ExtraSamples 2 - unassociated alpha - and every byte
+  // of that channel was 255, carried from the shader through the canvas into the file and
+  // compressed. Measured across 151 million pixels before this was written: daylight on the GPU
+  // path, daylight and black light on the CPU path, tiles that are half ground where the picture
+  // ends, and three coat effects at 0.6. Alpha min 255, max 255, not one pixel otherwise.
+  //
+  // WHAT IT BUYS, measured on a real 2048 stored tile: the deflate goes 132.1 ms to 102.1 - 1.29x,
+  // because there is a quarter less to compress - and the tile goes 742 KB to 662, 11% off every
+  // master and 11% off the OPFS write volume with it. The throughput is flat at about 120 MB/s
+  // whichever shape it gets, so this is not a compression win; it is fewer bytes.
+  //
+  // AND PREDICTOR 2 IS A LOSS HERE, which is worth writing down because the textbook says
+  // otherwise. Horizontal differencing assumes neighbouring pixels are similar; glass at this
+  // scale is high-frequency, so it measured FASTER and BIGGER - 93.8 ms but 700 KB against 662.
+  //
+  // This is where the cost lands, and it is the mirror of the loop the RGBA direct write removed:
+  // about 12 ms a tile against the 30 the deflate gives back. It runs in the finish worker on the
+  // pooled paths, which is where the render is bound now, so twelve of them share it.
+  function rgbFromRGBA(px) {
+    const n = (px.length / 4) | 0;
+    const out = new Uint8Array(n * 3);
+    for (let i = 0, o = 0; o < out.length; i += 4, o += 3) {
+      out[o] = px[i]; out[o + 1] = px[i + 1]; out[o + 2] = px[i + 2];
+    }
+    return out;
+  }
   async function deflateBytes(u8) {
     const cs = new CompressionStream('deflate');
     const w = cs.writable.getWriter();
@@ -12922,7 +12953,7 @@ self.onmessage = async (e) => {
   // up there is a temporal dead zone. A function declaration is hoisted, so renderCoreSrc can call
   // these and they resolve against the live values at call time - the same escape hatch glowFns uses,
   // and check-worker-core reads both.
-  function finishFns() { return { storedTilePixels, markStamp, markPack, deflateBytes, tilePainted }; }
+  function finishFns() { return { storedTilePixels, markStamp, markPack, deflateBytes, rgbFromRGBA, tilePainted }; }
   function finishPreamble() {
     return 'var MARK_ON=' + MARK_ON + ',MARK_CELL=' + MARK_CELL + ',MARK_BITS=' + MARK_BITS +
            ',MARK_COPIES=' + MARK_COPIES + ',MARK_VER=' + MARK_VER + ',MARK_MAGIC=' + MARK_MAGIC + ';' +
@@ -15708,8 +15739,17 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       // rendered eight minutes earlier. The field the render census groups on, wrong, silently.
       const atSpectrum = lightSpectrum, atInputs = renderSig();
       let markedCells = 0;
+      // samples IS IN THE RESUME KEY AND NOT IN renderSig. A record written when a stored tile was
+      // four channels describes bytes this build no longer produces, and the verification would be
+      // comparing a three-channel deflate against a four-channel length - it would refuse, but on an
+      // 11% size difference rather than on anything structural. Here it cannot match at all.
+      //
+      // NOT in renderSig, deliberately: that hash identifies the PICTURE, the picture is unchanged
+      // to the level, and putting this there would re-date every master on disk for a channel that
+      // was always 255.
       const jobSig = resumeSig({ inputs: renderSig(), w: W, h: p.FH, ts: p.ts, store: p.store,
-                                 bleed: p.bleed, across: p.across, down: p.down, renders: p.renders });
+                                 bleed: p.bleed, across: p.across, down: p.down, renders: p.renders,
+                                 samples: 3 });
       // PICK UP, OR START OVER. Loaded, then VERIFIED by re-rendering tiles the file already holds -
       // the signature decides whether to look, the tiles decide whether to trust. Any doubt at all
       // takes the null and the render starts from nothing, which costs time and can never cost
@@ -16042,7 +16082,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             const l = (px[i] + px[i + 1] + px[i + 2]) / 3;
             litSum += l; if (l > 40) litUp++; litN++;
           }
-          const z = await deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength));
+          const z = await deflateBytes(rgbFromRGBA(px));
           // LENGTH FIRST. The sink may TRANSFER this buffer to the writer worker, and a transferred
           // buffer detaches - z.length reads back as 0 afterwards. Taking it after the call silently
           // zeroed `bytes` and every perTile row, which is a master that looks finished and whose
