@@ -38,9 +38,9 @@ if (!DECL) { console.error('probe-hash-cache: FAIL - no _NZC declaration found i
 const ablate = process.argv.includes('--ablate');
 
 function build(mutate) {
-  let decl = DECL, fns = ['nz', 'vnoise', 'fbm2', 'vnoiseC', 'fbm2C'].map(liftFn).join('\n');
+  let decl = DECL, fns = ['nz', 'vnoise', 'fbm2', 'vnoiseC', 'vnoiseCfill', 'fbm2C'].map(liftFn).join('\n');
   if (mutate) ({ decl, fns } = mutate(decl, fns));
-  return new Function(decl + '\n' + fns + '\nreturn { nz, vnoise, fbm2, vnoiseC, fbm2C, peek: () => _NZC };')();
+  return new Function(decl + '\n' + fns + '\nreturn { nz, vnoise, fbm2, vnoiseC, vnoiseCfill, fbm2C, peek: () => _NZC };')();
 }
 
 // ---- the walk --------------------------------------------------------------------------------
@@ -140,9 +140,9 @@ if (ablate) {
   console.log('\nD  ablations — each must go red');
   const ABL = [
     ['the key ignores the cell, so stale corners are served',
-      (d, f) => ({ decl: d, fns: f.replace('if (_NZC[o] === s && _NZC[o + 1] === xi && _NZC[o + 2] === yi) {', 'if (_NZC[o] === s) {') })],
+      (d, f) => ({ decl: d, fns: f.replace('if (_NZC[o] !== s || _NZC[o + 1] !== xi || _NZC[o + 2] !== yi)', 'if (_NZC[o] !== s)') })],
     ['the key ignores the seed, so one site answers for another',
-      (d, f) => ({ decl: d, fns: f.replace('if (_NZC[o] === s && _NZC[o + 1] === xi && _NZC[o + 2] === yi) {', 'if (_NZC[o + 1] === xi && _NZC[o + 2] === yi) {') })],
+      (d, f) => ({ decl: d, fns: f.replace('if (_NZC[o] !== s || _NZC[o + 1] !== xi || _NZC[o + 2] !== yi)', 'if (_NZC[o + 1] !== xi || _NZC[o + 2] !== yi)') })],
     ['the array is zero-filled, so slot 0 answers for seed 0 at cell (0,0)',
       (d, f) => ({ decl: d.replace('.fill(NaN)', ''), fns: f })],
     ['every call uses one slot, so the three sites evict each other and must still agree',

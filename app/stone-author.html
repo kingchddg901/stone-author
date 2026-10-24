@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.23.174';
+  const BUILD = '2026.10.23.175';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2303,17 +2303,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // wrap past 2^31 and two different cells could compare equal. A false MISS costs four hashes, a
   // false HIT is a wrong picture - the same rule warpCacheKey is written to below.
   const _NZC = new Float64Array(12 * 7).fill(NaN);
+  // THE MISS PATH IS OUTLINED, AND THAT IS THE WHOLE POINT OF SPLITTING IT. The first version put the
+  // four nz calls inside vnoiseC beside the cache test, which left a hot function carrying four calls
+  // and pushed it past what V8 would inline - measured, build 2026.10.23.174 settled into one of two
+  // modes per render and held it: a 32,768 took either 87 core-seconds of work or 110, same code, same
+  // input, same output bytes, on a quiet box. Slow in EVERY fifth, so not a warm-up. Here the hot path
+  // has no calls in it at all - a floor, three compares, four loads and the interpolation - and the
+  // hashing lives in a function the optimiser is free to leave alone.
+  function vnoiseCfill(xi, yi, s, o) {
+    const a = nz(xi, yi, s), b = nz(xi + 1, yi, s), c = nz(xi, yi + 1, s), d = nz(xi + 1, yi + 1, s);
+    _NZC[o] = s; _NZC[o + 1] = xi; _NZC[o + 2] = yi;
+    _NZC[o + 3] = a; _NZC[o + 4] = b; _NZC[o + 5] = c; _NZC[o + 6] = d;
+  }
   function vnoiseC(x, y, s, slot) {
     const xi = Math.floor(x), yi = Math.floor(y), tx = x - xi, ty = y - yi;
     const o = slot * 7;
-    let a, b, c, d;
-    if (_NZC[o] === s && _NZC[o + 1] === xi && _NZC[o + 2] === yi) {
-      a = _NZC[o + 3]; b = _NZC[o + 4]; c = _NZC[o + 5]; d = _NZC[o + 6];
-    } else {
-      a = nz(xi, yi, s); b = nz(xi + 1, yi, s); c = nz(xi, yi + 1, s); d = nz(xi + 1, yi + 1, s);
-      _NZC[o] = s; _NZC[o + 1] = xi; _NZC[o + 2] = yi;
-      _NZC[o + 3] = a; _NZC[o + 4] = b; _NZC[o + 5] = c; _NZC[o + 6] = d;
-    }
+    // READ BACK EVEN ON A MISS, rather than using the values just computed. A Float64Array store and
+    // load of a double is exact, so this cannot move a bit, and it keeps one path through the tail.
+    if (_NZC[o] !== s || _NZC[o + 1] !== xi || _NZC[o + 2] !== yi) vnoiseCfill(xi, yi, s, o);
+    const a = _NZC[o + 3], b = _NZC[o + 4], c = _NZC[o + 5], d = _NZC[o + 6];
     const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
     // vnoise's OWN expression, character for character. Re-associating it would move the last place,
     // and T feeds exp(-a*T) on every channel, so this has to read identically and not merely equally.
@@ -5028,7 +5036,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // with a metal layer reached it, and nothing gated that. It carries nothing new behind it.
       fbm2, woodAtan2, groundCol, surfaceGloss, woodEye, woodStain, specRGB, drawLayerArtifacts,
       resample, smoothPath, handRoute, pathLen, segD, tangent, roughen, lineGeom, curvature, sinuate,
-      vnoise, vnoiseG, fbm2G, vnoiseC, fbm2C, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
+      vnoise, vnoiseG, fbm2G, vnoiseC, vnoiseCfill, fbm2C, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
     // THE GLOW TRIO ARRIVES SEPARATELY, and not for tidiness. liftCol is a function declaration and
     // emitCross is declared up at the top, so both could be named in the literal above - glowLift is a
     // const arrow seven thousand lines below it, and naming it there is a temporal dead zone that
