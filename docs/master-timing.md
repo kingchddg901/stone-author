@@ -197,6 +197,29 @@ Three things follow, and they apply to every optimisation measured from here on:
   where the coordinates are all distinct and the branches are cold. Use the microbenchmark for
   *ratios* between two functions and the renders for absolute scale.
 
+## Wall time divided by busy threads separates three causes that look alike
+
+`ms.render` alone cannot tell a slower machine from slower code from a worse schedule. Multiplying
+wall by the mean busy threads from a hardware log gives **core-seconds**, the total work, and the two
+numbers together name the cause:
+
+| wall | core-seconds | what it is |
+| --- | --- | --- |
+| up | **up** | more work per sample — the code, or the optimiser's treatment of it |
+| up | flat | the same work, badly spread — load imbalance, stragglers, a serial consumer |
+| up | up, with lower clocks | the machine — check clocks, temperature and the free-memory floor first |
+
+Measured on five 32,768 renders of one build on a quiet box, byte-identical output: 700 to 872
+core-seconds, a **25% swing in total work for identical work done**. That could not be imbalance,
+and the block sums were slow in every fifth rather than only the first, so it was not a warm-up
+either. It was the optimiser declining to inline a function that had grown — see
+`glass-one-pixel.md`. Outlining the cold path took the spread from 17.2% to 0.8%.
+
+**A falling core-second count with a flatter wall gain is the signal that a render has stopped being
+compute-bound.** At 32,768 the same change took 9.4% off the work and 4.5% off the clock, with busy
+threads dropping from 8.3–8.6 to 8.0 — the workers outran the consumer. That is a real ceiling and it
+arrives at small sizes first.
+
 ## What this does not recover
 
 `trace.busy` exists on 50% of the long renders and `poolStrain` on 25% — both are newer than the

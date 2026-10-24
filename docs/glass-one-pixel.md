@@ -334,3 +334,30 @@ That matters beyond this optimisation, because `glass-gpu.md` rests its verdict 
 that this work is "a hash chain, not shading" and that a GPU's advantage evaporates on integer
 multiply. The hash share is real but smaller than that framing implies, and that section should be
 re-read against these numbers rather than trusted.
+
+### What it measured, and the mistake in between
+
+Build `2026.10.23.174` put the cache test and the four `nz` calls in one function, and it was
+**bimodal**: five 32,768 renders on a quiet box, byte-identical output, took either 700 or up to 872
+core-seconds of work. Slow in *every* fifth rather than only at the start, so not a warm-up, and
+core-seconds varying rules out load imbalance, which moves wall time and leaves total work flat. A
+hot function that carries four calls is near what the optimiser will inline, and whether it inlines
+was not stable run to run.
+
+Build `2026.10.23.175` moves the miss path into `vnoiseCfill`, leaving the hot path with no calls in
+it. Measured at 32,768, all on one quiet afternoon, same slab, byte-identical masters throughout:
+
+| build | runs | mean wall | spread | core-seconds |
+| --- | --- | --- | --- | --- |
+| `173` (no cache) | 2 | 1.468 min | 2.6% | 743 |
+| `174` (cache, inlined miss) | 5 | 1.638 min | **17.2%** | 700–872 |
+| `175` (cache, outlined miss) | 4 | **1.402 min** | **0.8%** | **673** |
+
+**4.5% off the wall and 9.4% off the work**, with a run-to-run spread five times tighter than the
+uncached build's. Outlining beat even `174`'s best run by 6%, so it did not merely remove the
+variance.
+
+**And the wall gain is smaller than the compute gain, which says where the next ceiling is.** Busy
+threads fall from 8.3–8.6 to about 8.0: the workers now finish a tile faster than the serial
+consumer can take them, so a 32,768 is becoming consumer-bound rather than compute-bound. Further
+per-sample savings will show up fully at 65,535 and 1,048,576 and only partly here.
