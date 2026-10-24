@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.184';
+  const BUILD = '2026.10.24.185';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -12690,28 +12690,6 @@ self.onmessage = async (e) => {
 
   // The element is captured BEFORE the await: Event.target is only valid while the event is being
   // dispatched, and awaiting the dialogue outlives that — e.target is null by the time it resolves.
-  // ---- THE GPU TOGGLE -------------------------------------------------------------------------
-  // ABSENT, NOT DISABLED, when the machine cannot run it. A greyed switch invites the question
-  // "why can I not turn this on", and the honest answer - no WebGPU, or this page is not on
-  // localhost - belongs in the export status where a refusal is already explained, not in a
-  // tooltip on a control that was never going to work here.
-  //
-  // THE BOX FOLLOWS THE SLAB. The preference is stored per slab name, so loading another document
-  // has to re-read it; gpuSyncRow is called from here at start-up and again whenever a slab is
-  // loaded or renamed. Without that the switch would keep showing the last slab's answer while the
-  // export used this one's, which is the state-and-behaviour disagreement all of this is avoiding.
-  async function gpuSyncRow() {
-    const row = document.getElementById('gpu-row'), box = document.getElementById('gpu-on');
-    if (!row || !box) return;
-    const cap = await gpuCapability();
-    row.hidden = !cap.ok;
-    if (cap.ok) box.checked = gpuPrefGet();
-  }
-  document.getElementById('gpu-on').addEventListener('change', () => {
-    gpuPrefSet(document.getElementById('gpu-on').checked);
-  });
-  gpuSyncRow();
-
   document.getElementById('tier-large').addEventListener('change', async e => {
     const box = document.getElementById('tier-large');
     if (box.checked && !(await bigDialog(TR('big.warn'), TR('btn.understood')))) { box.checked = false; return; }
@@ -14843,7 +14821,13 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     }
 
     return {
-      planned: 1, shed: 0, gpu: true,
+      // EVERY FIELD THE EXPORT READS OFF A POOL, not just the ones the tile loop touches. The
+      // metadata block does `{ n: pool.workers, planned: pool.planned, strain: pool.strain }` at
+      // the END of a render, six minutes in, and a stub missing two of those does not throw - it
+      // writes `workers: undefined` into the master's provenance and a trace whose target is
+      // undefined, on a file that cannot afterwards say what drew it. Which matters more here than
+      // for any other painter, because a GPU master is NOT byte-identical to a CPU one.
+      planned: 1, workers: 1, shed: 0, strain: null, gpu: true,
       get busy() { return busyN; },
       get tiles() { return held; },
       stamp: () => null,                                   // no per-worker trace: there is one of it
@@ -14879,6 +14863,35 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       },
     };
   }
+
+  // ---- THE GPU TOGGLE -------------------------------------------------------------------------
+  // DOWN HERE, BELOW THE DECLARATIONS, and that is the whole reason for its position. This block
+  // first sat up with the tier checkboxes, where the start-up call to gpuSyncRow ran before the
+  // `let gpuCap` above it existed - a temporal dead zone, so every page load threw
+  // "Cannot access 'gpuCap' before initialization" on an unhandled rejection. It did not show in
+  // a hand test because the row still ended up correct on a second pass; CI's browser harness
+  // reported it as a page error on the very first run.
+  // ABSENT, NOT DISABLED, when the machine cannot run it. A greyed switch invites the question
+  // "why can I not turn this on", and the honest answer - no WebGPU, or this page is not on
+  // localhost - belongs in the export status where a refusal is already explained, not in a
+  // tooltip on a control that was never going to work here.
+  //
+  // THE BOX FOLLOWS THE SLAB. The preference is stored per slab name, so loading another document
+  // has to re-read it; gpuSyncRow is called from here at start-up and again whenever a slab is
+  // loaded or renamed. Without that the switch would keep showing the last slab's answer while the
+  // export used this one's, which is the state-and-behaviour disagreement all of this is avoiding.
+  async function gpuSyncRow() {
+    const row = document.getElementById('gpu-row'), box = document.getElementById('gpu-on');
+    if (!row || !box) return;
+    const cap = await gpuCapability();
+    row.hidden = !cap.ok;
+    if (cap.ok) box.checked = gpuPrefGet();
+  }
+  document.getElementById('gpu-on').addEventListener('change', () => {
+    gpuPrefSet(document.getElementById('gpu-on').checked);
+  });
+  gpuSyncRow();
+
 
   async function tilePool(W, p) {
     const n = poolWidthFor(p.budgetMB, p.tileMB);
@@ -15591,6 +15604,11 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         // ZERO = painted on this thread, and `poolWhy` names the clause that refused the pool. The pool
         // no longer narrows itself, so `workers` is the width throughout and `poolPlanned` can only
         // differ from it if the two ever drift.
+        // WHICH RENDERER DREW THIS. The trail carries 'gpu 1x<tile>' as prose; this is the field a
+        // census can group on. fp32 against doubles differs on about 1.4% of channels by up to 107
+        // levels, so two masters of the same slab that disagree are not evidence of a bug until
+        // this field has been read - and a master written before this existed simply lacks it.
+        gpu: (pool && pool.gpu) ? true : undefined,
         workers: poolRan ? poolRan.n : 0,
         poolWhy: poolRan ? undefined : poolWhy,
         poolPlanned: poolRan && poolRan.planned !== poolRan.n ? poolRan.planned : undefined,
