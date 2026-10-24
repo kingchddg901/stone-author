@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.188';
+  const BUILD = '2026.10.24.190';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5203,6 +5203,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // levels, while every daylight tile stayed bit-exact. Same expression, same bs, as line 4810.
     s += `glowPx=BLOOM_DRAW?16*d.bs:0;\n`;
     s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
+    // A TILE THAT ARRIVES ALREADY DRAWN. The GPU path paints on the main thread - shader, readback,
+    // then renderOneTile's ground, coat and windows - and what is left is the expensive half: the
+    // k x k cut, the marks, the light sample and the deflate. Measured at 76.5% of a tile by
+    // tools/gpu-tile-budget.html, all of it on one thread while eight cores idle, because turning
+    // the GPU on turned the pool off.
+    //
+    // So this skips everything between here and the finish block. Nothing below it changes: the
+    // same storedTilePixels, the same deflate, the same reply. A worker that paints and a worker
+    // that finishes differ by which side of this branch they took.
+    s += `if(d.bmp){tcx.drawImage(d.bmp,0,0);d.bmp.close();}else{\n`;
     s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_GROUND;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
     s += `paintContent(false,false);\n`;
@@ -5219,6 +5229,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `var R={x:rx,y:ry,w:Math.min(d.ew-rx,d.tileW+2*ab),h:Math.min(d.eh-ry,d.tileH+2*ab)};` + NL;
     s += `compositeWindow(tcx,win,d.ew,d.eh,[d.finalW,0,0,d.finalW,-d.ex0,-d.ey0],d.bs,wx-d.ex0,wy-d.ey0,d.finalW,` + NL;
     s += `{ox:d.ex0+R.x,oy:d.ey0+R.y,fw:d.finalW,fh:d.finalH},R);}` + NL;
+    s += `}` + NL;                                 // closes the else the d.bmp branch opened
     // keepBleed: the export reads its quarters at [bleed + sx*store), so it wants the bled tile
     // exactly as renderOneTile returns it. Cropping here and re-offsetting there would be two
     // places to get the same arithmetic right.
@@ -5237,9 +5248,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `  var okP=tilePainted(tc);\n`;
     s += `  var parts=[],xfer=[],mk=0,lS=0,lU=0,lN=0;\n`;
     s += `  if(okP){for(var sy=0;sy<d.k;sy++)for(var sx=0;sx<d.k;sx++){\n`;
+    // d.finalH TRAVELS, and its absence was a defect that shipped. storedTilePixels hands p.FH
+    // to markStamp as the picture height, and markStamp guards with
+    //   if ((cx+1)*MARK_CELL > W || (cy+1)*MARK_CELL > H) continue;
+    // With H undefined that comparison is false - every comparison with undefined is - so the
+    // vertical half of the guard silently never fired and a bottom-edge tile had mark cells
+    // stamped BELOW the picture. The horizontal half worked, because finalW was being passed.
+    //
+    // Measured on a 16,384 whose picture ends mid-tile: on the same canvas the main thread marked
+    // 32 cells of the bottom-right tile and the worker marked 64. Every pooled export since
+    // finish mode became the default carries it, and it never showed because a mark is one bit of
+    // blue and nobody had compared the two paths byte for byte.
     s += `    var tx=d.gx*d.k+sx,ty=d.gy*d.k+sy;\n`;
     s += `    if(tx>=d.across||ty>=d.down)continue;\n`;
-    s += `    var pr=storedTilePixels(tcx,{bleed:d.bleed,store:d.store},sx,sy,tx,ty,d.finalW,d.markSig);\n`;
+    s += `    var pr=storedTilePixels(tcx,{bleed:d.bleed,store:d.store,FH:d.finalH},sx,sy,tx,ty,d.finalW,d.markSig);\n`;
     s += `    var px=pr.px;mk+=pr.marked;\n`;
     s += `    for(var q=0;q<px.length;q+=400){var l=(px[q]+px[q+1]+px[q+2])/3;lS+=l;if(l>40)lU++;lN++;}\n`;
     s += `    var z=await deflateBytes(new Uint8Array(px.buffer,px.byteOffset,px.byteLength));\n`;
@@ -14826,6 +14848,21 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     let closed = false, busyN = 0, held = 0;
     // the one prefetch in flight, if any: { i, slot, p }
     let ahead = null;
+    // THE POOL, DEMOTED TO FINISHING. Attached after the fact because it needs p.markSig, which the
+    // export takes after the painter is already chosen - and the painter has to be chosen first,
+    // because renderSig now records which one it was.
+    let fin = null;
+    // THE LOOKAHEAD. Draws are serial - there is one GPU - but finishes are not, and a consumer
+    // that awaits one tile at a time leaves seven workers idle. Measured: 805 ms a tile that way,
+    // worse than not using them at all. So the draw runs AHEAD of the consumer, each finished tile
+    // handed to a worker the moment the shader is done with it, and the consumer collects records
+    // that are already in flight.
+    //
+    // The worker pool solves the same problem by pre-starting idx+1..idx+n inside finish(). It can,
+    // because its workers paint their own tiles. These cannot: the bitmap does not exist until the
+    // GPU has drawn it, so the drawing is what has to run ahead.
+    const jobs = new Map();            // i -> Promise of the finish record
+    let chain = Promise.resolve();     // the GPU, which does one tile at a time
 
     async function paintOne(ex0, ey0, s) {
       const d = s.img.data, uni = s.uni, uniView = s.view;
@@ -14867,7 +14904,26 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       return paintOne(gx * p.ts - p.bleed, gy * p.ts - p.bleed, set[slot]);
     };
 
-    return {
+    // QUEUE ONE TILE, IF IT IS NOT QUEUED ALREADY. The draw joins the chain, so the GPU still does
+    // one at a time and tile()'s own prefetch keeps alternating its two slots exactly as it does
+    // for a sequential caller. The finish is hooked on behind it and runs wherever a worker is
+    // free, which is the whole point.
+    function pump(i) {
+      if (closed || !fin || i >= TOTAL || jobs.has(i)) return;
+      const draw = chain.then(() => api.tile(i));
+      chain = draw.catch(() => {});       // a failed draw must not stop the ones behind it
+      jobs.set(i, draw.then(async c => {
+        // createImageBitmap COPIES; the transfer after it does not. That copy is the price of
+        // moving the work - one 16.9 MB copy at a 2048 tile, against the 410 ms of deflate it buys
+        // a way out of.
+        const bmp = await createImageBitmap(c);
+        c.width = c.height = 1;
+        return fin.finishBitmap(i, bmp);
+      }));
+      jobs.get(i).catch(() => {});        // parked; rethrown by the await in finish()
+    }
+
+    const api = {
       // EVERY FIELD THE EXPORT READS OFF A POOL, not just the ones the tile loop touches. The
       // metadata block does `{ n: pool.workers, planned: pool.planned, strain: pool.strain }` at
       // the END of a render, six minutes in, and a stub missing two of those does not throw - it
@@ -14878,6 +14934,24 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       get busy() { return busyN; },
       get tiles() { return held; },
       stamp: () => null,                                   // no per-worker trace: there is one of it
+      // THE SAME TILE, HANDED ON INSTEAD OF HANDED BACK. The GPU draws it and renderOneTile lays
+      // the ground, the coat and the windows; a worker then does the cut, the marks, the light
+      // sample and the deflate - 76.5% of a tile by measurement, and single-threaded until now.
+      //
+      // The record it returns is the worker pool's own shape, so the export loop consumes this
+      // through the branch it already had for pool.finish(). A painted:false still falls through
+      // to the main thread's renderOneTile, where the lost-canvas guard runs as it always did.
+      async finish(i) {
+        if (!fin) throw new Error('gpu finish without finishers');
+        // ONE DEEPER THAN THE POOL IS WIDE, so there is always a tile being drawn while every
+        // worker has one to finish.
+        const depth = Math.max(2, (fin.planned || 2) + 1);
+        for (let k = 0; k < depth; k++) pump(i + k);
+        const rec = await jobs.get(i);
+        jobs.delete(i);
+        for (let k = 0; k < depth; k++) pump(i + k);
+        return rec;
+      },
       async tile(i) {
         if (closed) throw new Error('gpu pool used after close');
         busyN = 1;
@@ -14928,9 +15002,12 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
           });
         } finally { busyN = 0; }
       },
+      useFinishers(f) { fin = f; },
       close() {
         if (closed) return;
         closed = true;
+        jobs.clear();
+        if (fin) { try { fin.close(); } catch (_) {} fin = null; }
         // AN IN-FLIGHT PREFETCH STILL HOLDS A BUFFER. Destroying underneath it is a validation
         // error at best; the promise is already caught, so this only has to wait for it.
         const wait = ahead ? ahead.p.catch(() => {}) : Promise.resolve();
@@ -14943,6 +15020,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         });
       },
     };
+    return api;
   }
 
   // ---- THE GPU TOGGLE -------------------------------------------------------------------------
@@ -15047,7 +15125,10 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const PANIC = 10;                                      // what used to shed without waiting for a row
     const ROW = Math.max(2, p.rAcross || 2);               // one row of evidence
     const SHORT = Math.max(2, n);                          // one pass of the pool, and CONSTANT
-    let target = 1, base = 0;                              // ramp from one so the first tile is the baseline
+    // RAMP FROM ONE so the first tile is the baseline - unless nothing here paints. A finish-only
+    // pool never calls poolSettle, which is what moves `target` off 1, so it would run exactly one
+    // worker wide for the whole render and quietly undo the point of having it.
+    let target = p.finishOnly ? n : 1, base = 0;
     const recent = [];
     // over  - row medians past the strain level, which is where a worker used to go
     // panic - short-window medians past 10x, which used to go immediately
@@ -15114,7 +15195,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // idle. Only the busy count during the gap separates them, and nothing was recording it.
     const trace = new Map();                               // idx -> {d,s,f}; the consumer adds w
     const TRACE_KEEP = 512;                                // a consumer that never reads must not leak
-    const start = (idx) => {
+    const start = (idx, bmp) => {
       if (idx >= p.renders || inflight.has(idx)) return;
       if (busyCount() >= target) return;
       const q = pool.find(x => !x.busy);
@@ -15155,7 +15236,11 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
           // nothing else. Contention still shows there, because a swapping worker paints slowly; a
           // blocked consumer does not, because it cannot reach into the worker and slow it down.
           // Falls back to the old figure when no ack arrived, which is the only case it cannot tell.
-          poolSettle(q, tr.s ? tr.f - tr.s : tr.f - t0);
+          // A BITMAP PASS IS NOT PAINT, so it must not reach the shed logic - poolSettle's model
+          // is "a pass costing several times the solo baseline means this pool is swapping", and a
+          // finish is not a pass. Freed here instead, which is the only other thing it did.
+          if (bmp) q.busy = false;
+          else poolSettle(q, tr.s ? tr.f - tr.s : tr.f - t0);
           // In finish mode the pass IS the record - parts, counts and the painted flag - and there is
           // no bitmap to hand over. One pool is in one mode for its whole life, set by p.fin.
           res(e.data.fin ? e.data : e.data.bmp);
@@ -15169,7 +15254,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
                           ew: p.ts + 2 * p.bleed, eh: p.ts + 2 * p.bleed, ex0: gx * p.ts - p.bleed,
                           ey0: gy * p.ts - p.bleed, bleed: p.bleed, bs, finalW, finalH,
                           fin: !!p.fin, gx, gy, k: p.k, store: p.store, across: p.across, down: p.down,
-                          markSig: p.markSig || 0 });
+                          markSig: p.markSig || 0, bmp: bmp || undefined }, bmp ? [bmp] : []);
       }));
     };
     return {
@@ -15208,6 +15293,16 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         const rec = await inflight.get(idx);
         inflight.delete(idx);
         for (let k = 1; k <= n; k++) start(idx + k);
+        return rec;
+      },
+      // A TILE SOMEBODY ELSE DREW. Same workers, same reply, same scheduler - the only difference
+      // is that the pixels arrive instead of being painted. Returns the finish record, so a caller
+      // can hand this straight to the branch that already consumes pool.finish().
+      async finishBitmap(idx, bmp) {
+        if (!p.fin) throw new Error('finishBitmap without p.fin');
+        start(idx, bmp);
+        const rec = await inflight.get(idx);
+        inflight.delete(idx);
         return rec;
       },
       retire(idx) { const q = inflight.get(idx); inflight.delete(idx); if (q) q.then(b => b.close(), () => {}); },
@@ -15423,6 +15518,16 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // every pass and neither may be re-derived at the far end: the signature is taken once for the
     // whole render, and whether the worker finishes decides the shape of what it sends back.
     p.markSig = markSig; p.fin = FINISH_WORKER;
+    // THE POOL BECOMES THE FINISHER when the GPU is painting. It cannot be built any earlier: it
+    // needs p.markSig, and that is taken after the painter is chosen because renderSig now records
+    // which painter it was. finishOnly keeps it full width from the first pass - a finish is not a
+    // paint, so poolSettle never runs, and poolSettle is what moves `target` off one.
+    if (pool && pool.gpu && FINISH_WORKER) {
+      p.finishOnly = true;
+      const fw = await tilePool(W, p);
+      if (fw) { pool.useFinishers(fw); p.fin = true; p.trail.push('gpu finishers ' + fw.planned); }
+      else { p.fin = false; p.trail.push('gpu finishers refused'); }
+    } else if (pool && pool.gpu) p.fin = false;
     // THE GPU WAS DECIDED ABOVE, before the signature was taken. The worker pool is the fallback.
     if (pool) p.fin = false;
     else pool = layTiles ? null : await tilePool(W, p);

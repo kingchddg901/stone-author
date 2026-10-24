@@ -23,7 +23,12 @@ const ok = (what, cond, got) => {
   else console.log('  ok    ' + what + (got === undefined ? '' : '   ' + got));
 };
 
-const POOL = SRC.slice(SRC.indexOf('const start = (idx) => {'), SRC.indexOf('    return {\n      get workers()'));
+// ANCHORED ON THE NAME, NOT THE SIGNATURE. This read 'const start = (idx) => {' whole, so the
+// day start() grew a second parameter - a ready bitmap, for the GPU path's finishers - the slice
+// came back empty and NINE claims failed at once, every one of them reporting a real ordering
+// constraint as broken when nothing about the ordering had moved. A gate that cries wolf over a
+// parameter list teaches the reader to skim it.
+const POOL = SRC.slice(SRC.indexOf('const start = (idx'), SRC.indexOf('    return {\n      get workers()'));
 
 // ---- the ack must never be mistaken for the tile ------------------------------------------------
 // It carries no bitmap. Resolving on it hands the consumer `undefined`, which fails the tilePainted()
@@ -75,7 +80,7 @@ const POOL = SRC.slice(SRC.indexOf('const start = (idx) => {'), SRC.indexOf('   
 {
   ok('the id is assigned at creation', /pool\.push\(\{ w, busy: false, id: i \}\)/.test(SRC));
   ok('the trace carries that id, not an array position', /k: q\.id/.test(POOL));
-  const settle = SRC.slice(SRC.indexOf('function poolSettle('), SRC.indexOf('const start = (idx) =>'));
+  const settle = SRC.slice(SRC.indexOf('function poolSettle('), SRC.indexOf('const start = (idx'));
   ok('NOTHING removes a worker mid-render any more', !/pool\.splice\(/.test(settle));
   ok('and nothing terminates one either', !/terminate\(\)/.test(settle));
 }
