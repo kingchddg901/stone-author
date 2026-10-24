@@ -1,0 +1,529 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GPU native probe</title>
+<!--
+  IS A GPU PATH WORTH WRITING, GIVEN WHAT THE CPU PATH NOW DOES?
+
+  tools/gpu-probe.html answered an earlier question and its numbers are kept for the record, but its
+  CPU arm is the renderer as it stood before 2026-10-23: three fbm2 evaluations, thirty-six corner
+  hashes, no cache. The shipped renderer does TWO fbm2 over twenty-four nz calls with a corner cache
+  that hits 93-99%, so the old CPU arm does roughly twenty times the hash work the real one does.
+  Every ratio derived from it flatters the GPU. It also divided by twelve threads where the pool runs
+  eight workers, which flatters the CPU. Two errors pointing opposite ways and no way to tell the
+  sign of the net, which is why this file exists.
+
+  THREE ARMS, AND THE THIRD IS THE POINT.
+
+    CPU AS SHIPPED        lifted from app/stone-author.html, cache and all. Not re-implemented:
+                          a second copy of the arithmetic is how a probe starts measuring something
+                          other than the renderer, and three probes caught that drift in one day.
+    GPU TRANSLITERATED    the same integer hashing in WGSL, with no cache, because a per-invocation
+                          port has no previous sample to cache from. This is what the old numbers
+                          priced, and it is the WORST way to write a GPU path.
+    GPU NATIVE            vnoise IS bilinear interpolation of a hash lattice, and a GPU does bilinear
+                          filtering in fixed-function hardware. Put the lattice in an f32 texture,
+                          pre-warp the coordinate to floor(x) + smoothstep(frac(x)), and one
+                          textureSampleLevel returns a*(1-sx) + b*sx exactly as vnoise computes it.
+                          Six samples replace twenty-four hashes and their interpolation. The texture
+                          unit is the cache the GPU was said not to have, in silicon.
+
+  AND A CORRECTNESS ARM, because the speed is worthless without it. Hardware filtering has its own
+  weight precision, and that number decides whether a native path is a renderer or a toy. It is
+  measured here against the CPU's own vnoise rather than asserted from a spec sheet.
+
+  WHAT THIS DOES NOT ANSWER. The ribbon label. glassLay returns an integer and an integer cannot be
+  filtered or averaged, so nothing here touches what section 3 of glass-gpu.md says breaks. This
+  prices the FIELD - thickness, ream, cords - and that is all it prices.
+-->
+<style>
+  :root { --bg:#faf9f7; --fg:#1b1a19; --dim:#6b6864; --rule:#dcd8d2; --good:#1d6b3a; --warn:#8a5a00; --bad:#9b2420; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; } }
+  :root[data-theme="dark"] { --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; }
+  body { background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin:0; padding:16px; }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; }
+  p.sub { color:var(--dim); margin:0 0 14px; max-width:62ch; }
+  button { font:inherit; padding:7px 15px; border:1px solid var(--rule); border-radius:5px;
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  button:disabled { color:var(--dim); cursor:default; }
+  table { border-collapse:collapse; margin:14px 0; font-size:13px; }
+  td, th { border-bottom:1px solid var(--rule); padding:4px 13px 4px 0; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  .n { text-align:right; font-variant-numeric:tabular-nums; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  pre { color:var(--dim); font-size:12px; white-space:pre-wrap; margin:10px 0 0; }
+  h2 { font-size:14px; margin:18px 0 0; font-weight:600; }
+</style>
+
+<h1>GPU native probe</h1>
+<p class="sub">Three ways to compute the same field, on this device: the CPU as it ships, the same
+hashing transliterated to WGSL, and a GPU-native path that reads the noise lattice out of a filtered
+texture. The ratio against this device’s own pool is the answer; the filter deviation decides whether
+the third one is a renderer or a toy.</p>
+<button id="run">Run</button>
+<div id="res"></div>
+<pre id="log"></pre>
+
+<script>
+const LOG = document.getElementById('log');
+const log = m => { LOG.textContent += (LOG.textContent ? '\n' : '') + m; };
+const RES = document.getElementById('res');
+let TB = null;
+function row(k, v, cls) {
+  if (!TB) { TB = document.createElement('table'); RES.appendChild(TB); }
+  const tr = document.createElement('tr');
+  const a = document.createElement('th'); a.textContent = k;
+  const b = document.createElement('td'); b.textContent = v; if (cls) b.className = cls;
+  tr.appendChild(a); tr.appendChild(b); TB.appendChild(tr);
+}
+function head(t) { TB = null; const h = document.createElement('h2'); h.textContent = t; RES.appendChild(h); }
+
+// ---- the CPU arm comes out of the app, it is not written again here -------------------------------
+// Fetched over the studio server and sliced the way every probe in tools/ slices it. If the app's
+// arithmetic changes, this arm changes with it; a hand-copy would quietly stop being the renderer.
+async function liftFromApp() {
+  const src = await (await fetch('../app/stone-author.html')).text();
+  const fn = name => {
+    const i = src.indexOf('function ' + name + '(');
+    if (i < 0) throw new Error('the app has no function ' + name);
+    let d = 0;
+    for (let k = src.indexOf('{', i); k < src.length; k++) {
+      if (src[k] === '{') d++;
+      else if (src[k] === '}') { d--; if (!d) return src.slice(i, k + 1); }
+    }
+    throw new Error('unbalanced ' + name);
+  };
+  const decl = (src.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0];
+  if (!decl) throw new Error('the app has no _NZC declaration — the corner cache is what this arm is for');
+  const names = ['nz', 'vnoise', 'fbm2', 'vnoiseC', 'vnoiseCfill', 'fbm2C'];
+  const body = decl + '\n' + names.map(fn).join('\n')
+    + '\nreturn { ' + names.join(', ') + ' };';
+  return { app: new Function(body)(), lifted: names.length };
+}
+
+// ---- the lattice, built once on the CPU and shared by both GPU arms ------------------------------
+// LAT is the side of the hash lattice. The slab reaches only a couple of hundred cells at the scales
+// this slab uses, so 512 is far past wrapping; the texture arm addresses it with repeat so a stray
+// coordinate is periodic rather than clamped, which is wrong in a way that would show as a flat band.
+const LAT = 512, SEED = 71;
+function buildLattice(nz, seed) {
+  const a = new Float32Array(LAT * LAT);
+  for (let j = 0; j < LAT; j++) for (let i = 0; i < LAT; i++) a[j * LAT + i] = nz(i, j, seed);
+  return a;
+}
+
+const WGSL_HASH = `
+fn nz(xi: i32, yi: i32, s: i32) -> f32 {
+  var h: u32 = (u32(xi) * 374761393u) ^ (u32(yi) * 668265263u) ^ (u32(s) * 2246822519u);
+  h = (h ^ (h >> 13u)) * 1274126177u;
+  return f32(h ^ (h >> 16u)) / 4294967296.0;
+}
+fn vnoise(x: f32, y: f32, s: i32) -> f32 {
+  let xi = i32(floor(x)); let yi = i32(floor(y));
+  let tx = x - floor(x); let ty = y - floor(y);
+  let sx = tx * tx * (3.0 - 2.0 * tx); let sy = ty * ty * (3.0 - 2.0 * ty);
+  let a = nz(xi, yi, s); let b = nz(xi + 1, yi, s);
+  let c = nz(xi, yi + 1, s); let d = nz(xi + 1, yi + 1, s);
+  return (a * (1.0 - sx) + b * sx) * (1.0 - sy) + (c * (1.0 - sx) + d * sx) * sy;
+}
+fn fbm2(x: f32, y: f32, s: i32) -> f32 {
+  return vnoise(x, y, s) * 0.6 + vnoise(x * 2.1, y * 2.1, s + 9) * 0.3 + vnoise(x * 4.3, y * 4.3, s + 19) * 0.1;
+}`;
+
+// TWO fbm2 a sample and three exponentials, which is the shape of a glass sample on this slab -
+// glassFormT's ream and glassLay's cord wander, plus Beer-Lambert on three channels.
+//
+// REPS IS NOT PADDING, IT IS THE INSTRUMENT. The first version of this probe dispatched 270,400
+// invocations once per arm and reported 2.50 ms for twenty-four hashes and 2.80 ms for six texture
+// samples - four times the arithmetic for twelve percent more time, which is the sound of a number
+// that is not measuring arithmetic at all. It was the submit-and-fence round trip. So each arm is now
+// run at several rep counts and the cost comes from the SLOPE, which cancels the fixed overhead
+// exactly; the intercept is printed so nobody has to take that on faith. The per-rep coordinate nudge
+// is what stops a compiler hoisting the loop, and the accumulator is what stops it being dropped.
+const WGSL_TRANS = reps => `${WGSL_HASH}
+@group(0) @binding(0) var<storage, read_write> outb: array<f32>;
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x;
+  var acc = 0.0;
+  for (var r = 0u; r < ${reps}u; r = r + 1u) {
+    let x = f32(i % 520u) * 0.0031 + 0.17 + f32(r) * 0.000731;
+    let y = f32(i / 520u) * 0.0029 + 0.11 + f32(r) * 0.000517;
+    let th = 4.2 * (1.0 + 0.30 * (fbm2(x * 26.0, y * 1.56, 71) - 0.5) * 2.0);
+    let lay = fbm2(x * 9.1, y * 9.1, 311);
+    acc = acc + exp(-0.011 * th) + exp(-0.008 * th) + exp(-0.006 * th) + lay * 1e-6;
+  }
+  outb[i] = acc;
+}`;
+
+// THE NATIVE ARM. The pre-warp is the whole trick: hardware bilinear is LINEAR in the sample
+// coordinate, and feeding it floor(x) + smoothstep(frac(x)) makes it compute vnoise's smoothstep
+// interpolation exactly. +0.5 puts the sample on the texel centre, which is where a filter's weights
+// are zero; without it every value is shifted half a cell and the field is subtly wrong everywhere.
+const WGSL_NATIVE = reps => `
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var smp: sampler;
+@group(0) @binding(2) var<storage, read_write> outb: array<f32>;
+const LAT: f32 = ${LAT}.0;
+fn tnoise(x: f32, y: f32) -> f32 {
+  let fx = floor(x); let fy = floor(y);
+  let tx = x - fx; let ty = y - fy;
+  let sx = tx * tx * (3.0 - 2.0 * tx); let sy = ty * ty * (3.0 - 2.0 * ty);
+  let u = (fx + sx + 0.5) / LAT; let v = (fy + sy + 0.5) / LAT;
+  return textureSampleLevel(tex, smp, vec2<f32>(u, v), 0.0).r;
+}
+fn tfbm(x: f32, y: f32, off: f32) -> f32 {
+  return tnoise(x + off, y) * 0.6 + tnoise(x * 2.1 + off, y * 2.1) * 0.3 + tnoise(x * 4.3 + off, y * 4.3) * 0.1;
+}
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x;
+  var acc = 0.0;
+  for (var r = 0u; r < ${reps}u; r = r + 1u) {
+    let x = f32(i % 520u) * 0.0031 + 0.17 + f32(r) * 0.000731;
+    let y = f32(i / 520u) * 0.0029 + 0.11 + f32(r) * 0.000517;
+    let th = 4.2 * (1.0 + 0.30 * (tfbm(x * 26.0, y * 1.56, 0.0) - 0.5) * 2.0);
+    let lay = tfbm(x * 9.1, y * 9.1, 211.0);
+    acc = acc + exp(-0.011 * th) + exp(-0.008 * th) + exp(-0.006 * th) + lay * 1e-6;
+  }
+  outb[i] = acc;
+}`;
+
+// the filter arm asks one question: how far from the CPU's vnoise does a hardware lerp land
+const WGSL_FILTER = `
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var smp: sampler;
+@group(0) @binding(2) var<storage, read_write> outb: array<f32>;
+@group(0) @binding(3) var<storage, read> pts: array<vec2<f32>>;
+const LAT: f32 = ${LAT}.0;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let p = pts[gid.x];
+  let fx = floor(p.x); let fy = floor(p.y);
+  let tx = p.x - fx; let ty = p.y - fy;
+  let sx = tx * tx * (3.0 - 2.0 * tx); let sy = ty * ty * (3.0 - 2.0 * ty);
+  outb[gid.x] = textureSampleLevel(tex, smp, vec2<f32>((fx + sx + 0.5) / LAT, (fy + sy + 0.5) / LAT), 0.0).r;
+}`;
+
+const N = 270400;                         // 520 x 520, one tile's worth, as gpu-probe used
+const med = v => { const s = [...v].sort((a, b) => a - b); return s[(s.length - 1) >> 1]; };
+
+// REPS. One pass is 270,400 samples, and the slope across several rep counts is arithmetic with the
+// fixed cost removed.
+//
+// THE TWO SIDES NEED DIFFERENT LADDERS, and finding that out was the probe's first real result. At one
+// to eight passes the CPU scaled 28.7 / 57.5 / 114.4 / 229.8 ms to four figures while the GPU sat at
+// 3.40 / 2.90 / 2.90 / 2.40 - and out[0] came back 2.8961 / 5.7921 / 11.5834 / 23.1649, exactly 1:2:4:8,
+// so the work certainly happened. Eight times the arithmetic simply cost nothing a clock could see:
+// 52 million hashes is a fraction of a millisecond on this part, buried under ~2.5 ms of submit, fence
+// and map. So the GPU climbs until its own arithmetic clears that floor, and the CPU does not have to.
+const CPU_REPS = [1, 2, 4, 8];
+const GPU_REPS = [64, 128, 256, 512];
+// least squares through (work, ms). m = ms per pass, b = what the harness costs whatever you ask it.
+function fit(xs, ys) {
+  const n = xs.length, mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0, sxx = 0;
+  for (let i = 0; i < n; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; }
+  return { m: sxy / sxx, b: my - (sxy / sxx) * mx };
+}
+// A DISPATCH IS TIMED ON THE GPU'S OWN CLOCK, by timestamp query, and this took three goes to get
+// right. Each wrong instrument left its own signature in the readings:
+//
+//   onSubmittedWorkDone   flat 2.4-3.4 ms for one to eight passes while out[0] scaled exactly 1:2:4:8.
+//                         The fence resolved before the work landed, so that arm timed a queue.
+//   copy and mapAsync     the work finally showed, but the early readings PINNED to 33.3 ms - two
+//                         frames at 60 Hz - escaping to 16.8 now and then and only running free by the
+//                         fourth rung: [33.6 32.7 33.4 33.4 33.3 33.4 16.8 33.2 33.2] at 64 passes,
+//                         then [8.0 8.5 8.6 9.2 9.5 8.7 8.2 8.3 8.9] at 512. A map resolution handed
+//                         to the compositor is quantised by the compositor.
+//   timestamp query       the GPU writes the clock either side of the pass itself. No submit, no fence,
+//                         no map, no frame. This is the only one of the three that measures the GPU.
+//
+// The readback stays, because out[0] is what proves the loop was not folded away - but it is no longer
+// on the clock. If the device will not grant timestamps the probe falls back and SAYS which it used,
+// since the fallback is a known-quantised instrument and a reading from it must not pass as the other.
+// The MINIMUM of several readings is the figure either way: contention can only ever add.
+async function gpuOnce(dev, code, binds, n, wgs, reps, ts) {
+  const mod = dev.createShaderModule({ code });
+  const ci = await mod.getCompilationInfo();
+  const errs = ci.messages.filter(m => m.type === 'error');
+  if (errs.length) throw new Error('WGSL: ' + errs[0].message);
+  const pipe = await dev.createComputePipelineAsync({ layout: 'auto', compute: { module: mod, entryPoint: 'main' } });
+  const grp = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: binds(dev) });
+  const back = dev.createBuffer({ size: 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  const src = binds(dev).filter(e => e.resource && e.resource.buffer
+    && (e.resource.buffer.usage & GPUBufferUsage.COPY_SRC)).pop().resource.buffer;
+  let qs = null, qres = null, qmap = null;
+  if (ts) {
+    qs = dev.createQuerySet({ type: 'timestamp', count: 2 });
+    qres = dev.createBuffer({ size: 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
+    qmap = dev.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  }
+  const times = [], walls = []; let first = 0;
+  for (let r = 0; r < reps; r++) {
+    const enc = dev.createCommandEncoder();
+    const pass = enc.beginComputePass(ts
+      ? { timestampWrites: { querySet: qs, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 } } : {});
+    pass.setPipeline(pipe); pass.setBindGroup(0, grp);
+    pass.dispatchWorkgroups(Math.ceil(n / wgs));
+    pass.end();
+    enc.copyBufferToBuffer(src, 0, back, 0, 4);
+    if (ts) { enc.resolveQuerySet(qs, 0, 2, qres, 0); enc.copyBufferToBuffer(qres, 0, qmap, 0, 16); }
+    const t0 = performance.now();
+    dev.queue.submit([enc.finish()]);
+    await back.mapAsync(GPUMapMode.READ);
+    const wall = performance.now() - t0; walls.push(wall);
+    first = new Float32Array(back.getMappedRange())[0];
+    back.unmap();
+    if (ts) {
+      await qmap.mapAsync(GPUMapMode.READ);
+      const q = new BigInt64Array(qmap.getMappedRange().slice(0));
+      qmap.unmap();
+      times.push(Number(q[1] - q[0]) / 1e6);          // nanoseconds on the GPU's clock
+    } else times.push(wall);
+  }
+  return { ms: Math.min(...times), all: times, first, wall: Math.min(...walls) };
+}
+async function gpuCost(dev, codeFor, binds, n, wgs, ts) {
+  const xs = [], ys = [], note = [], vals = [], walls = [];
+  for (const r of GPU_REPS) {
+    const o = await gpuOnce(dev, codeFor(r), binds, n, wgs, ts ? 5 : 9, ts);
+    xs.push(r); ys.push(o.ms); vals.push(o.first); walls.push(o.wall - o.ms);
+    note.push(r + 'x [' + o.all.map(v => v.toFixed(1)).join(' ') + '] out[0]=' + o.first.toFixed(2));
+  }
+  const f = fit(xs, ys);
+  // TWO THINGS HAVE TO BE TRUE BEFORE A SLOPE MEANS ANYTHING, and this probe has been wrong about each
+  // of them once. The accumulator must actually accumulate - if out[0] is the same at 1x and 8x the
+  // compiler threw the loop away and there is nothing to time. And the clock must respond: eight times
+  // the arithmetic has to cost visibly more than one, or the harness is being measured instead.
+  // and monotonic, because a ladder that goes down somewhere has not been measured either
+  let mono = true;
+  for (let i = 1; i < ys.length; i++) if (ys[i] < ys[i - 1]) mono = false;
+  const span = GPU_REPS[GPU_REPS.length - 1] / GPU_REPS[0];
+  const ran = Math.abs(vals[vals.length - 1] / Math.max(vals[0], 1e-9) - span) < span * 0.02;
+  const grew = ys[ys.length - 1] > ys[0] * 1.8;
+  return { ...f, note: note.join('   '), ran, grew, round: Math.min(...walls),
+    why: !mono ? 'the readings do not rise with the work (' + ys.map(v => v.toFixed(1)).join(' ')
+          + ' ms) - something other than the arithmetic is setting the clock'
+      : !ran ? 'out[0] did not scale with the rep count (' + vals[0].toFixed(2) + ' then '
+          + vals[vals.length - 1].toFixed(2) + ', wanted ' + span + 'x) - the loop was folded away'
+      : !grew ? 'the clock did not respond to ' + span + 'x the work (' + ys[0].toFixed(2) + ' then '
+          + ys[ys.length - 1].toFixed(2) + ' ms) - this is the harness, not the GPU'
+      : NOISY ? 'the GPU arm is clean, but the CPU ladder it is divided by was too noisy to quote'
+      : null };
+}
+// a cost whose own preconditions failed is not reported as a number
+let NOISY = false;                 // set once the CPU ladder is measured; a noisy box voids the ratios
+function cost(o) { return o.why || NOISY ? null : o.m; }
+function ratio(cpu, o, div) { const m = cost(o); return m === null ? 'NOT MEASURED' : (cpu / m / div).toFixed(2) + '×'; }
+
+document.getElementById('run').onclick = async () => {
+  document.getElementById('run').disabled = true;
+  RES.textContent = ''; TB = null; LOG.textContent = '';
+  try {
+    head('this device');
+    row('user agent', navigator.userAgent);
+    row('cores reported', String(navigator.hardwareConcurrency || '?'));
+    const POOL = 8;                        // the pool the renderer actually runs, measured at 7.8-8.2 busy threads
+    row('pool the renderer uses', POOL + ' workers (measured 7.8-8.2 busy threads at 65,535)');
+
+    log('lifting the CPU arm out of the app...');
+    const { app, lifted } = await liftFromApp();
+    row('CPU arm', lifted + ' functions lifted from app/stone-author.html, corner cache included', 'good');
+
+    // ---- arm 1: the CPU as it ships ------------------------------------------------------------
+    // SCANLINE ORDER, because that is what makes the corner cache hit. Walking randomly would
+    // measure a cache that never fires, which is the uncached arm wearing the shipped arm's name.
+    head('arm 1 — CPU as shipped');
+    const SX = 0.0031, SY = 0.0029;
+    // the same rep structure as the shaders, for the same reason: the slope is the arithmetic and the
+    // intercept is the loop, the timer and the call. SCANLINE ORDER, because that is what makes the
+    // corner cache hit - walking randomly would measure a cache that never fires, which is the
+    // uncached arm wearing the shipped arm's name.
+    const cpuOnce = reps => {
+      let acc = 0;
+      for (let r = 0; r < reps; r++) {
+        const dx = r * 0.000731, dy = r * 0.000517;
+        for (let j = 0; j < 520; j++) {
+          const y = j * SY + 0.11 + dy;
+          for (let i = 0; i < 520; i++) {
+            const x = i * SX + 0.17 + dx;
+            const th = 4.2 * (1 + 0.30 * (app.fbm2C(x * 26, y * 1.56, 71, 0) - 0.5) * 2);
+            const lay = app.fbm2C(x * 9.1, y * 9.1, 311, 6);
+            acc += Math.exp(-0.011 * th) + Math.exp(-0.008 * th) + Math.exp(-0.006 * th) + lay * 1e-6;
+          }
+        }
+      }
+      return acc;
+    };
+    cpuOnce(2); cpuOnce(2);
+    const cx = [], cy = [], cnote = [];
+    for (const r of CPU_REPS) {
+      const ts = [];
+      for (let k = 0; k < 5; k++) { const t0 = performance.now(); cpuOnce(r); ts.push(performance.now() - t0); }
+      cx.push(r); cy.push(med(ts)); cnote.push(r + 'x ' + med(ts).toFixed(1) + ' ms');
+    }
+    // THE CLEANEST RUNG, NOT A LEAST-SQUARES SLOPE. A fit is only as good as its worst rung, and on a
+    // box that is not perfectly quiet one slow reading rotates the whole line: a run that read
+    // 30.5 / 57.6 / 119.3 / 259.0 produced a slope of 32.90 ms and an intercept of MINUS 6.78 ms - a
+    // negative fixed cost, which is not a thing - and inflated the headline ratio from 246x to 284x.
+    // Per-pass cost at each rung is ys/xs and they should agree; the minimum is the rung least
+    // disturbed, since noise can only ever add. Across the two runs the slope gave 28.5 then 32.9 ms
+    // while the minimum gave 28.5 then 28.8 - stable to 1%. The SPREAD is printed because it is the
+    // only visible measure of how quiet the box was, and a ratio off a noisy box is not quoted at all.
+    const per = cx.map((r, i) => cy[i] / r);
+    const cpuMs = Math.min(...per);
+    const spread = (Math.max(...per) / cpuMs - 1) * 100;
+    row('one thread, one pass', cpuMs.toFixed(2) + ' ms   ' + (N / cpuMs / 1000).toFixed(2) + ' Mpx/s');
+    row('agreement across the ladder', per.map(v => v.toFixed(1)).join(' / ') + ' ms a pass — '
+      + spread.toFixed(1) + '% spread'
+      + (spread > 15 ? ', TOO NOISY: the ratios below are not quotable' : ''),
+      spread > 15 ? 'bad' : spread > 6 ? 'warn' : 'good');
+    NOISY = spread > 15;
+    log('CPU: ' + cnote.join('   '));
+
+    // ---- the GPU ------------------------------------------------------------------------------
+    head('this GPU');
+    if (!navigator.gpu) { row('WebGPU', 'navigator.gpu is absent — no port is possible on this device', 'bad'); return; }
+    const ad = await navigator.gpu.requestAdapter();
+    if (!ad) { row('WebGPU', 'no adapter granted', 'bad'); return; }
+    const filterable = ad.features.has('float32-filterable');
+    row('adapter', ad.info ? (ad.info.vendor + ' / ' + ad.info.architecture) : 'reported no info');
+    row('float32-filterable', filterable ? 'yes' : 'NO — the native arm would need an 8-bit texture, which quantises each hash to 256 levels',
+      filterable ? 'good' : 'warn');
+    const TS = ad.features.has('timestamp-query');
+    row('timestamp-query', TS ? 'yes — the pass is timed on the GPU’s own clock'
+      : 'NO — falling back to a wall clock around the map, which this device quantises to 60 Hz frames',
+      TS ? 'good' : 'warn');
+    const want = [];
+    if (filterable) want.push('float32-filterable');
+    if (TS) want.push('timestamp-query');
+    const dev = await ad.requestDevice({ requiredFeatures: want });
+
+    const outBuf = dev.createBuffer({ size: N * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+
+    head('arm 2 — GPU, the same hashing transliterated');
+    const t2 = await gpuCost(dev, WGSL_TRANS, () => [{ binding: 0, resource: { buffer: outBuf } }], N, 256, TS);
+    if (t2.why) row('NOT MEASURED', t2.why, 'bad');
+    else {
+      row('one pass', t2.m.toFixed(3) + ' ms   ' + (N / t2.m / 1000).toFixed(0) + ' Mpx/s');
+      // NEAR ZERO IS THE RIGHT ANSWER HERE and it is a check on the instrument, not a result: the GPU
+      // clock brackets the pass, so there is no per-dispatch cost inside it to find. An intercept of
+      // any size would mean the clock had picked up something outside the pass.
+      row('intercept', t2.b.toFixed(3) + ' ms — near zero, as a clock inside the pass should give');
+      row('vs one CPU thread', (cpuMs / t2.m).toFixed(1) + '×');
+    }
+    row('vs the ' + POOL + '-worker pool', ratio(cpuMs, t2, POOL),
+      cost(t2) !== null && cpuMs / t2.m / POOL > 2 ? 'good' : 'warn');
+    log('GPU transliterated: ' + t2.note);
+
+    head('arm 3 — GPU native, noise out of a filtered texture');
+    const lat = buildLattice(app.nz, SEED);
+    const tex = dev.createTexture({ size: [LAT, LAT], format: 'r32float',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    dev.queue.writeTexture({ texture: tex }, lat, { bytesPerRow: LAT * 4 }, [LAT, LAT]);
+    const smp = dev.createSampler({ magFilter: 'linear', minFilter: 'linear',
+      addressModeU: 'repeat', addressModeV: 'repeat' });
+    const natBinds = () => [
+      { binding: 0, resource: tex.createView() }, { binding: 1, resource: smp },
+      { binding: 2, resource: { buffer: outBuf } }];
+    const t3 = await gpuCost(dev, WGSL_NATIVE, natBinds, N, 256, TS);
+    row('lattice', LAT + ' × ' + LAT + ' r32float = ' + (LAT * LAT * 4 / 1048576).toFixed(1)
+      + ' MB, repeat-addressed');
+    if (t3.why) row('NOT MEASURED', t3.why, 'bad');
+    else {
+      row('one pass', t3.m.toFixed(3) + ' ms   ' + (N / t3.m / 1000).toFixed(0) + ' Mpx/s');
+      row('intercept', t3.b.toFixed(3) + ' ms — near zero, as a clock inside the pass should give');
+      row('vs one CPU thread', (cpuMs / t3.m).toFixed(1) + '×');
+    }
+    row('vs the ' + POOL + '-worker pool', ratio(cpuMs, t3, POOL),
+      cost(t3) !== null && cpuMs / t3.m / POOL > 2 ? 'good' : 'warn');
+    // THE COST THE GPU CLOCK CANNOT SEE, and the one that decides how a port must be SHAPED. The GPU
+    // clock brackets the pass; submit, fence and map sit outside it and are paid once per dispatch
+    // whatever the pass contains. A tile-at-a-time port would pay this per tile.
+    const roundTrip = Math.min(t2.round, t3.round);
+    const TILES = Math.ceil(65535 / 520) ** 2;
+    row('submit, fence and map', roundTrip.toFixed(2) + ' ms a dispatch, outside the pass — '
+      + 'this is what the first two instruments were reporting as arithmetic');
+    row('so the port must batch', TILES.toLocaleString() + ' tiles of 520² at 65,535 would pay '
+      + (TILES * roundTrip / 1000).toFixed(0) + ' s of round trip alone, before any arithmetic. '
+      + 'A GPU field has to go out in few, large dispatches.', 'warn');
+    row('vs arm 2', cost(t2) === null || cost(t3) === null ? 'NOT MEASURED'
+      : (t2.m / t3.m).toFixed(2) + '× the transliterated port — '
+        + (t2.m / t3.m > 1.2 ? 'the texture unit earns its place' : 'the hashing was not the bottleneck'));
+    log('GPU native: ' + t3.note);
+
+    // ---- arm 4: is the hardware lerp the same function? ----------------------------------------
+    head('arm 4 — what the hardware filter costs in accuracy');
+    const M = 4096;
+    const pts = new Float32Array(M * 2);
+    for (let i = 0; i < M; i++) {                       // spread across cells AND across the fraction
+      pts[2 * i] = (i % 61) * 1.37 + (i / M) * 0.97 + 0.013;
+      pts[2 * i + 1] = ((i * 7) % 53) * 1.19 + ((i * 13) % 97) / 97 + 0.021;
+    }
+    const pbuf = dev.createBuffer({ size: pts.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    dev.queue.writeBuffer(pbuf, 0, pts);
+    const fout = dev.createBuffer({ size: M * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    await gpuOnce(dev, WGSL_FILTER, () => [
+      { binding: 0, resource: tex.createView() }, { binding: 1, resource: smp },
+      { binding: 2, resource: { buffer: fout } }, { binding: 3, resource: { buffer: pbuf } }], M, 64, 1);
+    const read = dev.createBuffer({ size: M * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    { const e = dev.createCommandEncoder(); e.copyBufferToBuffer(fout, 0, read, 0, M * 4); dev.queue.submit([e.finish()]); }
+    await read.mapAsync(GPUMapMode.READ);
+    const got = new Float32Array(read.getMappedRange().slice(0));
+    read.unmap();
+    let worst = 0, sum = 0, worstAt = 0;
+    for (let i = 0; i < M; i++) {
+      const x = pts[2 * i], y = pts[2 * i + 1];
+      const want = app.vnoise(x % LAT, y % LAT, SEED);
+      const d = Math.abs(want - got[i]);
+      sum += d; if (d > worst) { worst = d; worstAt = i; }
+    }
+    const mean = sum / M;
+    row('points compared', M.toLocaleString() + ', spread across cells and across the fraction');
+    row('mean deviation from the CPU vnoise', mean.toExponential(2));
+    row('worst deviation', worst.toExponential(2),
+      worst < 1e-5 ? 'good' : worst < 1e-3 ? 'warn' : 'bad');
+    // a level is 1/255 of the output, and the field reaches colour through a 0.30 multiplier
+    row('worst, as levels of 255', (worst * 0.30 * 2 * 255).toFixed(3),
+      worst * 0.30 * 2 * 255 < 0.5 ? 'good' : 'warn');
+    row('for comparison', 'the spin table ships at 2.9e-7; woodAtan2 shipped at 1.5e-3 rad');
+
+    head('what this says');
+    const verdict = o => { const m = cost(o); return m === null ? 'NOT MEASURED — ' + o.why
+      : (cpuMs / m / POOL).toFixed(2) + '× the pool — '
+        + (cpuMs / m / POOL > 4 ? 'go' : cpuMs / m / POOL > 2 ? 'worth deciding on'
+          : 'not worth a second renderer'); };
+    const grade = o => { const m = cost(o); return m === null ? 'bad'
+      : cpuMs / m / POOL > 4 ? 'good' : cpuMs / m / POOL > 2 ? 'warn' : 'bad'; };
+    row('transliterated port', verdict(t2), grade(t2));
+    row('native port', verdict(t3), grade(t3));
+    row('and it does not price', 'the ribbon label. An integer cannot be filtered — see section 3 of glass-gpu.md');
+
+    // A FAST FIELD IS NOT A FAST RENDER. Everything above prices the noise field and the three
+    // exponentials. A render is also the unform walk, the roller and stamp geometry, the ribbon label,
+    // the colour flatten and the write - and the field's SHARE of a real render is not measured here,
+    // so this prints the curve instead of picking a number. Read the row that matches what the render
+    // profile says, and until that share is measured the honest answer is the range.
+    head('what a 246× field does to a render');
+    const F = cost(t3) === null ? null : cpuMs / cost(t3) / POOL;
+    if (F === null) row('cannot be drawn', 'the native arm was not measured', 'bad');
+    else for (const share of [0.3, 0.5, 0.7, 0.9, 0.95, 0.99]) {
+      const whole = 1 / (1 - share + share / F);
+      row('if the field is ' + (share * 100).toFixed(0) + '% of a render',
+        whole.toFixed(2) + '× faster overall, so 5:05 becomes '
+          + (305 / whole > 60 ? Math.floor(305 / whole / 60) + ':' + String(Math.round(305 / whole) % 60).padStart(2, '0')
+            : (305 / whole).toFixed(0) + ' s'),
+        whole > 3 ? 'good' : whole > 1.8 ? 'warn' : 'bad');
+    }
+    row('the share is not measured here', 'it is the next thing to measure, and it is the whole decision');
+  } catch (e) {
+    head('failed');
+    row('error', String(e && e.message || e), 'bad');
+    log(String(e && e.stack || e));
+  } finally {
+    document.getElementById('run').disabled = false;
+  }
+};
+</script>

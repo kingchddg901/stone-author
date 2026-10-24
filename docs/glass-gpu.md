@@ -1,13 +1,96 @@
 # A GPU path for glass — measured, and worth building for the long ones
 
-Status: **needs re-deciding, 2026-10-24.** Every hour figure below was derived against a renderer
-that no longer exists, and the page contradicts itself about which partial port it means. Read
-"Where this stands after 2026-10-24" first; the reasoning underneath is sound and the arithmetic is
-stale.
+Status: **measured 2026-10-24, and the answer reversed.** The one measurement this page asked for
+now exists: `tools/gpu-native-probe.html`, three arms, against the *current* arithmetic with the
+corner cache granted to the CPU. A GPU-native field — noise read out of a hardware-filtered texture
+rather than hashed per invocation — came back at **246× the eight-worker pool** on an RDNA-2 desktop,
+3.30× the transliterated port the page had been arguing about. Read "The measurement, 2026-10-24"
+first. Everything under "Where this stands" was the right question and is now answered; every hour
+figure below it is stale.
 
 Earlier status, left as written: **OPEN 2026-10-23, partial port first.** This document was closed
 on the strength of a correct measurement and a wrong judgement, and reopened within hours. Both are
 left visible below, because the mistake is more instructive than the conclusion.
+
+## The measurement, 2026-10-24
+
+`tools/gpu-native-probe.html`, run in the pane on this desktop. One AMD RDNA-2 part, twelve cores
+reported, the renderer's real eight-worker pool as the divisor. **Desktop only so far** — the probe is
+written to run on the S23 and the iPhone and has not yet.
+
+| arm | per 270,400-sample pass | vs one thread | vs the 8-worker pool |
+|---|---|---|---|
+| CPU as shipped, corner cache in place | 28.5 ms (105 ns a sample) | 1× | 0.125× |
+| GPU, the same hashing transliterated | 0.048 ms | 597× | **74.6×** |
+| GPU native, filtered texture | 0.014 ms | 1,970× | **246×** |
+
+The CPU arm is **lifted out of `app/stone-author.html` at run time** — `nz`, `vnoise`, `vnoiseC`,
+`vnoiseCfill`, `fbm2C` and the `_NZC` declaration, fetched and sliced — so it is the shipped
+arithmetic and not a second copy of it. That is the discipline that caught three drifts in a day.
+
+**What the native arm is.** `vnoise` *is* bilinear interpolation of a hash lattice, and a GPU does
+bilinear interpolation in fixed-function silicon. Put the lattice in an `r32float` texture, pre-warp
+the sample coordinate to `floor(x) + smoothstep(frac(x))`, and one `textureSampleLevel` returns
+`(a(1−sx) + b·sx)(1−sy) + (c(1−sx) + d·sx)·sy` — vnoise's own expression. Six samples replace
+twenty-four hashes and all their interpolation.
+
+**This is the reversal.** "Where this stands" argued, correctly, that the corner cache is worth 13.3%
+to the CPU and that a per-invocation port cannot have it — the port would recompute twenty-four
+hashes where the CPU computes about one. All true, and it does not matter: the native path never
+hashes at all. **The texture unit is the cache the port was said not to have, in hardware.** The 246×
+is measured with the CPU's cache advantage already granted, on the arithmetic as it ships today.
+
+Sanity, so the figure is not taken on faith: 270,400 × 6 fetches in 0.014 ms is 116 Gsample/s, under
+an RDNA-2 part's texture peak; the hash arm's 135 Ghash/s is consistent with 32-bit integer multiply
+running at quarter rate. Both are plausible and neither is at a limit.
+
+### What the hardware filter costs in accuracy
+
+Measured against the CPU's own `vnoise` over 4,096 points spread across cells and across the
+fraction: mean **4.27e-4**, worst **2.40e-3** — **0.368 levels of 255** through the field's 0.30
+multiplier. Under half a level, against a spin table already shipped at 2.9e-7 and a `woodAtan2`
+shipped for months at 1.5e-3 rad. The filter is accurate enough to be a renderer, not a toy.
+
+### The cost the GPU clock cannot see, and what it forces
+
+**0.59 ms a dispatch** of submit, fence and map, outside the pass and paid whatever the pass
+contains. At 65,535 a 520²-tile port would be 16,129 dispatches — **9 s of round trip before any
+arithmetic**. A GPU field has to go out in few, large dispatches; a tile-at-a-time port throws the
+win away on overhead. This is a shape constraint on the port, decided before any code.
+
+### A fast field is not a fast render
+
+This prices the noise field and the three exponentials. A render is also the unform walk, the roller
+and stamp geometry, the ribbon label, the colour flatten and the write. **The field's share of a real
+render is not measured**, and it is the whole decision:
+
+| if the field is | the render is | 5:05 becomes |
+|---|---|---|
+| 30% | 1.43× faster | 3:34 |
+| 50% | 1.99× faster | 2:33 |
+| 70% | 3.30× faster | 1:32 |
+| 90% | 9.65× faster | 32 s |
+| 95% | 18.6× faster | 16 s |
+| 99% | 71× faster | 4 s |
+
+**Measuring that share is the next step**, and it is cheap — the per-line-item timings already exist
+for the CPU path. Nothing else about the port should be decided first.
+
+### Three instruments were wrong before the fourth was right
+
+Recorded because each failure is invisible unless you look for it, and the first two produced
+confident numbers.
+
+| instrument | what it reported | why it was wrong |
+|---|---|---|
+| one dispatch, `onSubmittedWorkDone` | 2.50 ms for 24 hashes, 2.80 ms for 6 texture samples | 4× the work, 12% more time. The fence resolved before the work landed; it timed a queue. |
+| reps 1–8, same fence | flat 2.4–3.4 ms while `out[0]` scaled exactly 1:2:4:8 | the work certainly happened; 52M hashes is a fraction of a millisecond, buried under the round trip |
+| copy and `mapAsync` | pinned to 33.3 ms, escaping to 16.8, free only by the fourth rung | two frames at 60 Hz. A map resolution handed to the compositor is quantised by the compositor. |
+| timestamp query | 3.1 / 6.2 / 12.2 / 24.4 and 0.9 / 1.9 / 3.7 / 7.4 ms, ±0.1 across five reads | the GPU writes the clock either side of the pass. No submit, no fence, no map, no frame. |
+
+The probe now refuses to quote a slope unless `out[0]` scales with the rep count (the loop was not
+folded away), the readings rise with the work, and the ladder is monotonic. It prints `NOT MEASURED`
+and the reason instead — it did, twice, on the way to the table above.
 
 ## Where this stands after 2026-10-24
 
