@@ -605,4 +605,62 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
   PK[gi] = r | (gg << 8u) | (b << 16u) | 0xff000000u;
 }`;
 
+// PACKING INTO A TEXTURE, SO THE PIXELS NEVER REACH THIS THREAD AT ALL.
+//
+// WGSL.pack above writes bytes into a buffer and the main thread maps that buffer, which is 23.4 ms
+// of a 28.2 ms tile - measured - and all of it this thread waiting for a device round trip. The
+// bytes do not have to come here. A compute pass can write a storage TEXTURE, a render pass can
+// blit that onto a canvas, and transferToImageBitmap hands the canvas to a worker without any
+// pixel crossing into JS. Measured bare on one 2056-square tile: 8.0 ms of main thread becomes 0.2.
+//
+// THE CANVAS IS NOT THE STORAGE TARGET, and the first version of this made that mistake. A canvas
+// is bgra8unorm, STORAGE_BINDING on that format is a validation error, and with no error scope the
+// pass simply never ran - the pixel asked to be red came back black and the timing was the cost of
+// doing nothing. So the compute pass writes an rgba8unorm texture we own, and the RENDER PASS
+// converts into whatever the canvas is. That needs no feature flag and cannot swap channels,
+// because the hardware converts rather than the shader guessing the order.
+//
+// ROUND BEFORE NORMALISING, OR IT IS A DIFFERENT PAINTER. A texture store takes 0..1 and quantises
+// itself. Handing it PX[o]/255.0 lets the hardware resolve the tie, and it resolves 11.5% of them
+// the other way from round(): 76 channels of 12,582,912, measured against the f32 arm over this
+// document's 660 exact ties. round() first - the same call WGSL.pack uses - leaves an integer, and
+// n/255*255 in f32 lands within 3e-5 of n for every n in 0..255, so there is no tie left to break.
+// With it, 0 of 12,582,912. That is the difference between a faster readback and a new renderSig
+// key, a resume that refuses across the switch, and every master re-dated.
+//
+// THE BAND OFFSET IS ITS OWN UNIFORM. PX holds one band at a time - a 4096 tile plus bleed wants
+// 202 MB of f32 against a 128 MiB binding - while the texture is the whole tile, so the pack needs
+// to know which rows it is writing. It goes in a buffer of its own rather than in a spare field of
+// the 304-byte uniform, because that struct and glass-real.mjs's packer are a replica pair and a
+// new meaning for a pad word would have to be reconciled in both.
+WGSL.tex = `
+struct Band { y0: i32, pad1: i32, pad2: i32, pad3: i32 }
+@group(0) @binding(4) var TEX: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(6) var<uniform> BND: Band;
+@compute @workgroup_size(8, 8)
+fn packTex(@builtin(global_invocation_id) g: vec3<u32>) {
+  let tw = u32(E.tileW);
+  let th = u32(E.tileH);                      // this band's height, not the tile's
+  if (g.x >= tw || g.y >= th) { return; }
+  let o = (g.y * tw + g.x) * 3u;
+  textureStore(TEX, vec2<i32>(i32(g.x), BND.y0 + i32(g.y)),
+    vec4<f32>(clamp(round(PX[o]), 0.0, 255.0) / 255.0,
+              clamp(round(PX[o + 1u]), 0.0, 255.0) / 255.0,
+              clamp(round(PX[o + 2u]), 0.0, 255.0) / 255.0, 1.0));
+}
+// ONE TRIANGLE COVERS THE TARGET. Three vertices at (-1,-1), (3,-1), (-1,3) leave a right triangle
+// whose clipped area is the whole clip space, which is one draw call and no index buffer.
+@vertex
+fn vfull(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+  var q = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
+  return vec4<f32>(q[i], 0.0, 1.0);
+}
+@group(0) @binding(5) var SRC: texture_2d<f32>;
+// textureLoad AND NOT A SAMPLER: one texel to one pixel, nothing to interpolate and nothing to be
+// inexact about. A sampler would put filtering between the shader and the file.
+@fragment
+fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+  return textureLoad(SRC, vec2<i32>(i32(pos.x), i32(pos.y)), 0);
+}`;
+
 export { WGSL };

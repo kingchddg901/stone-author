@@ -801,6 +801,47 @@ chose its field with `bmp: (bmp && !asGlass) || undefined, glass: (bmp && asGlas
 and `a && b` yields `b`, so `glass` was the BOOLEAN `true` rather than the bitmap. Every tile threw
 in `drawImage`. Written out as a ternary and checked as a truth table rather than by eye.
 
+### Step two: the pixels never reach this thread
+
+`paintOne` maps a buffer and memcpies it. `paintTex` does not: the bands write into one full-tile
+`rgba8unorm` texture, a single render pass blits that onto the slot's canvas, and
+`transferToImageBitmap` hands the canvas to a worker. No `copyBufferToBuffer`, no `mapAsync`, no
+`set()`, no `await` on a pixel.
+
+| per tile, 2048 + bleed, 16 tiles, 3 reps | `sub` | `map` | `err` | `copy` | main thread |
+| --- | --- | --- | --- | --- | --- |
+| buffer readback (202) | 0.06 | 15.9 | 7.9 | 1.2 | **23.4 ms** |
+| texture readback (205) | 0.02 – 0.07 | **0** | **0** | **0** | **0.06 – 0.10 ms** |
+
+**That figure is what this thread spends, and nothing more.** The bitmap carries GPU work that has
+not finished, so the wait lands wherever it is drawn - in a worker, twelve at a time. Reporting it
+as though the work had vanished would be the same error the first texture measurement made.
+
+**ONE SUBMIT PER BAND, not one per tile.** `writeBuffer` is ordered against submits rather than
+interleaved with the commands inside an encoder, so batching every band into one encoder applies the
+LAST band's uniform to all of them and paints the same rows N times. Submit overhead is 0.06 ms
+measured; there is nothing to win by trying.
+
+**The band offset is its own uniform buffer.** PX holds one band - a 4096 tile plus bleed wants
+202 MB of f32 against a 128 MiB binding - while the texture is the whole tile, so the pack has to be
+told which rows it is writing. Sixteen bytes of its own rather than a spare word of the 304-byte
+uniform, because that struct and `glass-real.mjs`'s packer are a replica pair and a new meaning for
+a pad would have to be reconciled in both.
+
+**It also uses less memory.** `px + pk + rb + img` was 101.4 MB a slot at 2056 square;
+`px + tex + canvas` is 84.5.
+
+### And the fallback has to be exercised, because it now has no callers
+
+`texOn` is false when the compute pipeline, the render pipeline or the canvas context refuses - its
+own `try`, its own error scope, and a refusal leaves every buffer and both `else` branches exactly
+as they were. On a machine where the texture path works, that is dead code that passes every audit.
+
+So it was forced: `pipeT` nulled, the gate re-run. **0 channels apart over 67,108,864 bytes** on the
+buffer path too. Both shapes write the same tile, and the chain underneath is byte-exact at every
+link - texture bytes against the f32 reference (0 of 12,582,912), the byte pack against the same
+reference (0 of 12,582,912), and the worker's composite against the main thread's (0 of 67,108,864).
+
 ## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
 
 **His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,

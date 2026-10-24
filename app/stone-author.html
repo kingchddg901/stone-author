@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.204';
+  const BUILD = '2026.10.24.205';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14544,6 +14544,64 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
   PK[gi] = r | (gg << 8u) | (b << 16u) | 0xff000000u;
 }`;
 
+  // PACKING INTO A TEXTURE, SO THE PIXELS NEVER REACH THIS THREAD AT ALL.
+  //
+  // WGSL.pack above writes bytes into a buffer and the main thread maps that buffer, which is 23.4 ms
+  // of a 28.2 ms tile - measured - and all of it this thread waiting for a device round trip. The
+  // bytes do not have to come here. A compute pass can write a storage TEXTURE, a render pass can
+  // blit that onto a canvas, and transferToImageBitmap hands the canvas to a worker without any
+  // pixel crossing into JS. Measured bare on one 2056-square tile: 8.0 ms of main thread becomes 0.2.
+  //
+  // THE CANVAS IS NOT THE STORAGE TARGET, and the first version of this made that mistake. A canvas
+  // is bgra8unorm, STORAGE_BINDING on that format is a validation error, and with no error scope the
+  // pass simply never ran - the pixel asked to be red came back black and the timing was the cost of
+  // doing nothing. So the compute pass writes an rgba8unorm texture we own, and the RENDER PASS
+  // converts into whatever the canvas is. That needs no feature flag and cannot swap channels,
+  // because the hardware converts rather than the shader guessing the order.
+  //
+  // ROUND BEFORE NORMALISING, OR IT IS A DIFFERENT PAINTER. A texture store takes 0..1 and quantises
+  // itself. Handing it PX[o]/255.0 lets the hardware resolve the tie, and it resolves 11.5% of them
+  // the other way from round(): 76 channels of 12,582,912, measured against the f32 arm over this
+  // document's 660 exact ties. round() first - the same call WGSL.pack uses - leaves an integer, and
+  // n/255*255 in f32 lands within 3e-5 of n for every n in 0..255, so there is no tie left to break.
+  // With it, 0 of 12,582,912. That is the difference between a faster readback and a new renderSig
+  // key, a resume that refuses across the switch, and every master re-dated.
+  //
+  // THE BAND OFFSET IS ITS OWN UNIFORM. PX holds one band at a time - a 4096 tile plus bleed wants
+  // 202 MB of f32 against a 128 MiB binding - while the texture is the whole tile, so the pack needs
+  // to know which rows it is writing. It goes in a buffer of its own rather than in a spare field of
+  // the 304-byte uniform, because that struct and glass-real.mjs's packer are a replica pair and a
+  // new meaning for a pad word would have to be reconciled in both.
+  WGSL.tex = `
+struct Band { y0: i32, pad1: i32, pad2: i32, pad3: i32 }
+@group(0) @binding(4) var TEX: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(6) var<uniform> BND: Band;
+@compute @workgroup_size(8, 8)
+fn packTex(@builtin(global_invocation_id) g: vec3<u32>) {
+  let tw = u32(E.tileW);
+  let th = u32(E.tileH);                      // this band's height, not the tile's
+  if (g.x >= tw || g.y >= th) { return; }
+  let o = (g.y * tw + g.x) * 3u;
+  textureStore(TEX, vec2<i32>(i32(g.x), BND.y0 + i32(g.y)),
+    vec4<f32>(clamp(round(PX[o]), 0.0, 255.0) / 255.0,
+              clamp(round(PX[o + 1u]), 0.0, 255.0) / 255.0,
+              clamp(round(PX[o + 2u]), 0.0, 255.0) / 255.0, 1.0));
+}
+// ONE TRIANGLE COVERS THE TARGET. Three vertices at (-1,-1), (3,-1), (-1,3) leave a right triangle
+// whose clipped area is the whole clip space, which is one draw call and no index buffer.
+@vertex
+fn vfull(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+  var q = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
+  return vec4<f32>(q[i], 0.0, 1.0);
+}
+@group(0) @binding(5) var SRC: texture_2d<f32>;
+// textureLoad AND NOT A SAMPLER: one texel to one pixel, nothing to interpolate and nothing to be
+// inexact about. A sampler would put filtering between the shader and the file.
+@fragment
+fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+  return textureLoad(SRC, vec2<i32>(i32(pos.x), i32(pos.y)), 0);
+}`;
+
   // PACKING A REAL DOCUMENT'S SCENE FOR THE SHADER.
   //
   // glass-scene.mjs holds a synthetic scene chosen to reach every branch. This takes the F that
@@ -14827,6 +14885,30 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       return null;                                         // the CPU path is always there
     }
 
+    // THE TEXTURE PATH, AND IT IS ALLOWED TO REFUSE ON ITS OWN. The module already compiled in
+    // gpuCapability(), so the WGSL is sound everywhere this path runs at all - but a compute
+    // pipeline over a storage texture, a render pipeline, and a webgpu canvas context are three
+    // more things a device can decline, and the answer to "this machine cannot do the fast
+    // readback" is the slow one rather than no GPU at all. Its own try, its own scope, and a
+    // refusal here leaves every buffer below exactly as it was.
+    let pipeT = null, pipeBlit = null, cvFmt = null;
+    try {
+      dev.pushErrorScope('validation');
+      cvFmt = navigator.gpu.getPreferredCanvasFormat();
+      pipeT = await dev.createComputePipelineAsync({
+        layout: 'auto', compute: { module: cap.mod, entryPoint: 'packTex' } });
+      pipeBlit = await dev.createRenderPipelineAsync({
+        layout: 'auto',
+        vertex: { module: cap.mod, entryPoint: 'vfull' },
+        fragment: { module: cap.mod, entryPoint: 'fblit', targets: [{ format: cvFmt }] },
+        primitive: { topology: 'triangle-list' } });
+      const e2 = await dev.popErrorScope();
+      if (e2) throw new Error(e2.message.split(String.fromCharCode(10))[0]);
+    } catch (e) {
+      console.warn('gpu: no texture readback', e);
+      pipeT = pipeBlit = null;
+    }
+
     // TWO OF EVERYTHING, so tile n+1 can be on the GPU while tile n is being deflated and written.
     //
     // THE MEASUREMENT THAT ASKED FOR THIS: on the 262,144 master the shader is about 2 ms of a
@@ -14838,18 +14920,41 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // starts n+1 into the OTHER set, so the caller's deflate and disk write overlap the next tile's
     // shader and readback instead of following them.
     const SETS = 2;
-    const set = Array.from({ length: SETS }, () => ({
-      px: dev.createBuffer({ size: n * 3 * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }),
-      pk: dev.createBuffer({ size: bytes4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }),
-      rb: dev.createBuffer({ size: bytes4,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }),
-      ub: dev.createBuffer({ size: 304,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
-      img: new ImageData(ew, ew),
-      uni: packed.uni.slice(0),
-    }));
+    // ONE SHAPE OR THE OTHER, never both allocated. The texture path wants a full-tile rgba8unorm
+    // texture and a canvas to blit it onto; the buffer path wants the byte buffer, the readback
+    // buffer and an ImageData. Holding both would be 34 MB a slot at a 2048 tile for nothing.
+    //
+    // It also comes out SMALLER: px + pk + rb + img was 101.4 MB a slot at 2056 square, and
+    // px + tex + canvas is 84.5.
+    const texOn = !!(pipeT && pipeBlit);
+    const set = Array.from({ length: SETS }, () => {
+      const s = {
+        px: dev.createBuffer({ size: n * 3 * 4,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }),
+        ub: dev.createBuffer({ size: 304,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+        uni: packed.uni.slice(0),
+      };
+      if (texOn) {
+        // THE BAND'S OFFSET IN ITS OWN BUFFER. PX holds one band, the texture holds the whole tile,
+        // so the pack has to be told which rows it is writing. 16 bytes is the minimum uniform
+        // binding size.
+        s.bnd = dev.createBuffer({ size: 16,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+        s.tex = dev.createTexture({ size: [ew, ew], format: 'rgba8unorm',
+          usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING });
+        s.cv = new OffscreenCanvas(ew, ew);
+        s.ctx = s.cv.getContext('webgpu');
+        s.ctx.configure({ device: dev, format: cvFmt, alphaMode: 'opaque' });
+      } else {
+        s.pk = dev.createBuffer({ size: bytes4,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+        s.rb = dev.createBuffer({ size: bytes4,
+          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+        s.img = new ImageData(ew, ew);
+      }
+      return s;
+    });
     for (const s of set) s.view = new DataView(s.uni);
     // THE ARENA IS SHARED and read-only to the shader - it is the document, identical for every
     // tile, and 40,874 floats of it. Two copies would be two uploads of the same thing.
@@ -14860,9 +14965,17 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       s.grp = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
         { binding: 0, resource: { buffer: s.px } }, { binding: 2, resource: { buffer: s.ub } },
         { binding: 3, resource: { buffer: ar } }] });
-      s.grpP = dev.createBindGroup({ layout: pipeP.getBindGroupLayout(0), entries: [
-        { binding: 0, resource: { buffer: s.px } }, { binding: 1, resource: { buffer: s.pk } },
-        { binding: 2, resource: { buffer: s.ub } }] });
+      if (texOn) {
+        s.grpT = dev.createBindGroup({ layout: pipeT.getBindGroupLayout(0), entries: [
+          { binding: 0, resource: { buffer: s.px } }, { binding: 2, resource: { buffer: s.ub } },
+          { binding: 4, resource: s.tex.createView() }, { binding: 6, resource: { buffer: s.bnd } }] });
+        s.grpB = dev.createBindGroup({ layout: pipeBlit.getBindGroupLayout(0), entries: [
+          { binding: 5, resource: s.tex.createView() }] });
+      } else {
+        s.grpP = dev.createBindGroup({ layout: pipeP.getBindGroupLayout(0), entries: [
+          { binding: 0, resource: { buffer: s.px } }, { binding: 1, resource: { buffer: s.pk } },
+          { binding: 2, resource: { buffer: s.ub } }] });
+      }
     }
 
     // packReal writes tileX and tileY as int32s at a known place in the 304-byte uniform; patching
@@ -14924,6 +15037,55 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // 1.3-2.5 in the harness, against a map wait of 16 ms on both. Whatever it is doing, it is not
     // the same on every machine, and it was doing it 640 times for two distinct encodings.
     const scoped = new Set();
+    // THE TEXTURE PAINT. Everything the buffer version does up to the pack, and then nothing: no
+    // copyBufferToBuffer, no mapAsync, no memcpy, no await on a pixel. The bands write into one
+    // full-tile texture and a single render pass puts it on the slot's canvas.
+    //
+    // ONE SUBMIT PER BAND, not one for the tile. writeBuffer is ordered against SUBMITS rather than
+    // interleaved with the commands inside an encoder, so batching every band into one encoder
+    // would apply the LAST band's uniform to all of them and paint the same rows N times. Submit
+    // overhead is 0.06 ms measured, so there is nothing to win by trying.
+    async function paintTex(ex0, ey0, s) {
+      const uni = s.uni, uniView = s.view;
+      const bnd = new Int32Array(4);
+      for (let y0 = 0; y0 < ew; y0 += rowsMax) {
+        const rows = Math.min(rowsMax, ew - y0);
+        uniView.setInt32(OFF_TX, ex0, true);
+        uniView.setInt32(OFF_TY, ey0 + y0, true);
+        uniView.setInt32(OFF_TH, rows, true);
+        dev.queue.writeBuffer(s.ub, 0, uni);
+        bnd[0] = y0;
+        dev.queue.writeBuffer(s.bnd, 0, bnd);
+        const check = !scoped.has(rows);
+        if (check) { scoped.add(rows); dev.pushErrorScope('validation'); }
+        const tS = performance.now();
+        const [dX, dY] = split(Math.ceil(ew * rows / 64));
+        const enc = dev.createCommandEncoder();
+        const a = enc.beginComputePass();
+        a.setPipeline(pipe); a.setBindGroup(0, s.grp);
+        a.dispatchWorkgroups(dX, dY); a.end();
+        const b = enc.beginComputePass();
+        b.setPipeline(pipeT); b.setBindGroup(0, s.grpT);
+        b.dispatchWorkgroups(Math.ceil(ew / 8), Math.ceil(rows / 8)); b.end();
+        dev.queue.submit([enc.finish()]);
+        own.sub += performance.now() - tS;
+        const tE = performance.now();
+        const e = check ? await dev.popErrorScope() : null;
+        own.err += performance.now() - tE;
+        if (!e && cap.fault) throw new Error(cap.fault);
+        if (e) throw new Error(e.message.split(String.fromCharCode(10))[0]);
+      }
+      // AND THE BLIT, once the whole texture is written. getCurrentTexture() hands back a fresh
+      // surface after each transferToImageBitmap, so this is the only place the canvas is touched.
+      const tB2 = performance.now();
+      const enc2 = dev.createCommandEncoder();
+      const rp = enc2.beginRenderPass({ colorAttachments: [{
+        view: s.ctx.getCurrentTexture().createView(),
+        loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 } }] });
+      rp.setPipeline(pipeBlit); rp.setBindGroup(0, s.grpB); rp.draw(3); rp.end();
+      dev.queue.submit([enc2.finish()]);
+      own.sub += performance.now() - tB2;
+    }
     // WHERE A FAULT HAS TO STOP THINGS, and it is not where the fault happens.
     //
     // The first version of this threw at the end of paintOne, and the bite test said it did not
@@ -14992,7 +15154,8 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // WHERE A TILE'S GPU WORK BEGINS, called both directly and as the prefetch for the next one.
     const start = (i, slot) => {
       const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
-      return paintOne(gx * p.ts - p.bleed, gy * p.ts - p.bleed, set[slot]);
+      const f = texOn ? paintTex : paintOne;
+      return f(gx * p.ts - p.bleed, gy * p.ts - p.bleed, set[slot]);
     };
 
     // QUEUE ONE TILE, IF IT IS NOT QUEUED ALREADY. The draw joins the chain, so the GPU still does
@@ -15034,6 +15197,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // byte-identical to `?pool=8` in every field, and the experiment could only be judged on a
       // wall clock with its own independent variable unrecorded.
       planned: 1, workers: 1, finishers: 0, shed: 0, strain: null, gpu: true, pipelined: SETS > 1,
+      texReadback: texOn,
       get busy() { return busyN; },
       get tiles() { return held; },
       // READ ONCE AT THE END, by the metadata. Totals rather than per tile: these are main-thread
@@ -15114,6 +15278,10 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // putImageData and one transferToImageBitmap - the same two steps the composite did on this
       // thread, minus the composite.
       glassFrom(slot) {
+        // THE TEXTURE PATH ALREADY HAS A CANVAS and the pixels are on it, so this is a transfer of
+        // ownership and nothing else - no putImageData, no ImageData, no byte of it in JS. The
+        // bitmap carries the GPU's work with it, so whoever draws it is the one who waits.
+        if (texOn) return set[slot].cv.transferToImageBitmap();
         const g = gl || (gl = new OffscreenCanvas(ew, ew));
         const gx2 = g.getContext('2d');
         gx2.putImageData(set[slot].img, 0, 0);
@@ -15125,7 +15293,11 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       async tile(i) {
         const slot = await this.paintSlot(i);
           const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
-          const img = set[slot].img;
+          // WHAT THE COMPOSITE DRAWS FROM. The buffer path has an ImageData; the texture path has
+          // pixels on a canvas and no ImageData at all, so it takes the same bitmap the finishers
+          // get. drawImage at 1:1 with integer rectangles is exact - gpu-worker-composite.html
+          // compares 67,108,864 bytes through it at 0 apart - so the two spellings agree.
+          const img = texOn ? this.glassFrom(slot) : set[slot].img;
           const tA = performance.now();
           try {
           return renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed, cx => {
@@ -15141,7 +15313,8 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
             try { B = woodRect(); } finally { g2d = prevG; }
             if (!B) return;
             cx.save(); cx.setTransform(1, 0, 0, 1, 0, 0);
-            cx.putImageData(img, 0, 0, B.x0, B.y0, B.bw, B.bh);
+            if (texOn) cx.drawImage(img, B.x0, B.y0, B.bw, B.bh, B.x0, B.y0, B.bw, B.bh);
+            else cx.putImageData(img, 0, 0, B.x0, B.y0, B.bw, B.bh);
             cx.restore();
           });
           } finally { own.asm += performance.now() - tA; }
