@@ -156,8 +156,21 @@ nudged until it passed. Against `181`, measured on 1024 tiles at 65,535: **601 p
 changed near the spin centre, 627 at the corner, 91 mid-sheet**, worst 105 levels. Still three orders
 of magnitude below `179`'s 53.9%.
 
-**It fixed the bimodality, and that makes the footprint a finding rather than a suspect.** Four
-65,535 runs on the quietest box of the day — 8.9% cpu, 1.07 threads beforehand:
+**CORRECTED 2026-10-23, later the same evening: there was probably no bimodality to fix.** A fifth
+`182` run came in at 5.076 min and exposed what both builds were really showing — **a render gets
+slower the longer its page has been open**, 8–11% by the third to fifth render of one session, across
+six sessions. `181`'s slow third run was its *third render*, not a cache mode. `master-timing.md` has
+the table.
+
+What survives, compared like-for-like at the same position in a session: the 64 KB table is **3.9%
+faster at #1 and 1.0% at #2**, with core-seconds at positions 1–3 below `181`'s best of 2260. Real,
+and a few percent. That `181` turns by its third render while `182` holds to its fourth is one
+session each — suggestive of the footprint mattering, not established. The paragraph below was
+written before the fifth run and reads the spread as a property of the build; it is kept because the
+error is the instructive part, and because the numbers in it are correct even where the conclusion
+drawn from them is not.
+
+Four 65,535 runs on the quietest box of the day — 8.9% cpu, 1.07 threads beforehand:
 
 | build | runs | wall | spread | sd | core-seconds |
 | --- | --- | --- | --- | --- | --- |

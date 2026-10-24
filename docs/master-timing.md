@@ -244,6 +244,39 @@ compute-bound.** At 32,768 the same change took 9.4% off the work and 4.5% off t
 threads dropping from 8.3–8.6 to 8.0 — the workers outran the consumer. That is a real ceiling and it
 arrives at small sizes first.
 
+## A render gets slower the longer its page has been open
+
+**Measured across six sessions on 2026-10-23, at 65,535 on one slab.** He reloads the app only to
+change build, so each build's runs are one page session:
+
+| build | #1 | #2 | #3 | #4 | #5 | #2 vs #1 | last vs best |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `173` | 6.179 | 6.165 | | | | −0.2% | 0.0% |
+| `174` | 6.032 | 6.007 | | | | −0.4% | 0.0% |
+| `175` | 5.383 | 5.314 | | | | −1.3% | 0.0% |
+| `177` | 5.216 | 5.204 | | | | −0.2% | 0.0% |
+| `181` | 4.894 | 4.769 | **5.280** | | | −2.5% | **+10.7%** |
+| `182` | 4.704 | 4.722 | 4.733 | 4.815 | **5.076** | +0.4% | **+7.9%** |
+
+**Every two-run session is tight. Every session of three or more has its last render 8–11% slow.**
+The second render is usually the fastest — a warm-up of about half a percent — and then it turns.
+`182`'s five runs rise monotonically in wall AND in core-seconds, 2251 → 2213 → 2253 → 2291 → 2437,
+while the clock falls only 0.8%. So it is work, not boost and not the machine: the box sat at 4.5–10%
+for the whole half hour before that fifth run.
+
+This is the degradation the app's own note beside `_warpMemo` records — the same build measuring
+34,782 ms late in a session and 15,648 immediately after opening a fresh tab. What is new here is the
+SIZE of it inside four renders, and that it is invisible unless a session is run past two.
+
+**It cost a diagnosis.** Build `181`'s slow third run was read as the spin table going bimodal on a
+256 KB footprint, and the 64 KB table was built to fix it. Compared like-for-like by position the
+shrink is worth **3.9% at #1 and 1.0% at #2**, with core-seconds at positions 1–3 below `181`'s best
+— real, but a few percent rather than the removal of a mode that was never there.
+
+**Two rules follow.** Compare renders at the SAME position in their session, never a first against a
+third. And treat anything past the second render in one page as carrying an unknown penalty: reload
+between them, which costs seconds and is the only thing known to reset it.
+
 ## Comparing two designs: build both, interleave, keep the best of each
 
 Chris's protocol, adopted 2026-10-24 after a day of picking designs by microbench and having the
@@ -267,10 +300,16 @@ makes interleaving free: render in any order, keep no notes, and the pairing is 
 afterwards from the `build` field the files already record. It is also the only version of this that
 survives a mistake - a master cannot be filed under the wrong arm, because nobody files it.
 
-**Interleave, do not block.** `A B A B A B`, not `AAA` then `BBB`. The box drifts: a gate sweep at
-90% CPU was still clearing when a triplet started and sent it 1.722 -> 1.686 -> 1.620 as it drained,
-and two runs of one build on a nominally quiet box came in 12% apart in core-seconds. Blocking lets
-that drift land entirely on one arm; interleaving splits it across both at the same machine cost.
+**Interleave, do not block, and the strongest reason is the section above.** `A B A B A B`, not
+`AAA` then `BBB`. Two drifts are in play. The box drifts: a gate sweep at 90% CPU was still clearing
+when a triplet started and sent it 1.722 -> 1.686 -> 1.620 as it drained. And the PAGE drifts: the
+last render of a session runs 8-11% slow, which is larger than most differences worth measuring.
+Blocking lets both land entirely on one arm.
+
+**Switching between two app files handles the page drift for free**, because loading the other file
+is a fresh page - so an interleaved sequence puts every render at position #1 or #2 of its own
+session, which is exactly where the table above says a render is trustworthy. Interleaving within one
+page would not: it would spread the drift evenly but still accumulate it.
 
 **Three runs an arm, not two.** Two runs on build `181` agreed at 4.769 and 4.894 and were both
 wrong about the build; the third read 5.280 and exposed a 10.8% spread. A pair that agrees is not
