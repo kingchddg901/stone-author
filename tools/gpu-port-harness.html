@@ -97,8 +97,19 @@ async function liftFromApp(names) {
     }
     throw new Error('unbalanced ' + name);
   };
-  const decl = (src.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0] || '';
-  return { app: new Function(decl + '\n' + names.map(fn).join('\n') + '\nreturn {' + names.join(',') + '};')(), from };
+  // the const declarations the lifted functions reach for - _NZC for the corner cache and
+  // SPIN_NB for spinTable. A function lifted without its constants throws before it can disagree
+  // with anything, which is how this failed the first time.
+  const decl = ((src.match(/const _NZC = new Float64Array\([^;]*\);/) || [])[0] || '')
+    + ';' + ((src.match(/const SPIN_NB = [^;]*;/) || [])[0] || '')
+    + ';' + ((src.match(/const OPK = \{[^}]*\};/) || [])[0] || '');   // compileOps reads it
+  const SLAB_FT = +(src.match(/const SLAB_FT = (\\d+)/) || [, 8])[1];
+  // AND SPIN_T IS BUILT AFTER THE FUNCTIONS, NOT BEFORE. It is const SPIN_T = spinTable() in the
+  // app - a CALL - so it cannot sit with the declarations above, which have not been evaluated
+  // yet. app/stone-author.html:5086 records the same trap in the worker core, where it read
+  // 'spinTable is not a function' in every worker while the main thread was fine.
+  const tail = 'const SPIN_T = spinTable();';
+  return { SLAB_FT, app: new Function(decl + '\n' + names.map(fn).join('\n') + '\n' + tail + '\nreturn {' + names.join(',') + '};')(), from };
 }
 
 // ---- THE SHADER LIBRARY, growing one proven function at a time -------------------------------------
@@ -116,7 +127,7 @@ struct Env {
   MSQ: f32, MJ: f32, CN: f32, TW: f32,
   LC: f32, LS: f32, CW: f32, CS: f32,
   LP: f32, STC: f32, WPH: f32, RLH: f32,
-  RLtotal: f32, pad0: f32, pad1: f32, pad2: f32,
+  RLtotal: f32, PX: f32, PY: f32, SLAB: f32,
   // the integers
   form: i32, MR: i32, MB: i32, MCn: i32,
   STn: i32, WPnx: i32, WPny: i32, RLnx: i32,
@@ -124,6 +135,7 @@ struct Env {
   oWU: i32, oWV: i32, oMEX: i32, oMHL: i32,
   oMD: i32, oMRIM: i32, oBS: i32, oBV: i32,
   oRPR: i32, oRTL: i32, oSTS: i32, oMCC: i32,
+  oSPIN: i32, oOPS: i32, nOps: i32, pad5: i32,
 };
 @group(0) @binding(2) var<uniform> E: Env;
 @group(0) @binding(3) var<storage, read> ARR: array<f32>;
@@ -139,6 +151,8 @@ fn aRPR(k: i32) -> f32 { return ARR[E.oRPR + k]; }
 fn aRTL(k: i32) -> f32 { return ARR[E.oRTL + k]; }
 fn aSTS(k: i32) -> vec4<f32> { let o = E.oSTS + k * 4; return vec4<f32>(ARR[o], ARR[o + 1], ARR[o + 2], ARR[o + 3]); }
 fn aMCC(k: i32) -> f32 { return ARR[E.oMCC + k]; }
+fn aSPIN(k: i32) -> f32 { return ARR[E.oSPIN + k]; }
+fn aOP(i: i32, f: i32) -> f32 { return ARR[E.oOPS + i * 16 + f]; }
 const PINF: f32 = 1e30;`;
 
 
@@ -482,6 +496,83 @@ fn glassLay(gc0: f32, ga0: f32) -> vec4<f32> {
   return o;
 }`;
 
+
+// THE OP CHAIN, WALKED BACKWARDS, ONE PIXEL AT A TIME. Five kinds behind one loop, and which arm a
+// pixel takes depends on the slab rather than the pixel - so unlike glassLay every thread in a group
+// runs the same sequence here. The divergence in this function is in rollStampAt underneath it.
+//
+// WHAT THIS DOES NOT PORT, and it matters for assembly rather than for correctness: op.B and op.S
+// are a PER-OP roller grid and warp grid in the app, and here every press reads the one synthetic
+// roller and every stir the one synthetic warp. The arithmetic of all five arms is exercised; the
+// plumbing that gives each op its own grid is a second arena offset per op and belongs with the tile
+// assembly, not with proving the walk.
+//
+// SPIN_NB and SPIN_TURN are the app's own constants, and the table itself rides in the arena -
+// 4,096 entries of interleaved cos and sin, two guard entries past the end so the lerp never reads
+// off it, exactly as spinTable builds it.
+WGSL.opchain = `
+const SPIN_NB: f32 = 4096.0;
+const SPIN_TURN: f32 = 0.15915494309189535;
+fn glassUnform(x0: f32, y0: f32) -> vec3<f32> {
+  var x = x0; var y = y0; var press = 0.0;
+  for (var i = E.nOps - 1; i >= 0; i = i - 1) {
+    let k = i32(aOP(i, 0));
+    let ox = aOP(i, 1); let oy = aOP(i, 2);
+    if (k == 1) {
+      let px = x - ox; let py = y - oy;
+      let ar = aOP(i, 3) * sqrt(px * px + py * py);
+      let sq = ar * SPIN_TURN;
+      let su = (sq - floor(sq)) * SPIN_NB;
+      let si = i32(su); let sf = su - f32(si); let sj = si << 1u;
+      let c1 = aSPIN(sj) + sf * (aSPIN(sj + 2) - aSPIN(sj));
+      let s1 = aSPIN(sj + 1) + sf * (aSPIN(sj + 3) - aSPIN(sj + 1));
+      x = ox + px * c1 + py * s1;
+      y = oy - px * s1 + py * c1;
+    } else if (k == 2) {
+      let s = aOP(i, 4);
+      x = ox + (x - ox) / s;
+      y = oy + (y - oy) / s;
+    } else if (k == 3) {
+      let cd = aOP(i, 6); let sd = aOP(i, 7);
+      if (aOP(i, 11) != 0.0) {
+        let h = rollStampAt(x * cd + y * sd - aOP(i, 8), -x * sd + y * cd);
+        press = max(press, h);
+      }
+      let s = aOP(i, 4);
+      if (aOP(i, 5) != 0.0) {
+        let a0 = x * cd + y * sd; let c0 = -x * sd + y * cd;
+        let a1 = a0 / s; let c1 = c0 * s;
+        x = a1 * cd - c1 * sd;
+        y = a1 * sd + c1 * cd;
+      } else { x = x / s; y = y * s; }
+    } else if (k == 4) {
+      if (aOP(i, 12) != 0.0) {
+        let cu = (x - E.PX) * 12.0 / E.SLAB + 0.5;
+        let cvv = (y - E.PY) * 12.0 / E.SLAB + 0.5 * E.WPH;
+        let r = rollerAt(cu, cvv);
+        let half = aOP(i, 9);
+        if (r.y > -half && r.y < half) {
+          let hh = rollerHand(r.x);
+          let bite = aOP(i, 10) * hh.x * (1.0 + hh.y * (r.y / half));
+          if (bite > 0.0) {
+            let h = rollStampAt(r.x, r.y);
+            if (h > 0.0) { press = max(press, h * min(bite, 1.0)); }
+          }
+        }
+      }
+    } else if (k == 5) {
+      if (aOP(i, 13) != 0.0) {
+        let cu = (x - E.PX) * 12.0 / E.SLAB + 0.5;
+        let cvv = (y - E.PY) * 12.0 / E.SLAB + 0.5 * E.WPH;
+        let w = glassUnwarp(cu, cvv);
+        x = x + w.x * E.SLAB / 12.0;
+        y = y + w.y * E.SLAB / 12.0;
+      }
+    }
+  }
+  return vec3<f32>(x, y, press);
+}`;
+
 // form, as an integer, in one place for both sides
 const FORM = { spun: 1, poured: 2, blown: 3, rolled: 4, flattened: 5 };
 
@@ -548,12 +639,17 @@ const BLV = { MW: 0.5, MSQ: 3.2, MJ: 0.7, CN: 6, MST: 2.5 };
 // STAMPS, deliberately overlapping and spread around the circumference, with one rotated off-axis so
 // starR's angle argument is not always near zero. D is in inches; the app turns it into a
 // circumference in feet, and that conversion is part of what is being checked.
+// THE RADII ARE DELIBERATELY LARGE. At realistic sizes - r around an inch, so R = r/24 is about
+// 0.04 ft against a 1.57 ft circumference - the op chain produced a non-zero press on 2 samples out
+// of 2,048, which means that output channel agreed because BOTH SIDES WERE ZERO almost everywhere.
+// A channel that is never exercised is not a channel that was checked. Widened until the press path
+// actually fires; the test is for coverage, not for a plausible roller.
 const STD = { D: 6, list: [
-  { a: 0,   x: -0.4, r: 1.1, rot: 0 },
-  { a: 37,  x: 0.0,  r: 0.9, rot: 23 },
-  { a: 140, x: 0.35, r: 1.4, rot: 71 },
-  { a: 250, x: -0.1, r: 0.7, rot: 0 },
-  { a: 330, x: 0.2,  r: 1.2, rot: 199 },
+  { a: 0,   x: -0.4, r: 5.5, rot: 0 },
+  { a: 37,  x: 0.0,  r: 4.5, rot: 23 },
+  { a: 140, x: 0.35, r: 7.0, rot: 71 },
+  { a: 250, x: -0.1, r: 3.5, rot: 0 },
+  { a: 330, x: 0.2,  r: 6.0, rot: 199 },
 ] };
 function stampArr() {
   const a = new Float32Array(STD.list.length * 4);
@@ -568,27 +664,31 @@ function stampArr() {
 const MCC_COL = [2, 0, 5, 1, 4, 3];                      // the cane index each ribbon carries
 function envUni(o) {
   o = o || {};
-  const b = new ArrayBuffer(208), d = new DataView(b);
+  const b = new ArrayBuffer(224), d = new DataView(b);   // 28 floats then 28 integers
   const F = [FV.TH, FV.RM, FV.RS, FV.FR, FV.FP, FV.FD, FV.SD, FV.INC,
              FV.SST, MOB, MST, BLV.MW,
              BLV.MSQ, BLV.MJ, BLV.CN, o.TW !== undefined ? o.TW : 0.21,
              o.LC !== undefined ? o.LC : 0.83, o.LS !== undefined ? o.LS : 0.42,
              o.CW !== undefined ? o.CW : 0.6, o.CS !== undefined ? o.CS : 1.7,
              o.LP !== undefined ? o.LP : 0.18, Math.PI * STD.D / 12, WH, RH,
-             RTOTAL, 0, 0, 0];
+             RTOTAL, PANEX, PANEY, SLAB_FT];
   F.forEach((v, i) => d.setFloat32(i * 4, v, true));
+  const offs = arenaOffsets().offs;
   const I = [FORM[o.form || 'rolled'], o.MR ? 1 : 0, o.MB ? 1 : 0,
              o.MCn !== undefined ? o.MCn : 0,
              STD.list.length, WNX, WNY, RNX, RNY, RPROF, 0, 0]
-    .concat(arenaOffsets().offs);   // all float offsets; aSTS does its own x4 for the vec4 stride
+    .concat(offs.slice(0, 12))                 // all float offsets; aSTS does its own x4 stride
+    .concat([offs[12], offs[13], CHAIN ? CHAIN.F.OPC.length : 0, 0]);
   I.forEach((v, i) => d.setInt32(112 + i * 4, v, true));
   return b;
 }
 const MCCARR = new Float32Array(MCC_COL);
+let SLAB_FT = 8, CHAIN = null, SPINT = null;   // filled once the app is lifted
 // one arena, packed in the order the Env's offsets name
 function arenaParts() {
   return [W.u, W.v, RIBD.ex, RIBD.hl, RIBD.md, RIBD.rim,
-          ROLD.s, ROLD.v, ROLD.pr, ROLD.tl, stampArr(), MCCARR];
+          ROLD.s, ROLD.v, ROLD.pr, ROLD.tl, stampArr(), MCCARR,
+          SPINT || new Float32Array(2), CHAIN ? chainArena(CHAIN.F.OPC) : new Float32Array(16)];
 }
 function arenaOffsets() {
   const parts = arenaParts(), offs = []; let at = 0;
@@ -603,6 +703,40 @@ function allArrays() {
 }
 // every binding referenced once, so none is eliminated - see the note where this was first needed
 const TOUCH_ALL = '  if (i == 4294967295u) { OUT[0] = ARR[0] + f32(E.MCn); }' + String.fromCharCode(10);
+
+
+// THE CHAIN IS COMPILED BY THE APP, not described here. compileOps turns an authored op into the
+// record glassUnform actually walks - kind strings into integers, degrees into cos and sin, the
+// stamp list into a flag - and a hand-built record would be a second copy of that mapping, drifting
+// the first time a field is added. The arena rows are read OFF the app's own OPC.
+const PANEX = 0.21, PANEY = -0.13;
+const OPS_IN = [
+  { k: 'spin',  a: 1.2, cx: 0.3, cy: -0.2 },
+  { k: 'blow',  a: 1.4 },
+  { k: 'roll',  a: 0.8, d: 31, st: STD.list, D: STD.D },
+  { k: 'press', a: 1.0, d: 12, face: 5, bite: 1.3, st: STD.list, D: STD.D, ri: 0 },
+  { k: 'stir',  a: 1.0 },
+];
+function buildChain(app, SLAB_FT) {
+  // the roller and warp states the press and stir arms read - one each, shared, see the WGSL note
+  const B = { nx: RNX, ny: RNY, H: RH, s: ROLD.s, v: ROLD.v, total: RTOTAL,
+              R: { P: new Array(RPROF), pr: ROLD.pr, tl: ROLD.tl } };
+  const F = { PX: PANEX, PY: PANEY, H: RH, ROLL: [B], S: W, PV: [0, 0], PH: [0, 0],
+              RU0: OPS_IN.map(() => 0.4) };
+  F.OPC = app.compileOps(F, OPS_IN);
+  return { F, B };
+}
+function chainArena(OPC) {
+  const a = new Float32Array(OPC.length * 16);
+  OPC.forEach((op, i) => {
+    const b = i * 16;
+    a[b] = op.k; a[b + 1] = op.ox; a[b + 2] = op.oy; a[b + 3] = op.a; a[b + 4] = op.s;
+    a[b + 5] = op.rot ? 1 : 0; a[b + 6] = op.cd; a[b + 7] = op.sd; a[b + 8] = op.u0;
+    a[b + 9] = op.face; a[b + 10] = op.bite;
+    a[b + 11] = op.st ? 1 : 0; a[b + 12] = op.B ? 1 : 0; a[b + 13] = op.S ? 1 : 0;
+  });
+  return a;
+}
 
 // ---- running a WGSL function over inputs -----------------------------------------------------------
 async function runWgsl(dev, bodies, call, N, inputs, uni, arrays, outs) {
@@ -885,6 +1019,25 @@ function cases(app) {
         const F = { MR: true, MB: true, MW: BLV.MW, MSQ: BLV.MSQ, MJ: BLV.MJ, CN: BLV.CN, MST };
         for (let i = 0; i < N; i++) { app.glassLay(a[2 * i], a[2 * i + 1], F, v);
           for (let k = 0; k < 4; k++) o[4 * i + k] = v[k]; } return o; } },
+
+    // THE LAST FUNCTION, and the only one whose data is a CHAIN rather than a grid. Five ops, one of
+    // every kind, compiled by the app's own compileOps so the records cannot drift from what the walk
+    // expects. press is a shade looser than the rest because it runs rollerAt, rollerHand and
+    // rollStampAt in series before it decides anything.
+    { name: 'glassUnform', kind: 'f32', outs: 4,
+      needs: ['env', 'nz', 'vnoise', 'fbm2', 'woodHash', 'woodAtan2', 'ribbon', 'roller', 'stamp',
+              'glassUnwarp', 'opchain'],
+      channelKinds: ['custom', 'custom', 'custom', 'custom'], gate: 5e-5,
+      gateWhy: 'five ops in series, each feeding the next; 5e-5 on a coordinate in feet',
+      uni: () => envUni(), arrays: allArrays,
+      call: TOUCH_ALL + '  let u = glassUnform(IN[i * 2], IN[i * 2 + 1]);' + NLC
+          + '  OUT[i * 4] = u.x; OUT[i * 4 + 1] = u.y; OUT[i * 4 + 2] = u.z; OUT[i * 4 + 3] = 0.0;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 167) * 0.029 - 2.3);
+          a[2 * i + 1] = Math.fround(((i * 13) % 157) * 0.023 - 1.7); } return a; },
+      cpu: a => { const o = new Float64Array(N * 4), v = [0, 0, 0];
+        for (let i = 0; i < N; i++) { app.glassUnform(a[2 * i], a[2 * i + 1], CHAIN.F, v);
+          o[4 * i] = v[0]; o[4 * i + 1] = v[1]; o[4 * i + 2] = v[2]; o[4 * i + 3] = 0; } return o; } },
   ];
 }
 
@@ -900,14 +1053,18 @@ document.getElementById('run').onclick = async () => {
   document.getElementById('run').disabled = true;
   RES.textContent = ''; TB = null; LOG.textContent = '';
   try {
-    const { app, from } = await liftFromApp(['nz', 'woodAtan2', 'glassFlow', 'glassUnwarp', 'vnoise', 'vnoiseC', 'vnoiseCfill',
+    const { app, from, SLAB_FT: SLABFT } = await liftFromApp(['nz', 'woodAtan2', 'glassFlow', 'glassUnwarp', 'vnoise', 'vnoiseC', 'vnoiseCfill',
       'fbm2C', 'glassCellSDF', 'glassDepth', 'rollerAt', 'rollerHand', 'woodHash', 'glassFormT',
-      'glassMelt', 'glassBlob', 'glassBlobDepth', 'rollStampAt', 'starR', 'glassLay']);
+      'glassMelt', 'glassBlob', 'glassBlobDepth', 'rollStampAt', 'starR', 'glassLay',
+      'compileOps', 'spinTable', 'glassUnform']);
     if (!navigator.gpu) throw new Error('no WebGPU on this device');
     const ad = await navigator.gpu.requestAdapter();
     if (!ad) throw new Error('no adapter');
     const dev = await ad.requestDevice();
 
+    SLAB_FT = SLABFT;
+    SPINT = new Float32Array(app.spinTable());
+    CHAIN = buildChain(app, SLABFT);
     table(['function', 'what counts as right', 'worst', 'gate', 'notes']);
     let bad = 0, done = 0;
     for (const c of cases(app)) {
@@ -980,9 +1137,11 @@ document.getElementById('run').onclick = async () => {
     TB = null;
     const p = document.createElement('p');
     p.style.color = 'var(--dim)';
-    p.textContent = 'Seventeen rows, fifteen functions — about 206 of the 282 lines, and all '
-      + 'three of glassLay’s paths. Still to port: the op chain (55), which walks the slab’s '
-      + 'ops backwards per pixel and is the last piece before a whole tile can be drawn.';
+    p.textContent = 'ALL 282 LINES. Eighteen rows, sixteen functions, every per-pixel path the '
+      + 'renderer takes. What is NOT yet ported is the plumbing rather than the arithmetic: op.B and '
+      + 'op.S are a per-op roller grid and warp grid in the app, and here every press reads one '
+      + 'synthetic roller and every stir one synthetic warp. Next is assembly — one shader, one '
+      + 'tile, against the CPU tile, and then the number this was all for.';
     RES.appendChild(p);
   } catch (e) {
     const v = document.createElement('p');
