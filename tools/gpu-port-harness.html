@@ -244,8 +244,94 @@ fn rollerHand(s: f32) -> vec2<f32> {
   return vec2<f32>(RPR[i] + (RPR[i + 1] - RPR[i]) * g, RTL[i] + (RTL[i + 1] - RTL[i]) * g);
 }`;
 
+
+// THE SAME INTEGER SHAPE AS nz, so the same gate: bit-identical or the port is wrong. The app writes
+// `| 0` after the multiply AND after the add, which is i32 wraparound; u32 wraps identically and is
+// the only wrap WGSL actually defines - signed overflow there is an indeterminate value, not a wrap.
+WGSL.woodHash = `
+fn woodHash(a: i32, b: i32) -> f32 {
+  var h: u32 = u32(a) * 374761393u + u32(b) * 668265263u;
+  h = (h ^ (h >> 13u)) * 1274126177u;
+  return f32(h ^ (h >> 16u)) / 4294967296.0;
+}`;
+
+// THE FORM BLOCK, shared by glassFormT and glassMelt. Scalars only; neither reaches an array.
+WGSL.form = `
+struct Form {
+  TH: f32, RM: f32, RS: f32, FR: f32,
+  FP: f32, FD: f32, SD: f32, INC: f32,
+  SST: f32, form: i32, pad0: i32, pad1: i32,
+};
+@group(0) @binding(2) var<uniform> FM: Form;`;
+
+// FIRST FUNCTION HERE WITH TRANSCENDENTALS IN IT. exp and sin are not IEEE-exact on a GPU and vary by
+// vendor inside the allowed ULP budget - section 3 of glass-gpu.md is explicit that this is why the
+// GPU path is a different renderer. So this row is expected to sit looser than the pure arithmetic
+// ones, and HOW MUCH looser is a thing to measure rather than wave at.
+WGSL.glassFormT = `
+fn glassFormT(ox: f32, oy: f32, fv: vec2<f32>) -> f32 {
+  var T = FM.TH;
+  if (FM.RM > 0.0 && (fv.x != 0.0 || fv.y != 0.0)) {
+    let a = ox * fv.x + oy * fv.y;
+    let c = -ox * fv.y + oy * fv.x;
+    T = T * (1.0 + FM.RM * 0.30 * (fbm2(c * FM.RS, a * FM.RS * 0.06, 71) - 0.5) * 2.0);
+  } else if (FM.RM > 0.0) {
+    T = T * (1.0 + FM.RM * 0.18 * (fbm2(ox * FM.RS * 0.5, oy * FM.RS * 0.5, 11) - 0.5) * 2.0);
+  }
+  if (FM.form == 1) {
+    let r = sqrt(ox * ox + oy * oy);
+    var k = 1.0;
+    if (r < FM.FR) { k = r / FM.FR; }
+    T = T * (1.0 - 0.45 * k);
+    let b = r / (FM.FR * 0.07);
+    T = T + FM.TH * 2.0 * exp(-b * b);
+    T = T + FM.TH * FM.RM * 0.14 * sin(r * FM.RS * 7.0);
+  } else if (FM.form == 4) {
+    let u = ox * FM.FP;
+    let f = u - floor(u);
+    T = T + FM.TH * FM.FD * (1.0 - abs(2.0 * f - 1.0));
+  }
+  return max(T, 0.05);
+}`;
+
+// A NINE-CELL WALK with an early `continue` in it - the first ported function whose threads can take
+// different numbers of iterations. On a CPU that is a branch; in a warp it is divergence, and this is
+// a small taste of what glassLay will do at a much larger scale.
+WGSL.glassMelt = `
+fn glassMelt(ox: f32, oy: f32, fv: vec2<f32>) -> vec2<f32> {
+  var o = vec2<f32>(0.0, 0.0);
+  if (FM.SD <= 0.0 && FM.INC <= 0.0) { return o; }
+  let flowing = fv.x != 0.0 || fv.y != 0.0;
+  var ux = 1.0; var uy = 0.0; var drawn = 1.0;
+  if (flowing) { ux = fv.x; uy = fv.y; drawn = FM.SST; }
+  let a0 = ox * ux + oy * uy;
+  let c0 = -ox * uy + oy * ux;
+  let cs = 0.06;
+  let csa = cs * drawn;
+  let gx = i32(floor(c0 / cs));
+  let gy = i32(floor(a0 / csa));
+  for (var i = -1; i <= 1; i = i + 1) {
+    for (var j = -1; j <= 1; j = j + 1) {
+      let cx = gx + i;
+      let cy = gy + j;
+      let h = woodHash(cx, cy + 991);
+      let jx = (f32(cx) + 0.5 + (woodHash(cx, cy) - 0.5) * 0.8) * cs;
+      let jy = (f32(cy) + 0.5 + (woodHash(cy, cx + 17) - 0.5) * 0.8) * csa;
+      let dx = (c0 - jx) / (cs * 0.32);
+      let dy = (a0 - jy) / (csa * 0.32);
+      let d2 = dx * dx + dy * dy;
+      if (d2 < 1.0) {
+        let q = 1.0 - d2;
+        if (h < FM.SD) { o.x = max(o.x, q); }
+        else if (h > 1.0 - FM.INC) { o.y = max(o.y, q); }
+      }
+    }
+  }
+  return o;
+}`;
+
 // form, as an integer, in one place for both sides
-const FORM = { spun: 1, poured: 2, blown: 3, rolled: 4, flattened: 4 };
+const FORM = { spun: 1, poured: 2, blown: 3, rolled: 4, flattened: 5 };
 
 // ---- the synthetic warp grid, identical on both sides ---------------------------------------------
 const WNX = 17, WNY = 13, WH = 0.625;
@@ -294,6 +380,19 @@ function makeRoller() {
   return { s, v, pr, tl };
 }
 const ROLD = makeRoller();
+
+
+// THE FORM SCALARS, chosen so every branch above is reached: RM > 0 so the streak runs, SD and INC
+// both > 0 so glassMelt does not take its early return, and FR small enough that r < FR is false for
+// most of the sweep and true near the centre - the pontil boss is the interesting part.
+const FV = { TH: 4.2, RM: 0.55, RS: 26, FR: 2.1, FP: 3.3, FD: 0.18, SD: 0.12, INC: 0.07, SST: 4 };
+function formUni(form) {
+  const b = new ArrayBuffer(48), d = new DataView(b);
+  const f = [FV.TH, FV.RM, FV.RS, FV.FR, FV.FP, FV.FD, FV.SD, FV.INC, FV.SST];
+  f.forEach((v, i) => d.setFloat32(i * 4, v, true));
+  d.setInt32(36, FORM[form], true);
+  return b;
+}
 
 // ---- running a WGSL function over inputs -----------------------------------------------------------
 async function runWgsl(dev, bodies, call, N, inputs, uni, arrays) {
@@ -466,21 +565,67 @@ function cases(app) {
         const B = { R: { P: new Array(RPROF), pr: ROLD.pr, tl: ROLD.tl }, total: RTOTAL };
         for (let i = 0; i < N; i++) { app.rollerHand(B, a[2 * i], t);
           o[2 * i] = t[0]; o[2 * i + 1] = t[1]; } return o; } },
+
+    { name: 'woodHash', kind: 'EXACT', needs: ['woodHash'],
+      call: '  OUT[i * 2] = woodHash(i32(IN[i * 2]), i32(IN[i * 2 + 1])); OUT[i * 2 + 1] = 0.0;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = (i % 211) - 105; a[2 * i + 1] = ((i * 13) % 199) - 99; } return a; },
+      cpu: a => { const o = new Float64Array(N * 2);
+        for (let i = 0; i < N; i++) o[2 * i] = app.woodHash(a[2 * i], a[2 * i + 1]); return o; } },
+
+    { name: 'glassFormT', kind: 'f32', needs: ['nz', 'vnoise', 'fbm2', 'form', 'glassFormT'],
+      uni: () => formUni(CURFORM), perForm: true, gpuTranscendental: true,
+      call: '  let fv = vec2<f32>(IN[i * 4 + 2], IN[i * 4 + 3]);\n'
+          + '  OUT[i * 2] = glassFormT(IN[i * 4], IN[i * 4 + 1], fv); OUT[i * 2 + 1] = 0.0;',
+      inputs: () => { const a = new Float32Array(N * 4);
+        for (let i = 0; i < N; i++) { a[4 * i] = Math.fround((i % 181) * 0.031 - 2.8);
+          a[4 * i + 1] = Math.fround(((i * 7) % 167) * 0.024 - 2.0);
+          a[4 * i + 2] = Math.fround(Math.cos(i * 0.013));
+          a[4 * i + 3] = Math.fround(Math.sin(i * 0.013)); } return a; },
+      cpu: (a, form) => { const o = new Float64Array(N * 2);
+        const F = { TH: FV.TH, RM: FV.RM, RS: FV.RS, FR: FV.FR, FP: FV.FP, FD: FV.FD, form };
+        for (let i = 0; i < N; i++) o[2 * i] = app.glassFormT(a[4 * i], a[4 * i + 1], F, [a[4 * i + 2], a[4 * i + 3]]);
+        return o; } },
+
+    { name: 'glassMelt', kind: 'f32', needs: ['woodHash', 'form', 'glassMelt'],
+      uni: () => formUni(CURFORM), perForm: true,
+      // divides by cs * 0.32 = 0.0192 and squares, so f32 epsilon arrives about 2,700x larger. The
+      // outputs are bounded to [0,1], so the figure is absolute: 2e-5 is 0.005 levels of 255.
+      gate: 2e-5, gateWhy: 'amplifies f32 epsilon ~2700x; 2e-5 is 0.005 levels',
+      call: '  let fv = vec2<f32>(IN[i * 4 + 2], IN[i * 4 + 3]);\n'
+          + '  let m = glassMelt(IN[i * 4], IN[i * 4 + 1], fv);\n'
+          + '  OUT[i * 2] = m.x; OUT[i * 2 + 1] = m.y;',
+      inputs: () => { const a = new Float32Array(N * 4);
+        for (let i = 0; i < N; i++) { a[4 * i] = Math.fround((i % 157) * 0.017 - 1.3);
+          a[4 * i + 1] = Math.fround(((i * 11) % 149) * 0.015 - 1.1);
+          a[4 * i + 2] = Math.fround(Math.cos(i * 0.013));
+          a[4 * i + 3] = Math.fround(Math.sin(i * 0.013)); } return a; },
+      cpu: (a, form) => { const o = new Float64Array(N * 2), t = [0, 0];
+        const F = { SD: FV.SD, INC: FV.INC, SST: FV.SST };
+        for (let i = 0; i < N; i++) {
+          app.glassMelt(a[4 * i], a[4 * i + 1], F, [a[4 * i + 2], a[4 * i + 3]], t);
+          o[2 * i] = t[0]; o[2 * i + 1] = t[1];
+        } return o; } },
   ];
 }
 
 // Keeps every declared binding reachable - see the note at the ribbon and roller cases.
+let CURFORM = 'rolled';
 const TOUCH_RIB = '  if (i == 4294967295u) { OUT[0] = MEX[0] + MHL[0] + MD[0] + MRIM[0]; }' + String.fromCharCode(10);
 const TOUCH_ROLL = '  if (i == 4294967295u) { OUT[0] = BS[0] + BV[0] + RPR[0] + RTL[0]; }' + String.fromCharCode(10);
 
-const GATE = { EXACT: 0, f32: 2e-6, branch: 0 };
+// GPU exp and sin are not IEEE-exact and vary by vendor inside the ULP budget, so a function
+// carrying them gets its own gate. Loosening the shared one instead would quietly excuse every
+// other row as well, which is how a gate stops meaning anything.
+const GATE = { EXACT: 0, f32: 2e-6, branch: 0, trig: 5e-5, custom: 0 };
 
 document.getElementById('run').onclick = async () => {
   document.getElementById('run').disabled = true;
   RES.textContent = ''; TB = null; LOG.textContent = '';
   try {
     const { app, from } = await liftFromApp(['nz', 'woodAtan2', 'glassFlow', 'glassUnwarp', 'vnoise', 'vnoiseC', 'vnoiseCfill',
-      'fbm2C', 'glassCellSDF', 'glassDepth', 'rollerAt', 'rollerHand']);
+      'fbm2C', 'glassCellSDF', 'glassDepth', 'rollerAt', 'rollerHand', 'woodHash', 'glassFormT',
+      'glassMelt']);
     if (!navigator.gpu) throw new Error('no WebGPU on this device');
     const ad = await navigator.gpu.requestAdapter();
     if (!ad) throw new Error('no adapter');
@@ -493,19 +638,21 @@ document.getElementById('run').onclick = async () => {
       // PER FORM, RESET EACH TIME. The first version carried `worst` across the whole loop, so one
       // computing arm marked every form as failing and the note read "spun! poured! blown!" when only
       // spun had anything to answer for.
-      let worst = 0, note = [], anyBad = false;
+      let worst = 0, note = [], anyBad = false, overCount = 0;
       for (const form of forms) {
         let fWorst = 0;
         const inp = c.inputs();
         const bodies = {};
         for (const n of c.needs) bodies[n] = WGSL[n];
         let call = c.call;
-        if (form) call = call.replace('FORMSEL', String(FORM[form]));
+        if (form) { CURFORM = form; call = call.replace('FORMSEL', String(FORM[form])); }
         let got;
         try { got = await runWgsl(dev, bodies, call, N, inp, c.uni ? c.uni() : null, c.arrays ? c.arrays() : null); }
         catch (e) { row([c.name, c.kind, '—', '—', 'DID NOT COMPILE: ' + e.message], 'bad'); bad++; worst = NaN; break; }
         const want = form ? c.cpu(inp, form) : c.cpu(inp);
-        const kind = (form && c.kindPerForm && c.kindPerForm[form]) || c.kind;
+        let kind = (form && c.kindPerForm && c.kindPerForm[form]) || c.kind;
+        if (c.gpuTranscendental && kind === 'f32') kind = 'trig';
+        if (c.gate) { GATE.custom = c.gate; kind = 'custom'; }
         for (let i = 0; i < N * 2; i++) {
           const w = want[i], g = got[i];
           const d = kind === 'EXACT' ? (Math.fround(w) === g ? 0 : 1)
@@ -513,6 +660,14 @@ document.getElementById('run').onclick = async () => {
           if (d > fWorst) fWorst = d;
         }
         const fOk = fWorst <= GATE[kind];
+        if (!fOk) { let over = 0;
+          for (let i = 0; i < N * 2; i++) {
+            const w = want[i], g = got[i];
+            const d = kind === 'EXACT' ? (Math.fround(w) === g ? 0 : 1)
+                    : Math.abs(w - g) / Math.max(1, Math.abs(w));
+            if (d > GATE[kind]) over++;
+          }
+          overCount = Math.max(overCount, over); }
         if (!fOk) anyBad = true;
         if (fWorst > worst) worst = fWorst;
         if (form) note.push(form + ':' + (kind === 'f32' ? fWorst.toExponential(0) : fOk ? 'exact' : 'DIFFERS'));
@@ -521,12 +676,15 @@ document.getElementById('run').onclick = async () => {
       done++;
       const ok = c.perForm ? !anyBad : worst <= GATE[c.kind];
       if (!ok) bad++;
-      row([c.name, c.kind === 'EXACT' ? 'bit-identical'
+      row([c.name, c.gateWhy ? c.gateWhy : c.kind === 'EXACT' ? 'bit-identical'
             : c.kind === 'branch' ? 'exact where it selects, 2e-6 where it computes'
             : 'within 2e-6 relative',
         c.kind === 'EXACT' ? (worst ? 'DIFFERS' : 'identical') : worst.toExponential(1),
-        c.perForm ? 'per arm' : c.kind === 'f32' ? '2e-6' : '0',
-        note.length ? 'forms: ' + note.join(' ') : ''], ok ? 'good' : 'bad');
+        c.gate ? c.gate.toExponential(0) : c.perForm ? 'per arm'
+          : c.gpuTranscendental ? '5e-5' : c.kind === 'f32' ? '2e-6' : '0',
+        (note.length ? 'forms: ' + note.join(' ') : '')
+          + (overCount ? '   ' + overCount + ' of ' + (N * 2) + ' past the gate'
+              + (overCount < 8 ? ' — discrete, not rounding' : '') : '')], ok ? 'good' : 'bad');
       log(c.name + ': worst ' + worst);
     }
 
@@ -538,10 +696,11 @@ document.getElementById('run').onclick = async () => {
     TB = null;
     const p = document.createElement('p');
     p.style.color = 'var(--dim)';
-    p.textContent = 'Done: nz, woodAtan2, glassFlow, glassUnwarp, vnoise, fbm2, glassCellSDF, '
-      + 'glassDepth, rollerAt, rollerHand — about 70 of the 282 lines. Still to port: '
-      + 'glassFormT (21), glassLay (31), glassMelt (22), the op chain (55), glassBlob (22) and '
-      + 'rollStampAt (18), plus glassBlobDepth and starR under them.';
+    p.textContent = 'Done: nz, woodHash, woodAtan2, glassFlow, glassUnwarp, vnoise, fbm2, '
+      + 'glassCellSDF, glassDepth, rollerAt, rollerHand, glassFormT, glassMelt — about 115 of '
+      + 'the 282 lines. Still to port: glassLay (31), the op chain (55), glassBlob (22) and '
+      + 'rollStampAt (18), plus glassBlobDepth and starR under them. glassLay is the one that '
+      + 'answers the divergence question.';
     RES.appendChild(p);
   } catch (e) {
     const v = document.createElement('p');
