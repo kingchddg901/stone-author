@@ -302,9 +302,19 @@ document.getElementById('run').onclick = async () => {
     }
 
     head('what to compare across devices');
-    pair('read the × baseline column, not the ns', 'a device with a faster core moves every row '
-      + 'together; an engine that compiles one thing badly moves ONE row. Those are the two answers, '
-      + 'and only this column tells them apart.');
+    pair('COMPARE THE ns, AND TREAT × baseline WITH CARE', 'the × baseline column was meant '
+      + 'to be the instrument here and it has already misled once. This baseline is a SERIAL dependency '
+      + 'chain - each multiply-add waits on the last - so it measures floating-point LATENCY, while the '
+      + 'field is throughput and memory. Measured 2026-10-24 the desktop beat the S23 on the baseline '
+      + '(1.42 vs 1.79 ns) and LOST to it on the real sample (110.9 vs 95.7), so normalising by it '
+      + 'ranks those two devices the opposite way round from the work. Compare the per-piece ns across '
+      + 'devices instead, and read × baseline only as this device’s own internal profile.',
+      'warn');
+    pair('what a single row has to look like to matter', 'between the two V8 devices every row sits '
+      + 'between 0.87× and 1.29× - uniform, no villain, which is what two builds of one '
+      + 'engine should look like. A row that is 5× or 10× off on ONE engine is the shape '
+      + 'that would be worth fixing, and this codebase already has the move for it: woodAtan2 replaced '
+      + 'Math.atan2 with a polynomial and shipped at 1.5e-3 rad.');
     pair('measured 2026-10-24', 'desktop Chrome 152: 28.5 ms a pass · S23 Chrome 155: 25.8 · '
       + 'iPhone 14 Pro Safari 26.1: 9.0');
   } catch (e) {

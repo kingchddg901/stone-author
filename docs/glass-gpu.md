@@ -58,42 +58,73 @@ so this was never compile cost: a mobile governor ramps on sustained load and on
 not ask for it. The whole first rung ran at idle frequency. The probe now warms at the *top* of its
 ladder. Anything that measures a phone GPU over a short burst is measuring the governor.
 
-### Still unexplained, and worth more than the port
+### Answered: it is not the core, it is V8 on the composed noise functions
 
-**The iPhone's CPU arm is 9.0 ms a pass against this desktop's 28.5 and the S23's 25.8** — three
-times faster per core on identical lifted arithmetic. Its ladder is 9.0 / 18.0 / 36.0 / 73.0, exactly
-linear, and the accumulator gate proves the loop ran, so it is not a JIT deleting work.
+`tools/cpu-breakdown-probe.html`, run 1 after a fresh load on all three devices, each piece calibrated
+to run long enough to clear the clock's granularity.
 
-`tools/cpu-breakdown-probe.html` takes the field apart on the desktop, each piece against a baseline
-of plain float multiply-add measured on the same device in the same run — a faster *core* moves every
-row together, a badly compiled *call* moves one row:
+| piece | desktop, V8/x86 | S23, V8/ARM | iPhone 14 Pro, JSC/ARM | desktop ÷ iPhone |
+|---|---|---|---|---|
+| baseline `a*b+c` | 1.42 | 1.79 | **2.02** | **0.70×** |
+| `Math.imul` | 0.45 | 0.52 | 0.35 | 1.29× |
+| `Math.floor` | 0.80 | 0.70 | 0.65 | 1.23× |
+| `nz` | 1.34 | 1.13 | 0.88 | 1.52× |
+| `Math.exp` | 9.55 | 7.43 | 3.16 | 3.02× |
+| `vnoise`, uncached | 5.99 | 6.03 | 3.50 | 1.71× |
+| `vnoiseC` | 12.67 | 10.97 | 3.13 | **4.05×** |
+| `fbm2C` | 40.0 | 36.83 | 9.09 | **4.40×** |
+| the whole sample | 110.9 | 95.74 | **33.17** | 3.34× |
 
-| piece | ns an op | × baseline | share of a sample |
-|---|---|---|---|
-| baseline `a*b+c` | 1.42 | 1.0× | — |
-| `Math.imul` | 0.45 | 0.3× | — |
-| `Math.floor` | 0.80 | 0.6× | — |
-| `nz` | 1.34 | 0.9× | 29% |
-| `vnoise`, uncached | 5.99 | 4.2× | — |
-| **`Math.exp`** | **9.55** | **6.7×** | **26%** |
-| `fbm2C` | 40.0 | 28.1× | 72% |
-| the whole sample | 110.9 | 77.9× | 100% |
+**The iPhone has the SLOWEST baseline of the three.** 2.02 ns against the S23's 1.79 and the desktop's
+1.42, on a serial multiply-add chain — and it still does the whole sample 3.3× faster. Whatever is
+happening, the silicon is not ahead on plain arithmetic. That closes "an A16 is just that good".
 
-Parts to whole within 2%, so the breakdown describes the renderer rather than nine microbenchmarks.
+**Two instruction sets running V8 agree within 16%; one ARM core running JavaScriptCore is 2.9× away.**
+x86-64 and ARM landing together while a second ARM part lands three times off is the engine, not the
+hardware.
 
-**And it already bounds the answer.** The desktop sample is 110.9 ns, the iPhone's is 33.3. Three
-`Math.exp` are 26% of the sample — the largest single oddity in the table at 6.7× baseline — but
-making them **free** leaves 82.3 ns against the iPhone's 33.3, still 2.5×. **No single call can
-explain the gap**; whatever it is has to be broad. That points at the core rather than at one
-pathological intrinsic, which would close the question — but the phones have not run this probe yet,
-and the `× baseline` column is what decides it.
+**And the primitives are near-equal.** `Math.imul` 1.29×, `Math.floor` 1.23×, `nz` 1.52×. V8 is not
+bad at this arithmetic. It is bad at the *composition* of it:
 
-**The corner cache was re-tested here and it holds.** Measured call by call, `vnoiseC` came out at
-12.7 ns against the uncached `vnoise`'s 6.0 — twice the cost, which cannot be squared with the cache
-being worth 13.3% of a live render. Stack against stack it is `fbm2C` 40.0 ns against `fbm2` 45.5 —
-**0.88×, the cache paying 12%**, consistent with the live figure. The per-call number is the artifact:
-a function measured alone inlines differently from the same function inside the sample loop. The
-established measurement was right and the new derivation was the suspect.
+| | `fbm2` against its own three `vnoise` calls |
+|---|---|
+| desktop, V8 | **2.53× its parts** |
+| S23, V8 | **2.21× its parts** |
+| iPhone, JSC | **0.96× its parts** |
+
+On JavaScriptCore the octave stack costs exactly the three calls inside it. On V8 it costs two and a
+half times them — the pieces are fine and the function built out of them is not, which is the
+signature of calls that are not being inlined or of a function that has fallen out of the optimiser's
+budget. **This project has already met that exact failure**: `vnoiseCfill` was outlined from `vnoiseC`
+precisely because a hot function carrying calls can fall out of V8's inlining budget, and it produced
+bimodal per-render behaviour until it was.
+
+**The size of the prize.** `vnoiseC` runs six times a sample, so its 12.67 ns is 76 of the desktop's
+110.9. Bringing it to the iPhone's 3.13 would make the sample 27.7 ns — and the whole desktop render
+roughly 3× faster, on the renderer that ships today, with no second code path and no device-dependent
+filter precision. Even halving it is worth about 1.5×.
+
+**`Math.exp` is real but second.** 3.02× between the engines and 26–29% of a sample; free, it buys
+1.35× on the desktop. This codebase already has the move — `woodAtan2` replaced `Math.atan2` with a
+polynomial and shipped at 1.5e-3 rad — so it is available if wanted, but it is not the main event.
+
+**Not acted on.** A microbenchmark cannot authorise a change to `app/stone-author.html`; the standard
+here is a before/after on a real render on the real box. The next experiment is to try inlining
+variants of `vnoiseC`/`fbm2C` under V8 and watch whether the stack's 2.5×-its-parts collapses, then
+prove any winner on a live 65,535.
+
+**One caveat on the instrument.** The `× baseline` column was meant to be the headline here and it
+misled once: the baseline is a *serial* dependency chain, so it measures floating-point latency, while
+the field is throughput and memory. The desktop beat the S23 on the baseline (1.42 vs 1.79) and lost
+to it on the real sample (110.9 vs 95.7) — ranked opposite to the work. The per-piece ns compared
+across devices is what carried the finding; the ratio column is only each device's own profile. The
+probe says so on its own page now.
+
+**The corner cache was re-tested and it holds.** Call by call, `vnoiseC` came out at 12.7 ns against
+the uncached `vnoise`'s 6.0 — twice the cost, which cannot be squared with the cache being worth 13.3%
+of a live render. Stack against stack it is `fbm2C` 40.0 against `fbm2` 45.5, **0.88×, the cache paying
+12%**, agreeing with the live figure; on the iPhone 0.90×. The established measurement was right and
+the new derivation was the suspect, which is the order those two should be doubted in.
 
 The CPU arm is **lifted out of `app/stone-author.html` at run time** — `nz`, `vnoise`, `vnoiseC`,
 `vnoiseCfill`, `fbm2C` and the `_NZC` declaration, fetched and sliced — so it is the shipped
