@@ -75,6 +75,12 @@ close enough, with the note that the lower region may want supersampling — whi
 trade is: masters rendered before `179` are historical for any slab with a spin, and in exchange the
 spin is geometrically true and the renderer is deterministic again from `179` on.
 
+**Measured on a render: 1.8% off the wall and 2.2% off the compute at 65,535**, against build `180`'s
+predecessor on a box held to 0.03 threads. That matches the 2.3% ceiling the function bench predicted,
+which is the only microbench prediction on this renderer that has held. The 32,768 pair is not quoted:
+it ran 0.2 threads above its comparison set, and its core-seconds went up while its wall went down,
+which is what that margin looks like.
+
 **It is not a speed change and should not be quoted as one.** `woodAtan2` is a polynomial, so dropping
 it saves **9.4% of one spin** — a ceiling of about 2.3% off a render, since four spins are 24.4% of a
 4096 tile. Gated by `tools/probe-spin-identity.mjs`, which asserts the exactness and *prints* the
@@ -211,8 +217,13 @@ at tile 148 they are 16.5 apart. Statistics taken in a quiet region say nothing 
 ## Method, so this is repeatable
 
 - `tools/tiff-meta.mjs` reads any master's own record of itself, including the `inputs` signature that
-  says whether two files came from the same picture. `state` cannot answer that and must not be used for
-  it — see the signature note in the app.
+  says whether two files came from the same **document inputs**. `state` cannot answer that and must not
+  be used for it — see the signature note in the app. **It is not a picture identity across builds, and
+  since `179` it cannot be.** `inputs` signs the document, never the renderer, so two masters that agree
+  on it can still be different pictures if a build moved the arithmetic between them: the `175` and
+  `180` 65,535 masters both read `cefe5c` and differ on **640 of 640 tiles, worst byte delta 113**, with
+  the compressed image moving 392,456,504 to 392,462,224 bytes. Compare bytes within one build era, or
+  read the `build` field first.
 - `.claude/tools/tile-diff.mjs` compares two masters tile by tile. It refuses mismatched spectra, and it
   has been shown to detect a single flipped bit in 10.7 GB.
 - **The UV master is the vein-finder.** Locating a vein crossing in daylight fails, because the ground is
