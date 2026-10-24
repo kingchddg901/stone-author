@@ -558,4 +558,51 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
   PX[o + 2] = E.LBB * exp(-ab * T) * m;
 }`;
 
+// PACKING TO BYTES ON THE GPU, SO THE FLOATS NEVER CROSS THE BUS.
+//
+// main writes f32 RGB - twelve bytes a pixel - and tools/gpu-sheet-probe.html measured that moving
+// those off the GPU is 93% of a batched tile's wall clock, against 7% for the shader itself. The
+// TIFF writer wants u8 RGB, three bytes. So this reads the f32 buffer where it already lives and
+// writes the bytes beside it; only the bytes are read back, and the floats stay on the device.
+//
+// A SEPARATE ENTRY POINT RATHER THAN A CHANGE TO main, deliberately. main is the thing
+// gpu-port-harness.html proved function by function and gpu-tile-probe.html compares against the
+// CPU; folding the pack into it would put the verified path and an untested one in the same
+// function. This way the f32 arm stays available as the reference it is, and the pack is six lines
+// that can be checked against it.
+//
+// ONE THREAD, FOUR PIXELS, THREE WORDS. Three bytes a pixel does not divide into a u32, so a thread
+// taking one pixel would have to write across word boundaries - which needs atomics or a fourth
+// wasted byte. Four pixels is twelve bytes is exactly three words, aligned, no overlap between
+// threads, and the full 4x cut rather than RGBA8's 3x.
+//
+// ROUNDING IS NOT A DETAIL HERE. The canvas stores through ToUint8Clamp, which rounds ties to even,
+// and WGSL's round does the same - but "the spec says so" is not a measurement, so the probe
+// compares these bytes against a Uint8ClampedArray of the f32 arm and reports any pixel where they
+// disagree rather than assuming they cannot.
+WGSL.pack = `
+@group(0) @binding(1) var<storage, read_write> PK: array<u32>;
+@compute @workgroup_size(64)
+fn pack(@builtin(global_invocation_id) g: vec3<u32>) {
+  let n = u32(E.tileW * E.tileW);
+  let base = g.x * 4u;
+  if (base >= n) { return; }
+  var b: array<u32, 12>;
+  for (var k = 0u; k < 4u; k = k + 1u) {
+    let p = base + k;
+    var cr = 0.0; var cg = 0.0; var cb = 0.0;
+    if (p < n) {                       // a tile whose pixel count is not a multiple of four
+      let o = p * 3u;
+      cr = PX[o]; cg = PX[o + 1u]; cb = PX[o + 2u];
+    }
+    b[k * 3u] = u32(clamp(round(cr), 0.0, 255.0));
+    b[k * 3u + 1u] = u32(clamp(round(cg), 0.0, 255.0));
+    b[k * 3u + 2u] = u32(clamp(round(cb), 0.0, 255.0));
+  }
+  let w = g.x * 3u;
+  PK[w] = b[0] | (b[1] << 8u) | (b[2] << 16u) | (b[3] << 24u);
+  PK[w + 1u] = b[4] | (b[5] << 8u) | (b[6] << 16u) | (b[7] << 24u);
+  PK[w + 2u] = b[8] | (b[9] << 8u) | (b[10] << 16u) | (b[11] << 24u);
+}`;
+
 export { WGSL };

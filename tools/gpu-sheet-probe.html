@@ -372,6 +372,133 @@ document.getElementById('run').onclick = async () => {
       + (bytes / 1048576 * N / (mapB / 1000)).toFixed(0) + ' MB/s');
     pair('wall clock', wallB.toFixed(1) + ' ms   (' + (wallB / N).toFixed(2) + ' a tile)', 'good');
 
+    // ---- ARM C: batched, packed to bytes on the GPU --------------------------------------------
+    // Arm B showed the shader is 7% of the wall clock and the readback is the rest, so this moves
+    // four times less. main still writes f32 into PX; a second entry point reads PX where it
+    // already lives and writes three bytes a pixel into PK, and only PK comes back. The floats
+    // never cross the bus.
+    //
+    // TWO PASSES, NOT TWO DISPATCHES IN ONE. WebGPU does order dispatches within a pass, but a pass
+    // boundary is the guarantee that does not need looking up - and it costs nothing here. Pass one
+    // paints every tile, pass two packs every tile.
+    head('all at once, packed to bytes');
+    const bytes3 = n * 3;
+    pair('what moves', (bytes3 / 1048576).toFixed(2) + ' MiB a tile against '
+      + (bytes / 1048576).toFixed(2) + ' — ' + (bytes / bytes3).toFixed(0) + '\u00d7 less');
+
+    dev.pushErrorScope('validation');
+    const pipeP = await dev.createComputePipelineAsync({
+      layout: 'auto', compute: { module: mod, entryPoint: 'pack' } });
+    const pErr = await dev.popErrorScope();
+    if (pErr) throw new Error('pack pipeline: ' + pErr.message.split('\n')[0]);
+
+    const pk = dev.createBuffer({ size: bytes3 * N,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const rbP = dev.createBuffer({ size: bytes3 * N,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const groupsP = tiles.map((_, i) => dev.createBindGroup({
+      layout: pipeP.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: pxB, offset: i * bytes, size: bytes } },
+        { binding: 1, resource: { buffer: pk, offset: i * bytes3, size: bytes3 } },
+        { binding: 2, resource: { buffer: ubsB[i] } }] }));
+
+    let wallP = Infinity, shaderP = 0, packP = 0, mapP = 0, waitP = 0, copyP = 0, outP = null;
+    const allP = [];
+    for (let rep = 0; rep < REPS; rep++) {
+      const qs = ts ? dev.createQuerySet({ type: 'timestamp', count: 4 }) : null;
+      const qres = ts ? dev.createBuffer({ size: 32,
+        usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC }) : null;
+      const qmap = ts ? dev.createBuffer({ size: 32,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }) : null;
+      const tP0 = performance.now();
+      tiles.forEach((tt, i) => dev.queue.writeBuffer(ubsB[i], 0, uniFor(packed.uni, tt[0], tt[1], TW)));
+      const encP = dev.createCommandEncoder();
+      const p1 = encP.beginComputePass(qs
+        ? { timestampWrites: { querySet: qs, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 } } : {});
+      p1.setPipeline(pipe);
+      for (let i = 0; i < N; i++) { p1.setBindGroup(0, groupsB[i]); p1.dispatchWorkgroups(Math.ceil(n / 64)); }
+      p1.end();
+      const p2 = encP.beginComputePass(qs
+        ? { timestampWrites: { querySet: qs, beginningOfPassWriteIndex: 2, endOfPassWriteIndex: 3 } } : {});
+      p2.setPipeline(pipeP);
+      for (let i = 0; i < N; i++) { p2.setBindGroup(0, groupsP[i]); p2.dispatchWorkgroups(Math.ceil(n / 4 / 64)); }
+      p2.end();
+      encP.copyBufferToBuffer(pk, 0, rbP, 0, bytes3 * N);
+      if (qs) { encP.resolveQuerySet(qs, 0, 4, qres, 0); encP.copyBufferToBuffer(qres, 0, qmap, 0, 32); }
+      dev.pushErrorScope('validation');
+      dev.queue.submit([encP.finish()]);
+      const z0 = performance.now();
+      await rbP.mapAsync(GPUMapMode.READ);
+      const z1 = performance.now();
+      const gotP = new Uint8Array(rbP.getMappedRange().slice(0));
+      const z2 = performance.now();
+      rbP.unmap();
+      const wP = performance.now() - tP0;
+      const ePerr = await dev.popErrorScope();
+      if (ePerr) throw new Error('pack run: ' + ePerr.message.split('\n')[0]);
+      let sh1 = 0, sh2 = 0;
+      if (qs) {
+        await qmap.mapAsync(GPUMapMode.READ);
+        const v = new BigInt64Array(qmap.getMappedRange().slice(0));
+        qmap.unmap();
+        sh1 = Number(v[1] - v[0]) / 1e6; sh2 = Number(v[3] - v[2]) / 1e6;
+      }
+      allP.push(wP);
+      if (wP < wallP) { wallP = wP; shaderP = sh1; packP = sh2; mapP = z2 - z0;
+                        waitP = z1 - z0; copyP = z2 - z1; outP = gotP; }
+    }
+    pair('shader', shaderP.toFixed(2) + ' ms for ' + N + ' tiles   (' + (shaderP / N).toFixed(3) + ' a tile)');
+    pair('the pack pass', packP.toFixed(2) + ' ms for ' + N + ' tiles   ('
+      + (packP / N).toFixed(3) + ' a tile) — on-device, so it never crosses the bus');
+    pair('waiting for the map', waitP.toFixed(1) + ' ms   (' + (waitP / N).toFixed(2) + ' a tile)');
+    pair('copying out of it', copyP.toFixed(1) + ' ms   (' + (copyP / N).toFixed(2) + ' a tile)');
+    pair('readback in all', mapP.toFixed(1) + ' ms   (' + (mapP / N).toFixed(2) + ' a tile), '
+      + (bytes3 / 1048576 * N / (mapP / 1000)).toFixed(0) + ' MB/s');
+    pair('wall clock', wallP.toFixed(1) + ' ms   (' + (wallP / N).toFixed(2) + ' a tile)', 'good');
+
+    // ---- DOES THE PACK MATCH WHAT THE CANVAS WOULD STORE? --------------------------------------
+    // Not "does it look right" - the exact bytes. Uint8ClampedArray applies ToUint8Clamp, which is
+    // what an ImageData write does, so this is the real question: would the TIFF get the same byte
+    // the CPU path puts there. WGSL's round and ToUint8Clamp both claim ties-to-even; a claim is
+    // not a measurement, and this is the measurement.
+    head('does the pack match the canvas?');
+    const ref = new Uint8ClampedArray(n * 3 * N);
+    for (let i = 0; i < n * 3 * N; i++) ref[i] = outB[i];
+    let pkBad = 0, pkWorst = 0, firstBad = -1;
+    for (let i = 0; i < n * 3 * N; i++) {
+      const d = Math.abs(ref[i] - outP[i]);
+      if (d) { pkBad++; if (d > pkWorst) pkWorst = d; if (firstBad < 0) firstBad = i; }
+    }
+    // COULD THIS HAVE CAUGHT A DIFFERENCE? The two roundings can only disagree on an exact tie, so
+    // a clean run over values that contain no ties has not tested the thing it claims to. Counted
+    // rather than assumed, and the count is printed whichever way it comes out.
+    let ties = 0, nearTies = 0;
+    for (let i = 0; i < n * 3 * N; i++) {
+      const v = outB[i];
+      if (v >= 0 && v <= 255) {
+        const f = v - Math.floor(v);
+        if (f === 0.5) ties++;
+        else if (Math.abs(f - 0.5) < 1e-4) nearTies++;
+      }
+    }
+    pair('bytes compared', (n * 3 * N).toLocaleString());
+    pair('exact ties among them', ties.toLocaleString() + ', and ' + nearTies.toLocaleString()
+      + ' within 1e-4 of one — ' + (ties
+        ? 'so a disagreement on ties WOULD have shown up here'
+        : 'so this run contains no exact tie, and an agreement does NOT establish that the two '
+          + 'roundings break ties the same way. It establishes that they agree on every value this '
+          + 'document produced, which is the question that matters for the export.'),
+      ties ? 'good' : 'warn');
+    pair('bytes apart', pkBad.toLocaleString() + (pkBad
+      ? '   (' + (100 * pkBad / (n * 3 * N)).toFixed(4) + '%, worst ' + pkWorst
+        + ' level' + (pkWorst === 1 ? '' : 's') + ', first at ' + firstBad + ')'
+      : ''), pkBad === 0 ? 'good' : pkWorst > 1 ? 'bad' : 'warn');
+    if (pkBad && pkWorst === 1) {
+      pair('what one level means here', 'the two roundings disagree on exact ties only — the packed '
+        + 'byte is still a correct rounding of the same float, but it is not the byte the canvas '
+        + 'would have stored', 'warn');
+    }
+
     // ---- DO THE TWO ARMS AGREE? ----------------------------------------------------------------
     // Batching is a chance to hand a dispatch the wrong uniform and paint a perfectly plausible
     // tile of the wrong part of the sheet. No timing would notice.
@@ -435,22 +562,34 @@ document.getElementById('run').onclick = async () => {
     const sharePct = 100 * shaderB / wallB;
     pair('the shader is', sharePct.toFixed(1) + '% of the batched wall clock — the rest is upload, '
       + 'readback and the map', sharePct > 50 ? 'good' : 'warn');
+    const gainP = poolMs / wallP;
+    pair('packed to bytes, against the pool', gainP.toFixed(1) + '\u00d7',
+      gainP > 2 ? 'good' : 'warn');
+    pair('packing is worth', (wallB / wallP).toFixed(2) + '\u00d7 over the f32 readback — '
+      + 'predicted about ' + (bytes / bytes3).toFixed(0) + '\u00d7 if it were purely bandwidth, so '
+      + (wallB / wallP > (bytes / bytes3) * 0.7
+         ? 'it is'
+         : 'something else is now taking the time: look at the split above'),
+      wallB / wallP > 1.5 ? 'good' : 'warn');
 
     const TILES_FULL = Math.pow(Math.ceil(FULLW / TW), 2);
     pair('a full ' + FULLW.toLocaleString() + ' sheet is', TILES_FULL.toLocaleString() + ' tiles');
-    pair('extrapolated, batched', (wallB / N * TILES_FULL / 1000).toFixed(0) + ' s   against '
+    pair('extrapolated, packed', (wallP / N * TILES_FULL / 1000).toFixed(0) + ' s   against '
       + (poolMs / N * TILES_FULL / 1000).toFixed(0) + ' s for the pool', 'warn');
     pair('and that extrapolation assumes', 'the whole sheet behaves like these ' + N + ' tiles, that '
       + (bytes * TILES_FULL / 1073741824).toFixed(0) + ' GiB moves off the GPU at this rate, and '
       + 'that the TIFF encode - which neither arm does - is free. It is none of those.', 'warn');
 
-    big(gainB > 2
-      ? 'Batched, the GPU is ' + gainB.toFixed(1) + '× the pool with the readback counted.'
-      : 'With the readback counted the GPU is ' + gainB.toFixed(1) + '× the pool — the shader '
-        + 'is not the bottleneck.', gainB > 2 ? 'good' : 'warn');
+    big(pkBad === 0
+      ? 'Packed to bytes, the GPU is ' + gainP.toFixed(1) + '\u00d7 the pool with the readback '
+        + 'counted — ' + gainB.toFixed(1) + '\u00d7 sending floats.'
+      : 'Packed, ' + gainP.toFixed(1) + '\u00d7 the pool — but ' + pkBad.toLocaleString()
+        + ' bytes do not match what the canvas would store.',
+      pkBad === 0 && gainP > 2 ? 'good' : 'warn');
     log('every rep, wall clock for all ' + N + ' tiles (the BEST is what is reported above):');
     log('  one at a time: ' + allA.map(v => v.toFixed(1)).join('  ') + ' ms');
     log('  all at once:   ' + allB.map(v => v.toFixed(1)).join('  ') + ' ms');
+    log('  packed bytes:  ' + allP.map(v => v.toFixed(1)).join('  ') + ' ms');
     log('  renderOneTile: ' + allC.map(v => v.toFixed(0)).join('  ') + ' ms');
     const spread = Math.max(...allB) / Math.min(...allB);
     log(spread > 1.5
