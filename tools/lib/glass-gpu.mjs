@@ -38,7 +38,11 @@ struct Env {
   oRPR: i32, oRTL: i32, oSTS: i32, oMCC: i32,
   oSPIN: i32, oOPS: i32, nOps: i32, oCANE: i32,
   nCane: i32, tileW: i32, tileX: i32, tileY: i32,
-  fullW: i32, pad6: i32, pad7: i32, pad8: i32,
+  // tileH IS NOT ALWAYS tileW. A 4096 px export tile plus bleed is 4,104 square and its f32
+  // intermediate is 202 MB, against a 128 MiB storage binding limit that every implementation
+  // has - so the app renders such a tile in horizontal BANDS, each a short tile with its own
+  // tileY. Below this line a band and a tile are the same thing.
+  fullW: i32, tileH: i32, pad7: i32, pad8: i32,
 };
 @group(0) @binding(2) var<uniform> E: Env;
 @group(0) @binding(3) var<storage, read> ARR: array<f32>;
@@ -509,12 +513,20 @@ fn glassUnform(x0: f32, y0: f32) -> vec3<f32> {
 // the slab this was measured against, which the call counter showed as fbm2G firing zero times.
 WGSL.tile = `
 @group(0) @binding(0) var<storage, read_write> PX: array<f32>;
+// DISPATCHED IN TWO DIMENSIONS WHEN IT HAS TO BE. A 512 px tile is 4,096 workgroups and fits in one
+// dimension; the exporter's 2048 px tile plus bleed is 2,056 square, which is 66,049 - past the
+// 65,535 per-dimension limit every WebGPU implementation has. Every probe used 512 and none of them
+// could have found this; the first thing to ask for a real export tile hit it immediately.
+//
+// num_workgroups rather than another uniform field, so a ONE-dimensional dispatch is unchanged:
+// nw.y is 1 and g.y is 0 there, and the index collapses back to g.x.
 @compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) g: vec3<u32>) {
-  let n = u32(E.tileW * E.tileW);
-  if (g.x >= n) { return; }
-  let px = i32(g.x) % E.tileW;
-  let py = i32(g.x) / E.tileW;
+fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let n = u32(E.tileW * E.tileH);
+  let gi = g.x + g.y * nw.x * 64u;
+  if (gi >= n) { return; }
+  let px = i32(gi) % E.tileW;
+  let py = i32(gi) / E.tileW;
 
   // where this pixel sits on the sheet, exactly as the paint loop computes it
   let fw = f32(E.fullW);
@@ -552,7 +564,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
       }
     }
   }
-  let o = i32(g.x) * 3;
+  let o = i32(gi) * 3;
   PX[o] = E.LBR * exp(-ar * T) * m;
   PX[o + 1] = E.LBG * exp(-ag * T) * m;
   PX[o + 2] = E.LBB * exp(-ab * T) * m;
@@ -583,9 +595,10 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>) {
 WGSL.pack = `
 @group(0) @binding(1) var<storage, read_write> PK: array<u32>;
 @compute @workgroup_size(64)
-fn pack(@builtin(global_invocation_id) g: vec3<u32>) {
-  let n = u32(E.tileW * E.tileW);
-  let base = g.x * 4u;
+fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let n = u32(E.tileW * E.tileH);
+  let gi = g.x + g.y * nw.x * 64u;          // two dimensions when needed; see the note on main
+  let base = gi * 4u;
   if (base >= n) { return; }
   var b: array<u32, 12>;
   for (var k = 0u; k < 4u; k = k + 1u) {
@@ -599,7 +612,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>) {
     b[k * 3u + 1u] = u32(clamp(round(cg), 0.0, 255.0));
     b[k * 3u + 2u] = u32(clamp(round(cb), 0.0, 255.0));
   }
-  let w = g.x * 3u;
+  let w = gi * 3u;
   PK[w] = b[0] | (b[1] << 8u) | (b[2] << 16u) | (b[3] << 24u);
   PK[w + 1u] = b[4] | (b[5] << 8u) | (b[6] << 16u) | (b[7] << 24u);
   PK[w + 2u] = b[8] | (b[9] << 8u) | (b[10] << 16u) | (b[11] << 24u);

@@ -27,6 +27,12 @@ const hook = `
     // one canvas and BLITS each piece out of a pre-rendered slab; renderFloorTile paints each piece
     // procedurally into one output tile. They must agree, and only a gate that can call both can say.
     renderFloorTile, renderFloor, tileInstances,
+    // THE GPU PATH, so a gate can run it against renderOneTile on the SAME tile. The shader is
+    // verified function by function and whole-tile against a re-implementation of the painter's
+    // order - not against renderOneTile itself, which also lays a ground, applies the coat and
+    // composites reality windows. Those three are exactly where a port goes wrong quietly, and
+    // without these there is no way to ask.
+    gpuPool, gpuWhyNot, gpuCapability, gpuPrefGet, gpuPrefSet, glassScene, packReal, tiffPlan,
     get T() { return T; },
     get layTiles() { return layTiles; }, set layTiles(v) { layTiles = !!v; },
     // the spectral resolver, so a gate can ask what an artifact glows at a given light without rendering

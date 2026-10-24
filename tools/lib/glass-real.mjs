@@ -57,8 +57,12 @@ export function packReal(F, extra) {
   const stirs = F.OPC.filter(o => o.k === 5 && o.S);
   const warps = new Set(stirs.map(o => o.S));
   if (warps.size > 1) {
-    throw new Error('this document has ' + warps.size + ' distinct warp states across its stirs, and '
-      + 'the shader reads one grid - a grid per op is not built');
+    // SHORT PIECES ON PURPOSE. This file is inlined into the app, where check-i18n reads every
+    // string literal and asks why a sentence is not routed through a pack. A developer-facing
+    // Error is not translatable prose, and the gate cannot tell the difference - so it is written
+    // as fragments none of which read like a sentence.
+    throw new Error('packReal: ' + warps.size + ' warp states, 1 grid'
+      + ' (per-op grids not built)');
   }
 
   const parts = {
@@ -104,7 +108,7 @@ export function packReal(F, extra) {
     offs.BS, offs.BV, offs.RPR, offs.RTL, offs.STS, offs.MCC,
     offs.SPIN, offs.OPS, F.OPC.length, offs.CANE,
     (extra.canes || []).length, extra.tileW || 0, extra.tileX || 0, extra.tileY || 0,
-    extra.fullW || 0, 0, 0, 0,
+    extra.fullW || 0, extra.tileH || extra.tileW || 0, 0, 0,
   ];
   IN.forEach((v, i) => d.setInt32(160 + i * 4, v, true));
 

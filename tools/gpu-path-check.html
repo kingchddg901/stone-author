@@ -1,0 +1,187 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GPU path check</title>
+<!--
+  THE PIECES WERE VERIFIED. THE PATH WAS NOT.
+  Run: node tools/make-probe-builds.mjs, python tools/serve-studio.py, then open this page.
+
+  gpu-port-harness.html proves all 282 lines of the per-pixel path function by function against the
+  app's own JS. gpu-tile-probe.html proves a whole tile - but against a RE-IMPLEMENTATION of
+  paintGlassContent's order written inside that page, not against the renderer. Its own header says
+  so, and lists what it leaves out: supersampling, the canvas write, the relief slope.
+
+  renderOneTile does four things. It lays a ground, paints the content, applies the coat, and
+  composites reality windows. Only the second is ported. The GPU path calls renderOneTile with the
+  content step replaced, so it should inherit the other three exactly - and "should" is the word
+  that this page exists to replace.
+
+  SO THIS COMPARES THE TWO THINGS THE EXPORTER CAN ACTUALLY CALL, on the same tiles, at the same
+  width, through the same plan: gpuPool(W, p).tile(n) against renderOneTile(W, ...). Anything that
+  differs here is a difference a master would carry.
+-->
+<style>
+  :root { --bg:#faf9f7; --fg:#1b1a19; --dim:#6b6864; --rule:#dcd8d2; --good:#1d6b3a; --warn:#8a5a00; --bad:#9b2420; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#14130f; --fg:#eceae6; --dim:#9b968e; --rule:#33302b; --good:#5fc98a; --warn:#d9a43a; --bad:#e8736d; } }
+  body { background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin:0; padding:16px; }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; }
+  p.sub { color:var(--dim); margin:0 0 14px; max-width:66ch; }
+  button { font:inherit; padding:7px 15px; border:1px solid var(--rule); border-radius:5px;
+           background:var(--bg); color:var(--fg); cursor:pointer; }
+  table { border-collapse:collapse; margin:12px 0; font-size:13px; }
+  td, th { border-bottom:1px solid var(--rule); padding:4px 14px 4px 0; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  h2 { font-size:14px; margin:18px 0 0; font-weight:600; }
+  .big { font-size:19px; font-weight:600; margin:14px 0 0; }
+  canvas { border:1px solid var(--rule); margin:4px 4px 0 0; }
+</style>
+
+<h1>GPU path check</h1>
+<p class="sub">The two things the exporter can call, on the same tiles, through the same plan:
+<code>gpuPool(W,&nbsp;p).tile(n)</code> against <code>renderOneTile</code>. The pieces are proved
+elsewhere; this is the path.</p>
+<label>width <select id="w"><option>2048</option><option selected>4096</option><option>8192</option><option>16384</option></select></label>
+<label>tiles <input id="n" type="number" value="6" min="1" max="64" style="width:4em"></label>
+<button id="run">Run</button>
+<div id="res"></div>
+<div id="shots"></div>
+
+<script type="module">
+const RES = document.getElementById('res'), SHOTS = document.getElementById('shots');
+let TB = null;
+function pair(k, v, cls) {
+  if (!TB) { TB = document.createElement('table'); RES.appendChild(TB); }
+  const tr = document.createElement('tr');
+  const a = document.createElement('th'); a.textContent = k;
+  const b = document.createElement('td'); b.textContent = v; if (cls) b.className = cls;
+  tr.appendChild(a); tr.appendChild(b); TB.appendChild(tr);
+}
+function head(t) { TB = null; const h = document.createElement('h2'); h.textContent = t; RES.appendChild(h); }
+function big(t, cls) { const p = document.createElement('p'); p.className = 'big ' + (cls || ''); p.textContent = t; RES.appendChild(p); }
+
+function load() {
+  return new Promise((res, rej) => {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0';
+    fr.src = '../harness/dist/stone-author.hooked.html';
+    fr.onerror = () => rej(new Error('could not load the hooked build'));
+    fr.onload = async () => {
+      const w = fr.contentWindow;
+      for (let i = 0; i < 150 && !w.__sa; i++) await new Promise(r => setTimeout(r, 100));
+      if (!w.__sa) return rej(new Error('no __sa'));
+      if (!w.__sa.gpuPool) return rej(new Error('this build predates the GPU hook - rebuild it'));
+      res(w);
+    };
+    document.body.appendChild(fr);
+  });
+}
+
+function shot(c, label, px) {
+  const o = document.createElement('canvas');
+  o.width = o.height = px; o.title = label;
+  o.getContext('2d').drawImage(c, 0, 0, c.width, c.height, 0, 0, px, px);
+  SHOTS.appendChild(o);
+  return o;
+}
+
+document.getElementById('run').onclick = async () => {
+  const btn = document.getElementById('run');
+  btn.disabled = true; RES.textContent = ''; SHOTS.textContent = ''; TB = null;
+  try {
+    const W = +document.getElementById('w').value;
+    const N = Math.max(1, Math.min(64, +document.getElementById('n').value | 0));
+    const w = await load();
+    const sa = w.__sa;
+    const slab = await (await fetch('/harness/dist/slab.json')).json();
+    sa.deserialize(slab); sa.render();
+
+    head('this device, this document');
+    const cap = await sa.gpuCapability();
+    pair('capability', cap.ok ? 'yes' : 'NO — ' + cap.why, cap.ok ? 'good' : 'bad');
+    if (!cap.ok) { big('Nothing to compare: this machine cannot run the GPU path.', 'bad'); return; }
+
+    // THE TOGGLE IS THE GATE, so the check turns it on the way a person would rather than reaching
+    // past it. If the predicate then refuses, that is the answer and it is worth printing.
+    const was = sa.gpuPrefGet();
+    sa.gpuPrefSet(true);
+    const why = sa.gpuWhyNot();
+    pair('this document', why ? 'refused: ' + why : 'accepted', why ? 'warn' : 'good');
+    if (why) { sa.gpuPrefSet(was); big('The predicate refuses this slab: ' + why, 'warn'); return; }
+
+    const p = await sa.tiffPlan(W);
+    pair('plan', p.ts + ' px tiles, bleed ' + p.bleed + ', ' + p.rAcross + ' x ' + p.rDown
+      + ' render tiles');
+    const gpu = await sa.gpuPool(W, p);
+    if (!gpu) { sa.gpuPrefSet(was); big('gpuPool returned null on a document the predicate accepted.', 'bad'); return; }
+
+    const total = p.rAcross * p.rDown;
+    const step = Math.max(1, Math.floor(total / N));
+    const picks = [];
+    for (let i = 0; i < N && i * step < total; i++) picks.push(i * step);
+    // AND THE EDGES, deliberately: the shader clamps its sheet coordinate and the CPU painter may
+    // not, so a tile that runs off the picture is where the two would first part company.
+    for (const e of [0, p.rAcross - 1, total - p.rAcross, total - 1])
+      if (e >= 0 && e < total && !picks.includes(e)) picks.push(e);
+
+    head('tile by tile');
+    let worstAll = 0, badTiles = 0, flat = 0;
+    const rows = [];
+    for (const n of picks) {
+      const a = await gpu.tile(n);
+      const b = sa.renderOneTile(W, (n % p.rAcross) * p.ts, ((n / p.rAcross) | 0) * p.ts,
+                                 p.ts, p.ts, p.bleed);
+      const ad = a.getContext('2d').getImageData(0, 0, a.width, a.height).data;
+      const bd = b.getContext('2d').getImageData(0, 0, b.width, b.height).data;
+      let worst = 0, over1 = 0, over5 = 0, lo = 255, hi = 0;
+      for (let i = 0; i < ad.length; i += 4) {
+        for (let k = 0; k < 3; k++) {
+          const d = Math.abs(ad[i + k] - bd[i + k]);
+          if (d > worst) worst = d;
+          if (d > 1) over1++;
+          if (d > 5) over5++;
+        }
+        if (bd[i] < lo) lo = bd[i]; if (bd[i] > hi) hi = bd[i];
+      }
+      // A TILE THAT IS ONE FLAT COLOUR agrees with anything. Counted, so a page full of matches
+      // over blank tiles cannot read as a pass.
+      if (lo === hi) flat++;
+      if (worst > worstAll) worstAll = worst;
+      if (over1) badTiles++;
+      rows.push({ n, worst, over1, over5, px: ad.length / 4 });
+      if (rows.length <= 3) { shot(b, 'cpu ' + n, 128); shot(a, 'gpu ' + n, 128); }
+      a.width = a.height = 1; b.width = b.height = 1;
+    }
+    gpu.close(); sa.gpuPrefSet(was);
+
+    let t = '<table><tr><th>tile</th><th>worst</th><th>channels &gt;1</th><th>channels &gt;5</th></tr>';
+    for (const r of rows) {
+      t += '<tr><td>' + r.n + '</td><td class="' + (r.worst > 5 ? 'bad' : r.worst ? 'warn' : 'good')
+        + '">' + r.worst + '</td><td>' + r.over1.toLocaleString() + ' <span class="dim">('
+        + (100 * r.over1 / (r.px * 3)).toFixed(3) + '%)</span></td><td>'
+        + r.over5.toLocaleString() + '</td></tr>';
+    }
+    const d = document.createElement('div'); d.innerHTML = t + '</table>'; RES.appendChild(d); TB = null;
+
+    head('what that says');
+    pair('tiles compared', rows.length + (flat ? '   (' + flat + ' of them one flat colour, which '
+      + 'agrees with anything)' : ''), flat ? 'warn' : '');
+    pair('tiles with any channel past 1 level', badTiles + ' of ' + rows.length,
+      badTiles ? 'warn' : 'good');
+    pair('worst anywhere', worstAll + ' levels',
+      worstAll > 5 ? 'bad' : worstAll > 1 ? 'warn' : 'good');
+    big(worstAll === 0
+      ? 'The GPU path draws the same tile as renderOneTile, byte for byte.'
+      : worstAll <= 5
+        ? 'The two agree to ' + worstAll + ' levels — fp32 against doubles, no cane picked differently.'
+        : 'The two differ by ' + worstAll + ' levels: a cane was selected differently, which is a '
+          + 'visible change rather than a rounding one.',
+      worstAll <= 5 ? 'good' : 'warn');
+  } catch (e) {
+    head('failed');
+    pair('error', String(e && e.message || e), 'bad');
+    console.error(e);
+  } finally { btn.disabled = false; }
+};
+</script>

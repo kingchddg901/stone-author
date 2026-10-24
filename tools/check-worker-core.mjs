@@ -25,7 +25,27 @@
 // several more free names behind it, which is how a fix becomes the next bug.
 import { readFileSync } from 'fs';
 
-const SRC = readFileSync('app/stone-author.html', 'utf8');
+// THE SHADER BLOCK IS NOT JAVASCRIPT TO THIS TOOL. Everything below reads the app as text - brace
+// matching for a function body, word matching for a free name - and the app now inlines a WGSL
+// compute shader as template literals. Parsed as JS it invented 42 free names out of shader locals,
+// every one of them reached by functions the worker already carries: a gate that was clean a moment
+// earlier reporting a wall of phantoms.
+//
+// ONLY THAT BLOCK, and the first attempt at this was a general "skip every template literal" - which
+// is worse, because the WORKER'S OWN SOURCE is a template literal. Blanking them all hid the
+// preamble that declares G, COL, uvMode and the rest, and the gate then reported those as
+// unresolved instead. The shader block is the one region that is categorically not JavaScript the
+// worker runs, and it is marked in the file, so that is the cut.
+//
+// BLANKED, NOT DELETED, so every byte offset below still lands where it did: the same number of
+// newlines, everything else a space.
+const RAW = readFileSync('app/stone-author.html', 'utf8');
+const SRC = (() => {
+  const a = RAW.indexOf('// <<<GPU-SYNC'), b = RAW.indexOf('// GPU-SYNC>>>');
+  if (a < 0 || b < a) return RAW;                        // no block: nothing to cut
+  const inner = RAW.slice(a, b);
+  return RAW.slice(0, a) + inner.replace(/[^\n]/g, ' ') + RAW.slice(b);
+})();
 const SELF = process.argv.includes('--self-test');
 
 // ---- what the worker is given ------------------------------------------------------------------
