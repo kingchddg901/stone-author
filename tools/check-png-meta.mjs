@@ -22,7 +22,21 @@
 import { readFileSync } from 'fs';
 
 const NL = String.fromCharCode(10);
-const app = readFileSync('app/stone-author.html', 'utf8');
+// LINE ENDINGS ARE NORMALISED BEFORE ANYTHING MATCHES. The working tree here is CRLF (core.autocrlf)
+// and CI checks out LF, and one ablation below looks for NL + '          light,' + NL. A pattern that
+// BEGINS with a newline is safe either way - it matches the LF inside a CRLF pair - but one that
+// CONTINUES past the content needs 'light,' to be followed by LF, and on CRLF it is followed by CR.
+// So that ablation changed nothing, reported itself as dead, and this gate exited 1 on Windows while
+// passing in CI on the identical commit. A gate that cries wolf locally is worse than a loose one:
+// the pre-push ritual runs these by hand, and a red that means nothing teaches you to ignore reds.
+//
+// It is fixed at the READ rather than in the one pattern, because the fixed-width windows below
+// (slice(plain, plain + 500), slice(streamed, streamed + 800)) also cover ~2% less text per CRLF line
+// and were tuned against LF. Normalising here makes every offset in this file mean the same thing on
+// both checkouts. A differential run of all 46 check-*/probe-* gates against an LF and a CRLF tree
+// found this to be the only one whose VERDICT changed.
+const CR = String.fromCharCode(13);
+const app = readFileSync('app/stone-author.html', 'utf8').split(CR + NL).join(NL);
 const fail = [];
 
 // ---- the measurement itself -------------------------------------------------------------------
