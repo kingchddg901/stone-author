@@ -138,6 +138,28 @@ So: mean 4.981 min against `177`'s 5.210, **4.4% faster on average**, covering t
 the table together — but `181`'s worst run is **1.5% slower than `177`'s typical**. The variance went
 from 0.2% to 10.8%, which is a regression in predictability even though the mean improved.
 
+### Build `2026.10.24.182` shrinks the table to 64 KB
+
+4,096 entries rather than 16,384, **for cache and not for accuracy**. Interleaved cos and sin mean one
+cache line carries a whole lookup, and 64 KB a worker sits beside a tile's working set instead of
+competing with it.
+
+| | entries | per worker | worst cos/sin error | as px of 65,535 |
+| --- | --- | --- | --- | --- |
+| `181` | 16,384 | 256 KB | 1.84e-8 | 5.2e-4 |
+| `182` | 4,096 | **64 KB** | **2.94e-7** | **1.4e-2** |
+| `woodAtan2`, until `179` | — | — | 1.51e-3 rad | **70.5** |
+
+The bound the probe asserts moved from 1e-7 to 1e-6 with it, and the measurement came in at **2.94e-7
+against a predicted h²/8 of 2.94e-7** — the arithmetic confirming itself rather than a tolerance
+nudged until it passed. Against `181`, measured on 1024 tiles at 65,535: **601 pixels per million
+changed near the spin centre, 627 at the corner, 91 mid-sheet**, worst 105 levels. Still three orders
+of magnitude below `179`'s 53.9%.
+
+**Whether it fixes the bimodality is unmeasured.** The footprint is a suspect, not a finding — nothing
+here has counted a cache miss, and a 65,535 **triplet** is what decides it. A pair will not do: two
+runs on `181` agreed at 4.769 and 4.894 and were both wrong about the build.
+
 **The leading suspect is the table's footprint**, and it is a suspect rather than a finding. 16,384
 entries of two doubles is 256 KB per worker, 2 MB across the pool, accessed at an index that moves
 with `a*r` and so does not stay in cache the way a scanline does. A 4,096-entry table would be 64 KB

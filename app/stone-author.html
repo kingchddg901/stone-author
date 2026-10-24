@@ -1812,7 +1812,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.181';
+  const BUILD = '2026.10.24.182';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6945,7 +6945,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // spin on every slab - cos and sin are periodic, so there is no Rmax to bound, no fallback branch
   // and no per-op array sized by `a`. Reducing in TURNS rather than radians keeps a divide out of the
   // hot path, which was worth 9 points on its own: 38.0% off a spin with the divide, 47.3% without.
-  const SPIN_NB = 16384, SPIN_TURN = 1 / (Math.PI * 2);
+  // 4,096 ENTRIES, NOT 16,384, AND THE REASON IS CACHE RATHER THAN ACCURACY. At 16,384 the table is
+  // 256 KB a worker and 2 MB across the pool, read at an index that moves with a*r rather than along
+  // a scanline - and build 2026.10.24.181 went BIMODAL on it: three 65,535 renders came in at 293.5,
+  // 286.0 and 316.6 seconds of tile time, the slow one slower in every fifth, which is the same shape
+  // build 174 had. At 4,096 it is 64 KB, one cache line per lookup because cos and sin are
+  // interleaved, and the worst error is 2.9e-7 - 0.014 px of 65,535, still five thousand times finer
+  // than the woodAtan2 this replaced. Accuracy was never the binding constraint here.
+  const SPIN_NB = 4096, SPIN_TURN = 1 / (Math.PI * 2);
   function spinTable() {
     const n = SPIN_NB, t = new Float64Array((n + 2) * 2);
     for (let i = 0; i <= n + 1; i++) { const a = i * (Math.PI * 2) / n; t[2 * i] = Math.cos(a); t[2 * i + 1] = Math.sin(a); }

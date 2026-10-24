@@ -106,12 +106,17 @@ for (const [name, ox, oy, a] of CASES) {
     worst = Math.max(worst, dev(S[0], E[0], r), dev(S[1], E[1], r));
     worstAbs = Math.max(worstAbs, Math.abs(S[0] - E[0]), Math.abs(S[1] - E[1]));
   }
-  // THE BOUND IS THE TABLE'S, NOT THE ARITHMETIC'S. Until build 2026.10.24.181 this read 1e-13,
-  // because the rotation was computed with Math.cos and Math.sin and was exact to a few ULPs. The
-  // spin now reads cos and sin off a 16,384-entry table over one turn and interpolates, so it is
-  // accurate to about 1.8e-8 in cos and sin — 5.2e-4 px of 65,535 at the rim, against the 70.5 px
-  // woodAtan2 was costing until the same afternoon. Tighten this and the TABLE is what has to change.
-  claim(worst < 1e-7, name, 'worst ' + worst.toExponential(2) + ' of the radius, '
+  // THE BOUND IS THE TABLE'S, NOT THE ARITHMETIC'S, AND IT HAS MOVED TWICE.
+  //
+  //   until 181   1e-13   Math.cos and Math.sin, exact to a few ULPs
+  //        181    1e-7    a 16,384-entry table, worst 1.8e-8  = 5.2e-4 px of 65,535
+  //        182    1e-6    a  4,096-entry table, worst 2.9e-7  = 1.4e-2 px
+  //
+  // The table shrank for CACHE, not accuracy: 181 went bimodal on a 256 KB-per-worker table and
+  // 4,096 entries is 64 KB. Both bounds are measured h^2/8 of the step, and the probe reported
+  // 2.94e-7 against a predicted 2.94e-7 when the size changed — which is the arithmetic confirming
+  // itself rather than a tolerance being nudged until it passed. Tighten this and the TABLE changes.
+  claim(worst < 1e-6, name, 'worst ' + worst.toExponential(2) + ' of the radius, '
     + worstAbs.toExponential(2) + ' ft = ' + (worstAbs / 8 * 65535).toExponential(1)
     + ' px of 65,535, over ' + PTS.length.toLocaleString() + ' points');
 }
@@ -186,7 +191,7 @@ if (process.argv.includes('--ablate')) {
       let worst = 0;
       for (const [x, y] of PTS) { const S = sh(x, y, 0, 0, 1.2), E = exact(x, y, 0, 0, 1.2);
         const r = Math.hypot(x, y); worst = Math.max(worst, dev(S[0], E[0], r), dev(S[1], E[1], r)); }
-      red = !(worst < 1e-7); why = 'worst ' + worst.toExponential(2) + ' of the radius';
+      red = !(worst < 1e-6); why = 'worst ' + worst.toExponential(2) + ' of the radius';
     } catch (e) { red = true; why = 'threw: ' + e.message; }
     claim(red, 'caught: ' + what, why);
   }
