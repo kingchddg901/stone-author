@@ -726,6 +726,56 @@ pool pins `workers: 1` because the GPU paints and one thread drives it, so `?poo
 record byte-identical to `?pool=8` in every field and the experiment could only be judged on a wall
 clock with its own variable unrecorded.
 
+### The readback does not have to touch the main thread, and the proof took two wrong turns
+
+**`map` is 23.4 ms of a 28.2 ms tile - 83%, one device round-trip, all of it serial on the main
+thread.** It is there because the bytes have to arrive in JS before `putImageData` can place them.
+They do not have to: a compute pass can write a storage TEXTURE, a render pass can blit that onto a
+canvas, and `transferToImageBitmap` hands the canvas to a worker without this thread ever seeing a
+pixel.
+
+| 2056 square, one real export tile | main thread | and then |
+| --- | --- | --- |
+| compute to a buffer, map it, read it here | **8.0 ms** | - |
+| compute to a texture, render it, transfer the bitmap | **0.2 ms** | a worker spends 15.4 ms reading it |
+
+**THE FIRST VERSION OF THAT MEASUREMENT WAS A NO-OP AND IT SAID 20x.** It made the CANVAS texture
+the compute pass's storage target. The canvas is `bgra8unorm`, `STORAGE_BINDING` on that format is
+a validation error, and there was no error scope around it - so the pass never ran, the pixel asked
+to be red came back `[0, 0, 0, 255]`, and the timing was the cost of doing nothing. The number was
+reported before anybody looked at a pixel.
+
+What replaced it writes an `rgba8unorm` texture we own and lets the RENDER PASS convert into
+whatever the canvas is. That needs no feature flag - `bgra8unorm-storage` is in the adapter's list
+but was never requested - and it cannot swap channels, because the hardware does the conversion
+rather than the shader guessing the order. Verified rather than assumed: a pixel asked for R44 G128
+B0 comes back `[44, 128, 0]`, and `gpu-sheet-probe.html` counts red-against-blue per pixel.
+
+### And the quantisation has to be told where the tie goes
+
+A texture store takes 0..1 and quantises itself, so the obvious spelling hands it `PX[o] / 255.0`
+and lets the hardware multiply by 255 again. That round trip through f32 is not exact on a tie, and
+this document produces 660 real ones:
+
+| the texture arm, 16 tiles against the f32 reference | channels apart |
+| --- | --- |
+| `PX[o] / 255.0` | **76** of 12,582,912, worst 1 level |
+| `clamp(round(PX[o]), 0.0, 255.0) / 255.0` | **0** of 12,582,912 |
+
+Eleven per cent of the ties went the other way. Rounding first - the same `round()` the byte pack
+uses, in the same order - leaves an integer, and `n / 255 * 255` in f32 lands within 3e-5 of `n` for
+every `n` in 0..255, so the quantiser has no tie left to break.
+
+**That is the difference between a faster readback and a new painter.** One level on 76 channels is
+invisible next to the 108-level f32 stir divergence this path already carries, but it is not
+nothing: it would have meant its own `renderSig` key, a resume that refuses across the switch, and
+every master re-dated. Byte-identical means the readback can move to a worker and nothing else
+changes.
+
+Both arms live in [`tools/gpu-sheet-probe.html`](../tools/gpu-sheet-probe.html) against the same
+reference and the same tie counter, so there is one gate for "the GPU's bytes are the canvas's
+bytes" rather than two that can drift apart.
+
 ## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
 
 **His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,

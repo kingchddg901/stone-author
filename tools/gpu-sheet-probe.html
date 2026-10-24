@@ -519,6 +519,143 @@ document.getElementById('run').onclick = async () => {
         + 'would have stored', 'warn');
     }
 
+    // ---- ARM D: packed into a TEXTURE and read back through a CANVAS ----------------------------
+    // WHY THIS ARM EXISTS. The readback is 73% of a tile and all of it is on the main thread,
+    // because the bytes have to arrive in JS before putImageData can place them. They do not have
+    // to: a compute pass can write a storage TEXTURE, a render pass can blit that onto a canvas,
+    // and transferToImageBitmap hands the canvas to a worker without the main thread ever seeing a
+    // pixel. Measured bare, that takes the main thread's share of a tile from 8.0 ms to 0.2.
+    //
+    // THE FIRST VERSION OF THAT MEASUREMENT WAS A NO-OP AND SAID 20x. It made the CANVAS texture
+    // the storage target; the canvas is bgra8unorm, STORAGE_BINDING on that format is a validation
+    // error, and with no error scope around it the pass simply never ran. The pixel came back
+    // black and the timing was the cost of doing nothing. So this writes an rgba8unorm texture we
+    // own and lets the RENDER PASS convert into whatever the canvas is - which needs no feature
+    // flag and cannot swap channels, because the hardware does the conversion rather than the
+    // shader guessing the order.
+    //
+    // AND THE ROUNDING IS THE WHOLE QUESTION. The pack above rounds explicitly, with
+    // u32(clamp(round(x), 0, 255)), and that is proven equal to a Uint8ClampedArray over 12.58M
+    // channels. A texture store takes 0..1 and quantises itself, so the shader divides by 255 and
+    // the hardware multiplies by 255 again - a round trip through f32 that is not obviously exact
+    // on a tie. Synthetic ties would not settle it; this document produces 660 real ones, so the
+    // comparison is the same tiles, the same reference, and every channel counted.
+    head('packed to a texture, read back through a canvas');
+    const texExtra = [
+      '@group(0) @binding(4) var TEX: texture_storage_2d<rgba8unorm, write>;',
+      '@compute @workgroup_size(8, 8)',
+      'fn packTex(@builtin(global_invocation_id) g: vec3<u32>) {',
+      '  let tw = u32(E.tileW); let th = u32(E.tileH);',
+      '  if (g.x >= tw || g.y >= th) { return; }',
+      '  let o = (g.y * tw + g.x) * 3u;',
+      '  textureStore(TEX, vec2<i32>(i32(g.x), i32(g.y)),',
+      // ROUND FIRST, THEN NORMALISE. Handing the hardware x/255 makes it resolve the tie, and
+      // it resolves 11.5% of them the other way from round(): 76 channels of 12.58M, measured.
+      // round() first - the same call the byte pack uses - leaves an integer, and n/255*255 in
+      // f32 lands within 3e-5 of n for every n in 0..255, so the quantiser has no tie left to
+      // break. Same arithmetic as the pack, in the same order, which is the point.
+      '    vec4<f32>(clamp(round(PX[o]), 0.0, 255.0) / 255.0,',
+      '              clamp(round(PX[o + 1u]), 0.0, 255.0) / 255.0,',
+      '              clamp(round(PX[o + 2u]), 0.0, 255.0) / 255.0, 1.0));',
+      '}',
+      '@vertex',
+      'fn vfull(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {',
+      '  var q = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));',
+      '  return vec4<f32>(q[i], 0.0, 1.0);',
+      '}',
+      '@group(0) @binding(5) var SRC: texture_2d<f32>;',
+      '@fragment',
+      'fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {',
+      '  return textureLoad(SRC, vec2<i32>(i32(pos.x), i32(pos.y)), 0);',
+      '}',
+    ].join(chrNL);
+    const cvFmt = navigator.gpu.getPreferredCanvasFormat();
+    pair('the canvas is', cvFmt + ' \u2014 so the shader never writes it directly');
+    dev.pushErrorScope('validation');
+    const modT = dev.createShaderModule({ code: code + chrNL + texExtra });
+    const ciT = await modT.getCompilationInfo();
+    const eT = ciT.messages.filter(m => m.type === 'error');
+    if (eT.length) { await dev.popErrorScope(); throw new Error('texture WGSL ' + eT[0].lineNum + ': ' + eT[0].message); }
+    const pipeT = await dev.createComputePipelineAsync({
+      layout: 'auto', compute: { module: modT, entryPoint: 'packTex' } });
+    const pipeBlit = await dev.createRenderPipelineAsync({
+      layout: 'auto',
+      vertex: { module: modT, entryPoint: 'vfull' },
+      fragment: { module: modT, entryPoint: 'fblit', targets: [{ format: cvFmt }] },
+      primitive: { topology: 'triangle-list' } });
+    const tex = dev.createTexture({ size: [TW, TW], format: 'rgba8unorm',
+      usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING });
+    const cvT = new OffscreenCanvas(TW, TW);
+    const ctxT = cvT.getContext('webgpu');
+    ctxT.configure({ device: dev, format: cvFmt, alphaMode: 'opaque' });
+    const grpBlit = dev.createBindGroup({ layout: pipeBlit.getBindGroupLayout(0),
+      entries: [{ binding: 5, resource: tex.createView() }] });
+    const read2d = new OffscreenCanvas(TW, TW).getContext('2d', { willReadFrequently: true });
+
+    // ONE TILE AT A TIME, because this arm is about the BYTES and a shared texture keeps it honest:
+    // every tile goes through the same texture, the same canvas and the same read, so a difference
+    // is the conversion and not which buffer it landed in.
+    const outT = new Uint8Array(n * 4 * N);
+    let wallT = Infinity;
+    for (let rep = 0; rep < REPS; rep++) {
+      const tT0 = performance.now();
+      for (let i = 0; i < N; i++) {
+        const grpT = dev.createBindGroup({ layout: pipeT.getBindGroupLayout(0), entries: [
+          { binding: 0, resource: { buffer: pxB, offset: i * bytes, size: bytes } },
+          { binding: 2, resource: { buffer: ubsB[i] } },
+          { binding: 4, resource: tex.createView() }] });
+        const encT = dev.createCommandEncoder();
+        const cp = encT.beginComputePass();
+        cp.setPipeline(pipeT); cp.setBindGroup(0, grpT);
+        cp.dispatchWorkgroups(Math.ceil(TW / 8), Math.ceil(TW / 8)); cp.end();
+        const rp = encT.beginRenderPass({ colorAttachments: [{
+          view: ctxT.getCurrentTexture().createView(),
+          loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 } }] });
+        rp.setPipeline(pipeBlit); rp.setBindGroup(0, grpBlit); rp.draw(3); rp.end();
+        dev.queue.submit([encT.finish()]);
+        const bmp = cvT.transferToImageBitmap();
+        read2d.drawImage(bmp, 0, 0); bmp.close();
+        outT.set(read2d.getImageData(0, 0, TW, TW).data, i * n * 4);
+      }
+      wallT = Math.min(wallT, performance.now() - tT0);
+    }
+    const errT = await dev.popErrorScope();
+    pair('validation', errT ? errT.message.split(chrNL)[0] : 'none', errT ? 'bad' : 'good');
+    pair('wall clock', (wallT / N).toFixed(2) + ' ms a tile \u2014 NOT comparable to the arms above: '
+      + 'this one reads on THIS thread to be able to compare, which is the work the real path moves '
+      + 'to a worker', 'warn');
+
+    // ---- and are they the same bytes? ----------------------------------------------------------
+    let tBad = 0, tWorst = 0, tFirst = -1, tAlpha = 0, swapped = 0;
+    for (let q = 0, i = 0; q < n * N; q++) {
+      for (let c = 0; c < 3; c++, i++) {
+        const d = Math.abs(ref[i] - outT[q * 4 + c]);
+        if (d) { tBad++; if (d > tWorst) tWorst = d; if (tFirst < 0) tFirst = i; }
+      }
+      if (outT[q * 4 + 3] !== 255) tAlpha++;
+      // A CHANNEL SWAP IS NOT A ROUNDING ERROR, and it would read as one if only the total were
+      // counted. Red against blue, per pixel: if this is the whole picture the order is wrong.
+      if (outT[q * 4] === ref[q * 3 + 2] && outT[q * 4 + 2] === ref[q * 3]
+          && ref[q * 3] !== ref[q * 3 + 2]) swapped++;
+    }
+    pair('channels apart from the canvas', tBad.toLocaleString() + ' of ' + (n * 3 * N).toLocaleString()
+      + (tBad ? '   (worst ' + tWorst + ' level' + (tWorst === 1 ? '' : 's') + ', first at ' + tFirst + ')' : ''),
+      tBad === 0 ? 'good' : tWorst > 1 ? 'bad' : 'warn');
+    pair('red and blue exchanged', swapped.toLocaleString() + ' pixel(s)',
+      swapped > n * N * 0.1 ? 'bad' : 'good');
+    pair('opaque', tAlpha === 0 ? 'every pixel alpha 255'
+      : tAlpha.toLocaleString() + ' pixels not opaque', tAlpha === 0 ? 'good' : 'bad');
+    big(tBad === 0
+      ? 'The texture path is byte-identical to the canvas over ' + (n * 3 * N).toLocaleString()
+        + ' channels, ties included. The readback can move to a worker without re-dating anything.'
+      : tWorst === 1
+        ? 'The texture path differs by one level on ' + tBad.toLocaleString() + ' channels - the '
+          + 'unorm quantisation does not break ties the way round() does, so this path is a '
+          + 'DIFFERENT painter and needs its own signature.'
+        : 'The texture path differs by up to ' + tWorst + ' levels. Something other than rounding '
+          + 'is wrong.',
+      tBad === 0 ? 'good' : tWorst === 1 ? 'warn' : 'bad');
+
     // ---- DO THE TWO ARMS AGREE? ----------------------------------------------------------------
     // Batching is a chance to hand a dispatch the wrong uniform and paint a perfectly plausible
     // tile of the wrong part of the sheet. No timing would notice.
