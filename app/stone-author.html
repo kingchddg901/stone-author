@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.214';
+  const BUILD = '2026.10.25.215';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -16265,6 +16265,26 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         scope: 'render', tiled: true, w: W, h: p.FH, tile: p.store, render: p.ts,
         tiles: p.tiles, renders: p.renders, bleed: p.bleed, sigma: Math.round(p.sigma) || 0,
         windows: p.wins || 0,
+        // SAMPLES PER PIXEL ON A SIDE, so 4 means sixteen samples.
+        //
+        // ALWAYS PRESENT, INCLUDING 1, and the argument is the glowLift note a few lines below: a
+        // field dropped at its default makes a master that chose the default indistinguishable from
+        // one written before the field existed. Absent here means a build older than this one, and
+        // `ss: 1` means a render that was asked and answered one - which is the whole point, since
+        // a 4x4 master and a 1x master of one slab differ in ms.render by 3.9x and in nothing else
+        // this block records.
+        //
+        // THE FOURTH FIELD IN A ROW TO BE ADDED FOR THE SAME REASON. gpu, finishers and texReadback
+        // each went in after a measurement had already been taken that nothing in the record could
+        // attribute - `?pool=12` produced a master byte-identical to `?pool=8` in every field, and
+        // four renders went by before anybody noticed. A 4x4 master and a 1x master of one slab
+        // differ in ms.render by about 3.9x and in nothing else here, which is exactly the shape of
+        // comparison this block exists to make possible a week later.
+        //
+        // NOT IN renderSig: it reaches the pixels, so it is already in `inputs` by way of GLASS -
+        // a 4x4 master and a 1x master of one slab do NOT share a signature, and that is correct.
+        // This is for reading, not for identity.
+        ss: Math.max(1, Math.min(4, (GLASS.ss | 0) || 1)),
         // The browser could not blur at all, so this master has no bloom and says so rather than pretending.
         bloomless: p.canBlur ? undefined : true,
         // KNOWN OMISSION. The lens is a whole-image step and this path has no whole image, so a
