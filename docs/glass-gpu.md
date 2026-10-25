@@ -581,6 +581,12 @@ thing: **a shader port would help wood - less than it helped glass, and not noth
 the answer this document would have given yesterday, and it is not the answer the first wood
 measurement gave either, because that render was carrying a reality window it should never have had.
 
+**MEASURED SINCE, and the forecast held in both halves: 8.5x, against glass's 20.0x.** The wood row
+of the table above is 105.8 s on the CPU and 12.5 s through the shader, same slab, same width, same
+tile. See `wood-gpu.md` - which also records that the two materials land within 1.1x of each other
+ON the GPU where they are 2.1x apart on the CPU, because neither is bound by its own field once the
+port is done.
+
 #### What this corrects
 
 **Pool 12 on the GPU path is worth nothing here, and the 1.31x measured for it was the window.**

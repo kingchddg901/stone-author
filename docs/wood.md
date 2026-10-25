@@ -44,6 +44,14 @@ All four pushed to `master`. CI green on each, including the browser harness.
 
 ---
 
+## The GPU path
+
+`wood-gpu.md` carries the shader port: 8.5x on a 65,535 master, what it refuses and why, and the
+agreement with the painter below (0.010-0.013% of channels, worst 25 levels, all of it the f32 ring
+quantiser). Read it before changing anything `shade` reads - the packer carries every array it
+subscripts, and a gate derives that list from this file rather than from what the packer's author
+believed.
+
 ## The architecture
 
 ### One seam, and a gate that enforces it

@@ -141,6 +141,12 @@ run. See [`docs/gallery.md`](docs/gallery.md).
   measured across the fleet: only 1.3–1.9×, because the work is a hash chain rather than shading
   — but 1.9× is 11.6 hours on a 1,048,576, so the multiple was never the decision. Desktop only;
   both tablets have no WebGPU. Carries the closing argument that was wrong and why.
+- **`wood-gpu.md`** — the second material through the same pipeline, and what a second one cost:
+  8.5x on the real document, which closes the forecast `glass-gpu.md` made from per-pixel cost alone.
+  Carries the three defects that generating the uniform struct exposed (all of which compile, run and
+  paint wood), the refusal that was aimed at a path the pool does not serve and the rule that came
+  out of it, and the one thing anyone chasing "why is it not on the GPU" needs: the path is reachable
+  from a TIFF export and nothing else.
 - **`master-size.md`** — what a master costs at each resolution, and why that is a property of the
   MATERIAL. Glass is a power law (0.791 per doubling, 0.4% spread, predicted a rung before it was
   rendered); stone is not (30% spread on matched footing) and its mechanism is inverted. Also: tile
