@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.211';
+  const BUILD = '2026.10.25.212';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -10047,6 +10047,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // byte-identical; wood starts its own. This is also why the wood settings are not in G: G is
         // hashed wholesale, so one key added there would have moved every master that exists.
         ...(s.material === 'wood' ? { material: s.material, wood: s.wood } : {}),
+        // A WINDOW THIS RENDER DOES NOT SHOW, which is a fact about the picture that `marks` cannot
+        // carry. The mask is hashed either way, so when windows became per authored material the
+        // glass and wood renders of a slab holding a stone window changed picture and kept their
+        // signature - the exact shape of the failure this file already records, where two UV masters
+        // shared renderSig 95ef95fe and did not share a picture.
+        //
+        // COUNTED AS HIDDEN RATHER THAN NAMED AS A MATERIAL, because "non-stone" is today's answer
+        // and not the question. A glass window authored on glass shows on a glass render, so nothing
+        // is hidden and nothing is added; the key appears only when the slab holds a window this
+        // render drops.
+        //
+        // UNCHANGED WHEN OFF, the same shape light, wood and the renderer use: absent for stone,
+        // absent for every slab with no window, so every signature already on disk is byte-identical
+        // and only the renders that actually moved start their own.
+        ...((() => {
+          const all = gatherMasks().filter(w => w.show != null).length;
+          const hid = all - windowMasks().length;
+          return hid > 0 ? { winHidden: hid } : {};
+        })()),
         // THE RENDERER REACHES THE PIXELS, so it belongs here with the rest. The shader and the CPU
         // painter disagree on about 111 levels across a 32,768 master - fp32 against doubles, a cane
         // picked differently - and without this two masters that differ by that much carry the same

@@ -53,6 +53,9 @@ const hook = `
     // a record in the app's own format rather than a copy of it, which is the whole point.
     resumeRow, resumeScan, resumeOffer,
     resumeAsk, resumeKind, resumeDiscard,
+    // THE TWO HALVES OF THE WINDOW QUESTION, so a test can read which masks a slab holds and
+    // which ones a render of it shows, rather than inferring the difference from a signature.
+    gatherMasks, windowMasks,
     storedTilePixels, markSigNow, resumeVerify,
     masterBase, masterFiles, setMaterial: (m) => { MATERIAL = m; },
     tilePainted,                                 // the lost-canvas guard, so it can be shown to bite
