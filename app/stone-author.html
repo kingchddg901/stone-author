@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.218';
+  const BUILD = '2026.10.25.219';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -11209,8 +11209,9 @@ self.onmessage = async (e) => {
   // `paint` IS THE PAINTER THAT WROTE THE RECORD, and leaving it out was a resume that could never
   // succeed. This re-rendered with renderOneTile unconditionally - the CPU path - and compared the
   // result byte for byte against tiles the GPU had written. They are not the same picture: fp32
-  // against doubles differs on about 1.4% of channels, which is a different deflate and a different
-  // length, so every GPU render reported "tile 0 is 603869 bytes, re-rendered 530229" and started
+  // against doubles differs on a few percent of channels, which is a different deflate and a
+  // different length, so every GPU render reported "tile 0 is 603869 bytes, re-rendered 530229"
+  // and started
   // over. An hour of rendering, refused by a check that was comparing two renderers.
   //
   // The record's renderer is known: renderSig carries it, so a record only matches when the toggle
@@ -16420,9 +16421,27 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         // no longer narrows itself, so `workers` is the width throughout and `poolPlanned` can only
         // differ from it if the two ever drift.
         // WHICH RENDERER DREW THIS. The trail carries 'gpu 1x<tile>' as prose; this is the field a
-        // census can group on. fp32 against doubles differs on about 1.4% of channels by up to 107
-        // levels, so two masters of the same slab that disagree are not evidence of a bug until
-        // this field has been read - and a master written before this existed simply lacks it.
+        // census can group on, because two masters of the same slab that disagree are not evidence
+        // of a bug until it has been read - and a master written before this existed simply lacks it.
+        //
+        // HOW FAR THE TWO RENDERERS DISAGREE IS NOT ONE NUMBER, and this comment used to quote one:
+        // "about 1.4% of channels by up to 107 levels". Measured 2026-10-25 on build .219, both
+        // renderers over the same document at 32,768:
+        //
+        //   Glass Master Source   2.955% of channels   worst 111   per tile 0.01-20.55%, median 0.67%
+        //   disco glass           0.029% of channels   worst 175   per tile 0.01-0.15%,  median 0.02%
+        //
+        // A HUNDREDFOLD APART, and the one with FEWER differing channels has the LARGER worst
+        // delta - a high-contrast glass carries little numerical noise but what it has lands on a
+        // hard cane boundary and flips the selection. So a percentage is not a tolerance; it is a
+        // property of the slab, and a threshold built from one material will clear or condemn the
+        // next one for no reason.
+        //
+        // WHAT DOES GENERALISE IS THE SHAPE. fp32 divergence is SCATTERED - both documents above
+        // run 0.01% on their quietest tile - while a real defect is GEOMETRIC and concentrates.
+        // That is the test that settled whether per-op warp grids addressed correctly on
+        // 2026-10-25: the suspect document's worst tile was 0.15% against the known-good control's
+        // 20.55%, which no amount of reading a percentage would have told anyone.
         // A REFUSAL IS A FACT ABOUT THE RENDER and belongs in the record, which it did not until
         // 2026-10-25. Before that a master drawn on the CPU because the GPU would not take it was
         // indistinguishable from one drawn on the CPU because nobody asked - both simply lacked
