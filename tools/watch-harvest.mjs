@@ -53,8 +53,39 @@ if (!DIR || !META) {
 //
 // Listed explicitly rather than widened. A looser rule over a Downloads folder would start harvesting --
 // and deleting -- files this project never wrote. Add a prefix here when a slab earns one.
-const PREFIX = ['stone', 'HERO-MASTER'];
-const MASTER = new RegExp('^(' + PREFIX.join('|') + ')-.*[.](tif|tiff|png|zip)$', 'i');
+const PREFIX = ['stone', 'HERO-MASTER', 'Glass Master Source', 'regression test'];
+// ESCAPED, because these are slab names a person typed rather than patterns. A slab called
+// `glass (v2)` would otherwise build an invalid regex and take the tool down at startup - or, worse,
+// a `.` in a name would quietly match any character.
+const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// THE SHAPE OF AN EXPORT, WHICH IS NOT THE SAME QUESTION AS WHETHER TO DELETE IT.
+//
+// The prefix list is deliberately narrow: a looser rule over a Downloads folder would start deleting
+// files this project never wrote, and this particular Downloads folder holds 22 Baen CD archives to
+// prove the point. But a narrow rule has a failure mode with no symptom, and this comment used to be
+// the only record of it: on 2026-09-30 a renamed slab put 21 masters and 15.2 GB past the regex, and
+// a name that does not match was indistinguishable from a directory with nothing in it.
+//
+// IT HAPPENED AGAIN. The ladder of 2026-10-24 exported 20 masters as `Glass Master Source-...`, and
+// every one of them was invisible here; their sidecars exist only because they were made by hand.
+// Two prefixes above fix those two slabs and fix nothing about the third.
+//
+// So the tail the EXPORTER writes - width, spectrum, platform, date, time - is matched separately,
+// and only ever to COUNT AND SAY SO. The asymmetry is the safety property: the loose rule can do
+// nothing but print a line, and the narrow rule above is still the only thing that can delete.
+const SHAPED = /-\d+-[A-Za-z]+-[A-Za-z]+-[A-Za-z]+-\d{4}-\d{6}[.](tif|tiff|png|zip)$/i;
+
+// A KNOWN SLAB **AND** THE EXPORT SHAPE, composed from the one definition above rather than written
+// twice. The delete net used to be prefix + `.*` + extension, and `check-harvest-names` caught what
+// that costs: `stone-author-main.zip` - this repo downloaded from GitHub into the same folder - was a
+// candidate for harvesting, on a prefix meant for masters. Nothing had deleted one, because a zip
+// with no metadata gets refused; it was a loaded gun with the safety on.
+//
+// Composing them can only ever NARROW what is deletable, and every master in the archive carries this
+// tail because the exporter writes it. The warning net stays the shape alone, so a new slab is still
+// seen - the two differ now in exactly one thing, whether the slab is known.
+const MASTER = new RegExp('^(' + PREFIX.map(esc).join('|') + ')' + SHAPED.source, 'i');
 const stamp = () => new Date().toISOString().slice(11, 19);
 const say = m => console.log(stamp() + '  ' + m);
 
@@ -62,6 +93,9 @@ const say = m => console.log(stamp() + '  ' + m);
 // not printed every ten seconds — the point of the log is what CHANGED.
 const settled = new Set();
 let harvested = 0, removed = 0, freed = 0, aside = 0, refused = 0;
+
+// Reported once per name, not once per sweep: the log is for what CHANGED.
+const unseen = new Set();
 
 function candidates() {
   const out = [];
@@ -71,7 +105,17 @@ function candidates() {
     for (const f of e) {
       const p = join(d, f.name);
       if (f.isDirectory()) { if (!KEEP.includes(f.name) && f.name !== basename(ASIDE || '')) walk(p); continue; }
-      if (MASTER.test(f.name) && !settled.has(p)) out.push(p);
+      if (MASTER.test(f.name)) { if (!settled.has(p)) out.push(p); continue; }
+      // SHAPED LIKE AN EXPORT AND NOT MATCHED: say so, do nothing else. A slab name this tool has
+      // never been told about looks exactly like an empty folder without this line.
+      if (SHAPED.test(f.name) && !unseen.has(p)) {
+        unseen.add(p);
+        const slab = f.name.replace(SHAPED, '');
+        say('NOT HARVESTED  ' + f.name);
+        say('               looks like an export but no prefix matches. Add ' + JSON.stringify(slab) +
+            ' to PREFIX in this file, or harvest it by hand:');
+        say('               node tools/meta-index.mjs "' + p + '" --out "' + META + '"');
+      }
     }
   })(DIR);
   return out;
@@ -151,6 +195,7 @@ function sweep() {
 say('watching ' + DIR + (DRY ? '   (dry run: nothing will be deleted)' : ''));
 say('  sidecars -> ' + META);
 if (KEEP.length) say('  never entered: ' + KEEP.join(', '));
+say('  harvests only: ' + PREFIX.map(s => s + '-*').join(', '));
 say('  empty stones -> ' + ASIDE);
 sweep();
 setInterval(sweep, EVERY);
