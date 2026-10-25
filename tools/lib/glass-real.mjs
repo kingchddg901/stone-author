@@ -65,6 +65,19 @@ export function packReal(F, extra) {
       + ' (per-op grids not built)');
   }
 
+  // AND EVERY PRESS ON ITS ROLLER, for the same reason and with a worse failure when it is not
+  // checked. B is F.ROLL[op.ri], so a document carrying two rollers packs ROLL[0] and the shader
+  // stamps EVERY press with it - a different picture from the one the CPU painter draws, with no
+  // throw, no console line and no refusal. The warp check above has been here since this path
+  // shipped and this shoulder had not, which is the shape where a guard that exists reads as
+  // complete. Same fragments, same reason: check-i18n reads every string literal in this file.
+  const presses = F.OPC.filter(o => o.k === 4 && o.B);
+  const rollers = new Set(presses.map(o => o.B));
+  if (rollers.size > 1) {
+    throw new Error('packReal: ' + rollers.size + ' roller states, 1 grid'
+      + ' (per-op grids not built)');
+  }
+
   const parts = {
     WU: f32(S && S.u), WV: f32(S && S.v),
     MEX: f32(F.MEX), MHL: f32(F.MHL), MD: f32(F.MD), MRIM: f32(F.MRIM),

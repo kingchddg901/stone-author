@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.216';
+  const BUILD = '2026.10.25.217';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14811,6 +14811,19 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         + ' (per-op grids not built)');
     }
 
+    // AND EVERY PRESS ON ITS ROLLER, for the same reason and with a worse failure when it is not
+    // checked. B is F.ROLL[op.ri], so a document carrying two rollers packs ROLL[0] and the shader
+    // stamps EVERY press with it - a different picture from the one the CPU painter draws, with no
+    // throw, no console line and no refusal. The warp check above has been here since this path
+    // shipped and this shoulder had not, which is the shape where a guard that exists reads as
+    // complete. Same fragments, same reason: check-i18n reads every string literal in this file.
+    const presses = F.OPC.filter(o => o.k === 4 && o.B);
+    const rollers = new Set(presses.map(o => o.B));
+    if (rollers.size > 1) {
+      throw new Error('packReal: ' + rollers.size + ' roller states, 1 grid'
+        + ' (per-op grids not built)');
+    }
+
     const parts = {
       WU: f32(S && S.u), WV: f32(S && S.v),
       MEX: f32(F.MEX), MHL: f32(F.MHL), MD: f32(F.MD), MRIM: f32(F.MRIM),
@@ -14952,6 +14965,10 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
   // both slopes; the shader has glassFormT and no slope at all, so a relieved sheet would come back
   // flat. GLASS.ss > 1 supersamples and the shader takes one sample a pixel. Neither is a tolerance
   // to widen - they are unported work, and widening either would silently change the picture.
+  // THE LAST THING THE POOL SAID ON ITS WAY OUT. Set by the two catches in gpuPool and read once,
+  // when the master's record is written. Not cleared between renders on purpose: a stale value can
+  // only ever be attached to a render that ALSO failed, because it is read only when gpuWhy is set.
+  let gpuFail = null;
   function gpuWhyNot() {
     if (!gpuPrefGet()) return 'exp.gpu.off';
     if (!gpuCap || !gpuCap.ok) return (gpuCap && gpuCap.why) || 'exp.gpu.nowebgpu';
@@ -15018,6 +15035,11 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     } catch (e) {
       // packReal THROWS rather than guess when a document's stirs disagree about their warp state,
       // because the arena carries one grid. That is a real document this cannot draw, not a bug.
+      // AND CARRIED OUT, not just logged. `exp.gpu.failed` in the record says a document was
+      // refused and nothing more; the sentence that names WHICH document feature did it lives in
+      // this error and nowhere else, and seven hours later a console nobody was watching is not a
+      // record. gpuFail is read once, where the master is written.
+      gpuFail = (e && e.message) || String(e);
       console.warn('gpu: this document will not pack', e);
       return null;
     }
@@ -15032,6 +15054,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       const e = await dev.popErrorScope();
       if (e) throw new Error(e.message.split(String.fromCharCode(10))[0]);
     } catch (e) {
+      gpuFail = (e && e.message) || String(e);
       console.warn('gpu: pipelines failed', e);
       return null;                                         // the CPU path is always there
     }
@@ -16367,7 +16390,18 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         // census can group on. fp32 against doubles differs on about 1.4% of channels by up to 107
         // levels, so two masters of the same slab that disagree are not evidence of a bug until
         // this field has been read - and a master written before this existed simply lacks it.
-        gpu: (poolRan && poolRan.gpu) ? true : undefined,
+        // A REFUSAL IS A FACT ABOUT THE RENDER and belongs in the record, which it did not until
+        // 2026-10-25. Before that a master drawn on the CPU because the GPU would not take it was
+        // indistinguishable from one drawn on the CPU because nobody asked - both simply lacked
+        // `gpu`, and the reason existed only in a console. It cost a morning to recover one.
+        //
+        // `exp.gpu.off` is not recorded: the toggle being off is not a refusal, and the trail
+        // already treats it that way. gpuDetail carries packReal's own sentence, which is the part
+        // that names the document feature rather than the category.
+        gpu: (poolRan && poolRan.gpu) ? true
+           : ((gpuWhy && gpuWhy !== 'exp.gpu.off') ? false : undefined),
+        gpuWhy: (gpuWhy && gpuWhy !== 'exp.gpu.off') ? gpuWhy : undefined,
+        gpuDetail: (gpuWhy === 'exp.gpu.failed' && gpuFail) ? gpuFail : undefined,
         // WHAT THE MAIN THREAD DID while the GPU and the workers were busy, in milliseconds for
         // the whole render: `draw` is a tile end to end on this thread, of which `copy` is the
         // readback loop and `bitmap` is createImageBitmap. `n` is how many tiles that covers.
