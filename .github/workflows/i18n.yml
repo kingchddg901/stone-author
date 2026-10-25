@@ -17,7 +17,7 @@ on:
       # has to be added by hand is a name somebody forgets; the extra CI minutes on an unrelated
       # script are cheaper than a silent gap.
       - 'tools/**'
-      - 'docs/functions.md'
+      - 'docs/**'
       - '.github/workflows/i18n.yml'
   pull_request:
     paths:
@@ -29,7 +29,7 @@ on:
       # has to be added by hand is a name somebody forgets; the extra CI minutes on an unrelated
       # script are cheaper than a silent gap.
       - 'tools/**'
-      - 'docs/functions.md'
+      - 'docs/**'
       - '.github/workflows/i18n.yml'
   workflow_dispatch:
 
@@ -77,6 +77,8 @@ jobs:
         run: node tools/check-material-fork.mjs
       - name: Nothing is called from outside the function that declares it
         run: node tools/check-scope.mjs
+      - name: Every relative link in the docs points at a file
+        run: node tools/check-doc-links.mjs
       - name: The worker core carries every name it reaches for
         run: node tools/check-worker-core.mjs
       - name: A tile carries its address, and a moved one is caught
