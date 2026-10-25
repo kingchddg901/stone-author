@@ -57,15 +57,58 @@ Nine levels were appended to the 1,048,576 master and every tile counted. It add
 **The per-halving ratio is not a constant** - 2.10 at the first halving, 1.10 by the fourth - so there
 is no single multiplier to quote, which is what the previous version of this section got wrong.
 
-**But the last two columns say what is going on.** A reduced level sits within about 9% of a NATIVE
-4x4-supersampled render at the same width, across seven levels, and 2.4-4x ABOVE a plain ss=1 one.
-Which is the mechanism rather than a coincidence: **reducing by 2^k averages 4^k source samples, and
-averaging samples is what supersampling does.** The ladder in `glass-gpu.md` measured that
-supersampling costs a flat 2.78x the bytes at every resolution, so a pyramid level's size was
-predictable from it all along. The one outlier is level 3 at +17%; the rest fall just under.
+**But the last two columns suggested what is going on.** A reduced level of THIS master sits within
+about 9% of a NATIVE 4x4-supersampled render at the same width, across seven levels, and 2.4-4x ABOVE
+a plain ss=1 one - which looked like a mechanism rather than a coincidence: **reducing by 2^k averages
+4^k source samples, and averaging samples is what supersampling does.** The ladder in `glass-gpu.md`
+measured that supersampling costs a flat 2.78x the bytes at every resolution, so a pyramid level's
+size looked predictable from it. The one outlier is level 3 at +17%; the rest fall just under.
 
-It also answers why the levels do not keep getting cheaper per pixel relative to the base. They are
-not smoothed copies of the picture - they are the picture, sampled properly.
+**That reading was right about this master and wrong as a general rule.** A second pyramid, on a
+supersampled base, does not obey it - see below. What survives is the weaker statement: the levels are
+not smoothed copies of the picture, they are the picture sampled more heavily, which is why they do
+not get cheaper per pixel relative to the base.
+
+### A second pyramid, on an ss=4 base - and the convergence
+
+The 1,048,576 was rendered again on 2026-10-25 at 4x4 sampling (122.30 GB, 0.17796 B/px) and given the
+same nine levels, 2,305 s at 11 workers. Its levels came to **63,581,553,098 bytes, 52.0% of its
+base** - well under the 89.9% the ss=1 base paid, because a base that has already averaged sixteen
+samples has less left to concentrate.
+
+**The model above does not survive it.** Against the same native ss=4 ladder it runs 1.150, 1.004,
+0.898, 0.864, 0.879, 0.919, 0.959, 0.966 - a spread of -14% to +15%, systematically UNDER in the
+middle, where the ss=1 base's pyramid sat within 9% and mostly just over. So "a reduced level is a
+native 4x4 render" is a property of the base it was reduced from, not of reduction.
+
+**What IS general is that the two pyramids converge.** Same widths, same slab, one built from a
+1-sample base and one from a 16-sample base:
+
+| width | from ss=1 | from ss=4 | ratio |
+|---|---|---|---|
+| 524,288 | 0.13640 | 0.26890 | **1.971** |
+| 262,144 | 0.26406 | 0.29646 | 1.123 |
+| 131,072 | 0.36333 | 0.31121 | 0.857 |
+| 65,536 | 0.39795 | 0.33984 | 0.854 |
+| 32,768 | 0.44347 | 0.40366 | 0.910 |
+| 16,384 | 0.53063 | 0.51104 | 0.963 |
+| 8,192 | 0.68568 | 0.67779 | 0.988 |
+| 4,096 | 0.91844 | 0.91556 | 0.997 |
+| 2,048 | 1.19578 | 1.19604 | **1.000** |
+
+At the first halving they differ by **2x**. By 8,192 they are within 1.2%, and at 2,048 they agree to
+**0.02%** - two renders that share no byte of their base arriving at the same picture. The ratio does
+not approach 1 from one side either: it crosses below around 131,072, bottoms at 0.854, and comes
+back. A damped crossing, not a decay.
+
+**Which is the real result, and it is about sampling rather than about compression.** Enough averaging
+erases where you started. The base sampling rate decides the top of a pyramid and stops mattering
+somewhere around a 128:1 reduction - so for any view served from a deep level, rendering at ss=4 buys
+nothing a box filter would not have given, and the 2.9 hours it cost over ss=1 bought only the levels
+near the top and the base itself.
+
+Both masters were deleted after measurement. The per-tile byte counts of both pyramids - 54,617
+numbers each, which no sidecar records - are kept beside their sidecars as `.levels.json`.
 
 **WHY THE ESTIMATE AHEAD OF THIS RUN WAS 21 GB, OR 1.9x LOW.** The prediction came from timing 24
 output tiles, and it was wrong twice over. The sampler took `ox` and `oy` from the same loop variable,
