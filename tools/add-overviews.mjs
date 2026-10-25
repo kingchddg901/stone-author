@@ -30,6 +30,33 @@ import { loadReducer, levels } from './lib/pyramid.mjs';
 import { locateMeta } from './lib/find-meta.mjs';
 
 const reduce2 = loadReducer();
+
+// THE REDUCER KNOWS RGBA AND THAT STAYS TRUE. It is lifted from the app rather than reimplemented,
+// because a retrofitted master and one built with levels from the start have to agree byte for byte
+// and two box filters will not. A master is three channels since the alpha drop, so the tiles are
+// widened for the reducer and narrowed again before they are written - the reducer itself is
+// untouched, and the result is the same bytes it would have produced.
+//
+// EXACT, NOT CLOSE. A box filter treats channels independently and a constant alpha averages to
+// itself, so widening with 255, reducing, and dropping the fourth channel gives precisely the RGB
+// that reducing RGB directly would. That is the whole reason this is allowed to cost two copies a
+// tile rather than a second implementation.
+const widen = (px, spp) => {
+  if (spp === 4) return px;
+  const n = (px.length / 3) | 0, out = new Uint8Array(n * 4);
+  for (let i = 0, o = 0; o < out.length; i += 3, o += 4) {
+    out[o] = px[i]; out[o + 1] = px[i + 1]; out[o + 2] = px[i + 2]; out[o + 3] = 255;
+  }
+  return out;
+};
+const narrow = (px, spp) => {
+  if (spp === 4) return px;
+  const n = (px.length / 4) | 0, out = new Uint8Array(n * 3);
+  for (let i = 0, o = 0; o < out.length; i += 4, o += 3) {
+    out[o] = px[i]; out[o + 1] = px[i + 1]; out[o + 2] = px[i + 2];
+  }
+  return out;
+};
 const args = process.argv.slice(2);
 const path = args.find(a => !a.startsWith('--'));
 const DRY = args.includes('--dry-run');
@@ -92,7 +119,7 @@ const refuse = m => { console.error('refused: ' + m); closeSync(fd); process.exi
 if (nextIfd !== 0) refuse('this master already has more than one directory - levels may already be here');
 if (!TW || !TH) refuse('not a tiled TIFF');
 if (COMP !== 8) refuse('compression ' + COMP + ' is not Adobe Deflate, which is all this writes');
-if (SPP !== 4) refuse(SPP + ' samples per pixel; the reducer knows RGBA only');
+if (SPP !== 4 && SPP !== 3) refuse(SPP + ' samples per pixel; this knows RGB and RGBA');
 if (TW !== TH) refuse('non-square tiles are not mapped');
 if (existsSync(BAK)) refuse(BAK + ' exists - a previous run died. --restore first, or delete it.');
 
@@ -130,12 +157,15 @@ for (const L of LV) {
         const sy = ty * 2 + (q >> 1), sx = tx * 2 + (q & 1);
         if (sy >= prev.down || sx >= prev.across) continue;      // past the grid: padding, left at zero
         const i = sy * prev.across + sx;
-        const small = reduce2(inflateSync(rd(prev.offs[i], prev.cnts[i])), TW, TW);
+        const small = reduce2(widen(inflateSync(rd(prev.offs[i], prev.cnts[i])), SPP), TW, TW);
         const ox = (q & 1) * half, oy = (q >> 1) * half;
         for (let y = 0; y < half; y++)
           out.set(small.subarray(y * half * 4, (y + 1) * half * 4), ((oy + y) * TW + ox) * 4);
       }
-      const z = deflateSync(Buffer.from(out.buffer, out.byteOffset, out.byteLength), { level: 6 });
+      // NARROWED BEFORE THE DEFLATE, so a written level has the same sample count as the base it
+      // came from - and the level above reads it back through widen() on the next pass.
+      const w8 = narrow(out, SPP);
+      const z = deflateSync(Buffer.from(w8.buffer, w8.byteOffset, w8.byteLength), { level: 6 });
       writeSync(fd, z, 0, z.length, at);
       offs.push(at); cnts.push(z.length); at += z.length;
     }
@@ -160,7 +190,7 @@ const entriesFor = pg => {
   if (pg.reduced) put(254, LONG, 1, b => b.writeUInt32LE(1, 0));
   put(256, LONG, 1, b => b.writeUInt32LE(pg.w, 0));
   put(257, LONG, 1, b => b.writeUInt32LE(pg.h, 0));
-  put(258, SHORT, 4, b => { for (let i = 0; i < 4; i++) b.writeUInt16LE(8, i * 2); });
+  put(258, SHORT, SPP, b => { for (let i = 0; i < SPP; i++) b.writeUInt16LE(8, i * 2); });
   put(259, SHORT, 1, b => b.writeUInt16LE(8, 0));
   put(262, SHORT, 1, b => b.writeUInt16LE(2, 0));
   if (!pg.reduced && tags.has(270))
@@ -171,8 +201,11 @@ const entriesFor = pg => {
   put(323, LONG, 1, b => b.writeUInt32LE(TH, 0));
   put(324, LONG8, pg.offs.length, null, null);
   put(325, LONG8, pg.cnts.length, null, null);
-  put(338, SHORT, 1, b => b.writeUInt16LE(2, 0));
-  put(339, SHORT, 4, b => { for (let i = 0; i < 4; i++) b.writeUInt16LE(1, i * 2); });
+  // ExtraSamples DESCRIBES THE FOURTH CHANNEL, so it is absent when there is not one. The entry
+  // count here is derived from this array rather than declared, so dropping an entry needs no
+  // second edit - which is the defect the app's own writer shipped when the alpha went.
+  if (SPP === 4) put(338, SHORT, 1, b => b.writeUInt16LE(2, 0));
+  put(339, SHORT, SPP, b => { for (let i = 0; i < SPP; i++) b.writeUInt16LE(1, i * 2); });
   return e;
 };
 const widthOf = (e, pg) => e.tag === 324 || e.tag === 325 ? pg.offs.length * 8
