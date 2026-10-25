@@ -8,6 +8,7 @@
 //   node tools/make-probe-builds.mjs                 everything, with HEAD as the "before" ref
 //   node tools/make-probe-builds.mjs --ref=v1.2.0    compare against that ref instead
 //   node tools/make-probe-builds.mjs --only=perop    one target
+//   node tools/make-probe-builds.mjs --only=ablate   the paint ablation, below
 //
 // WHAT EACH PAGE NEEDS
 //   tools/ab-tile-stats.html      stone-author.before.html + stone-author.hooked.html
@@ -112,6 +113,90 @@ function instrument(src, rec, perOp) {
   return out;
 }
 
+
+// ---- THE PAINT ABLATION -------------------------------------------------------------------------
+// WHAT A RENDER COSTS WITH PAINTING FREE, which is the floor a perfect GPU port approaches. It exists
+// because estimating that floor from the current arrangement has been wrong every time it was tried:
+// the port does not make one stage faster, it RESTRUCTURES - twelve workers that paint and finish
+// become one painter and N finishers - so a share measured under the old arrangement is a share of an
+// arrangement that stops existing. Wood was called "might not speed this up much at all" on exactly
+// that reasoning and went 8.8x.
+//
+// IT MUST NOT ABLATE THE BYTES. The obvious stub is a flat fill, and it is wrong: stone writes 0.645
+// GB and chewing that is the finishers' whole job, so a flat fill compresses to nothing and the
+// render comes in far under the true floor - a fake ceiling, read confidently. So the stub paints ONE
+// real tile per worker and blits that cache for every tile after it. Byte volume survives, per-tile
+// painting does not.
+//
+// IT REMOVES PAINTING FROM ALL TWELVE WORKERS AT ONCE, which is why it prices the restructure rather
+// than just the arithmetic: the contention that painting causes goes with it.
+//
+// VALIDATE IT BEFORE TRUSTING IT. Wood through the real shader is 12.5 s at 65,535 / tile 2048 / pool
+// 12. If the ablated wood render lands near that, this predicts GPU wall and can be pointed at a
+// material that has no shader. If it lands somewhere else it is measuring something else, and the
+// thing to do is throw it out rather than reason from it.
+//
+// FOUR EDITS, because the pooled path paints in a WORKER. The core is serialised with fn.toString()
+// out of its closure, so it keeps the TEXT and loses the SCOPE: the replacement travels, and every
+// free name in it has to be declared in the preamble or lifted beside it. check-worker-core says in
+// its own comment that a function declaration is invisible to it, so __ablPaint would not have been
+// caught - it is carried here deliberately rather than by the gate noticing.
+const ABLATE = [
+  [`  function paintContent(ident, angleView) {
+    if (MATERIAL === 'wood') return paintWoodContent(ident, angleView);
+    if (MATERIAL === 'glass') return paintGlassContent(ident, angleView);
+    return paintStoneContent(ident, angleView);
+  }`,
+   `  function paintContent(ident, angleView) {
+    const cv = g2d.canvas;
+    const k = cv.width + 'x' + cv.height + '|' + (ident ? 1 : 0) + '|' + (angleView ? 1 : 0)
+            + '|' + (uvMode ? 1 : 0) + '|' + MATERIAL;
+    if (__ablCv && __ablKey === k) {
+      const t = g2d.getTransform();
+      g2d.setTransform(1, 0, 0, 1, 0, 0);
+      g2d.drawImage(__ablCv, 0, 0);
+      g2d.setTransform(t);
+      return;
+    }
+    __ablPaint(ident, angleView);
+    try {
+      const c2 = new OffscreenCanvas(cv.width, cv.height);
+      const x2 = c2.getContext('2d');
+      x2.setTransform(1, 0, 0, 1, 0, 0);
+      x2.drawImage(cv, 0, 0);
+      __ablCv = c2; __ablKey = k;
+    } catch (_) { __ablCv = null; __ablKey = ''; }
+  }
+  function __ablPaint(ident, angleView) {
+    if (MATERIAL === 'wood') return paintWoodContent(ident, angleView);
+    if (MATERIAL === 'glass') return paintGlassContent(ident, angleView);
+    return paintStoneContent(ident, angleView);
+  }`,
+   'the painter'],
+
+  ['      paintWoodContent, paintContent, setMaterial,',
+   '      paintWoodContent, paintContent, __ablPaint, setMaterial,',
+   'the lift list'],
+
+  ['    s += `var ssC,lensC,spC,mmC;',
+   '    s += `var __ablCv=null,__ablKey=\'\';`;\n    s += `var ssC,lensC,spC,mmC;',
+   'the worker preamble'],
+];
+
+function ablate(src) {
+  let out = src;
+  for (const [from, to, what] of ABLATE) {
+    const n = out.split(from).length - 1;
+    if (n !== 1) {
+      console.error('make-probe-builds: the ablation could not find ' + what
+                    + ' (' + n + ' matches) - the app has moved under this recipe');
+      process.exit(1);
+    }
+    out = out.split(from).join(to);
+  }
+  return out;
+}
+
 const held = readFileSync(APP, 'utf8');
 let restored = false;
 const restore = () => { if (!restored) { writeFileSync(APP, held); restored = true; } };
@@ -163,6 +248,11 @@ if (want('unwarp')) {
 }
 if (want('perop')) {
   build(instrument(held, PEROP_REC, true), 'perop-capture.html', true);
+}
+// THE FLOOR, with painting free. One build; the two renders that read it are a wood validation
+// against a known 12.5 s and then whatever material is in question.
+if (want('ablate')) {
+  build(ablate(held), 'stone-author.paint-ablated.html', false);
 }
 
 restore();
