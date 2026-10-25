@@ -28,15 +28,16 @@ const f32 = a => a instanceof Float32Array ? a : new Float32Array(a || []);
 // so the stride is the first one's and grid w starts at w * stride.
 function catGrids(list, pick) {
   if (!list.length) return new Float32Array(0);
-  const first = f32(pick(list[0])), n = first.length;
+  const first = f32(pick(list[0]) || []), n = first.length;
   const a = new Float32Array(n * list.length);
-  list.forEach((g, i) => a.set(f32(pick(g)), i * n));
+  list.forEach((g, i) => a.set(f32(pick(g) || []), i * n));
   return a;
 }
 
 // one op is sixteen floats; the same record glass-scene.mjs writes, read off the app's own OPC.
-// `wi` is this op's index into the packed warp grids, or -1 for an op that has none.
-function opRow(op, wi) {
+// `wi` and `ri` are this op's indices into the packed warp and roller grids, or -1 for an op with
+// none. `H` is the document height, which is what a roller with no height of its own falls back to.
+function opRow(op, wi, ri, H) {
   const a = new Float32Array(16);
   a[0] = op.k; a[1] = op.ox; a[2] = op.oy; a[3] = op.a; a[4] = op.s;
   a[5] = op.rot ? 1 : 0; a[6] = op.cd; a[7] = op.sd; a[8] = op.u0;
@@ -44,8 +45,15 @@ function opRow(op, wi) {
   // SLOT 13 IS AN INDEX NOW, PLUS ONE, so zero still reads as "this op has no warp" and the
   // shader's existing `aOP(i, 13) != 0.0` test is unchanged. A document with one warp packs 1 for
   // every stir and indexes grid 0, which is the arithmetic it had before this was per-op.
-  a[11] = op.st ? 1 : 0; a[12] = op.B ? 1 : 0;
+  a[11] = op.st ? 1 : 0;
+  a[12] = (op.B && ri >= 0) ? ri + 1 : 0;
   a[13] = (op.S && wi >= 0) ? wi + 1 : 0;
+  // THE ROLLER'S OWN HEIGHT AND TOTAL, in the two floats this record has never used. They are the
+  // only per-roller quantities that are not grid data, and carrying them here rather than in a new
+  // arena part is what keeps the Env struct and the 304-byte uniform exactly as they were. The
+  // uniform's RLH and RLtotal stay roller 0's, which is what the probe pages pass.
+  a[14] = op.B ? (op.B.H || H) : 0;
+  a[15] = op.B ? (op.B.total || 0) : 0;
   return a;
 }
 
@@ -72,7 +80,19 @@ export function packReal(F, extra) {
   for (const o of F.OPC) if (o.k === 5 && o.S && warpList.indexOf(o.S) < 0) warpList.push(o.S);
   if (!warpList.length && F.S) warpList.push(F.S);
   const S = warpList[0] || null;
-  const B = (F.ROLL && F.ROLL[0]) || null;
+  // EVERY DISTINCT ROLLER, the same way and for the same reason as the warps below. This used to
+  // be F.ROLL[0] with no guard at all, so a document with two rollers stamped every press with the
+  // first - a different picture from the CPU painter's, silently.
+  const rollList = [];
+  for (const o of F.OPC) if (o.k === 4 && o.B && rollList.indexOf(o.B) < 0) rollList.push(o.B);
+  const B = rollList[0] || (F.ROLL && F.ROLL[0]) || null;
+  // AND WHAT ACTUALLY GETS PACKED. A document can carry roller data that no press op uses - a roll
+  // op is k 3 and takes none - and before this the first roller was packed regardless. The shader
+  // reads these parts only inside the press branch, so packing them for a document with no press
+  // changes nothing it draws; it is kept because NOT packing them would shift every offset after
+  // them, and a layout that moves for a document whose picture cannot move is a change nobody
+  // asked for and nobody could see.
+  const packList = rollList.length ? rollList : (B ? [B] : []);
   const stamp = stampsOf(F);
 
   // THEY MUST STILL AGREE ON THEIR DIMENSIONS, and that is the whole of what is left of the old
@@ -86,8 +106,8 @@ export function packReal(F, extra) {
   // as fragments none of which read like a sentence.
   for (const w of warpList) {
     if (w.nx !== S.nx || w.ny !== S.ny) {
-      throw new Error('packReal: warp grids of two sizes'
-        + ' (one stride, ' + warpList.length + ' grids)');
+      throw new Error('packReal: ' + warpList.length + ' warp'
+        + ' grids, 1 stride');
     }
   }
 
@@ -97,24 +117,29 @@ export function packReal(F, extra) {
   // throw, no console line and no refusal. The warp check above has been here since this path
   // shipped and this shoulder had not, which is the shape where a guard that exists reads as
   // complete. Same fragments, same reason: check-i18n reads every string literal in this file.
-  const presses = F.OPC.filter(o => o.k === 4 && o.B);
-  const rollers = new Set(presses.map(o => o.B));
-  if (rollers.size > 1) {
-    throw new Error('packReal: ' + rollers.size + ' roller states, 1 grid'
-      + ' (per-op grids not built)');
+  // ONE STRIDE FOR THE ROLLERS TOO, so their grids must agree on size. Everything else about a
+  // roller that differs - its height and its total - rides in the op record instead.
+  for (const r of rollList) {
+    const prN = (r.R && r.R.pr && r.R.pr.length) || 0;
+    const b0 = (B.R && B.R.pr && B.R.pr.length) || 0;
+    if (r.nx !== B.nx || r.ny !== B.ny || prN !== b0) {
+      throw new Error('packReal: ' + rollList.length + ' roller'
+        + ' grids, 1 stride');
+    }
   }
 
   const parts = {
     // END TO END, grid 0 first. With one warp this is byte for byte what it packed before.
     WU: catGrids(warpList, w => w.u), WV: catGrids(warpList, w => w.v),
     MEX: f32(F.MEX), MHL: f32(F.MHL), MD: f32(F.MD), MRIM: f32(F.MRIM),
-    BS: f32(B && B.s), BV: f32(B && B.v),
-    RPR: f32(B && B.R && B.R.pr), RTL: f32(B && B.R && B.R.tl),
+    BS: catGrids(packList, r => r.s), BV: catGrids(packList, r => r.v),
+    RPR: catGrids(packList, r => r.R && r.R.pr), RTL: catGrids(packList, r => r.R && r.R.tl),
     STS: stamp.arr,
     MCC: f32((F.MC || []).map(c => c.c | 0)),
     SPIN: f32(extra.spin),
     OPS: (() => { const a = new Float32Array(F.OPC.length * 16);
-      F.OPC.forEach((op, i) => a.set(opRow(op, warpList.indexOf(op.S)), i * 16)); return a; })(),
+      F.OPC.forEach((op, i) => a.set(
+        opRow(op, warpList.indexOf(op.S), rollList.indexOf(op.B), H), i * 16)); return a; })(),
     CANE: f32([].concat(...(extra.canes || []))),
   };
 

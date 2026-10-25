@@ -188,14 +188,17 @@ fn glassDepth(d: f32, i: i32) -> f32 {
 // THE ROLLER. Two more grid reads, the same bilinear shape as glassUnwarp, plus a walk along the
 // roller's own profile. B.total of zero is the app's guard against a roller that never moved.
 WGSL.roller = `
-fn rollerAt(cu: f32, cvv: f32) -> vec2<f32> {
-  let fx = cu * f32(E.RLnx - 1); let fy = (cvv / E.RLH) * f32(E.RLny - 1);
+fn rollerAt(ri: i32, rh: f32, cu: f32, cvv: f32) -> vec2<f32> {
+  // ri NAMES THE GRID and rh is that roller's own height, which the op record carries because it is
+  // the one per-roller quantity that is not grid data. E.RLH is still roller 0's and still what the
+  // probe pages pass; nothing about the uniform moved.
+  let fx = cu * f32(E.RLnx - 1); let fy = (cvv / rh) * f32(E.RLny - 1);
   var i0 = i32(fx); var j0 = i32(fy);
   if (i0 > E.RLnx - 2) { i0 = E.RLnx - 2; } if (i0 < 0) { i0 = 0; }
   if (j0 > E.RLny - 2) { j0 = E.RLny - 2; } if (j0 < 0) { j0 = 0; }
   // the same stable spelling, for the same reason; see the note on glassUnwarp above
   let tx = fx - f32(i0); let ty = fy - f32(j0);
-  let k = j0 * E.RLnx + i0; let k2 = k + E.RLnx;
+  let k = ri * E.RLnx * E.RLny + j0 * E.RLnx + i0; let k2 = k + E.RLnx;
   let sa = aBS(k) + tx * (aBS(k + 1) - aBS(k));
   let sb = aBS(k2) + tx * (aBS(k2 + 1) - aBS(k2));
   let va = aBV(k) + tx * (aBV(k + 1) - aBV(k));
@@ -204,14 +207,16 @@ fn rollerAt(cu: f32, cvv: f32) -> vec2<f32> {
   let v = va + ty * (vb - va);
   return vec2<f32>(s, v);
 }
-fn rollerHand(s: f32) -> vec2<f32> {
+fn rollerHand(ri: i32, rtot: f32, s: f32) -> vec2<f32> {
   let n = E.RLn;
   var u = 0.0;
-  if (E.RLtotal > 0.0) { u = s / E.RLtotal; }
+  if (rtot > 0.0) { u = s / rtot; }
   let f = clamp(u, 0.0, 1.0) * f32(n - 1);
   var i = i32(f); if (i > n - 2) { i = n - 2; } if (i < 0) { i = 0; }
   let g = f - f32(i);
-  return vec2<f32>(aRPR(i) + (aRPR(i + 1) - aRPR(i)) * g, aRTL(i) + (aRTL(i + 1) - aRTL(i)) * g);
+  let b = ri * n;
+  return vec2<f32>(aRPR(b + i) + (aRPR(b + i + 1) - aRPR(b + i)) * g,
+                   aRTL(b + i) + (aRTL(b + i + 1) - aRTL(b + i)) * g);
 }`;
 
 
@@ -486,10 +491,12 @@ fn glassUnform(x0: f32, y0: f32) -> vec3<f32> {
       if (aOP(i, 12) != 0.0) {
         let cu = (x - E.PX) * 12.0 / E.SLAB + 0.5;
         let cvv = (y - E.PY) * 12.0 / E.SLAB + 0.5 * E.WPH;
-        let r = rollerAt(cu, cvv);
+        // SLOT 12 IS THE ROLLER INDEX PLUS ONE; 14 and 15 are that roller's height and total.
+        let ri = i32(aOP(i, 12)) - 1;
+        let r = rollerAt(ri, aOP(i, 14), cu, cvv);
         let half = aOP(i, 9);
         if (r.y > -half && r.y < half) {
-          let hh = rollerHand(r.x);
+          let hh = rollerHand(ri, aOP(i, 15), r.x);
           let bite = aOP(i, 10) * hh.x * (1.0 + hh.y * (r.y / half));
           if (bite > 0.0) {
             let h = rollStampAt(r.x, r.y);

@@ -14,7 +14,7 @@
 //
 // WHAT THIS HAS TO PROVE:
 //   1  two warps of one size are PACKED, end to end, with each stir naming its own by index
-//   2  two disagreeing press rollers are still refused, and the message names the count
+//   2  two disagreeing press rollers are packed the same way, each press naming its own
 //   3  the guards are discriminating, not blanket - one shared roller passes, and so does none
 //   4  a document with one of each gets past both
 //   5  the app carries the failure sentence out of both places the pool gives up
@@ -36,8 +36,15 @@ const ok = (name, cond, detail) => {
 const WARP_A = { u: new Float32Array([10, 11, 12, 13]), v: new Float32Array([14, 15, 16, 17]), nx: 2, ny: 2 };
 const WARP_B = { u: new Float32Array([20, 21, 22, 23]), v: new Float32Array([24, 25, 26, 27]), nx: 2, ny: 2 };
 const WARP_BIG = { u: new Float32Array(9), v: new Float32Array(9), nx: 3, ny: 3 };
-const ROLL_A = { s: new Float32Array(4), v: new Float32Array(4), R: {} };
-const ROLL_B = { s: new Float32Array(4), v: new Float32Array(4), R: {} };
+const roller = (q, H, tot) => ({
+  s: new Float32Array([q, q + 1, q + 2, q + 3]), v: new Float32Array([q + 4, q + 5, q + 6, q + 7]),
+  nx: 2, ny: 2, H, total: tot,
+  R: { pr: new Float32Array([q, q + 1]), tl: new Float32Array([q + 2, q + 3]) },
+});
+const ROLL_A = roller(10, 5, 100);
+const ROLL_B = roller(50, 7, 200);
+const ROLL_BIG = { s: new Float32Array(9), v: new Float32Array(9), nx: 3, ny: 3, H: 5, total: 100,
+                   R: { pr: new Float32Array([1, 2]), tl: new Float32Array([3, 4]) } };
 const stir = S => ({ k: 5, S, raw: {} });
 const press = B => ({ k: 4, B, raw: {} });
 
@@ -54,8 +61,8 @@ const says = (msg, what) => !!msg && msg.indexOf(what) >= 0;
   const m = run([stir(WARP_A), stir(WARP_B)]);
   ok('two warps of one size are no longer refused', !says(m, 'warp'), m);
   const big = run([stir(WARP_A), stir(WARP_BIG)]);
-  ok('but grids of two SIZES still are - one stride cannot index them', says(big, 'two sizes'), big);
-  ok('and that message counts the grids', says(big, '2 grids'), big);
+  ok('but grids of two SIZES still are - one stride cannot index them', says(big, '1 stride'), big);
+  ok('and that message counts the grids', says(big, '2 warp'), big);
 }
 
 // ---- 1b: and they are packed where the shader will look for them -----------------------------------
@@ -92,24 +99,63 @@ const says = (msg, what) => !!msg && msg.indexOf(what) >= 0;
      r.parts.OPS[13] === 1 && r.parts.OPS[16 + 13] === 1);
 }
 
-// ---- 2: disagreeing rollers ------------------------------------------------------------------------
+// ---- 2: disagreeing rollers are packed now too -----------------------------------------------------
+// This one never refused before it was guarded - it took ROLL[0] and stamped every press with it, a
+// different picture from the CPU painter's with nothing said. Guarded on 2026-10-25, built the same day.
 {
   const m = run([press(ROLL_A), press(ROLL_B)]);
-  ok('two roller states are refused', says(m, 'roller states'), m);
-  ok('and the message names the count', says(m, '2 roller states'), m);
+  ok('two rollers of one size are no longer refused', !says(m, 'roller'), m);
+  const big = run([press(ROLL_A), press(ROLL_BIG)]);
+  ok('but roller grids of two SIZES still are', says(big, '1 stride'), big);
+  ok('and that message counts the grids', says(big, '2 roller'), big);
+}
+
+// ---- 2b: and the per-roller quantities ride where the shader looks ---------------------------------
+// A roller's HEIGHT and TOTAL are the only parts of it that are not grid data. They go in the op
+// record's two previously-unused floats rather than a new arena part, which is what keeps the Env
+// struct and the 304-byte uniform exactly as they were.
+{
+  const F = { OPC: [press(ROLL_A), press(ROLL_B), press(ROLL_A)], H: 3, ROLL: [ROLL_A, ROLL_B],
+              SG: {}, S: null, MC: [], MEX: [1], MHL: [2], MD: [3], MRIM: [4] };
+  const r = packReal(F, { SLAB: 12, canes: [], spin: [] });
+  ok('both roller grids are in the arena, end to end',
+     Array.from(r.parts.BS).join(',') === '10,11,12,13,50,51,52,53', Array.from(r.parts.BS).join(','));
+  ok('and the hand arrays with them',
+     Array.from(r.parts.RPR).join(',') === '10,11,50,51', Array.from(r.parts.RPR).join(','));
+  const f = (i, k) => r.parts.OPS[i * 16 + k];
+  ok('the first press names roller 0', f(0, 12) === 1, String(f(0, 12)));
+  ok('the second names roller 1', f(1, 12) === 2, String(f(1, 12)));
+  ok('a REPEAT names roller 0 again, not a third copy',
+     f(2, 12) === 1 && r.parts.BS.length === 8, String(f(2, 12)));
+  ok('each press carries ITS OWN roller height', f(0, 14) === 5 && f(1, 14) === 7 && f(2, 14) === 5,
+     f(0, 14) + ',' + f(1, 14) + ',' + f(2, 14));
+  ok('and its own total', f(0, 15) === 100 && f(1, 15) === 200 && f(2, 15) === 100,
+     f(0, 15) + ',' + f(1, 15) + ',' + f(2, 15));
+}
+
+// ---- 2c: a document with NO press keeps the layout it had ------------------------------------------
+// Roller data can exist that no press uses - a roll op is k 3 and takes none - and the shader reads
+// these parts only inside the press branch. They are packed anyway, because not packing them would
+// shift every offset after them for a document whose picture cannot move. Measured against the
+// packer at 1d97d1a: arena and uniform byte for byte identical.
+{
+  const F = { OPC: [stir(WARP_A), { k: 3, a: 1.1, raw: {} }], H: 3, ROLL: [ROLL_A], SG: {}, S: null,
+              MC: [], MEX: [1], MHL: [2], MD: [3], MRIM: [4] };
+  const r = packReal(F, { SLAB: 12, canes: [], spin: [] });
+  ok('an unused roller is still packed, so no offset moves', r.parts.BS.length === 4,
+     r.parts.BS.length + ' floats');
+  ok('and the roll op names no roller', r.parts.OPS[16 + 12] === 0, String(r.parts.OPS[16 + 12]));
 }
 
 // ---- 3: THE ABLATIONS - the guards discriminate rather than blanket-refuse -------------------------
 // Same two presses, one bit different: they share a roller. If this still said "roller states" the
 // test above would be proving nothing except that two presses exist.
 {
-  const shared = run([press(ROLL_A), press(ROLL_A)]);
-  ok('ABLATION two presses sharing ONE roller are not refused for it', !says(shared, 'roller states'), shared);
   const none = run([press(null), press(null)]);
-  ok('ABLATION two presses with no roller at all are not refused for it', !says(none, 'roller states'), none);
-  // three presses, two rollers: the count must follow the SET, not the op count
-  const three = run([press(ROLL_A), press(ROLL_A), press(ROLL_B)]);
-  ok('the count is of distinct rollers, not of presses', says(three, '2 roller states'), three);
+  ok('ABLATION two presses with no roller at all are not refused for it', !says(none, 'roller'), none);
+  // three presses over two SIZES: the count must follow the SET, not the op count
+  const three = run([press(ROLL_A), press(ROLL_A), press(ROLL_BIG)]);
+  ok('the size refusal counts distinct rollers, not presses', says(three, '2 roller'), three);
 }
 
 // ---- 4: one of each gets past both -----------------------------------------------------------------
