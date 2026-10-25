@@ -141,7 +141,7 @@ storage first and then handed to the browser to save, so both exist at once. Tha
 
 ## Looking at the result
 
-Past a few gigapixels no ordinary viewer will open a master — GIMP budgeted 443 GB of working space for
+Past a few gigapixels most viewers struggle with a master — GIMP *budgets* 443 GB of working space for
 a 262,144. [`vipsdisp`](https://github.com/libvips/vipsdisp) streams tiles and will open one, and
 `tools/add-overviews.mjs` adds pyramid levels to an existing master so that zooming *out* works too.
 See [`image-pyramid.md`](image-pyramid.md).
@@ -168,9 +168,21 @@ and free disk are both real limits, and both refuse *after* the render rather th
 **Time.** Hours, not minutes. Resume makes an interruption recoverable; it does not make 687 billion
 pixels less work. The same picture is 2.75 TB of uncompressed pixels before a byte of deflate.
 
-**Viewing.** Rendering it does not mean anything can open it. GIMP budgeted **443 GB** of working space
-for a 262,144 on a 16 GB machine. Conventional editors will refuse the dimensions, demand absurd
-scratch space, or spend a very long time discovering they cannot.
+**Viewing.** The two tiers differ, and the difference is the dimensions rather than the memory.
+
+**At 262,144 an editor opens it.** Measured 2026-10-25: an 11.08 GB master, four-by-four supersampled,
+took about **60 GB** of scratch in GIMP and gave it back on close. The **443 GB** figure quoted here
+for years is what GIMP *budgets* - a reservation it declares, not disk it commits - and it is roughly
+seven times the real cost. So the honest shape at that size is a long wait and tens of gigabytes of
+temporary disk while it is open, not impossibility. It is still not a recommendation.
+
+**At 1,048,576 nothing here has opened one**, and the wall is the side length rather than the working
+set. Editors carry a maximum dimension and 262,144 sits at or very near GIMP's, which is why that size
+opens and the tier above is a refusal at load rather than a long wait. Check your own build's limit
+before planning on it.
+
+What works at any size is the tiled reader described above, because a master is tiled BigTIFF and such
+a reader only ever touches the tiles the viewport needs.
 
 **What more pixels actually buy.** Not nothing — and this is the one most people get backwards. The
 field is procedural and has no resolution of its own, so a larger render keeps *finding* structure

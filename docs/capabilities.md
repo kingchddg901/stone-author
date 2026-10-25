@@ -258,7 +258,7 @@ scale: the hand-painted signature in the centre of that master is 16 × 5 px, wh
 
 **262144 is the ceiling, and it is a decision rather than a limit.** Nothing in the renderer stops at
 any size: the tiles stream, per-tile cost is flat, and the field never runs out of detail. What stops
-is the ability to look at the result — 443 GB of working space against 366 GB free on the machine that
+is the ability to look at the result — a 443 GB *budget* against 366 GB free on the machine that
 makes them, and roughly 1.8 TB for the tier above. Recorded here because a ceiling with no stated
 reason gets re-litigated, and this one was measured.
 

@@ -4,8 +4,11 @@ Status: **scoped, not built.**
 
 Every master this app has ever written is a single-level tiled BigTIFF — one IFD, full resolution,
 nothing else. So a viewer has to decode the whole picture to show you any of it, and past a certain
-size none of them can. Measured, in the warning the app already shows: GIMP budgeted **110.8 GB** of
-working space to open a 131,072 and **443 GB** for a 262,144, on a machine with 16. Four times per
+size none of them can - though the figure usually quoted for that is a RESERVATION rather than a
+requirement. GIMP *budgets* **110.8 GB** of working space to open a 131,072 and **443 GB** for a
+262,144, on a machine with 16. What it actually writes is far less: **about 60 GB** of scratch,
+measured on 2026-10-25 opening a 262,144 whose file was 11.08 GB. Seven times less than the budget,
+and still 60 GB of real disk for as long as the image is open. Four times per
 doubling puts the two sizes behind the `WHY` rung at roughly 1.8 TB and 7 TB of scratch.
 
 The files are correct and checkable — `tiff-meta` reads provenance without touching a pixel,
