@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.24.207';
+  const BUILD = '2026.10.24.209';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -10290,7 +10290,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // The margin before it was thinner than it looks. 65535 wrote 0.41 GB and 131072 wrote 1.35 GB,
     // which is 63% of the way to 2^31 — a noisier slab at 131072 would have hit this just as hard.
     // Math.ceil is exact to 2^53, which is past any file a browser will write.
-    const ENTRIES = dsc ? 14 : 13, IFD_LEN = 8 + ENTRIES * 20 + 8, pad8 = n => Math.ceil(n / 8) * 8;
+    // THE COUNT AND THE ENTRIES ARE A REPLICA PAIR, and dropping ExtraSamples proved it: this said
+    // 13 while twelve were written, so a reader walked past the last entry into the zero that
+    // terminates the IFD and read it as a thirteenth with tag 0. harness/tiff.mjs caught it in CI;
+    // nothing local did, because probe-tiff-offsets checks offsets rather than the entry count.
+    // IFD_LEN needs it before a single entry exists, so it cannot be derived - but it CAN be
+    // checked, which is what the assertion after the last entry does.
+    const ENTRIES = dsc ? 13 : 12, IFD_LEN = 8 + ENTRIES * 20 + 8, pad8 = n => Math.ceil(n / 8) * 8;
     const u64 = (dv, p, v) => { dv.setUint32(p, v >>> 0, true); dv.setUint32(p + 4, Math.floor(v / 4294967296), true); };
 
     // THE TRUE END, NOT THE LAST INDEX. This was `offs[N - 1] + cnts[N - 1]`, which is a different
@@ -10349,6 +10355,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // NO ExtraSamples. There is no extra sample any more, and a tag claiming one over three
     // channels is a file that disagrees with itself.
     entry(339, 3, 3, shorts(1, 3));                        // SampleFormat — unsigned integer
+    // AND THE COUNT WAS RIGHT. e starts at 8 and advances 20 an entry, so this is the one place
+    // that can tell whether ENTRIES described what was actually written. A master with a miscounted
+    // IFD is a file that reads as corrupt rather than as wrong, and it costs a whole render.
+    if (e !== 8 + ENTRIES * 20) {
+      throw new Error('TIFF IFD: ' + ((e - 8) / 20) + ' entries written, ENTRIES says ' + ENTRIES);
+    }
     u64(iv, e, 0);                                         // no second IFD
 
     const tail = [];
@@ -11377,13 +11389,26 @@ self.onmessage = async (e) => {
   // This is where the cost lands, and it is the mirror of the loop the RGBA direct write removed:
   // about 12 ms a tile against the 30 the deflate gives back. It runs in the finish worker on the
   // pooled paths, which is where the render is bound now, so twelve of them share it.
+  // ONE SCRATCH BUFFER, NOT ONE A TILE, and the first version of this shipped the other way.
+  //
+  // Allocating the output per call measured 24.5 ms against 14.4 reused - and the per-call figure is
+  // the smaller half of it. A 640-tile 65,535 allocated 8.1 GB of short-lived 12.7 MB arrays across
+  // twelve workers, and the garbage that makes does not show up in a best-of-five timing of the
+  // function itself. It showed up in the render: 13.7 s became 18.9, where the arithmetic said the
+  // deflate saving and the compaction should roughly cancel.
+  //
+  // Hung off the function rather than closed over, because this body is serialised into the finish
+  // worker by toString() and a closure variable would not travel with it. Each worker gets its own
+  // on first use; the main thread gets one for the sequential and resume paths.
   function rgbFromRGBA(px) {
-    const n = (px.length / 4) | 0;
-    const out = new Uint8Array(n * 3);
-    for (let i = 0, o = 0; o < out.length; i += 4, o += 3) {
+    const n = (px.length / 4) | 0, need = n * 3;
+    if (!rgbFromRGBA.buf || rgbFromRGBA.buf.length < need) rgbFromRGBA.buf = new Uint8Array(need);
+    const out = rgbFromRGBA.buf;
+    for (let i = 0, o = 0; o < need; i += 4, o += 3) {
       out[o] = px[i]; out[o + 1] = px[i + 1]; out[o + 2] = px[i + 2];
     }
-    return out;
+    // A VIEW, so a tile smaller than the buffer does not deflate the tail of the one before it.
+    return out.length === need ? out : out.subarray(0, need);
   }
   async function deflateBytes(u8) {
     const cs = new CompressionStream('deflate');
