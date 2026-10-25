@@ -21,49 +21,48 @@
 // THE REDUCER IS LIFTED FROM THE APP, not reimplemented. A retrofitted master and one built with levels
 // from the start must agree byte for byte, and two implementations of "box filter" will not.
 //
-//   node tools/add-overviews.mjs <master.tif> [--stop 2048] [--dry-run]
+//   node tools/add-overviews.mjs <master.tif> [--stop 2048] [--jobs N] [--dry-run]
 //   node tools/add-overviews.mjs <master.tif> --restore
 import { openSync, readSync, writeSync, closeSync, statSync, existsSync, unlinkSync,
          ftruncateSync } from 'fs';
-import { inflateSync, deflateSync } from 'zlib';
+import { Worker } from 'worker_threads';
+import { availableParallelism } from 'os';
 import { loadReducer, levels } from './lib/pyramid.mjs';
 import { locateMeta } from './lib/find-meta.mjs';
+import { runPool } from './lib/pyramid-pool.mjs';
 
-const reduce2 = loadReducer();
-
-// THE REDUCER KNOWS RGBA AND THAT STAYS TRUE. It is lifted from the app rather than reimplemented,
-// because a retrofitted master and one built with levels from the start have to agree byte for byte
-// and two box filters will not. A master is three channels since the alpha drop, so the tiles are
-// widened for the reducer and narrowed again before they are written - the reducer itself is
-// untouched, and the result is the same bytes it would have produced.
+// THE PIXEL WORK MOVED TO A WORKER THREAD, and the write stayed here.
 //
-// EXACT, NOT CLOSE. A box filter treats channels independently and a constant alpha averages to
-// itself, so widening with 255, reducing, and dropping the fourth channel gives precisely the RGB
-// that reducing RGB directly would. That is the whole reason this is allowed to cost two copies a
-// tile rather than a second implementation.
-const widen = (px, spp) => {
-  if (spp === 4) return px;
-  const n = (px.length / 3) | 0, out = new Uint8Array(n * 4);
-  for (let i = 0, o = 0; o < out.length; i += 3, o += 4) {
-    out[o] = px[i]; out[o + 1] = px[i + 1]; out[o + 2] = px[i + 2]; out[o + 3] = 255;
-  }
-  return out;
-};
-const narrow = (px, spp) => {
-  if (spp === 4) return px;
-  const n = (px.length / 4) | 0, out = new Uint8Array(n * 3);
-  for (let i = 0, o = 0; o < out.length; i += 4, o += 3) {
-    out[o] = px[i]; out[o + 1] = px[i + 1]; out[o + 2] = px[i + 2];
-  }
-  return out;
-};
+// Measured on the terapixel master: 222 ms an output tile, 54,617 tiles, 3.4 hours on one core - of
+// which 45% is the reducer and 31% the deflate, both pure CPU over tiles that do not know about each
+// other. The write cannot move, because a tile's offset is decided by where it lands; so the tiles are
+// built in parallel and handed back TO BE WRITTEN IN INDEX ORDER, which is runPool's whole job.
+//
+// WHAT THIS DOES NOT CHANGE: the bytes. One implementation of the reduction, one of the deflate, one
+// quadrant mapping, lifted into lib/pyramid-tile.mjs and called from the worker - with --jobs 1
+// running the same path rather than a serial twin of it, so there is no second implementation to
+// diverge. The output is byte-identical to the serial tool at any job count, which is checked against
+// the real thing rather than asserted: see the note in docs/image-pyramid.md.
+//
+// THE REDUCER IS STILL LOADED HERE, though nothing here reduces. loadReducer throws when it cannot
+// find reduce2 in the app, and that refusal belongs BEFORE the tail is taken - one clean message
+// rather than eight worker crashes over a file whose directory has already been destroyed.
+loadReducer();
+
 const args = process.argv.slice(2);
 const path = args.find(a => !a.startsWith('--'));
 const DRY = args.includes('--dry-run');
 const RESTORE = args.includes('--restore');
 const STOP = (() => { const i = args.indexOf('--stop'); return i < 0 ? 2048 : +args[i + 1] || 2048; })();
+// ONE CORE LEFT ALONE by default: this runs for the best part of an hour on a machine somebody is
+// probably still using. --jobs takes it back.
+const JOBS = (() => {
+  const i = args.indexOf('--jobs');
+  const n = i < 0 ? Math.max(1, availableParallelism() - 1) : +args[i + 1];
+  return Math.max(1, Math.min(64, n || 1));
+})();
 if (!path) {
-  console.error('usage: node tools/add-overviews.mjs <master.tif> [--stop 2048] [--dry-run] [--restore]');
+  console.error('usage: node tools/add-overviews.mjs <master.tif> [--stop 2048] [--jobs N] [--dry-run] [--restore]');
   process.exit(2);
 }
 const BAK = path + '.tailbak';
@@ -135,47 +134,98 @@ console.log('  tile data ends at ' + num(END) + ', tail is ' + num(tailLen) + ' 
 console.log('  provenance block ' + num(meta.end - meta.start) + ' bytes, kept');
 if (!LV.length) { console.log('  already at or under ' + STOP + 'px: nothing to add'); closeSync(fd); process.exit(0); }
 console.log('  ' + LV.length + ' level(s): ' + LV.map(l => l.w + 'x' + l.h).join('  '));
+console.log('  ' + JOBS + ' worker(s) of ' + availableParallelism() + ' cores');
 if (DRY) { console.log('  --dry-run: nothing written'); closeSync(fd); process.exit(0); }
 
 const metaText = rd(meta.start, meta.end - meta.start);
 { const bak = openSync(BAK, 'w'); const b = rd(END, tailLen); writeSync(bak, b, 0, tailLen, 0); closeSync(bak); }
 console.log('  tail backed up to ' + BAK);
 
-// EACH LEVEL IS BUILT FROM THE ONE ABOVE IT, not from the base. A level-L tile covers 2x2 tiles of
-// level L-1, and reduce2 turns each of those into exactly one quadrant - so the mapping is four reads,
-// four reductions and a blit, with no resampling across a tile seam.
+// EACH LEVEL IS BUILT FROM THE ONE ABOVE IT, not from the base - so the levels are strictly serial
+// even though the tiles within one are not. That is also why a worker carries the level number as a
+// generation and reopens the file on a change: level L+1 reads tiles written during level L.
+//
+// THE WORKERS ARE MADE AFTER EVERY REFUSAL AND AFTER THE BACKUP, so a refused run never spawns one
+// and a run that dies always has its tail on disk.
 let at = END;
 let prev = { across: Math.ceil(W / TW), down: Math.ceil(H / TW), offs: offs0, cnts: cnts0 };
 const built = [];
 const t0 = Date.now();
-for (const L of LV) {
-  const offs = [], cnts = [], half = TW >> 1;
-  for (let ty = 0; ty < L.down; ty++) {
-    for (let tx = 0; tx < L.across; tx++) {
-      const out = new Uint8Array(TW * TW * 4);
+
+const workers = Array.from({ length: JOBS }, () =>
+  new Worker(new URL('./lib/pyramid-worker.mjs', import.meta.url), { workerData: { path, TW, SPP } }));
+const idle = [];
+const pending = new Map();      // worker -> the promise handlers of the tile it is holding
+let wErr = null;
+for (const w of workers) {
+  idle.push(w);
+  w.on('message', m => {
+    const h = pending.get(w); pending.delete(w); idle.push(w);
+    if (!h) return;
+    if (m.err) h.rej(new Error(m.err)); else h.res(Buffer.from(m.z));
+  });
+  // A DEAD WORKER IS NOT RETURNED TO THE POOL. Its pending tile is failed here rather than left to
+  // hang, because the only thing worse than this falling over is this falling over silently at tile
+  // 40,000 of 54,617 with no tail on the file.
+  w.on('error', e => {
+    wErr = wErr || e;
+    const h = pending.get(w); pending.delete(w);
+    if (h) h.rej(e);
+  });
+}
+const shutdown = async () => {
+  for (const w of workers) { try { w.postMessage({ bye: true }); } catch { /* already gone */ } }
+  await Promise.allSettled(workers.map(w => w.terminate()));
+};
+
+try {
+  for (let li = 0; li < LV.length; li++) {
+    const L = LV[li];
+    const offs = [], cnts = [], n = L.across * L.down;
+    const quadsFor = i => {
+      const ty = (i / L.across) | 0, tx = i % L.across, q4 = [];
       for (let q = 0; q < 4; q++) {
         const sy = ty * 2 + (q >> 1), sx = tx * 2 + (q & 1);
-        if (sy >= prev.down || sx >= prev.across) continue;      // past the grid: padding, left at zero
-        const i = sy * prev.across + sx;
-        const small = reduce2(widen(inflateSync(rd(prev.offs[i], prev.cnts[i])), SPP), TW, TW);
-        const ox = (q & 1) * half, oy = (q >> 1) * half;
-        for (let y = 0; y < half; y++)
-          out.set(small.subarray(y * half * 4, (y + 1) * half * 4), ((oy + y) * TW + ox) * 4);
+        if (sy >= prev.down || sx >= prev.across) { q4.push(null); continue; }  // past the grid: padding
+        const k = sy * prev.across + sx;
+        q4.push({ off: prev.offs[k], cnt: prev.cnts[k] });
       }
-      // NARROWED BEFORE THE DEFLATE, so a written level has the same sample count as the base it
-      // came from - and the level above reads it back through widen() on the next pass.
-      const w8 = narrow(out, SPP);
-      const z = deflateSync(Buffer.from(w8.buffer, w8.byteOffset, w8.byteLength), { level: 6 });
+      return q4;
+    };
+    const build = i => new Promise((res, rej) => {
+      if (wErr) return rej(wErr);
+      const w = idle.pop();
+      if (!w) return rej(new Error('no live worker left to build tile ' + i));
+      pending.set(w, { res, rej });
+      w.postMessage({ i, gen: li, quads: quadsFor(i) });
+    });
+    let last = 0;
+    const emit = (i, z) => {
       writeSync(fd, z, 0, z.length, at);
       offs.push(at); cnts.push(z.length); at += z.length;
-    }
-    process.stdout.write('\r  ' + L.w + 'x' + L.h + '  row ' + (ty + 1) + '/' + L.down + '      ');
+      if (Date.now() - last > 500) {
+        last = Date.now();
+        const el = (Date.now() - t0) / 1000, eta = el / (i + 1) * (n - i - 1);
+        process.stdout.write('\r  ' + L.w + 'x' + L.h + '  tile ' + num(i + 1) + '/' + num(n) +
+                             '  ' + (eta / 60).toFixed(0) + ' min left on this level      ');
+      }
+    };
+    await runPool({ n, jobs: JOBS, build, emit });
+    built.push({ w: L.w, h: L.h, offs, cnts });
+    prev = { across: L.across, down: L.down, offs, cnts };
+    console.log('\r  ' + L.w + 'x' + L.h + '  ' + num(offs.length) + ' tiles, ' +
+                gb(cnts.reduce((a, b) => a + b, 0)) + '                              ');
   }
-  built.push({ w: L.w, h: L.h, offs, cnts });
-  prev = { across: L.across, down: L.down, offs, cnts };
-  console.log('\r  ' + L.w + 'x' + L.h + '  ' + num(offs.length) + ' tiles, ' +
-              gb(cnts.reduce((a, b) => a + b, 0)) + '              ');
+} catch (e) {
+  await shutdown();
+  console.error('');
+  console.error('FAILED while building levels: ' + ((e && e.message) || e));
+  console.error('The tail is still in ' + BAK + ' - run with --restore to put the file back as it was.');
+  closeSync(fd);
+  process.exit(1);
 }
+// CLOSED BEFORE THE TAIL IS WRITTEN, so nothing holds a read handle while the file is truncated.
+await shutdown();
 
 // THE NEW TAIL: one directory per level, chained. BigTIFF is an 8-byte entry count, 20-byte entries and
 // an 8-byte next-directory pointer; tags ascend, and a value of 8 bytes or fewer sits inline rather than

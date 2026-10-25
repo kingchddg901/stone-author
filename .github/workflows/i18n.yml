@@ -85,6 +85,8 @@ jobs:
         run: node tools/probe-mark.mjs
       - name: The overview reducer is a pure function of the picture
         run: node tools/probe-reduce.mjs
+      - name: Tiles built in parallel are written in the order their offsets claim
+        run: node tools/probe-pyramid-order.mjs
       - name: The mark's entry gate is wide enough for the one field that defeats the read
         run: node tools/probe-gate.mjs
       - name: The export clock measures the render, not the person reading the dialog

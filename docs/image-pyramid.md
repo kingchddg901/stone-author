@@ -35,6 +35,13 @@ a quarter of its pixels - about 1.7x the bytes per pixel. Reducing fine stone te
 rather than smoothing it, so deflate does worse on an overview than on the picture it came from. This
 document said the opposite until it was measured.
 
+**Confirmed at the top of the range on 2026-10-25.** Sampling the 1,048,576 master across the sheet,
+a level-1 tile deflates to **309 KB where its four sources hold 784 KB** - 0.39x rather than the 0.25x
+pixel arithmetic predicts, so bytes per pixel rises **1.58x per halving**. The series then sums to
+about **21 GB on a 44.7 GB master**, close to half again rather than a third. The 1.7x figure measured
+at 65,535 and this 1.58x at 1,048,576 are the same effect, and it does not weaken with scale - which
+is the ladder in `glass-gpu.md` seen from the other end: coarser is noisier per pixel.
+
 ## Build it as a post-pass, not inline
 
 The obvious design is to downsample each tile as it is painted, while its pixels are already in hand.
@@ -75,6 +82,41 @@ must agree byte for byte or the two paths have forked. This repo has been bitten
 exactly that shape — the export and the resume verification each preparing their own tile pixels, and
 a cache key naming its inputs by hand — so the tool lifts the reducer out of the app the way
 `tools/lib/mark.mjs` lifts the mark format.
+
+### The tiles are built in parallel; the writes are not
+
+Measured on the 1,048,576 master, one output tile costs **222 ms** on one core - four reads and
+inflates at 13.3 ms, four reductions at 25.2 ms, one deflate at 68.1 ms - and there are 54,617 of
+them across nine levels. **3.4 hours**, of which 45% is the reducer and 31% the deflate: pure CPU over
+tiles that do not know about each other.
+
+**The write is the part that cannot move.** A tile's offset is decided by where it lands, so
+`TileOffsets` is a record of write order rather than a plan; emit tile 7 before tile 6 and the file
+still holds every byte, in the wrong place, under a directory that says otherwise. So the tiles are
+built on worker threads and handed back to be **written in index order**, which is all
+`tools/lib/pyramid-pool.mjs` does. The pixel work moved whole into `tools/lib/pyramid-tile.mjs` and
+`--jobs 1` runs that same path, so there is no serial twin to drift from.
+
+| jobs | tiles/s | per worker | nine levels |
+|---|---|---|---|
+| 1 | 4.5 | 4.50 | 3.37 h |
+| 4 | 14.73 | 3.68 | 1.03 h |
+| 8 | 20.34 | 2.54 | 0.75 h |
+| **11** | **25.06** | 2.28 | **0.61 h** |
+| 12 | 23.91 | 1.99 | 0.63 h |
+
+**Eleven workers on twelve cores is a measurement, not a courtesy.** Twelve is slower than eleven, and
+the per-worker rate halves by eight, which is what memory-bandwidth-bound work looks like - the
+reducer walks a 16.8 MB buffer per source tile. The default is `availableParallelism() - 1` and
+`--jobs` overrides it.
+
+**The claim that this changed no bytes is checked against the real thing.** A green suite cannot see a
+reordered tile, so the serial tool at `a25505b` and the parallel one were each run over a copy of the
+same 16,384 master - 40 base tiles, three levels, including padded quadrants and a one-tile level.
+Serial, `--jobs 1` and `--jobs 8` all came out at SHA-256 `18e6d466...`, byte for byte identical.
+`tools/probe-pyramid-order.mjs` holds the parts of that a gate can carry: ordering under a backwards
+schedule, the quadrant mapping read back by corner, and one byte stream across three job counts, each
+ablated.
 
 ## What it touches
 
