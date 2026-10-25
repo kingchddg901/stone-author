@@ -3905,10 +3905,6 @@
     "terms": [],
     "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. Wood has two views of one tree: the BOARD, a cut along the trunk, and the LOG, a section straight across it. Only the board is on the shader. Should match the name of the log view control"
   },
-  "exp.gpu.woodstage": {
-    "terms": [],
-    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. A wood slab can show several boards sawn down the same log, or several sections each with its own settings. The GPU path prepares one tree once for the whole export and cannot change it between boards, so it steps aside"
-  },
   "exp.gpu.floor": {
     "terms": [],
     "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. Laying tiles paints pieces, which the GPU path does not do. Should match the floor/tile wording used elsewhere"

@@ -789,7 +789,6 @@
   "exp.gpu.notglass": "non è una lastra di vetro",
   "exp.gpu.nomaterial": "questo materiale non ha uno shader",
   "exp.gpu.logview": "la vista del tronco non è sullo shader",
-  "exp.gpu.woodstage": "più di una tavola",
   "exp.gpu.floor": "un pavimento a piastrelle",
   "exp.gpu.uv": "la luce UV",
   "exp.gpu.backlight": "la retroilluminazione",

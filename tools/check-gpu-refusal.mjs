@@ -25,6 +25,7 @@
 import { readFileSync } from 'fs';
 import { packReal } from './lib/glass-real.mjs';
 
+const NL = String.fromCharCode(10);
 let fails = 0;
 const ok = (name, cond, detail) => {
   if (cond) { console.log('  ok    ' + name); return; }
@@ -231,6 +232,99 @@ const has = (re, name) => ok(name, re.test(APP), String(re));
   const cut = APP.replace(/gpuFail = \(e && e\.message\) \|\| String\(e\);\n\s*/g, '');
   const n = (cut.match(/gpuFail = /g) || []).length;
   ok('ABLATION with the capture stripped, the site count is no longer 2', n !== 2, n + ' site(s)');
+}
+
+
+// ---- 7: A REFUSAL MUST BE ABOUT THE PATH IT STANDS IN FOR -------------------------------------------
+// THIS COST A RENDER. The wood descriptor refused `stageN() > 1 || woodBandY !== 0`, reasoning that a
+// sectioned or staged slab is painted by walking boards while the pool packs one scene. True of the
+// FLOOR and PREVIEW painters, and of neither path gpuPool serves: stageN() is read at five places,
+// every one inside drawTilesTo, the composite builder or the sections panel. exportTiff paints through
+// renderOneTile -> paintContent -> paintWoodContent, which never consults it, and the floor is already
+// refused by exp.gpu.floor one line above.
+//
+// Two 65,535 wood masters came back `gpu refused: exp.gpu.woodstage, pool 12x2048` carrying `floor none
+// laid - these pixels are the slab` in the same record: the master saying in one line that sections
+// played no part in the picture the clause turned away.
+//
+// SO THE RULE, AND IT IS DERIVABLE: a clause may only be predicated on something the painter it is
+// standing in for actually READS. If the CPU painter never consults a value, the shader cannot disagree
+// with it about that value, and refusing on it turns away work for nothing. Each material names its own
+// painter and scene builder below - those two are the whole of what the shader is a port OF.
+//
+// WHAT IT DOES NOT CATCH, said plainly: `woodBandY` IS read by paintWoodContent, so that half of the
+// bad clause would have passed this. It was not wrong in the same way - bandY rides in the uniform, so
+// the shader paints whichever board the painter would - it was merely unreachable. This gate is aimed
+// at the half that turned away a real document.
+{
+  const body = sig => {
+    const k = APP.indexOf(sig);
+    if (k < 0) return null;
+    let i = APP.indexOf('{', k), d = 0;
+    for (;; i++) { if (APP[i] === '{') d++; else if (APP[i] === '}' && --d === 0) break; }
+    return APP.slice(k, i + 1);
+  };
+  const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '')
+                      .split(String.fromCharCode(10)).map(l => l.replace(/\/\/.*$/, ''))
+                      .join(String.fromCharCode(10));
+
+  // WHAT THE SHADER IS A PORT OF, per material: the content painter and the scene it reads.
+  const SERVES = {
+    glass: ['function paintGlassContent(', 'function glassScene()'],
+    wood: ['function paintWoodContent(', 'function woodSampler()'],
+  };
+  // NAMES THAT ARE NOT DOCUMENT STATE. Operators, literals and the key strings a clause returns.
+  const NOISE = new Set(['why', 'null', 'true', 'false', 'exp', 'gpu', 'log', 'Math', 'max', 'min',
+                         'relief', 'logview', 'undefined']);
+
+  const mat = APP.indexOf('const GPU_MAT = {');
+  ok('the material descriptors are where this gate looks', mat >= 0);
+  let mi = APP.indexOf('{', mat), md = 0;
+  for (;; mi++) { if (APP[mi] === '{') md++; else if (APP[mi] === '}' && --md === 0) break; }
+  const descriptors = APP.slice(mat, mi + 1);
+
+  let checked = 0;
+  for (const [name, sigs] of Object.entries(SERVES)) {
+    // the clause for this material: `why: () => ( ... ),` inside its own entry
+    const at = descriptors.indexOf(name + ': {');
+    ok(name + ' has a descriptor', at >= 0);
+    if (at < 0) continue;
+    const rest = descriptors.slice(at);
+    const w = rest.indexOf('why: () =>');
+    ok(name + ' declares a refusal clause', w >= 0);
+    if (w < 0) continue;
+    const clause = strip(rest.slice(w, rest.indexOf(NL + '      pack:', w)));
+
+    const painter = sigs.map(s => strip(body(s) || '')).join(NL);
+    ok(name + ': its painter and scene are readable', painter.length > 500, painter.length + ' chars');
+
+    // every identifier the clause reads, minus the noise and minus quoted key strings
+    const noStrings = clause.replace(/'[^']*'/g, "''");
+    const reads = [...new Set([...noStrings.matchAll(/[A-Za-z_$][\w$]*/g)].map(m => m[0]))]
+      .filter(n => !NOISE.has(n));
+    const orphan = reads.filter(n => painter.indexOf(n) < 0);
+    ok(name + ': every value its clause reads, its painter reads too', orphan.length === 0,
+       'READ BY NOBODY IT SERVES: ' + orphan.join(', '));
+    checked++;
+    if (name === 'wood') {
+      ok('and wood no longer refuses on stageN at all', clause.indexOf('stageN') < 0, clause.trim());
+    }
+  }
+  ok('both materials were checked', checked === 2, checked + ' of 2');
+
+  // ---- the ablation: put the defect back and this must go red --------------------------------------
+  {
+    const painter = strip(body('function paintWoodContent(') || '')
+                  + strip(body('function woodSampler()') || '');
+    const bad = "why: () => (view === 'log' ? 'exp.gpu.logview' : stageN() > 1 ? 'x' : null),";
+    const reads = [...new Set([...bad.replace(/'[^']*'/g, "''").matchAll(/[A-Za-z_$][\w$]*/g)]
+      .map(m => m[0]))].filter(n => !NOISE.has(n));
+    const orphan = reads.filter(n => painter.indexOf(n) < 0);
+    ok('ABLATION the clause that cost a render is caught', orphan.indexOf('stageN') >= 0,
+       'orphans were ' + orphan.join(', '));
+    ok('and the clause that replaced it is not', !strip(body('function paintWoodContent(') || '')
+       .split('view').length < 2 || painter.indexOf('view') >= 0);
+  }
 }
 
 console.log('');

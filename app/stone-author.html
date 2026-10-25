@@ -939,7 +939,6 @@ window.SA_I18N = (() => {
   "exp.gpu.notglass": "not a glass slab",
   "exp.gpu.nomaterial": "this material has no shader",
   "exp.gpu.logview": "the log view is not on the shader",
-  "exp.gpu.woodstage": "more than one board",
   "exp.gpu.floor": "a tiled floor",
   "exp.gpu.uv": "the UV light",
   "exp.gpu.backlight": "the back light",
@@ -1832,7 +1831,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.223';
+  const BUILD = '2026.10.25.224';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -16013,20 +16012,27 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // otherwise surface as a validation error with nothing to point at.
       uni: WOOD_UNI_BYTES,
       off: () => ({ x: WOOD_UNI_OFF('tileX'), y: WOOD_UNI_OFF('tileY'), h: WOOD_UNI_OFF('tileH') }),
-      // TWO REFUSALS, AND BOTH ARE SHAPES THE SHADER CANNOT REPRESENT RATHER THAN RISKS.
+      // ONE REFUSAL, AND IT IS A SHAPE THE SHADER CANNOT REPRESENT RATHER THAN A RISK.
       //
       // THE LOG VIEW is a different painter - paintWoodLog cuts the same field at z = const instead
       // of x = const - and nothing of it is ported. paintWoodContent returns early for it, so the
       // shader would draw the board while the CPU drew the section.
       //
-      // MORE THAN ONE BOARD is the one worth reading twice. A sectioned or staged slab is painted
-      // by walking boards, setting woodBandY per piece and in the sectioned case swapping the whole
-      // WOOD config in; the pool packs ONE scene for the whole export and cannot follow that. The
-      // honest refusal is the broad one: a wrongly accepted document is a wrong picture written
-      // into a master, and a wrongly refused one is the CPU painter drawing the right picture more
-      // slowly. Widening this needs the staged export path measured, which has not been done.
-      why: () => (view === 'log' ? 'exp.gpu.logview'
-                : (stageN() > 1 || woodBandY !== 0) ? 'exp.gpu.woodstage' : null),
+      // THERE WAS A SECOND ONE AND IT WAS WRONG. `stageN() > 1 || woodBandY !== 0` refused a
+      // sectioned or staged slab on the reasoning that such a picture is painted by walking boards
+      // while the pool packs one scene. Every word of that is true of the FLOOR and PREVIEW
+      // painters and of neither thing this descriptor serves: stageN() is read at five places, all
+      // of them inside drawTilesTo, the composite builder or the sections panel, and woodBandY is
+      // set only by those same walks and reset by them. exportTiff paints through renderOneTile ->
+      // paintContent -> paintWoodContent, which consults neither; the floor is already refused one
+      // line above by exp.gpu.floor; and bandY rides in the uniform anyway, so the shader paints
+      // whichever board the painter would.
+      //
+      // IT COST A REAL RENDER. Two 65,535 wood masters came back `gpu refused: exp.gpu.woodstage,
+      // pool 12x2048` with `floor none laid - these pixels are the slab` in the same record, which
+      // is the master saying in one line that sections played no part in the picture the clause
+      // turned away. A guard aimed at a path other than the one it stands in.
+      why: () => (view === 'log' ? 'exp.gpu.logview' : null),
       pack: (ew, W) => {
         const S = woodSampler();
         // THE CUT PLANE, taken exactly where paintWoodContent takes it. pn is the painter's, not the
