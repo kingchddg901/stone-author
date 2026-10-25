@@ -16,7 +16,19 @@
 // single large function cannot be bisected that way, so the two small ones are the chance to prove
 // the plumbing before the thing that cannot be halved arrives.
 
+import { FE_FIELDS, FE_STRIDE } from './wood-real.mjs';
+
 export const WGSL = {};
+
+// THE FIELD INDICES, GENERATED FROM THE PACKER'S OWN LIST. A shader that indexes a record by number
+// and a packer that writes it by name are a replica pair, and today that pair has already drifted
+// once - `wl` left for its own part and took index 4 with it. Typing the numbers here a second time
+// would be the third copy of the layout. They are built instead, so a reorder in wood-real.mjs
+// moves them without anybody remembering.
+const LF = String.fromCharCode(10);   // no escape sequence survives a generator intact
+WGSL.woodFields = FE_FIELDS.map((k, i) => 'const FE_' + k + ': i32 = ' + i + ';').join(LF) +
+  LF + 'const FE_STRIDE: i32 = ' + FE_STRIDE + ';';
+
 
 // AN EYE IS A CELL LOOKUP, NOT A TEXTURE. Nine cells around the point, each holding one jittered eye
 // of its own size; the nearest one that actually covers the point wins.
@@ -105,7 +117,7 @@ fn aWZS(w: i32, z: i32) -> f32 { return ARR[E.oWZS + w * E.Z + z]; }
 // FE_STRIDE and the field order come from wood-real.mjs's FE_FIELDS. A shader that indexes by
 // number and a packer that writes by name are a replica pair and drift silently, so the stride is
 // repeated here once and check-wood-shader holds the two together.
-fn aFE(q: i32, f: i32) -> f32 { return ARR[E.oFE + q * 20 + f]; }
+fn aFE(q: i32, f: i32) -> f32 { return ARR[E.oFE + q * FE_STRIDE + f]; }
 fn aFEAL(q: i32, i: i32) -> f32 { return ARR[E.oFEAL + q * E.NA + i]; }
 fn aFEZW(q: i32, z: i32) -> f32 { return ARR[E.oFEZW + q * E.Z + z]; }
 fn aFEWL(q: i32, k: i32) -> f32 { return ARR[E.oFEWL + q * E.K + k]; }
@@ -171,9 +183,9 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
       }
     }
     for (var q = 0; q < E.NF; q = q + 1) {
-      let ca = (ddx * aFE(q, 1) + ddy * aFE(q, 2)) * inv;
+      let ca = (ddx * aFE(q, FE_ux) + ddy * aFE(q, FE_uy)) * inv;
       let ai = i32((ca + 1.0) * 0.5 * f32(E.NA - 1));
-      SQ[q] = aFE(q, 0) * aFEAL(q, ai) * aFEZW(q, zi);
+      SQ[q] = aFE(q, FE_amp) * aFEAL(q, ai) * aFEZW(q, zi);
     }
     let gi0 = i32(rad * E.KS);
     let ur = aUREL(gi0);
@@ -260,4 +272,114 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
     cr = cr * m2; cg = cg * m2 * 0.94; cb = cb * m2 * 0.88;
   }
   return vec4<f32>(cr, cg, cb, 1.0);
+}`;
+
+// ---- HALF TWO: THE KNOT FACE -----------------------------------------------------------------------
+// KN is the ONE feature carrying a knot face - the app finds it once per paint with
+// FE.find(f => f.kn > 0) - and E.KNI is its index, or -1 when the tree has none.
+//
+// IT REPLACES THE COLOUR RATHER THAN BLENDING INTO IT. Everything above this is the wood the branch
+// grew THROUGH; inside the cone there is no trunk ring to tint, there is branch. The w component
+// says whether the point landed inside, and the caller takes xyz only when it did.
+//
+// THE CONE, NOT A CYLINDER. rb grows with distance along the branch, and a dead one stopped gaining
+// rings when it died - te clamps the length that counts, which is what makes an encased knot a cone
+// frozen at its burial and a live one a cone that is still widening.
+//
+// q2 IS PYTHAGORAS WITH THE ALONG-AXIS PART SUBTRACTED, and it is clamped at zero because floating
+// point can take it a hair negative on the axis itself, where the answer is exactly zero.
+WGSL.woodKnot = `
+fn woodKnot(ddx: f32, ddy: f32, zp: f32, zi: i32, rad: f32, rad0: f32) -> vec4<f32> {
+  if (E.KNI < 0) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+  let k = E.KNI;
+  let dzz = zp - aFE(k, FE_zc);
+  let tt = ddx * aFE(k, FE_ax) + ddy * aFE(k, FE_ay) + dzz * aFE(k, FE_az);     // along the branch, from the pith
+  let r0 = aFE(k, FE_r0);
+  let rDie = aFE(k, FE_rDie);
+  if (!(tt > r0 && tt <= rDie)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+
+  let te = select(rDie, tt, tt < rDie);                             // it stopped gaining rings when it died
+  let rb = aFE(k, FE_kn) * (te - r0);
+  let ss = ddx * aFE(k, FE_px) + ddy * aFE(k, FE_py);
+  let q2 = max(0.0, rad0 * rad0 + dzz * dzz - tt * tt);
+  if (!(q2 < rb * rb)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+
+  var dd = sqrt(q2);
+  if (E.WAVY != 0) {
+    // THE SAME WAVE FAMILY, ON THE BRANCH'S OWN PERPENDICULARS. The trunk's harmonics are taken
+    // around the pith; here they are taken around the branch axis, which is why qx/qy/qz exist at
+    // all - the second perpendicular, so the recurrence has a plane to turn in.
+    let bb = ddx * aFE(k, FE_qx) + ddy * aFE(k, FE_qy) + dzz * aFE(k, FE_qz);
+    let iq = 1.0 / select(dd, 1e-9, dd == 0.0);
+    let bc = ss * iq;
+    let bs = bb * iq;
+    var ck = 1.0;
+    var sk = 0.0;
+    for (var h = 0; h < E.WK; h = h + 1) { let x = ck * bc - sk * bs; sk = sk * bc + ck * bs; ck = x; }
+    dd = dd + (sk * aWZC(0, zi) + ck * aWZS(0, zi)) * aWVA(i32(rad * E.KS)) * 0.5;
+    if (dd < 0.0) { dd = 0.0; }
+  }
+
+  var kv = 1.0;
+  var kcr = E.knotR;
+  var kcg = E.knotG;
+  var kcb = E.knotB;
+
+  if (E.HASGRAFT != 0) {
+    // GRAFTED: the branch takes its rings FROM THE SCION'S OWN TREE, not from a synthetic pitch.
+    // aLoc is where along the scion's life this part of the branch sits, so an older part of the
+    // stem reads an older ring - the walk is the recipe rather than a scatter.
+    let aLoc = aFE(k, FE_ageN) * (rb / aFE(k, FE_rbMax));
+    let hi = f32(E.Gn - 1);
+    let aIx = i32(select(select(aLoc, hi, aLoc > hi), 1.0, aLoc < 1.0));
+    let gRad = (dd / select(rb, 1e-9, rb == 0.0)) * aGEDGE(aIx);
+    let gq = i32(gRad * E.GKS);
+    let gl = select(E.GK - 1, gq, gq < E.GK);
+    let gw = aGLUT(gl);
+    let gmv = 1.0 + aGTV(gl);
+    let gmw = aGTW(gl) * 26.0;
+    kcr = (E.gLateR + (E.gEarlyR - E.gLateR) * gw) * gmv + gmw;
+    kcg = (E.gLateG + (E.gEarlyG - E.gLateG) * gw) * gmv;
+    kcb = (E.gLateB + (E.gEarlyB - E.gLateB) * gw) * gmv - gmw;
+    kv = 1.0;
+  } else {
+    // UNGRAFTED: its own latewood, at its own pitch - a branch is a stem and has a stem's history,
+    // and without this it reads as a drilled hole rather than as wood.
+    let u2 = (dd * aFE(k, FE_kp)) % 1.0;
+    let lt = select(0.0, (u2 - 0.72) / 0.28, u2 > 0.72);
+    kv = 1.0 - 0.55 * lt * lt;
+  }
+
+  // THE RIM. An INTERGROWN knot joins the wood that grew around it and stays tight; one that was
+  // PRUNED OR DIED gets a bark ring, and prune fades that ring out as the collar closes over it.
+  let rim = dd / select(rb, 1e-9, rb == 0.0);
+  if (aFE(k, FE_dead) != 0.0) {
+    let pr = aFE(k, FE_prune);
+    kv = kv * (0.72 + 0.2 * pr);                                    // sound heartwood is darker, not dead
+    if (rim > 0.74) { kv = kv * (0.18 + (0.55 - 0.18) * pr); }
+  } else if (rim > 0.88) {
+    kv = kv * 0.55;
+  }
+  return vec4<f32>(kcr * kv, kcg * kv, kcb * kv, 1.0);
+}`;
+
+// ---- THE TWO HALVES, COMPOSED ----------------------------------------------------------------------
+// The whole of shade. Written as a composition rather than one function so the integration can be
+// BISECTED: render a wood tile both ways, and if it diverges, return early from woodKnot and
+// measure again. The defect is then in one half or the other without needing a CPU twin for each,
+// which gpu-port-harness cannot provide here - shade is a closure, not a top-level function, so
+// liftFromApp has nothing to find.
+//
+// OUT OF RANGE IS A FALSE RETURN, NOT A COLOUR. The app returns false outside the log and the caller
+// paints the surround, which is the live edge of a board wider than the log it came from. w carries
+// that through both halves.
+WGSL.woodShade = `
+fn woodShade(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4<f32> {
+  let body = woodShadeBody(ddx, ddy, zi, zp, fu, fv);
+  if (body.w == 0.0) { return body; }                               // outside the log
+  let rad0 = sqrt(ddx * ddx + ddy * ddy);
+  let rad = rad0 * aGINV(zi) + aZOFF(zi);
+  let knot = woodKnot(ddx, ddy, zp, zi, rad, rad0);
+  let c = select(body.xyz, knot.xyz, knot.w > 0.0);
+  return vec4<f32>(clamp(c, vec3<f32>(0.0), vec3<f32>(255.0)), 1.0);
 }`;
