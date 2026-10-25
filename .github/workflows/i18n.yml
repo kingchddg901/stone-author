@@ -95,6 +95,8 @@ jobs:
         run: node tools/check-wood-pack.mjs
       - name: Every array the wood shader indexes is packed as one
         run: node tools/check-wood-inputs.mjs
+      - name: The probe pages still parse
+        run: node tools/check-probe-pages.mjs
       - name: The ported wood blocks carry the app's own constants
         run: node tools/check-wood-shader.mjs
       - name: The mark's entry gate is wide enough for the one field that defeats the read

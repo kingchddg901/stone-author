@@ -315,9 +315,7 @@ function cases(app) {
       // FIVE ARGUMENTS, ALL VARIED. Holding cell, wFt or rad fixed would leave the near-pith cap
       // untested - it only bites when wFt exceeds half a cell times the radius - and the cap is the
       // branch most likely to have been ported wrong.
-      call: '  OUT[i * 2] = woodEye(IN[i * 8], IN[i * 8 + 1], IN[i * 8 + 2], IN[i * 8 + 3], IN[i * 8 + 4]);'
-          + '
-  OUT[i * 2 + 1] = 0.0;',
+      call: '  OUT[i * 2] = woodEye(IN[i * 8], IN[i * 8 + 1], IN[i * 8 + 2], IN[i * 8 + 3], IN[i * 8 + 4]); OUT[i * 2 + 1] = 0.0;',
       inputs: () => { const a = new Float32Array(N * 8);
         for (let i = 0; i < N; i++) {
           // theta runs NEGATIVE as well, which is the floor-before-convert case: a board on the far
@@ -336,9 +334,7 @@ function cases(app) {
     { name: 'woodStain', kind: 'f32', needs: ['nz', 'vnoise', 'fbm2', 'woodStain'], gpuTranscendental: true,
       // Swept across the threshold on purpose: below it the answer is a hard zero, above it a ramp
       // that saturates at 1. Both sides and the knee, or the clamp goes unexercised.
-      call: '  OUT[i * 2] = woodStain(IN[i * 8], IN[i * 8 + 1], IN[i * 8 + 2], IN[i * 8 + 3], IN[i * 8 + 4]);'
-          + '
-  OUT[i * 2 + 1] = 0.0;',
+      call: '  OUT[i * 2] = woodStain(IN[i * 8], IN[i * 8 + 1], IN[i * 8 + 2], IN[i * 8 + 3], IN[i * 8 + 4]); OUT[i * 2 + 1] = 0.0;',
       inputs: () => { const a = new Float32Array(N * 8);
         for (let i = 0; i < N; i++) {
           a[8 * i]     = Math.fround(((i % 397) - 198) / 50);
