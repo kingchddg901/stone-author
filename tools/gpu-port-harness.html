@@ -312,19 +312,34 @@ function cases(app) {
     // each has a CPU twin that can be driven with the same inputs, and 130 lines in one function
     // cannot be bisected that way. Prove the plumbing here while a disagreement is still findable.
     { name: 'woodEye', kind: 'f32', needs: ['woodHash', 'woodEye'], gpuTranscendental: true,
-      // FIVE ARGUMENTS, ALL VARIED. Holding cell, wFt or rad fixed would leave the near-pith cap
-      // untested - it only bites when wFt exceeds half a cell times the radius - and the cap is the
-      // branch most likely to have been ported wrong.
+      // FIVE ARGUMENTS, ALL VARIED, AND ALL INSIDE WHAT THE PAINTER CAN PASS. The first sweep was
+      // not: it ran cell down to 0.004 and wFt up to 0.052, and failed 108 of 4096 there. Neither is
+      // a tree. The call site is
+      //
+      //   eyeG = woodEye(woodAtan2(ddy, ddx), zp, ECELL, ERADFT, rad0)
+      //
+      // and the two it passes are built from sliders:
+      //
+      //   ECELL  = max(eyeSpacing * (1/12), 0.002)   eyeSpacing 0.3 .. 8    -> 0.025 .. 0.667
+      //   ERADFT = max(eyeSize, 0.02) * (1/12) * 0.5 eyeSize    0.04 .. 0.8 -> 0.00167 .. 0.0333
+      //
+      // So cell was swept SIX TIMES below anything the control can produce and wFt 1.5x above its
+      // maximum. Rendered at the real bounds the two paths do not differ by a measurable amount at
+      // all; rendered at 0.004 they differ on 2.3% of pixels, as isolated single pixels, worst 0.38
+      // of a colour level. A gate that fails on impossible inputs teaches nothing.
+      //
+      // theta stays a real angle and rad a real radius: woodAtan2 returns -pi..pi, and shade has
+      // already refused anything past the bark before it calls this.
       call: '  OUT[i * 2] = woodEye(IN[i * 8], IN[i * 8 + 1], IN[i * 8 + 2], IN[i * 8 + 3], IN[i * 8 + 4]); OUT[i * 2 + 1] = 0.0;',
       inputs: () => { const a = new Float32Array(N * 8);
         for (let i = 0; i < N; i++) {
           // theta runs NEGATIVE as well, which is the floor-before-convert case: a board on the far
           // side of the pith. A positive-only sweep would pass with a bare i32().
-          a[8 * i]     = Math.fround(((i % 401) - 200) / 60);
-          a[8 * i + 1] = Math.fround(((i * 17) % 353) / 11);
-          a[8 * i + 2] = Math.fround(0.004 + ((i * 7) % 97) / 97 * 0.09);
-          a[8 * i + 3] = Math.fround(0.002 + ((i * 29) % 83) / 83 * 0.05);
-          a[8 * i + 4] = Math.fround(0.05 + ((i * 11) % 131) / 131 * 2.4);
+          a[8 * i]     = Math.fround(((i % 401) - 200) / 64 * Math.PI / 3.125);  // -pi .. pi
+          a[8 * i + 1] = Math.fround(((i * 17) % 353) / 11);                      // height up the log
+          a[8 * i + 2] = Math.fround(0.025 + ((i * 7) % 97) / 97 * 0.642);        // ECELL
+          a[8 * i + 3] = Math.fround(0.00167 + ((i * 29) % 83) / 83 * 0.0316);    // ERADFT
+          a[8 * i + 4] = Math.fround(0.05 + ((i * 11) % 131) / 131 * 2.4);        // rad0, pith to bark
         } return a; },
       cpu: a => { const o = new Float64Array(N * 2);
         for (let i = 0; i < N; i++)
@@ -334,14 +349,22 @@ function cases(app) {
     { name: 'woodStain', kind: 'f32', needs: ['nz', 'vnoise', 'fbm2', 'woodStain'], gpuTranscendental: true,
       // Swept across the threshold on purpose: below it the answer is a hard zero, above it a ramp
       // that saturates at 1. Both sides and the knee, or the clamp goes unexercised.
+      //
+      // AND INSIDE THE PAINTER'S OWN RANGE, for the same reason as woodEye above:
+      //
+      //   MINV = 1 / max(mineralSpacing * (1/12), 0.004)  spacing 0.3 .. 12 -> 1 .. 40
+      //   MTHR = 0.92 - clamp(mineralSize) * 0.52         size    0 .. 1    -> 0.40 .. 0.92
+      //
+      // The first sweep ran inv to 64, which is 1.6x the highest frequency the control reaches - and
+      // frequency is exactly what makes this diverge in f32. MTHR was already right.
       call: '  OUT[i * 2] = woodStain(IN[i * 8], IN[i * 8 + 1], IN[i * 8 + 2], IN[i * 8 + 3], IN[i * 8 + 4]); OUT[i * 2 + 1] = 0.0;',
       inputs: () => { const a = new Float32Array(N * 8);
         for (let i = 0; i < N; i++) {
-          a[8 * i]     = Math.fround(((i % 397) - 198) / 50);
-          a[8 * i + 1] = Math.fround(0.02 + ((i * 13) % 211) / 211 * 1.8);
-          a[8 * i + 2] = Math.fround(((i * 23) % 307) / 7);
-          a[8 * i + 3] = Math.fround(4 + ((i * 31) % 89) / 89 * 60);
-          a[8 * i + 4] = Math.fround(0.40 + ((i * 37) % 53) / 53 * 0.52);
+          a[8 * i]     = Math.fround(((i % 397) - 198) / 63);                 // -pi .. pi
+          a[8 * i + 1] = Math.fround(0.02 + ((i * 13) % 211) / 211 * 1.8);     // radius, feet
+          a[8 * i + 2] = Math.fround(((i * 23) % 307) / 7);                    // height up the log
+          a[8 * i + 3] = Math.fround(1 + ((i * 31) % 89) / 89 * 39);           // MINV
+          a[8 * i + 4] = Math.fround(0.40 + ((i * 37) % 53) / 53 * 0.52);      // MTHR
         } return a; },
       cpu: a => { const o = new Float64Array(N * 2);
         for (let i = 0; i < N; i++)
