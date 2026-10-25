@@ -7,6 +7,26 @@
 > size** is recorded (`bytes`); a sidecar carries the master's own block verbatim, and the block's
 > `bytes` counts image data only — 3.9 MB short of the file on one 262,144 master. Use the index for
 > anything about compression, and the sidecars for anything about the render.
+>
+> **A master with pyramid levels breaks the second half of that advice.** The 3.9 MB gap is the tail —
+> directory, offset arrays, JSON block — and it is small because nothing but pixels normally sits in a
+> master. Levels are not pixels the render produced. Measured on the 1,048,576 master after
+> [`add-overviews`](../image-pyramid.md) appended nine of them on 2026-10-25:
+>
+> | | |
+> |---|---|
+> | sidecar `bytes` — what the render wrote | 44,688,880,685 |
+> | index `bytes` — the file on disk | 84,869,197,241 |
+> | gap | **40,180,316,556, or 89.9%** — it was 5,244,531 before the append |
+>
+> So for a levelled master the index figure answers *how big is this file* and nothing else. **Bytes
+> per pixel taken from it is inflated 1.9×**, because 40 GB of overviews are divided by the base
+> level's pixel count. Take compression from the sidecar, or per level out of the directories.
+>
+> The re-harvest that produced those numbers moved exactly one field of thirty-two — `bytes` in the
+> row — and not one byte of the 8,377,859-byte sidecar, which is the split doing its job: the append
+> changed the file and changed nothing about the render. This is currently the only row of 1,049 where
+> the two disagree by more than a tail.
 
 The metadata extract (a **sidecar**) from a master: what it was, what made it, and how long each tile
 took. **Twenty-one masters, twenty-one sidecars**, in four sets that are evidence for four different things.
