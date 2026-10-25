@@ -541,6 +541,82 @@ pins it doing arithmetic.
 So the GPU question is a glass question. Stone would get nothing, and every 1,048,576 rendered so far
 has been stone.
 
+### The controlled matrix, 2026-10-25 — and wood is not stone
+
+**Every figure above crosses something.** The stone-against-glass pair was two slabs; the worker counts
+differed; the builds differed; the widths differed. That was enough to answer "is this a glass
+question" and not enough to answer anything about wood, which is why the first wood reading in this
+project got written down as "sits in stone's band" and was wrong.
+
+So: one slab carrying all three materials, one build, one width, one tile size, both worker counts.
+Ten cells.
+
+| material | light | path | 8 workers | 12 workers | Mpx/s at 12 | file |
+| --- | --- | --- | --- | --- | --- | --- |
+| stone | day | CPU | 27.4 s | **26.0 s** | 103.0 | 0.645 GB |
+| stone | uv | CPU | 26.8 s | **26.0 s** | 103.3 | 0.663 GB |
+| wood | day | CPU | 121.2 s | **105.8 s** | 25.4 | 0.092 GB |
+| glass | day | CPU | 273.6 s | **222.5 s** | 12.1 | 0.025 GB |
+| glass | day | GPU | **11.1 s** | 11.3 s | 238.1 | 0.026 GB |
+
+*universal master all three materials, 65,535, tile 2048, build 2026.10.25.211*
+
+#### The worker-scaling gradient is a second instrument, and it agrees with the first
+
+| | 8 to 12 workers |
+| --- | --- |
+| stone | **1.03 – 1.05x** |
+| wood | **1.15x** |
+| glass, CPU | **1.23x** |
+| glass, GPU | **1.01x** - nothing |
+
+**What four more cores buy tracks per-pixel cost exactly.** Stone is hand-off bound and barely notices
+them; glass is compute-bound and gains most. §1 reached that conclusion for stone from load shape -
+0.72 CPU threads per busy worker, the GPU already two-thirds busy - and this reaches it from a
+completely different direction, on one document, with nothing crossed.
+
+**Wood is intermediate and leans glass.** It is 2.1x cheaper per pixel than glass where stone is 4.1x
+cheaper than wood, and its scaling response sits between the two. Both instruments say the same
+thing: **a shader port would help wood - less than it helped glass, and not nothing.** That is not
+the answer this document would have given yesterday, and it is not the answer the first wood
+measurement gave either, because that render was carrying a reality window it should never have had.
+
+#### What this corrects
+
+**Pool 12 on the GPU path is worth nothing here, and the 1.31x measured for it was the window.**
+Earlier the same slab gave 81.9 s at pool 8 against 62.5 at pool 12 - but both carried a stone window
+composited into a glass render, and a window is an alt render whose cost scales with the pool the way
+the render does. With it gone, 8 and 12 are 11.1 and 11.3 seconds: the same number twice.
+
+So pool width on the GPU path is **slab-dependent**, and the thing it depends on is how much deflate
+the finishers are given. This glass compresses to 0.025 GB against `Glass Master Source`'s 0.417 -
+sixteen times less to chew - so the workers have slack at eight and more of them buy nothing. On a
+heavy slab they would.
+
+#### The window, measured on two materials
+
+210 against 211 is nothing but the window scoping, so these are controlled:
+
+| | with | without | |
+| --- | --- | --- | --- |
+| wood, CPU 8 | 155.2 s | 121.2 s | **1.28x - 34.0 s** |
+| glass, GPU 12 | 62.5 s | 11.3 s | **5.5x - 51.2 s** |
+
+Close in absolute seconds, wildly different as a fraction, and the reason is worth chasing: the alt
+render goes through `renderSlabTo`, which is not the GPU path. On a GPU glass render that is CPU work
+sitting on top of eleven seconds. Stated as a hypothesis, not a measurement.
+
+**And stone pays the same in daylight as under black light** - 26.0 s against 26.0 s, both carrying
+the window. The island is invisible in one and the loudest object in the picture in the other, and it
+costs the same either way, so the cost is the alt render rather than the compositing.
+
+#### The file sizes invert the whole table
+
+Stone renders **8.6x faster** than glass and writes a file **26x larger**. `master-size.md` warns that
+the quick render is the big file and neither tells you the other; this is that, in one document, with
+every other variable held still.
+
+
 ---
 
 ## 2. The work is fragment-shader *shaped*, and that was the wrong thing to measure
