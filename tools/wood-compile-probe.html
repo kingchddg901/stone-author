@@ -1,0 +1,167 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>wood shader: does it compile</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, monospace; background: #15161a; color: #d9dde3;
+         margin: 0; padding: 18px 20px; }
+  h1 { font: 600 14px/1.4 ui-monospace, monospace; margin: 0 0 14px; color: #f0f3f7; }
+  .r { padding: 2px 0; }
+  .ok { color: #7fd18b; }
+  .no { color: #ef7d7d; }
+  .dim { color: #8b929c; }
+  pre { background: #1d1f25; border-left: 2px solid #3a3e47; margin: 6px 0 10px;
+        padding: 8px 10px; overflow-x: auto; white-space: pre-wrap; }
+  #src { color: #8b929c; font-size: 12px; }
+</style>
+<h1>wood shader &mdash; compile and build every pipeline</h1>
+<div id="out"></div>
+<pre id="src"></pre>
+
+<script type="module">
+// THE ONE CHECK NO GATE IN THIS REPO CAN MAKE.
+//
+// Fifty-six gates run in CI and not one of them executes WGSL: there is no GPU on a runner and
+// Playwright will not spawn on this machine, so every shader block is unverified text until a real
+// device is asked to build it. check-wood-shader says so in its own header and calls itself the
+// floor.
+//
+// This is the step above that floor, and it is deliberately narrow. It does NOT render anything and
+// does not compare a picture - it asks a device to compile the assembled wood module and to create
+// every pipeline the export pool creates, which is the whole class of failure that reaches the user
+// as "the GPU refused and would not say why". A missing entry point, a workgroup array that will not
+// size, a struct field the shader reads and the Env does not declare: all of those are here, none of
+// them is a syntax error in JS, and all of them survive a green suite.
+//
+//   python tools/serve-studio.py      then  localhost:8777/tools/wood-compile-probe.html
+import { WGSL as GLASS } from './lib/glass-gpu.mjs';
+import { woodSource, WOOD_ORDER } from './lib/wood-gpu.mjs';
+import { UNI_BYTES } from './lib/wood-real.mjs';
+
+const out = document.getElementById('out');
+let bad = 0;
+const row = (good, text, detail) => {
+  if (!good) bad++;
+  const d = document.createElement('div');
+  d.className = 'r';
+  const m = document.createElement('span');
+  m.className = good ? 'ok' : 'no';
+  m.textContent = good ? '  ok   ' : '  FAIL ';
+  d.appendChild(m);
+  d.appendChild(document.createTextNode(text));
+  if (detail) {
+    const s = document.createElement('span');
+    s.className = 'dim';
+    s.textContent = '   ' + detail;
+    d.appendChild(s);
+  }
+  out.appendChild(d);
+};
+const note = text => {
+  const d = document.createElement('div');
+  d.className = 'r dim';
+  d.textContent = '       ' + text;
+  out.appendChild(d);
+};
+const bail = text => { row(false, text); };
+
+const asm = woodSource(GLASS);
+const code = asm.code;
+note(WOOD_ORDER.length + ' wood blocks, ' + asm.borrowed.length + ' borrowed from glass ('
+     + asm.borrowed.join(' ') + ')');
+note(code.split(String.fromCharCode(10)).length + ' lines of WGSL, uniform ' + UNI_BYTES + ' bytes');
+document.getElementById('src').textContent = code;
+
+if (!navigator.gpu) {
+  bail('no WebGPU on this engine - nothing here can run');
+} else {
+  const ad = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+  row(!!ad, 'an adapter answered');
+  const dev = ad && await ad.requestDevice();
+  row(!!dev, 'and a device opened');
+  if (dev) {
+    // UNCAPTURED ERRORS GO SOMEWHERE VISIBLE. Without this they reach the console and the page
+    // reports success, which is the exact failure shape the pool's own fault gate exists for.
+    const faults = [];
+    dev.onuncapturederror = e => faults.push((e && e.error && e.error.message) || 'unknown');
+
+    dev.pushErrorScope('validation');
+    const mod = dev.createShaderModule({ code });
+    const info = await mod.getCompilationInfo();
+    const vErr = await dev.popErrorScope();
+    const errs = info.messages.filter(m => m.type === 'error');
+    const warns = info.messages.filter(m => m.type === 'warning');
+    row(errs.length === 0 && !vErr, 'the module compiles',
+        errs.length ? errs.length + ' error(s)' : (vErr ? vErr.message.split(String.fromCharCode(10))[0] : ''));
+    for (const m of errs.slice(0, 12)) {
+      const p = document.createElement('pre');
+      p.textContent = 'line ' + m.lineNum + ':' + m.linePos + '  ' + m.message;
+      out.appendChild(p);
+    }
+    if (warns.length) note(warns.length + ' warning(s): ' + warns.slice(0, 3).map(w => w.message).join(' | '));
+
+    // EVERY PIPELINE THE POOL CREATES. A module that compiles can still have no entry point by the
+    // name the pool asks for, and that is the failure the dependency closure could not see: nothing
+    // in a shader CALLS pack, packTex, vfull or fblit, so closing over the call sites found none of
+    // them. This is where that goes red instead of on Chris's first wood export.
+    if (!errs.length && !vErr) {
+      for (const ep of ['main', 'pack', 'packTex']) {
+        dev.pushErrorScope('validation');
+        let ok = true, msg = '';
+        try {
+          await dev.createComputePipelineAsync({ layout: 'auto', compute: { module: mod, entryPoint: ep } });
+        } catch (e) { ok = false; msg = (e && e.message) || String(e); }
+        const e2 = await dev.popErrorScope();
+        if (e2) { ok = false; msg = e2.message.split(String.fromCharCode(10))[0]; }
+        row(ok, 'compute pipeline  ' + ep, msg);
+      }
+      dev.pushErrorScope('validation');
+      let okR = true, msgR = '';
+      try {
+        await dev.createRenderPipelineAsync({
+          layout: 'auto',
+          vertex: { module: mod, entryPoint: 'vfull' },
+          fragment: { module: mod, entryPoint: 'fblit',
+                      targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }] },
+          primitive: { topology: 'triangle-list' } });
+      } catch (e) { okR = false; msgR = (e && e.message) || String(e); }
+      const e3 = await dev.popErrorScope();
+      if (e3) { okR = false; msgR = e3.message.split(String.fromCharCode(10))[0]; }
+      row(okR, 'render pipeline   vfull + fblit', msgR);
+    }
+
+    // THE UNIFORM THE SHADER WANTS MUST BE THE ONE THE PACKER WRITES. A struct is padded and
+    // aligned by rules the packer does not apply, so 128 named f32/i32 slots are 512 bytes only if
+    // nothing was promoted to a vec4 boundary. Asking the device for the binding and handing it a
+    // buffer of exactly UNI_BYTES is what settles that, rather than arithmetic on this side.
+    if (!errs.length && !vErr) {
+      dev.pushErrorScope('validation');
+      let okU = true, msgU = '';
+      try {
+        const pipe = await dev.createComputePipelineAsync({
+          layout: 'auto', compute: { module: mod, entryPoint: 'main' } });
+        const ub = dev.createBuffer({ size: UNI_BYTES,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+        const px = dev.createBuffer({ size: 4096,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+        const ar = dev.createBuffer({ size: 4096, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+        dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
+          { binding: 0, resource: { buffer: px } },
+          { binding: 2, resource: { buffer: ub } },
+          { binding: 3, resource: { buffer: ar } }] });
+      } catch (e) { okU = false; msgU = (e && e.message) || String(e); }
+      const e4 = await dev.popErrorScope();
+      if (e4) { okU = false; msgU = e4.message.split(String.fromCharCode(10))[0]; }
+      row(okU, 'a ' + UNI_BYTES + '-byte uniform binds to the struct the shader declares', msgU);
+    }
+
+    await dev.queue.onSubmittedWorkDone();
+    row(faults.length === 0, 'and the device raised nothing outside a scope', faults.join('; '));
+  }
+}
+
+const d = document.createElement('div');
+d.className = 'r ' + (bad ? 'no' : 'ok');
+d.textContent = bad ? String(bad) + ' FAILED' : 'all clear - the wood module builds on this device';
+d.style.marginTop = '12px';
+out.appendChild(d);
+</script>

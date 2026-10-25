@@ -937,6 +937,9 @@ window.SA_I18N = (() => {
   "exp.gpu.nodevice": "the GPU would not open",
   "exp.gpu.noshader": "the shader would not build here",
   "exp.gpu.notglass": "not a glass slab",
+  "exp.gpu.nomaterial": "this material has no shader",
+  "exp.gpu.logview": "the log view is not on the shader",
+  "exp.gpu.woodstage": "more than one board",
   "exp.gpu.floor": "a tiled floor",
   "exp.gpu.uv": "the UV light",
   "exp.gpu.backlight": "the back light",
@@ -1829,7 +1832,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.222';
+  const BUILD = '2026.10.25.223';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15059,6 +15062,880 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         arenaFloats: at,
       } };
   }
+
+  // ---- AND WOOD, the second material through the same path. Its shader is assembled rather
+  // than concatenated: woodSource closes over the calls and borrows woodAtan2, woodHash, fbm2
+  // and what those call in turn from the glass blocks above, so the three functions both
+  // materials use have one definition and one set of probes behind them.
+  //
+  // IN A BLOCK, because both materials name their arena parts PART_NAMES. Four values come out
+  // of it and the pool uses only those.
+  let WOOD_SRC = null, WOOD_PACK = null, WOOD_UNI_OFF = null, WOOD_UNI_BYTES = 0;
+  // CAPTURED OUT HERE, AND THAT IS NOT A STYLE CHOICE. wood-gpu.mjs declares a WGSL of its own
+  // and it keeps it, so inside the block that name is the WOOD one - which makes a capture in
+  // there a read of a const in its own temporal dead zone. The app threw on load and started
+  // nothing: gates green, the shader compiling on a real device, and no studio.
+  const GLASS_WGSL = WGSL;
+  {
+    // THE WOOD SCENE, FLATTENED FOR A SHADER - the packer half of the wood port.
+    //
+    // `glass-real.mjs` does this for glass and this is its sibling, deliberately shaped the same way: one
+    // flat f32 arena of named parts, one uniform of scalars, and a per-entry record for the thing there
+    // are many of. Reading one teaches the other.
+    //
+    // WHY WOOD AND NOT STONE. Measured across the archive at >=16,384 wide on win-chrome: stone renders
+    // at 101.4 Mpx/s, glass at 7.7 on the CPU painter and 102.9 through the shader, wood at 21.9. Stone
+    // was never evaluating a field per pixel - it issues canvas commands the browser already runs on the
+    // GPU - so it is ALREADY at the rate glass reaches with a shader. Wood's painter is the shape
+    // glass's was: createImageData, a nested loop, one call a pixel, putImageData.
+    //
+    // THE FIRST VERSION OF THIS FILE WAS WRONG AND THE WAY IT WAS WRONG IS THE POINT. It read
+    // woodField's return statement, saw `fsp, fcz, urel, rwl, zoff, ginv, fwl, fchar, fzw` listed among
+    // the scalars, and packed them as uniform floats. They are ARRAYS - shade indexes every one by ring
+    // or by slice - and a feature's `al` and `zw` are arrays too, not numbers. A RETURN STATEMENT SAYS
+    // WHAT COMES BACK; ONLY THE CONSUMER SAYS WHAT SHAPE IT IS.
+    //
+    // And the first gate could not see it, because its fixture was built from the same wrong reading. A
+    // fixture written from the author's belief tests the author's belief. `check-wood-inputs` replaces
+    // that: it pulls the alias map out of woodSampler's own declarations and the subscripted set out of
+    // shade's own body, and requires FIELD_PARTS below to account for every name that survives the join.
+    // Nothing in it is written down by hand, so a tenth array in the app goes red on its own.
+
+    // the arena's parts, in the order the Env's offsets name them
+    const PART_NAMES = [
+      'LUT', 'TV', 'TW', 'TH', 'PAX', 'PAY', 'EDGE',          // the trunk's ring tables and pith track
+      'GINV', 'ZOFF', 'UREL', 'RWL',                           // the taper, and ring width by ring
+      'FSP', 'FCZ', 'FWL', 'FCHAR', 'FZW',                     // the fire's tables
+      'WVA', 'WZC', 'WZS',                                     // the wave family, by wave and by slice
+      'FE', 'FEAL', 'FEZW', 'FEWL',                            // features: scalars, lobes, z windows, ring weights
+      'GLUT', 'GTV', 'GTW', 'GEDGE',                           // the graft's, when there is one
+    ];
+
+    // WHICH PART CARRIES WHICH FIELD PROPERTY. `check-wood-inputs` reads every name shade subscripts
+    // straight out of the app and requires an entry here for each, so this map is the packer's CLAIM
+    // about what it carries and that gate is the app's ANSWER.
+    //
+    // `WV` names the wave FAMILY, whose members are objects holding two tables apiece, so it resolves to
+    // the first of the two concatenated tables rather than to a part of its own - there is no flat WV.
+    const FIELD_PARTS = {
+      lut: 'LUT', tv: 'TV', tw: 'TW', th: 'TH', pax: 'PAX', pay: 'PAY', edge: 'EDGE',
+      ginv: 'GINV', zoff: 'ZOFF', urel: 'UREL', rwl: 'RWL',
+      fsp: 'FSP', fcz: 'FCZ', fwl: 'FWL', fchar: 'FCHAR', fzw: 'FZW',
+      wv: 'WVA', WV: 'WZC', 'wave:zc': 'WZC', 'wave:zs': 'WZS',
+      FE: 'FE', 'feature:al': 'FEAL', 'feature:zw': 'FEZW', 'feature:wl': 'FEWL',
+      'graft:lut': 'GLUT', 'graft:tv': 'GTV', 'graft:tw': 'GTW', 'graft:edge': 'GEDGE',
+    };
+
+    const f32 = a => a instanceof Float32Array ? a : new Float32Array(a || []);
+
+    // MANY TABLES OF ONE LENGTH, laid end to end. Every wave carries a zc of Z and every feature a zw of
+    // Z, so entry i starts at i * stride and the shader needs no table of offsets. A caller whose
+    // entries disagree on length is a DEFECT rather than a case: it would mean the field built them
+    // differently, and silently indexing past one is worse than refusing.
+    function catSame(list, pick, what) {
+      if (!list.length) return new Float32Array(0);
+      const first = f32(pick(list[0]) || []), n = first.length;
+      for (const g of list) {
+        if (f32(pick(g) || []).length !== n) throw new Error('packWood: ' + what + ' of two lengths');
+      }
+      const out = new Float32Array(n * list.length);
+      list.forEach((g, i) => out.set(f32(pick(g) || []), i * n));
+      return out;
+    }
+
+    // A FEATURE'S SCALARS ARE TWENTY-TWO FLOATS, the way an op is sixteen. Its `al` and `zw` are TABLES
+    // and live in their own parts - a lobe is NA long and a z window is Z long, and neither belongs in a
+    // fixed-width record. That is the correction this file exists to record.
+    //
+    // rDie IS SUBSTITUTED, and it is the one value that does not survive the trip unchanged. A feature
+    // that never dies carries Infinity, and while f32 can hold it, a shader running where infinities are
+    // flushed would compare against garbage. The sentinel is past any radius a tree in feet can reach.
+    //
+    // AND IT IS A POWER OF TWO ON PURPOSE. The first spelling was 1e30, which is not representable in
+    // f32 and came back as 1.0000000150474662e30 - fine for a greater-than, wrong the moment anything
+    // compares a sentinel for equality, which is what a sentinel invites. 2^100 round trips exact.
+    // THE RECORD'S LAYOUT, NAMED. The shader indexes these by number, so the two have to agree and a
+    // list is the only thing that makes the agreement checkable. `wl` is NOT here - it is a table and
+    // lives in FEWL - and when it left it took index 4 with it, leaving a hole that is now closed.
+    const FE_FIELDS = ['amp', 'ux', 'uy', 'zc', 'ax', 'ay', 'az', 'px', 'py',
+                              'qx', 'qy', 'qz', 'kn', 'kp', 'r0', 'dead', 'rDie',
+                              'prune', 'ageN', 'rbMax'];
+    const FE_STRIDE = FE_FIELDS.length;
+    const NEVER_DIES = 2 ** 100;
+
+    // HOW MANY FEATURES THE SHADER HAS SCRATCH FOR. The CPU painter keeps a Float64Array of each
+    // feature's strength across the two passes of the ring inversion, sized at run time from the list.
+    // A shader cannot: its scratch is a function-local array and that needs a length at compile time.
+    //
+    // TWO TODAY AND THE APP SAYS SO IN A LITERAL - DEV is two entries filtered by amp > 0 - but the
+    // comment above it is explicit that a third is five more keys and a row of sliders, not another
+    // case to write. So the seam is built for more than it ships: four slots, and packWood REFUSES a
+    // field with more rather than the shader quietly dropping the extra one. A refused document falls
+    // to the CPU painter, which has no such bound; a truncated loop would paint a plausible tree with
+    // a branch missing and nothing anywhere would say so. check-wood-shader reads DEV out of the app
+    // and goes red if it ever outgrows this.
+    const SQ_MAX = 4;
+
+    function feRow(f) {
+      const a = new Float32Array(FE_STRIDE);
+      // WRITTEN THROUGH THE NAMED LIST, so a field cannot land at an index nobody meant. The one
+      // substitution is rDie, below.
+      FE_FIELDS.forEach((k, i) => {
+        if (k === 'dead') { a[i] = f.dead ? 1 : 0; return; }
+        if (k === 'rDie') { a[i] = Number.isFinite(f.rDie) ? f.rDie : NEVER_DIES; return; }
+        a[i] = f[k];
+      });
+      return a;
+    }
+
+    // THE UNIFORM IS 512 BYTES, not the 304 glass gets, and that is a choice rather than a measurement.
+    // The glass one is cramped - supersampling took one of its two spare words and the per-op metadata
+    // bases took the other two - because four probe pages build that bind group independently and a
+    // required binding added there breaks every one of them. Wood has no probes of its own yet, so its
+    // layout is free, and starting it with room is cheaper than discovering the ceiling later.
+    //
+    // AND IT IS NAMED RATHER THAN POSITIONAL, which is the one thing the glass layout is not. That one
+    // writes a bare array and its WGSL struct repeats the order by hand - a replica pair, reconciled
+    // only when somebody notices. The struct below is GENERATED from these two lists, so there is no
+    // second copy to drift, for the same reason feRow writes through FE_FIELDS rather than to numbers.
+    //
+    // IT CAUGHT ITS FIRST ONE BEFORE IT HAD A CONSUMER. The shader read E.EYESF in two places and
+    // E.EYES in two others, left over from when EYES was an int flag and the strength needed a float
+    // beside it. Declared as a field, EYESF would have compiled, run, painted wood and silently thrown
+    // away the eye dimple and the gloss darkening - the slider moves and nothing happens. Generated, an
+    // undeclared name will not compile and an unwritten one goes red below.
+    const UNI_FLOAT_NAMES = [
+      'R', 'LMAX', 'EYES', 'pad0',
+      'KS', 'ZS', 'GKS', 'MINL',
+      'MINV', 'MTHR', 'GLOSS', 'LIT',
+      'ffx', 'ffy', 'fcIn', 'fcOut',
+      'FSEV', 'ECELL', 'ERADFT', 'eyeDepth',
+      // THE BOARD AND ITS PLACE IN THE LOG. len and wid are the plank, y0 and bandY where it was sawn
+      // from, pcx/pcy the pith and cux/cuy the cut direction - and H is the sheet aspect, the one field
+      // here that belongs to the canvas rather than to the tree.
+      'len', 'wid', 'y0', 'H',
+      'pcx', 'pcy', 'cux', 'cuy',
+      // THE FACE NORMAL, which the two views set for themselves. Figure is an angle BETWEEN the fibre
+      // and the surface, so the surface has to be part of the question.
+      'bandY', 'pnx', 'pny', 'pnz',
+      // SEVEN TRIPLES, each padded to four so a colour starts on a vec4 boundary whether or not the
+      // struct is ever read as vectors.
+      'earlyR', 'earlyG', 'earlyB', 'pad1',
+      'lateR', 'lateG', 'lateB', 'pad2',
+      'heartR', 'heartG', 'heartB', 'pad3',
+      'knotR', 'knotG', 'knotB', 'pad4',
+      'minR', 'minG', 'minB', 'pad5',
+      'gEarlyR', 'gEarlyG', 'gEarlyB', 'pad6',
+      'gLateR', 'gLateG', 'gLateB', 'pad7',
+      // BEYOND THE BARK THERE IS NO BOARD, and the surround is what says so rather than clamped bark.
+      'surR', 'surG', 'surB', 'pad8',
+      'pad10', 'pad11', 'pad12', 'pad13',
+      'pad14', 'pad15', 'pad16', 'pad17',
+      'pad18', 'pad19', 'pad20', 'pad21',
+      'pad22', 'pad23', 'pad24', 'pad25',
+    ];
+
+    // THE STRIDES ARE IN THE UNIFORM because the shader indexes table i at i * stride. NA is a lobe
+    // length and Z a slice count; a wave zc and a feature zw are both Z long.
+    //
+    // fullW IS THE SHEET, NOT THE TILE, and that is the whole coordinate contract. The CPU painter
+    // takes a device pixel through the canvas inverse affine, incrementally, column by column; a shader
+    // has no previous pixel to add to and no canvas transform to invert. So it does what the glass one
+    // does - normalise the pixel position on the SHEET - which is identical for the axis-aligned tiling
+    // an export uses and for nothing else. A rotated affine would need the real inverse, and the pool
+    // refuses rather than approximating one.
+    const UNI_INT_NAMES = [
+      'K', 'Z', 'NA', 'NW',
+      'NF', 'n', 'pad26', 'WAVY',
+      'GK', 'Gn', 'HASGRAFT', 'WK',
+      // WHICH FEATURE CARRIES THE KNOT FACE, or -1. The app finds it with FE.find(f => f.kn > 0) once
+      // per paint; a shader cannot search a list per pixel, so it is told.
+      'KNI', 'HASFIRE', 'fullW', 'pad27',
+      ...PART_NAMES.map(n => 'o' + n),
+      'tileX', 'tileY', 'tileW', 'tileH',
+    ];
+
+    const UNI_BYTES = 512;
+    // EXPORTED so a gate reads the layout instead of repeating it. The first spelling of
+    // check-wood-pack hardcoded 96 and went red when this moved, which is a test coupled to a number
+    // rather than to the thing the number describes.
+    const UNI_FLOATS = UNI_FLOAT_NAMES.length;
+    const UNI_INTS = UNI_INT_NAMES.length;
+
+    // WHERE ONE FIELD LIVES, by name. The pool patches three of these per band and nothing else, and it
+    // asks here rather than carrying byte offsets of its own - which is what the glass pool does, and
+    // what made its OFF_TX a third copy of the layout.
+    function uniOffset(n) {
+      const f = UNI_FLOAT_NAMES.indexOf(n);
+      if (f >= 0) return f * 4;
+      const i = UNI_INT_NAMES.indexOf(n);
+      if (i < 0) throw new Error('uniOffset: no uniform field ' + n);
+      return UNI_FLOATS * 4 + i * 4;
+    }
+
+    function packWood(F, extra) {
+      const G = extra.graft || null;                   // the scion's field, or none
+      const S = extra.sampler || {};                   // woodSampler's own constants
+      const C = extra.colours || {};                   // seven triples, resolved from COL at draw time
+      const FE = F.FE || [], WV = F.WV || [];
+
+      const parts = {
+        LUT: f32(F.lut), TV: f32(F.tv), TW: f32(F.tw), TH: f32(F.th),
+        PAX: f32(F.pax), PAY: f32(F.pay), EDGE: f32(F.edge),
+        GINV: f32(F.ginv), ZOFF: f32(F.zoff), UREL: f32(F.urel), RWL: f32(F.rwl),
+        FSP: f32(F.fsp), FCZ: f32(F.fcz), FWL: f32(F.fwl), FCHAR: f32(F.fchar), FZW: f32(F.fzw),
+        WVA: f32(F.wv),
+        WZC: catSame(WV, w => w.zc, 'a wave zc'),
+        WZS: catSame(WV, w => w.zs, 'a wave zs'),
+        FE: (() => {
+          const a = new Float32Array(FE.length * FE_STRIDE);
+          FE.forEach((f, i) => a.set(feRow(f), i * FE_STRIDE));
+          return a;
+        })(),
+        FEAL: catSame(FE, f => f.al, 'a feature lobe'),
+        FEZW: catSame(FE, f => f.zw, 'a feature z window'),
+        // FE[q].wl[gi] - indexed by RING, not by slice, which is why it is its own part and not folded
+        // in with zw. Missed on the first two passes: the gate saw a bare `wl[` and I called it scratch.
+        FEWL: catSame(FE, f => f.wl, 'a feature ring weight'),
+        GLUT: f32(G && G.lut), GTV: f32(G && G.tv), GTW: f32(G && G.tw), GEDGE: f32(G && G.edge),
+      };
+
+      // an empty part still needs an offset; the shader never indexes one whose count is zero
+      const offs = {}; let at = 0;
+      for (const n of PART_NAMES) { offs[n] = at; at += Math.max(parts[n].length, 1); }
+      const arena = new Float32Array(at);
+      for (const n of PART_NAMES) if (parts[n].length) arena.set(parts[n], offs[n]);
+
+      // EVERY VALUE BY NAME, so a field cannot land at an index nobody meant and a field nobody
+      // supplies cannot pass as a zero.
+      const pn = extra.pn || [0, 0, 0];
+      const cols = {};
+      for (const [key, pre, dflt] of [
+        ['early', 'early', [196, 150, 96]], ['late', 'late', [96, 62, 34]],
+        ['heart', 'heart', [90, 52, 24]], ['knot', 'knot', [74, 47, 24]],
+        ['mineral', 'min', [93, 97, 82]],
+        ['graftEarly', 'gEarly', [196, 150, 96]], ['graftLate', 'gLate', [96, 62, 34]],
+      ]) {
+        const v = C[key] || dflt;
+        cols[pre + 'R'] = v[0]; cols[pre + 'G'] = v[1]; cols[pre + 'B'] = v[2];
+      }
+      const sur = extra.surround || [0, 0, 0];
+
+      const V = {
+        // EYES IS A FLOAT, not a flag. WOOD.eyes is a strength the app uses BOTH as a test and as a
+        // multiplier - eyeG * EYES * eyeDepth - so writing it as 0 or 1 throws the slider away. WAVY
+        // beside it really is a boolean (waveAmp > 0) and stays an int.
+        R: F.R, LMAX: F.LMAX, EYES: S.EYES,
+        KS: S.KS, ZS: S.ZS, GKS: S.GKS, MINL: S.MINL, MINV: S.MINV, MTHR: S.MTHR,
+        GLOSS: S.GLOSS, LIT: S.LIT,
+        ffx: S.ffx, ffy: S.ffy, fcIn: S.fcIn, fcOut: S.fcOut,
+        FSEV: S.FSEV, ECELL: S.ECELL, ERADFT: S.ERADFT, eyeDepth: S.eyeDepth,
+        len: extra.len, wid: extra.wid, y0: extra.y0, H: extra.H,
+        pcx: extra.pcx, pcy: extra.pcy, cux: extra.cux, cuy: extra.cuy, bandY: extra.bandY,
+        pnx: pn[0], pny: pn[1], pnz: pn[2],
+        ...cols,
+        surR: sur[0], surG: sur[1], surB: sur[2],
+        K: F.K, Z: F.Z, NA: F.NA, NW: F.NW, NF: FE.length, n: F.n,
+        WAVY: S.WAVY ? 1 : 0, WK: F.WK,
+        GK: G ? G.K : 0, Gn: G ? G.n : 0, HASGRAFT: G ? 1 : 0,
+        KNI: S.KNI === undefined ? -1 : S.KNI,
+        // F.FIRE IS A BOOLEAN, not a table, and this tested it for a `.length` it has never had -
+        // so HASFIRE packed 0 for every tree and a burnt one would have come back unburnt. It also had
+        // a part in the arena, `f32(true)`, which is a one-element array of zero built by coercion.
+        // Nothing caught it because nothing required a field the packer WRITES to have a READER: the
+        // guard existed, read as complete, and the shoulder just past it was the bug.
+        HASFIRE: F.FIRE ? 1 : 0,
+        fullW: extra.fullW, tileX: extra.tileX, tileY: extra.tileY,
+        tileW: extra.tileW, tileH: extra.tileH,
+      };
+      for (const n of PART_NAMES) V['o' + n] = offs[n];
+
+      // A DECLARED FIELD NOTHING SUPPLIES IS THE EYESF DEFECT FROM THE PACKER SIDE: the struct names
+      // it, the shader reads it, and it is quietly zero for the life of the port. A pad is the one
+      // thing allowed to be absent, because being absent is what a pad is for.
+      const absent = [...UNI_FLOAT_NAMES, ...UNI_INT_NAMES]
+        .filter(n => !n.startsWith('pad') && !(n in V));
+      if (absent.length) throw new Error('packWood: nothing supplies ' + absent.join(', '));
+
+      // AND THE ONE BOUND THE SHADER CANNOT GROW INTO AT RUN TIME. Refusing here is what keeps the
+      // alternative honest: the caller falls back to the CPU painter, which has no such limit.
+      if (FE.length > SQ_MAX) {
+        throw new Error('packWood: ' + FE.length + ' features, shader scratch holds ' + SQ_MAX);
+      }
+
+      // Number.isFinite AND NOT `|| 0`. KNI is legitimately -1 and an offset legitimately 0, so the
+      // falsy test is the wrong one; what has to become zero is undefined, null and NaN.
+      const num = v => (Number.isFinite(v) ? v : 0);
+      const b = new ArrayBuffer(UNI_BYTES), d = new DataView(b);
+      UNI_FLOAT_NAMES.forEach((n, i) => d.setFloat32(i * 4, num(V[n]), true));
+      UNI_INT_NAMES.forEach((n, i) => d.setInt32(UNI_FLOATS * 4 + i * 4, num(V[n]) | 0, true));
+
+      return {
+        uni: b, arena, offs, parts,
+        summary: {
+          features: FE.length, rings: F.K || 0, slices: F.Z || 0,
+          waves: WV.length, lobe: F.NA || 0, graft: !!G,
+          arenaFloats: arena.length,
+        },
+      };
+    }
+
+    // THE WOOD FIELD IN WGSL - the shader half of the wood port.
+    //
+    // `glass-gpu.mjs` is the sibling and the model: named blocks of WGSL in one object, assembled by the
+    // caller, with the app inlining a copy that `check-gpu-sync` holds identical. Nothing here allocates
+    // or binds; it is text, and the probe pages and the exporter each build what they need from it.
+    //
+    // TWO OF WOOD'S DEPENDENCIES WERE ALREADY HERE. `woodHash` and `woodAtan2` were ported for glass -
+    // glass reaches them through its own cell and stamp work - so the wood port inherits them rather
+    // than writing them twice. That is also why they live in glass-gpu.mjs and are imported here: one
+    // definition, and the gate that proves it bit-identical to the app's is already running.
+    //
+    // THE ORDER THIS GOES IN. woodEye and woodStain first, because they are 37 lines between them and
+    // each has a CPU twin that can be driven with the same inputs on both sides. `shade` comes after,
+    // and it is 130 lines in ONE function - which is the real risk of this port. Glass's was verified
+    // function by function through gpu-port-harness, seventeen of them, each against its own twin. A
+    // single large function cannot be bisected that way, so the two small ones are the chance to prove
+    // the plumbing before the thing that cannot be halved arrives.
+
+
+
+    const WGSL = {};
+
+    // THE FIELD INDICES, GENERATED FROM THE PACKER'S OWN LIST. A shader that indexes a record by number
+    // and a packer that writes it by name are a replica pair, and today that pair has already drifted
+    // once - `wl` left for its own part and took index 4 with it. Typing the numbers here a second time
+    // would be the third copy of the layout. They are built instead, so a reorder in wood-real.mjs
+    // moves them without anybody remembering.
+    const LF = String.fromCharCode(10);   // no escape sequence survives a generator intact
+    WGSL.woodFields = FE_FIELDS.map((k, i) => 'const FE_' + k + ': i32 = ' + i + ';').join(LF) +
+      LF + 'const FE_STRIDE: i32 = ' + FE_STRIDE + ';';
+
+
+    // AN EYE IS A CELL LOOKUP, NOT A TEXTURE. Nine cells around the point, each holding one jittered eye
+    // of its own size; the nearest one that actually covers the point wins.
+    //
+    // FLOOR BEFORE i32, AND IT MATTERS. JS Math.floor(-0.5) is -1 and WGSL i32(-0.5) is 0, because the
+    // conversion truncates toward zero. A board on the far side of the pith has negative theta, so the
+    // direct conversion would put a whole half of the log one cell out and the eyes would step at the
+    // axis. floor() first, then convert.
+    //
+    // THE ARGUMENT SWAP IN THE SECOND HASH IS DELIBERATE and is in the app: jy keys on (cy2, cx2 + 7919)
+    // where jx keys on (cx2, cy2). Hashing the same pair twice would put every eye on the diagonal.
+    WGSL.woodEye = `
+fn woodEye(th: f32, zp: f32, cell: f32, wFt: f32, rad: f32) -> f32 {
+  // THE NEAR-PITH BOUND. A physical eye subtends wFt/rad, which runs away as rad falls; past about
+  // half a cell the nine cells below stop covering it and eyes tear at the cell edges.
+  let cap = 0.5 * cell * rad;
+  let w = select(cap, wFt, wFt < cap);
+  let w2 = w * w;
+  let gx = i32(floor(th / cell));
+  let gy = i32(floor(zp / cell));
+  var best = 1.0;                                      // the SQUARED normalised distance, so 1 is a miss
+  for (var i = -1; i <= 1; i = i + 1) {
+  for (var j = -1; j <= 1; j = j + 1) {
+    let cx2 = gx + i;
+    let cy2 = gy + j;
+    // 0.92 is as far as the jitter can go while the nine cells checked still cover every eye that
+    // could reach this point; at 0.7 the eyes sat in visible diagonal rows.
+    let jx = (f32(cx2) + 0.5 + (woodHash(cx2, cy2) - 0.5) * 0.92) * cell;
+    let jy = (f32(cy2) + 0.5 + (woodHash(cy2, cx2 + 7919) - 0.5) * 0.92) * cell;
+    // and each eye its own size, because a field of identical dots reads as a pattern, not as wood
+    let sz = 0.5 + 1.0 * woodHash(cx2 + 104729, cy2 + 31337);
+    let r2 = w2 * sz * sz;
+    // the angular offset becomes an ARC: dx and dy are both lengths, so the test is a circle
+    let dx = (th - jx) * rad;
+    let dy = zp - jy;
+    let d2 = dx * dx + dy * dy;
+    // Order the candidates on d2/r2 and take the sqrt ONCE, at the end: both that and the cone
+    // 1 - sqrt(d2/r2) fall monotonically in d, so they pick the same winner.
+    if (d2 < r2) { let q = d2 / r2; if (q < best) { best = q; } }
+  }
+  }
+  // A CONE, not a bump. Constant slope from centre to rim, so the ring boundaries it bends come out
+  // EVENLY SPACED - the little contour map that reads as an eye.
+  if (best < 1.0) { return 1.0 - sqrt(best); }
+  return 0.0;
+}`;
+
+    // HOW STAINED THIS POINT IS. A smooth field over the cross-section, thresholded: everything above
+    // the threshold is stained and nothing else is, so coverage is one declared number.
+    //
+    // The streaks run UP because the field's z frequency is a fiftieth of its cross-section frequency.
+    // Nearly constant along z means a patch in the section extrudes into a slowly drifting column,
+    // which is how a vessel runs, and it crosses the rings instead of following them.
+    WGSL.woodStain = `
+fn woodStain(th: f32, rad: f32, zp: f32, inv: f32, thr: f32) -> f32 {
+  let arc = th * rad;
+  let v = fbm2(arc * inv, rad * inv + zp * inv * 0.02, 4211);
+  // Saturating well before v = 1, because fbm2 never gets near it - normalising against 1 capped
+  // the strongest stain at about a third of the token colour however hard it was driven.
+  let s = (v - thr) / 0.18;
+  if (v > thr) { return select(s, 1.0, s > 1.0); }
+  return 0.0;
+}`;
+
+    // ---- THE ARENA -----------------------------------------------------------------------------------
+    // One flat f32 buffer of named parts, the way glass's is, with the bases in the uniform. Written as
+    // accessors rather than inline indexing so a stride appears ONCE: FEWL is per-feature by RING and
+    // FEZW per-feature by SLICE, and that distinction cost two rounds to notice.
+    WGSL.woodArena = `
+fn aLUT(i: i32) -> f32 { return ARR[E.oLUT + i]; }
+fn aTV(i: i32) -> f32 { return ARR[E.oTV + i]; }
+fn aTW(i: i32) -> f32 { return ARR[E.oTW + i]; }
+fn aTH(i: i32) -> f32 { return ARR[E.oTH + i]; }
+fn aPAX(i: i32) -> f32 { return ARR[E.oPAX + i]; }
+fn aPAY(i: i32) -> f32 { return ARR[E.oPAY + i]; }
+fn aGINV(i: i32) -> f32 { return ARR[E.oGINV + i]; }
+fn aZOFF(i: i32) -> f32 { return ARR[E.oZOFF + i]; }
+fn aUREL(i: i32) -> f32 { return ARR[E.oUREL + i]; }
+fn aRWL(i: i32) -> f32 { return ARR[E.oRWL + i]; }
+fn aFSP(i: i32) -> f32 { return ARR[E.oFSP + i]; }
+fn aFCZ(i: i32) -> f32 { return ARR[E.oFCZ + i]; }
+fn aFWL(i: i32) -> f32 { return ARR[E.oFWL + i]; }
+fn aFCHAR(i: i32) -> f32 { return ARR[E.oFCHAR + i]; }
+fn aFZW(i: i32) -> f32 { return ARR[E.oFZW + i]; }
+fn aWVA(i: i32) -> f32 { return ARR[E.oWVA + i]; }
+fn aWZC(w: i32, z: i32) -> f32 { return ARR[E.oWZC + w * E.Z + z]; }
+fn aWZS(w: i32, z: i32) -> f32 { return ARR[E.oWZS + w * E.Z + z]; }
+// FE_STRIDE and the field order come from wood-real.mjs's FE_FIELDS. A shader that indexes by
+// number and a packer that writes by name are a replica pair and drift silently, so the stride is
+// repeated here once and check-wood-shader holds the two together.
+fn aFE(q: i32, f: i32) -> f32 { return ARR[E.oFE + q * FE_STRIDE + f]; }
+fn aFEAL(q: i32, i: i32) -> f32 { return ARR[E.oFEAL + q * E.NA + i]; }
+fn aFEZW(q: i32, z: i32) -> f32 { return ARR[E.oFEZW + q * E.Z + z]; }
+fn aFEWL(q: i32, k: i32) -> f32 { return ARR[E.oFEWL + q * E.K + k]; }
+fn aGLUT(i: i32) -> f32 { return ARR[E.oGLUT + i]; }
+fn aGTV(i: i32) -> f32 { return ARR[E.oGTV + i]; }
+fn aGTW(i: i32) -> f32 { return ARR[E.oGTW + i]; }
+fn aGEDGE(i: i32) -> f32 { return ARR[E.oGEDGE + i]; }`;
+
+    // ---- HALF ONE: EVERYTHING BUT THE KNOT -------------------------------------------------------------
+    // Returns the colour this point would be if no branch ran through it.
+    //
+    // THE w COMPONENT IS THE FALSE RETURN. The app returns false OUTSIDE THE LOG rather than clamping to
+    // the outermost ring, because clamping paints solid bark out to the slab edge and that reads as the
+    // renderer giving up - the truth is there is no wood there, and the caller draws the live edge of a
+    // board wider than the log it came from. Zero in w carries that.
+    //
+    // THE INVERSION RUNS TWICE ON PURPOSE. Once features, waves and eyes have moved the surface the
+    // rings are no longer circles, so "which ring is this point in" stops being a lookup on the radius.
+    // It is still a subtraction - take the concentric answer, correct by the deviation accumulated
+    // there, read again - and the deviation moves by well under a ring width per ring, so one
+    // refinement lands it.
+    //
+    // SQ IS SCRATCH, one slot per feature, because the app keeps a Float64Array of them across the two
+    // passes of that inversion rather than computing each feature's strength twice.
+    //
+    // AND IT IS PER INVOCATION, WHICH THE FIRST DRAFT GOT WRONG. It was written as workgroup scope,
+    // copying the app's one shared array, and at a workgroup of 64 that is 64 pixels writing the same
+    // four slots: feature strengths bleeding between neighbours, which would read as noise in the
+    // figure rather than as a crash. A function-local var is the fix, and it is also why SQ_MAX has to
+    // exist - a local array needs its length at compile time, where the app sizes one at run time.
+    WGSL.woodShadeBody = `
+fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4<f32> {
+  var SQ: array<f32, SQ_MAX>;
+  let rad0 = sqrt(ddx * ddx + ddy * ddy);
+  let rad = rad0 * aGINV(zi) + aZOFF(zi);
+  if (rad > E.R) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+
+  var li = 0;
+  var eyeHold = 0.0;
+  var fireW = 0.0;
+  var fireCav = 0.0;
+
+  if (E.NF > 0 || E.WAVY != 0 || E.EYES != 0 || E.HASFIRE != 0) {
+    let inv = 1.0 / select(rad, 1e-9, rad == 0.0);
+    var eyeG = 0.0;
+    if (E.EYES != 0) {
+      eyeG = woodEye(woodAtan2(ddy, ddx), zp, E.ECELL, E.ERADFT, rad0);
+      // ORIENTATION. The needle runs along the radius, so what decides whether this face shows an
+      // eye or a faint fleck is how square it is to that needle - one dot product, and the whole
+      // quarter-versus-flat behaviour comes out of it.
+      let iv3 = 1.0 / select(rad0, 1e-9, rad0 == 0.0);
+      let sq2 = (ddx * iv3) * E.pnx + (ddy * iv3) * E.pny;
+      eyeG = eyeG * select(sq2, -sq2, sq2 < 0.0);
+      eyeHold = eyeG;
+    }
+    var wsum = 0.0;
+    if (E.WAVY != 0) {
+      // THE CHEBYSHEV RECURRENCE, which is where the integer-wavenumber constraint earns its keep:
+      // k, 2k and 3k are three more multiplies each, not three sines.
+      let ct = ddx * inv;
+      let st = ddy * inv;
+      var ck = 1.0;
+      var sk = 0.0;
+      for (var h = 0; h < E.WK; h = h + 1) { let x = ck * ct - sk * st; sk = sk * ct + ck * st; ck = x; }
+      var hc = ck;
+      var hs = sk;
+      for (var i = 0; i < E.NW; i = i + 1) {
+        wsum = wsum + hs * aWZC(i, zi) + hc * aWZS(i, zi);
+        let x = hc * ck - hs * sk; hs = hs * ck + hc * sk; hc = x;
+      }
+    }
+    for (var q = 0; q < E.NF; q = q + 1) {
+      let ca = (ddx * aFE(q, FE_ux) + ddy * aFE(q, FE_uy)) * inv;
+      let ai = i32((ca + 1.0) * 0.5 * f32(E.NA - 1));
+      SQ[q] = aFE(q, FE_amp) * aFEAL(q, ai) * aFEZW(q, zi);
+    }
+    let gi0 = i32(rad * E.KS);
+    let ur = aUREL(gi0);
+    let rw = aRWL(gi0);
+    // THE FIRE, pulling the surface IN over its sector. Its contribution is SUBTRACTED from the
+    // radius, which is the one direction everything else here is forbidden to move.
+    if (E.HASFIRE != 0) {
+      let iv = 1.0 / select(rad0, 1e-9, rad0 == 0.0);
+      let ca = (ddx * iv) * E.ffx + (ddy * iv) * E.ffy;
+      if (ca > E.fcOut) {
+        let den = select(E.fcIn - E.fcOut, 1e-9, (E.fcIn - E.fcOut) == 0.0);
+        let sgs = select((ca - E.fcOut) / den, 1.0, ca >= E.fcIn);
+        fireW = sgs * sgs * (3.0 - 2.0 * sgs) * aFZW(zi) * E.FSEV;
+      }
+    }
+    // THE DIMPLE MOVES THE SURFACE INWARD, the one direction the foam model otherwise forbids, and
+    // it is quoted in RING WIDTHS. Two parts: the BASE is the same dip on every annual layer, so
+    // they keep their spacing however deep it goes; the RIPPLE is the stack of shallow cones that
+    // varies BETWEEN layers, which is the one held under a ring width.
+    let eBase = eyeG * E.EYES * E.eyeDepth;
+    let eRip = select(0.7, eBase * 0.3, eBase * 0.3 < 0.7);
+    let eyeD = (eBase + eRip * (ur * ur - 0.5)) * rw;
+
+    var gi = i32(rad * E.KS);
+    var dv = wsum * aWVA(gi) - eyeD - fireW * aFWL(gi);
+    for (var q = 0; q < E.NF; q = q + 1) { dv = dv + SQ[q] * aFEWL(q, gi); }
+    var rr = rad - dv;
+    gi = i32(select(0.0, rr * E.KS, rr > 0.0));
+    dv = wsum * aWVA(gi) - eyeD - fireW * aFWL(gi);
+    for (var q = 0; q < E.NF; q = q + 1) { dv = dv + SQ[q] * aFEWL(q, gi); }
+    rr = rad - dv;
+    if (fireW > 0.0 && rr > E.R) { fireCav = fireW; }
+    li = i32(select(0.0, rr * E.KS, rr > 0.0));
+  } else {
+    li = i32(rad * E.KS);
+  }
+
+  // THE FINE GRAIN IS NOT DECORATION. Without the second hash term wood reads as plastic.
+  var w = aLUT(li)
+        + (woodHash(i32(fv * 2600.0), 7) - 0.5) * 0.06
+        + (woodHash(i32(fu * 1700.0), i32(fv * 2600.0)) - 0.5) * 0.035;
+  w = clamp(w, 0.0, 1.25);
+  let mv = 1.0 + aTV(li);
+  let mw = aTW(li) * 26.0;
+  var cr = (E.lateR + (E.earlyR - E.lateR) * w) * mv + mw;
+  var cg = (E.lateG + (E.earlyG - E.lateG) * w) * mv;
+  var cb = (E.lateB + (E.earlyB - E.lateB) * w) * mv - mw;
+
+  // ...then the material state on top of it, and the ring keeps its own light and dark through the
+  // conversion rather than being replaced by a flat heartwood colour.
+  let h = aTH(li);
+  if (h != 0.0) {
+    let s = 0.55 + 0.45 * w;
+    cr = cr + (E.heartR * s - cr) * h;
+    cg = cg + (E.heartG * s - cg) * h;
+    cb = cb + (E.heartB * s - cb) * h;
+  }
+  if (E.MINL != 0.0) {
+    let ms = woodStain(woodAtan2(ddy, ddx), rad0, zp, E.MINV, E.MTHR) * E.MINL;
+    if (ms > 0.0) {
+      cr = cr + (E.minR - cr) * ms;
+      cg = cg + (E.minG - cg) * ms;
+      cb = cb + (E.minB - cb) * ms;
+    }
+  }
+  // FIGURE. The dark bands are the fibres diving away from the light, which is why turning the
+  // light reverses the ribbon - that reversal is the whole tell of real figure.
+  if (E.GLOSS != 0.0 && E.pnz == 0.0) {
+    let iv2 = 1.0 / select(rad0, 1e-9, rad0 == 0.0);
+    let rx = ddx * iv2;
+    let ry = ddy * iv2;
+    let dNr = rx * E.pnx + ry * E.pny;
+    let dNt = -ry * E.pnx + rx * E.pny;
+    let eh3 = eyeHold * eyeHold * eyeHold;
+    var m = 1.0 + E.GLOSS * E.LIT * (aFSP(li) * dNt + aFCZ(zi) * dNr)
+          - E.GLOSS * eh3 * E.EYES * 0.38;
+    if (!(m > 0.0)) { m = 0.0; }
+    cr = cr * m; cg = cg * m; cb = cb * m;
+  }
+  // CHAR, toward soot, which is warmer than neutral black.
+  let chw = select(select(0.0, fireW * aFCHAR(li), fireW > 0.0), fireCav, fireCav > 0.0);
+  if (chw > 0.0) {
+    let m2 = 1.0 - select(0.72, 0.88, fireCav > 0.0) * chw;
+    cr = cr * m2; cg = cg * m2 * 0.94; cb = cb * m2 * 0.88;
+  }
+  return vec4<f32>(cr, cg, cb, 1.0);
+}`;
+
+    // ---- HALF TWO: THE KNOT FACE -----------------------------------------------------------------------
+    // KN is the ONE feature carrying a knot face - the app finds it once per paint with
+    // FE.find(f => f.kn > 0) - and E.KNI is its index, or -1 when the tree has none.
+    //
+    // IT REPLACES THE COLOUR RATHER THAN BLENDING INTO IT. Everything above this is the wood the branch
+    // grew THROUGH; inside the cone there is no trunk ring to tint, there is branch. The w component
+    // says whether the point landed inside, and the caller takes xyz only when it did.
+    //
+    // THE CONE, NOT A CYLINDER. rb grows with distance along the branch, and a dead one stopped gaining
+    // rings when it died - te clamps the length that counts, which is what makes an encased knot a cone
+    // frozen at its burial and a live one a cone that is still widening.
+    //
+    // q2 IS PYTHAGORAS WITH THE ALONG-AXIS PART SUBTRACTED, and it is clamped at zero because floating
+    // point can take it a hair negative on the axis itself, where the answer is exactly zero.
+    WGSL.woodKnot = `
+fn woodKnot(ddx: f32, ddy: f32, zp: f32, zi: i32, rad: f32, rad0: f32) -> vec4<f32> {
+  if (E.KNI < 0) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+  let k = E.KNI;
+  let dzz = zp - aFE(k, FE_zc);
+  let tt = ddx * aFE(k, FE_ax) + ddy * aFE(k, FE_ay) + dzz * aFE(k, FE_az);     // along the branch, from the pith
+  let r0 = aFE(k, FE_r0);
+  let rDie = aFE(k, FE_rDie);
+  if (!(tt > r0 && tt <= rDie)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+
+  let te = select(rDie, tt, tt < rDie);                             // it stopped gaining rings when it died
+  let rb = aFE(k, FE_kn) * (te - r0);
+  let ss = ddx * aFE(k, FE_px) + ddy * aFE(k, FE_py);
+  let q2 = max(0.0, rad0 * rad0 + dzz * dzz - tt * tt);
+  if (!(q2 < rb * rb)) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+
+  var dd = sqrt(q2);
+  if (E.WAVY != 0) {
+    // THE SAME WAVE FAMILY, ON THE BRANCH'S OWN PERPENDICULARS. The trunk's harmonics are taken
+    // around the pith; here they are taken around the branch axis, which is why qx/qy/qz exist at
+    // all - the second perpendicular, so the recurrence has a plane to turn in.
+    let bb = ddx * aFE(k, FE_qx) + ddy * aFE(k, FE_qy) + dzz * aFE(k, FE_qz);
+    let iq = 1.0 / select(dd, 1e-9, dd == 0.0);
+    let bc = ss * iq;
+    let bs = bb * iq;
+    var ck = 1.0;
+    var sk = 0.0;
+    for (var h = 0; h < E.WK; h = h + 1) { let x = ck * bc - sk * bs; sk = sk * bc + ck * bs; ck = x; }
+    dd = dd + (sk * aWZC(0, zi) + ck * aWZS(0, zi)) * aWVA(i32(rad * E.KS)) * 0.5;
+    if (dd < 0.0) { dd = 0.0; }
+  }
+
+  var kv = 1.0;
+  var kcr = E.knotR;
+  var kcg = E.knotG;
+  var kcb = E.knotB;
+
+  if (E.HASGRAFT != 0) {
+    // GRAFTED: the branch takes its rings FROM THE SCION'S OWN TREE, not from a synthetic pitch.
+    // aLoc is where along the scion's life this part of the branch sits, so an older part of the
+    // stem reads an older ring - the walk is the recipe rather than a scatter.
+    let aLoc = aFE(k, FE_ageN) * (rb / aFE(k, FE_rbMax));
+    let hi = f32(E.Gn - 1);
+    let aIx = i32(select(select(aLoc, hi, aLoc > hi), 1.0, aLoc < 1.0));
+    let gRad = (dd / select(rb, 1e-9, rb == 0.0)) * aGEDGE(aIx);
+    let gq = i32(gRad * E.GKS);
+    let gl = select(E.GK - 1, gq, gq < E.GK);
+    let gw = aGLUT(gl);
+    let gmv = 1.0 + aGTV(gl);
+    let gmw = aGTW(gl) * 26.0;
+    kcr = (E.gLateR + (E.gEarlyR - E.gLateR) * gw) * gmv + gmw;
+    kcg = (E.gLateG + (E.gEarlyG - E.gLateG) * gw) * gmv;
+    kcb = (E.gLateB + (E.gEarlyB - E.gLateB) * gw) * gmv - gmw;
+    kv = 1.0;
+  } else {
+    // UNGRAFTED: its own latewood, at its own pitch - a branch is a stem and has a stem's history,
+    // and without this it reads as a drilled hole rather than as wood.
+    let u2 = (dd * aFE(k, FE_kp)) % 1.0;
+    let lt = select(0.0, (u2 - 0.72) / 0.28, u2 > 0.72);
+    kv = 1.0 - 0.55 * lt * lt;
+  }
+
+  // THE RIM. An INTERGROWN knot joins the wood that grew around it and stays tight; one that was
+  // PRUNED OR DIED gets a bark ring, and prune fades that ring out as the collar closes over it.
+  let rim = dd / select(rb, 1e-9, rb == 0.0);
+  if (aFE(k, FE_dead) != 0.0) {
+    let pr = aFE(k, FE_prune);
+    kv = kv * (0.72 + 0.2 * pr);                                    // sound heartwood is darker, not dead
+    if (rim > 0.74) { kv = kv * (0.18 + (0.55 - 0.18) * pr); }
+  } else if (rim > 0.88) {
+    kv = kv * 0.55;
+  }
+  return vec4<f32>(kcr * kv, kcg * kv, kcb * kv, 1.0);
+}`;
+
+    // ---- THE TWO HALVES, COMPOSED ----------------------------------------------------------------------
+    // The whole of shade. Written as a composition rather than one function so the integration can be
+    // BISECTED: render a wood tile both ways, and if it diverges, return early from woodKnot and
+    // measure again. The defect is then in one half or the other without needing a CPU twin for each,
+    // which gpu-port-harness cannot provide here - shade is a closure, not a top-level function, so
+    // liftFromApp has nothing to find.
+    //
+    // OUT OF RANGE IS A FALSE RETURN, NOT A COLOUR. The app returns false outside the log and the caller
+    // paints the surround, which is the live edge of a board wider than the log it came from. w carries
+    // that through both halves.
+    WGSL.woodShade = `
+fn woodShade(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4<f32> {
+  let body = woodShadeBody(ddx, ddy, zi, zp, fu, fv);
+  if (body.w == 0.0) { return body; }                               // outside the log
+  let rad0 = sqrt(ddx * ddx + ddy * ddy);
+  let rad = rad0 * aGINV(zi) + aZOFF(zi);
+  let knot = woodKnot(ddx, ddy, zp, zi, rad, rad0);
+  let c = select(body.xyz, knot.xyz, knot.w > 0.0);
+  return vec4<f32>(clamp(c, vec3<f32>(0.0), vec3<f32>(255.0)), 1.0);
+}`;
+
+    // ---- THE ENV, GENERATED ----------------------------------------------------------------------------
+    // NOT TYPED OUT. wood-real.mjs names every slot of its own uniform and this walks those two lists,
+    // so the struct and the packer cannot disagree about an order or a name: there is one list and two
+    // readers of it. The glass port does it the other way - a bare array there, a hand-written struct
+    // here - and that pair is why check-gpu-sync exists.
+    //
+    // WHAT THAT BUYS, CONCRETELY: a field the shader reads but nothing declares will not compile, and a
+    // field declared but never written makes packWood throw. The first draft of the body read E.EYESF
+    // twice; with a hand-written struct that is a plausible picture with the eyes switched off.
+    const chunk4 = (xs, ty) => {
+      const out = [];
+      for (let i = 0; i < xs.length; i += 4) {
+        out.push('  ' + xs.slice(i, i + 4).map(n => n + ': ' + ty).join(', ') + ',');
+      }
+      return out.join(LF);
+    };
+    WGSL.woodEnv = 'struct Env {' + LF +
+      chunk4(UNI_FLOAT_NAMES, 'f32') + LF +
+      chunk4(UNI_INT_NAMES, 'i32') + LF +
+      '}' + LF +
+      '@group(0) @binding(2) var<uniform> E: Env;' + LF +
+      '@group(0) @binding(3) var<storage, read> ARR: array<f32>;' + LF +
+      'const SQ_MAX: i32 = ' + SQ_MAX + ';';
+
+    // ---- THE ENTRY POINT -------------------------------------------------------------------------------
+    // One invocation a pixel, and the whole of the port is three lines of it: work out where on the
+    // board this pixel is, ask shade, write three floats. Everything above was getting the field here.
+    //
+    // THE COORDINATE CONTRACT, AND IT IS NOT THE PAINTER'S. The CPU walks the canvas's own inverse
+    // affine incrementally - solve the row start, then one add per column - which is general for any
+    // transform and exact in slab space. A shader has no previous pixel to add to, so it would have to
+    // evaluate the affine per invocation; and for the tiling an export actually uses that affine is
+    // DIAGONAL, which makes the whole thing equal to normalising the pixel's position on the sheet.
+    // That is what the glass path does, so wood does the same and the two cannot drift apart over what
+    // a tile coordinate means. A rotated transform would need the real inverse and the pool refuses
+    // instead, because approximating one silently would move every pixel.
+    //
+    // zi TRUNCATES TOWARD ZERO on both sides - JS `| 0` and WGSL i32() agree - and cu cannot be
+    // negative after the clamp, so the low end needs no guard and the high end gets the app's own.
+    //
+    // THE SURROUND IS NOT A COLOUR THE SHADER CHOOSES. shade returns w = 0 outside the log, and a plank
+    // set wider than the tree is a LIVE EDGE rather than a failure; the app paints STONE_BG there and
+    // so does this, from the uniform, because deciding it here would be a second opinion about what
+    // the board's background is.
+    WGSL.woodMain = `
+@group(0) @binding(0) var<storage, read_write> PX: array<f32>;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let n = u32(E.tileW * E.tileH);
+  // TWO DIMENSIONS WHEN IT HAS TO BE. A 4096 px export tile plus bleed is past the 65,535
+  // workgroups-per-dimension limit every implementation has, so the grid is split and this puts it
+  // back together; a one-dimensional dispatch has nw.x alone and collapses to g.x.
+  let gi = g.x + g.y * nw.x * 64u;
+  if (gi >= n) { return; }
+  let px = i32(gi) % E.tileW;
+  let py = i32(gi) / E.tileW;
+
+  let fw = f32(E.fullW);
+  let su = (f32(E.tileX + px) + 0.5) / fw;
+  let sv = (f32(E.tileY + py) + 0.5) / fw;
+  // CLAMP, NEVER SKIP: the field extends by at most a pixel at its own edge, which is what any
+  // sampler does. Skipping would leave the pixel unwritten, and that erases.
+  let cu = clamp(su, 0.0, 1.0);
+  let cvv = clamp(sv, 0.0, E.H);
+
+  var zi = i32(cu * E.len * E.ZS);
+  if (zi > E.Z - 1) { zi = E.Z - 1; }
+  let yy = E.y0 + E.bandY + (cvv / E.H) * E.wid;      // across the plank, along the cut plane
+  let c = woodShade(E.pcx - yy * E.cuy - aPAX(zi), E.pcy + yy * E.cux - aPAY(zi),
+                    zi, cu * E.len, cu, cvv);
+  let rgb = select(vec3<f32>(E.surR, E.surG, E.surB), c.xyz, c.w > 0.0);
+  let o = gi * 3u;
+  PX[o] = rgb.x;
+  PX[o + 1u] = rgb.y;
+  PX[o + 2u] = rgb.z;
+}`;
+
+    // ---- THE WHOLE MODULE, ASSEMBLED ---------------------------------------------------------------------
+    // WOOD DOES NOT OWN EVERY FUNCTION IT CALLS. woodAtan2, woodHash and fbm2 were ported for glass and
+    // are already proven bit-identical to the app by gpu-port-harness, so wood inherits them rather than
+    // a second copy going unverified beside them. All three are pure - no E.*, no buffer - which is what
+    // makes them safe to lift into a module with a completely different Env.
+    //
+    // THE DEPENDENCY SET IS COMPUTED, NOT LISTED. A list would be a replica of the call sites, and the
+    // thing it would miss is the transitive step: fbm2 calls vnoise, vnoise calls nz, and neither of
+    // those appears anywhere in wood's own text. So this closes over the calls instead - take what is
+    // called and not defined, find the block that defines it, repeat - and a new call in a wood block
+    // pulls its dependency in with no edit here.
+    //
+    // NO EXEMPTION LIST OF BUILTINS, DELIBERATELY. An unresolved name is simply one no block defines, so
+    // clamp and select and `if` fall out for free; and a builtin wrongly left off such a list would have
+    // cost nothing anyway, which is the test of whether the list was load-bearing.
+    //
+    // THE ORDER OF WOOD'S OWN BLOCKS IS A FACT ABOUT THE SHADER and is written down: woodEnv declares the
+    // struct and the two bindings everything else reads, woodFields the record indices, and woodMain is
+    // the entry point that calls all of it. A block added and not placed here goes red rather than
+    // landing wherever the object happened to put it.
+    const WOOD_ORDER = ['woodEnv', 'woodFields', 'woodEye', 'woodStain', 'woodArena',
+                               'woodShadeBody', 'woodKnot', 'woodShade', 'woodMain'];
+
+    function woodSource(GW) {
+      const unordered = Object.keys(WGSL).filter(k => WOOD_ORDER.indexOf(k) < 0);
+      if (unordered.length) throw new Error('woodSource: unplaced block(s) ' + unordered.join(', '));
+      const mine = WOOD_ORDER.map(k => WGSL[k]).join(LF);
+
+      const defs = s => [...s.matchAll(/fn ([A-Za-z_][A-Za-z0-9_]*)[ ]*[(]/g)].map(m => m[1]);
+      const defined = new Set(defs(mine));
+      const taken = [];
+      // EIGHT PASSES IS NOT A GUESS AT THE DEPTH, it is a refusal to loop forever on a cycle. The real
+      // chain is three deep today and the loop stops as soon as a pass adds nothing.
+      for (let pass = 0; pass < 8; pass++) {
+        const text = taken.map(k => GW[k]).join(LF) + LF + mine;
+        const called = new Set([...text.matchAll(/([A-Za-z_][A-Za-z0-9_]*)[ ]*[(]/g)].map(m => m[1]));
+        const add = [];
+        for (const n of called) {
+          if (defined.has(n)) continue;
+          // THE BLOCK THAT DEFINES IT, if any block does. A name nothing defines is a builtin or a
+          // keyword and needs no entry anywhere.
+          const k = Object.keys(GW).find(k2 => typeof GW[k2] === 'string'
+            && GW[k2].indexOf('fn ' + n + '(') >= 0);
+          if (k && taken.indexOf(k) < 0 && add.indexOf(k) < 0) add.push(k);
+        }
+        if (!add.length) break;
+        for (const k of add) { for (const d of defs(GW[k])) defined.add(d); }
+        for (const k of add) taken.push(k);
+      }
+
+      // AND SORTED INTO GLASS'S OWN DECLARATION ORDER AT THE END, which is the correction that mattered.
+      // Sorting per pass does not work: the first pass takes fbm2 and the second the vnoise it calls, so
+      // appending by pass puts a function before the one it depends on. WGSL wants declaration before
+      // use, so that is a compile error rather than a wrong picture - but it is a compile error nothing
+      // in this repo can run, which makes it a defect that reaches a GPU to be found. glass-gpu.mjs is
+      // written in dependency order already: nz, then vnoise, then fbm2.
+      const order = Object.keys(GW);
+      taken.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+
+      // AND THE READBACK, WHICH THE CLOSURE CANNOT FIND. pack, packTex, vfull and fblit are ENTRY
+      // POINTS: the pool names them to createPipeline and no shader function calls them, so closing over
+      // the call sites reaches none of the four. They are named here for exactly that reason and for no
+      // other - a hand-written dependency is a liability, and the one that earns it is the one a
+      // discoverable rule provably cannot discover.
+      //
+      // THEY NEED NOTHING OF GLASS. All four read PX, E.tileW, E.tileH and the Band uniform, every one
+      // of which wood's Env also declares, so the two materials share one readback rather than wood
+      // getting a second copy of the rounding argument that cost 76 channels to settle.
+      const ENTRY = ['pack', 'tex'];
+      const entry = ENTRY.filter(k => typeof GW[k] === 'string');
+
+      return {
+        code: taken.concat(entry).map(k => GW[k]).join(LF) + LF + mine,
+        borrowed: taken.concat(entry),
+      };
+    }
+
+    // LAZY, because assembling it measures 1.24 ms and most loads never export wood at
+    // all. gpuModule calls it once and memoises the compiled module.
+    WOOD_SRC = () => woodSource(GLASS_WGSL).code;
+    WOOD_PACK = packWood;
+    WOOD_UNI_OFF = uniOffset;
+    WOOD_UNI_BYTES = UNI_BYTES;
+  }
   // GPU-SYNC>>>
 
   // ---- THE TOGGLE'S MEMORY: per slab, on this machine ------------------------------------------
@@ -15082,15 +15959,142 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     } catch (_) {}                                         // a full quota must not break an export
   }
 
+  // ---- WHAT A MATERIAL GIVES THE POOL ----------------------------------------------------------
+  // gpuPool below is four hundred lines of pipelining - two buffer sets, a lookahead, a fault gate
+  // at the handoff, a band loop sized to the device - and none of it is about glass. Wood arrived
+  // needing every line of it and changing none, so what went in is the material-shaped hole: four
+  // values and two functions.
+  //
+  // A SECOND POOL WAS THE OTHER OPTION AND IT IS THE WORSE ONE. This path is measured on real
+  // hardware three times over, and every fix it has had - the fault gate moved to the handoff, one
+  // submit per band rather than per tile, the texture readback - would afterwards have had to land
+  // twice, with a green suite unable to see a missing copy.
+  //
+  // code() IS CALLED ONCE, by gpuModule, and memoised there. Wood's is ASSEMBLED rather than
+  // concatenated - woodSource closes over the call sites and borrows woodAtan2, woodHash and fbm2
+  // from the glass blocks, plus the readback entry points, which is why the two materials share one
+  // definition of each instead of two unverified copies.
+  const GPU_MAT = {
+    glass: {
+      code: () => Object.values(WGSL).join(String.fromCharCode(10)),
+      uni: 304,
+      // THE THREE FIELDS THE POOL PATCHES PER BAND, as byte offsets into that uniform. Glass's
+      // layout is positional so these are written down beside it; wood's names its own slots and
+      // gets asked, which is the difference that stopped this being a third copy of a layout.
+      off: () => ({ x: 160 + 30 * 4, y: 160 + 31 * 4, h: 160 + 33 * 4 }),
+      // THE LAST CLAUSE THAT IS NOT CAUTION: GLASS.relief > 0 sends the CPU through glassFormTG,
+      // which returns the thickness AND both slopes, and the shader has glassFormT and no slope at
+      // all - so a relieved sheet would come back flat. Unported work, not a tolerance to widen.
+      why: () => (Math.max(0, GLASS.relief) > 0 ? 'exp.gpu.relief' : null),
+      pack: (ew, W) => {
+        const scene = glassScene();
+        return packReal(scene.F, {
+          SLAB: SLAB_FT, spin: spinTable(), canes: scene.canes,
+          CORD: scene.CORD, OPQ: scene.OPQ, OREF: scene.OREF,
+          kr: scene.kr, kg: scene.kg, kb: scene.kb,
+          LBR: scene.LBR, LBG: scene.LBG, LBB: scene.LBB,
+          tileW: ew, tileH: ew, tileX: 0, tileY: 0, fullW: W,
+          // SAMPLES PER PIXEL, read the same way the CPU painter reads it so the two cannot
+          // disagree about what the setting means. One is exactly today: the shader's offset is
+          // 0.0 and it divides by 1.
+          ss: Math.max(1, Math.min(4, (GLASS.ss | 0) || 1)),
+        });
+      },
+    },
+    wood: {
+      // WOOD_SRC, NOT woodSource. The assembler is declared inside the wood block - it has to
+      // be, because both materials name their arena parts PART_NAMES - so it is not in scope
+      // here, and the WGSL that IS in scope here is glass's. The block hands out one closure
+      // that has both of its own names bound, and this calls that.
+      code: () => WOOD_SRC(),
+      // READ AFTER THE BLOCK HAS RUN, which it has: the generated block is spliced in above this
+      // whole section, so WOOD_UNI_BYTES is 512 by the time this object is built. The pool refuses
+      // a zero rather than handing WebGPU a zero-length uniform, which is where that ordering would
+      // otherwise surface as a validation error with nothing to point at.
+      uni: WOOD_UNI_BYTES,
+      off: () => ({ x: WOOD_UNI_OFF('tileX'), y: WOOD_UNI_OFF('tileY'), h: WOOD_UNI_OFF('tileH') }),
+      // TWO REFUSALS, AND BOTH ARE SHAPES THE SHADER CANNOT REPRESENT RATHER THAN RISKS.
+      //
+      // THE LOG VIEW is a different painter - paintWoodLog cuts the same field at z = const instead
+      // of x = const - and nothing of it is ported. paintWoodContent returns early for it, so the
+      // shader would draw the board while the CPU drew the section.
+      //
+      // MORE THAN ONE BOARD is the one worth reading twice. A sectioned or staged slab is painted
+      // by walking boards, setting woodBandY per piece and in the sectioned case swapping the whole
+      // WOOD config in; the pool packs ONE scene for the whole export and cannot follow that. The
+      // honest refusal is the broad one: a wrongly accepted document is a wrong picture written
+      // into a master, and a wrongly refused one is the CPU painter drawing the right picture more
+      // slowly. Widening this needs the staged export path measured, which has not been done.
+      why: () => (view === 'log' ? 'exp.gpu.logview'
+                : (stageN() > 1 || woodBandY !== 0) ? 'exp.gpu.woodstage' : null),
+      pack: (ew, W) => {
+        const S = woodSampler();
+        // THE CUT PLANE, taken exactly where paintWoodContent takes it. pn is the painter's, not the
+        // sampler's: woodSampler leaves it [1,0,0] and the board view overwrites it with the face
+        // it is actually cutting, which is what makes figure reverse when the light turns.
+        const phi = WOOD.cutAngle * Math.PI / 180, cux = Math.cos(phi), cuy = Math.sin(phi);
+        const [UR, UG, UB] = hexRGB(STONE_BG);
+        return WOOD_PACK(S.scene.F, {
+          sampler: S.scene.sampler, colours: S.scene.colours, graft: S.scene.graft,
+          len: WOOD.len, wid: WOOD.wid, y0: WOOD.y0, H, bandY: woodBandY,
+          pcx: WOOD.plane * cux, pcy: WOOD.plane * cuy, cux, cuy,
+          pn: [cux, cuy, 0], surround: [UR, UG, UB],
+          tileW: ew, tileH: ew, tileX: 0, tileY: 0, fullW: W,
+        });
+      },
+    },
+  };
+
   // ---- CAN THIS MACHINE RUN IT AT ALL ----------------------------------------------------------
   // Asked once and remembered. Returns a plain verdict and throws nothing: no navigator.gpu, no
   // adapter, no device and a shader that will not compile are all simply NO, each with its own
   // reason, because "your GPU cannot do this" and "this page is not on localhost" send somebody to
   // completely different places.
   let gpuCap = null;                                       // null until asked; then {ok, why, ...}
+  // THE DEVICE ONCE, THE MODULE PER MATERIAL. These were one function while there was one shader,
+  // and a second material cannot share that: a wood module that will not build on some device would
+  // have refused GLASS there too, which is a refusal for a reason that is not true.
   async function gpuCapability() {
-    if (gpuCap) return gpuCap;
-    const no = why => (gpuCap = { ok: false, why });
+    if (!gpuCap) gpuCap = await gpuDevice();
+    // COMPILED HERE because gpuWhyNot is synchronous and is asked immediately after this. The
+    // export already awaits this call to resolve the device before the predicate runs; the module
+    // rides along, is memoised on the capability, and the predicate can then just read the answer.
+    if (gpuCap.ok) await gpuModule(currentMaterial());
+    return gpuCap;
+  }
+  async function gpuModule(mat) {
+    const cap = gpuCap;
+    if (!cap || !cap.ok) return { why: 'exp.gpu.nowebgpu' };
+    if (cap.mods.has(mat)) return cap.mods.get(mat);
+    const M = GPU_MAT[mat];
+    let out = null;
+    if (!M) out = { why: 'exp.gpu.nomaterial' };
+    else {
+      try {
+        // AND IT MUST COMPILE, now, before anything offers the path. A module that will not build
+        // is not a slow render, it is a render that never starts - and six minutes into an export
+        // is the worst moment to find out.
+        cap.dev.pushErrorScope('validation');
+        const mod = cap.dev.createShaderModule({ code: M.code() });
+        const info = await mod.getCompilationInfo();
+        const errs = info.messages.filter(m => m.type === 'error');
+        const vErr = await cap.dev.popErrorScope();
+        if (errs.length || vErr) {
+          console.warn('gpu: the ' + mat + ' shader would not compile', errs[0] || vErr);
+          out = { why: 'exp.gpu.noshader' };
+        } else out = { mod };
+      } catch (e) {
+        // code() ITSELF CAN THROW. woodSource refuses to assemble a block it cannot place, which is
+        // a gate failure in CI and must not be an unhandled rejection in a browser.
+        console.warn('gpu: the ' + mat + ' shader would not assemble', e);
+        out = { why: 'exp.gpu.noshader' };
+      }
+    }
+    cap.mods.set(mat, out);
+    return out;
+  }
+  async function gpuDevice() {
+    const no = why => ({ ok: false, why });
     if (typeof navigator === 'undefined' || !navigator.gpu) {
       return no(window.isSecureContext === false ? 'exp.gpu.insecure' : 'exp.gpu.nowebgpu');
     }
@@ -15102,15 +16106,6 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       // AND IT MUST COMPILE, now, before anything offers the path. A module that will not build is
       // not a slow render, it is a render that never starts - and six minutes into an export is the
       // worst moment to find out.
-      dev.pushErrorScope('validation');
-      const mod = dev.createShaderModule({ code: Object.values(WGSL).join(String.fromCharCode(10)) });
-      const info = await mod.getCompilationInfo();
-      const errs = info.messages.filter(m => m.type === 'error');
-      const vErr = await dev.popErrorScope();
-      if (errs.length || vErr) {
-        console.warn('gpu: the shader would not compile', errs[0] || vErr);
-        return no('exp.gpu.noshader');
-      }
       dev.lost.then(() => { gpuCap = null; });              // a lost device is re-asked next time
       // THE BACKSTOP THAT WAS MISSING. Every error this device reports outside an explicit scope
       // went to the console and nowhere else, so nothing could fail a render on it - and the one
@@ -15120,12 +16115,12 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       //
       // FIRST ONE WINS. A device that has gone wrong tends to report the same thing repeatedly, and
       // the first error is the one with a cause attached.
-      const cap = { ok: true, why: null, dev, mod, fault: null };
+      const cap = { ok: true, why: null, dev, mods: new Map(), fault: null };
       dev.onuncapturederror = e => {
         if (!cap.fault) cap.fault = (e && e.error && e.error.message) || 'unknown WebGPU error';
         console.error('gpu: uncaptured error', e && e.error);
       };
-      return (gpuCap = cap);
+      return cap;
     } catch (e) {
       console.warn('gpu: the capability check threw', e);
       return no('exp.gpu.nodevice');
@@ -15148,11 +16143,22 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
   function gpuWhyNot() {
     if (!gpuPrefGet()) return 'exp.gpu.off';
     if (!gpuCap || !gpuCap.ok) return (gpuCap && gpuCap.why) || 'exp.gpu.nowebgpu';
-    if (currentMaterial() !== 'glass') return 'exp.gpu.notglass';
+    // exp.gpu.notglass IS GONE FROM HERE and the key is kept only in the strings, because masters
+    // written before wood was ported carry it in their record and a reader of those files still has
+    // to be able to name it. `nomaterial` is what a material with no shader says now - stone among
+    // them, which measured at 101.4 Mpx/s on the CPU because it issues canvas commands the browser
+    // already runs on the GPU, so there is nothing there to port.
+    const mat = currentMaterial(), M = GPU_MAT[mat];
+    if (!M) return 'exp.gpu.nomaterial';
     if (layTiles) return 'exp.gpu.floor';
     if (uvMode) return 'exp.gpu.uv';
     if (G.backlight > 0) return 'exp.gpu.backlight';
-    if (Math.max(0, GLASS.relief) > 0) return 'exp.gpu.relief';
+    const own = M.why();
+    if (own) return own;
+    // THE MODULE, WHICH gpuCapability HAS ALREADY RESOLVED for this material. Reading it rather
+    // than compiling it is what keeps this predicate synchronous.
+    const got = gpuCap.mods.get(mat) || {};
+    if (!got.mod) return got.why || 'exp.gpu.noshader';
     // SUPERSAMPLING IS NO LONGER A REFUSAL. It was never a safety clause - the shader simply drew
     // one sample and the CPU painter drew SSxSS, so the two would have disagreed. The loop is
     // ported now, and the reason it was worth porting is that supersampling is per-pixel work and
@@ -15178,6 +16184,12 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     const cap = await gpuCapability();
     if (!cap.ok || gpuWhyNot()) return null;
     const dev = cap.dev;
+    // THE MATERIAL, RESOLVED ONCE. gpuWhyNot has just proved both of these exist, so neither read
+    // needs a guard here - and taking them once is what makes the rest of this function the same
+    // code for both materials.
+    const M = GPU_MAT[currentMaterial()];
+    const mod = cap.mods.get(currentMaterial()).mod;
+    if (!M.uni) { console.warn('gpu: no uniform size'); return null; }
     const ew = p.ts + 2 * p.bleed;
 
     // BANDS, SIZED TO WHAT THIS DEVICE WILL BIND. The f32 intermediate is twelve bytes a pixel, so
@@ -15194,20 +16206,9 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     // FOUR BYTES A PIXEL, matching ImageData, so the readback is a memcpy and not a loop.
     const n = ew * rowsMax, bytes4 = n * 4;
 
-    let scene = null, packed = null;
+    let packed = null;
     try {
-      scene = glassScene();
-      packed = packReal(scene.F, {
-        SLAB: SLAB_FT, spin: spinTable(), canes: scene.canes,
-        CORD: scene.CORD, OPQ: scene.OPQ, OREF: scene.OREF,
-        kr: scene.kr, kg: scene.kg, kb: scene.kb,
-        LBR: scene.LBR, LBG: scene.LBG, LBB: scene.LBB,
-        tileW: ew, tileH: ew, tileX: 0, tileY: 0, fullW: W,
-        // SAMPLES PER PIXEL, read the same way the CPU painter reads it so the two cannot disagree
-        // about what the setting means. One is exactly today: the shader's offset is 0.0 and it
-        // divides by 1.
-        ss: Math.max(1, Math.min(4, (GLASS.ss | 0) || 1)),
-      });
+      packed = M.pack(ew, W);
     } catch (e) {
       // packReal THROWS rather than guess when a document's stirs disagree about their warp state,
       // because the arena carries one grid. That is a real document this cannot draw, not a bug.
@@ -15215,6 +16216,10 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       // refused and nothing more; the sentence that names WHICH document feature did it lives in
       // this error and nowhere else, and seven hours later a console nobody was watching is not a
       // record. gpuFail is read once, where the master is written.
+      //
+      // WOOD REFUSES HERE TOO, for the one bound its shader cannot grow into at run time: SQ is a
+      // function-local array and more features than it holds is a throw rather than a loop that
+      // quietly paints a tree with a branch missing.
       gpuFail = (e && e.message) || String(e);
       console.warn('gpu: this document will not pack', e);
       return null;
@@ -15224,9 +16229,9 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     try {
       dev.pushErrorScope('validation');
       pipe = await dev.createComputePipelineAsync({
-        layout: 'auto', compute: { module: cap.mod, entryPoint: 'main' } });
+        layout: 'auto', compute: { module: mod, entryPoint: 'main' } });
       pipeP = await dev.createComputePipelineAsync({
-        layout: 'auto', compute: { module: cap.mod, entryPoint: 'pack' } });
+        layout: 'auto', compute: { module: mod, entryPoint: 'pack' } });
       const e = await dev.popErrorScope();
       if (e) throw new Error(e.message.split(String.fromCharCode(10))[0]);
     } catch (e) {
@@ -15246,11 +16251,11 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       dev.pushErrorScope('validation');
       cvFmt = navigator.gpu.getPreferredCanvasFormat();
       pipeT = await dev.createComputePipelineAsync({
-        layout: 'auto', compute: { module: cap.mod, entryPoint: 'packTex' } });
+        layout: 'auto', compute: { module: mod, entryPoint: 'packTex' } });
       pipeBlit = await dev.createRenderPipelineAsync({
         layout: 'auto',
-        vertex: { module: cap.mod, entryPoint: 'vfull' },
-        fragment: { module: cap.mod, entryPoint: 'fblit', targets: [{ format: cvFmt }] },
+        vertex: { module: mod, entryPoint: 'vfull' },
+        fragment: { module: mod, entryPoint: 'fblit', targets: [{ format: cvFmt }] },
         primitive: { topology: 'triangle-list' } });
       const e2 = await dev.popErrorScope();
       if (e2) throw new Error(e2.message.split(String.fromCharCode(10))[0]);
@@ -15281,7 +16286,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       const s = {
         px: dev.createBuffer({ size: n * 3 * 4,
           usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }),
-        ub: dev.createBuffer({ size: 304,
+        ub: dev.createBuffer({ size: M.uni,
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
         uni: packed.uni.slice(0),
       };
@@ -15328,15 +16333,16 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       }
     }
 
-    // packReal writes tileX and tileY as int32s at a known place in the 304-byte uniform; patching
-    // those two keeps every other field provably identical from tile to tile.
+    // THE PACKER WRITES tileX, tileY AND tileH as int32s and the material says where; patching
+    // those three keeps every other field provably identical from tile to tile. Glass answers with
+    // the offsets written beside its own positional layout, wood by asking its layout by name.
     // A TILE THE EXPORTER ASKS FOR DOES NOT FIT IN ONE DISPATCH DIMENSION. 2048 px plus bleed is
     // 2,056 square, which is 66,049 workgroups against a 65,535 limit - so the grid is split, and
     // the shader reads num_workgroups to put the two back together. Every probe used a 512 px tile
     // and could not have met this; the first real export tile did, immediately.
     const DIM = Math.min(65535, dev.limits.maxComputeWorkgroupsPerDimension || 65535);
     const split = g => { const x = Math.min(g, DIM); return [x, Math.ceil(g / x)]; };
-    const OFF_TX = 160 + 30 * 4, OFF_TY = 160 + 31 * 4, OFF_TH = 160 + 33 * 4;
+    const { x: OFF_TX, y: OFF_TY, h: OFF_TH } = M.off();
     const TOTAL = p.rAcross * p.rDown;
     let closed = false, busyN = 0, held = 0;
     // THE MAIN THREAD'S OWN SHARE, which no timer in the export loop can see. Measured at 192:

@@ -16,7 +16,8 @@
 // single large function cannot be bisected that way, so the two small ones are the chance to prove
 // the plumbing before the thing that cannot be halved arrives.
 
-import { FE_FIELDS, FE_STRIDE } from './wood-real.mjs';
+import { FE_FIELDS, FE_STRIDE, SQ_MAX,
+         UNI_FLOAT_NAMES, UNI_INT_NAMES } from './wood-real.mjs';
 
 export const WGSL = {};
 
@@ -102,6 +103,8 @@ fn aLUT(i: i32) -> f32 { return ARR[E.oLUT + i]; }
 fn aTV(i: i32) -> f32 { return ARR[E.oTV + i]; }
 fn aTW(i: i32) -> f32 { return ARR[E.oTW + i]; }
 fn aTH(i: i32) -> f32 { return ARR[E.oTH + i]; }
+fn aPAX(i: i32) -> f32 { return ARR[E.oPAX + i]; }
+fn aPAY(i: i32) -> f32 { return ARR[E.oPAY + i]; }
 fn aGINV(i: i32) -> f32 { return ARR[E.oGINV + i]; }
 fn aZOFF(i: i32) -> f32 { return ARR[E.oZOFF + i]; }
 fn aUREL(i: i32) -> f32 { return ARR[E.oUREL + i]; }
@@ -140,10 +143,17 @@ fn aGEDGE(i: i32) -> f32 { return ARR[E.oGEDGE + i]; }`;
 // there, read again - and the deviation moves by well under a ring width per ring, so one
 // refinement lands it.
 //
-// SQ IS A WORKGROUP-SCOPE SCRATCH, one slot per feature, because the app keeps a Float64Array of
-// them across the two passes of that inversion rather than computing each feature's strength twice.
+// SQ IS SCRATCH, one slot per feature, because the app keeps a Float64Array of them across the two
+// passes of that inversion rather than computing each feature's strength twice.
+//
+// AND IT IS PER INVOCATION, WHICH THE FIRST DRAFT GOT WRONG. It was written as workgroup scope,
+// copying the app's one shared array, and at a workgroup of 64 that is 64 pixels writing the same
+// four slots: feature strengths bleeding between neighbours, which would read as noise in the
+// figure rather than as a crash. A function-local var is the fix, and it is also why SQ_MAX has to
+// exist - a local array needs its length at compile time, where the app sizes one at run time.
 WGSL.woodShadeBody = `
 fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4<f32> {
+  var SQ: array<f32, SQ_MAX>;
   let rad0 = sqrt(ddx * ddx + ddy * ddy);
   let rad = rad0 * aGINV(zi) + aZOFF(zi);
   if (rad > E.R) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
@@ -205,7 +215,7 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
     // it is quoted in RING WIDTHS. Two parts: the BASE is the same dip on every annual layer, so
     // they keep their spacing however deep it goes; the RIPPLE is the stack of shallow cones that
     // varies BETWEEN layers, which is the one held under a ring width.
-    let eBase = eyeG * E.EYESF * E.eyeDepth;
+    let eBase = eyeG * E.EYES * E.eyeDepth;
     let eRip = select(0.7, eBase * 0.3, eBase * 0.3 < 0.7);
     let eyeD = (eBase + eRip * (ur * ur - 0.5)) * rw;
 
@@ -261,7 +271,7 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
     let dNt = -ry * E.pnx + rx * E.pny;
     let eh3 = eyeHold * eyeHold * eyeHold;
     var m = 1.0 + E.GLOSS * E.LIT * (aFSP(li) * dNt + aFCZ(zi) * dNr)
-          - E.GLOSS * eh3 * E.EYESF * 0.38;
+          - E.GLOSS * eh3 * E.EYES * 0.38;
     if (!(m > 0.0)) { m = 0.0; }
     cr = cr * m; cg = cg * m; cb = cb * m;
   }
@@ -383,3 +393,157 @@ fn woodShade(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4<f32
   let c = select(body.xyz, knot.xyz, knot.w > 0.0);
   return vec4<f32>(clamp(c, vec3<f32>(0.0), vec3<f32>(255.0)), 1.0);
 }`;
+
+// ---- THE ENV, GENERATED ----------------------------------------------------------------------------
+// NOT TYPED OUT. wood-real.mjs names every slot of its own uniform and this walks those two lists,
+// so the struct and the packer cannot disagree about an order or a name: there is one list and two
+// readers of it. The glass port does it the other way - a bare array there, a hand-written struct
+// here - and that pair is why check-gpu-sync exists.
+//
+// WHAT THAT BUYS, CONCRETELY: a field the shader reads but nothing declares will not compile, and a
+// field declared but never written makes packWood throw. The first draft of the body read E.EYESF
+// twice; with a hand-written struct that is a plausible picture with the eyes switched off.
+const chunk4 = (xs, ty) => {
+  const out = [];
+  for (let i = 0; i < xs.length; i += 4) {
+    out.push('  ' + xs.slice(i, i + 4).map(n => n + ': ' + ty).join(', ') + ',');
+  }
+  return out.join(LF);
+};
+WGSL.woodEnv = 'struct Env {' + LF +
+  chunk4(UNI_FLOAT_NAMES, 'f32') + LF +
+  chunk4(UNI_INT_NAMES, 'i32') + LF +
+  '}' + LF +
+  '@group(0) @binding(2) var<uniform> E: Env;' + LF +
+  '@group(0) @binding(3) var<storage, read> ARR: array<f32>;' + LF +
+  'const SQ_MAX: i32 = ' + SQ_MAX + ';';
+
+// ---- THE ENTRY POINT -------------------------------------------------------------------------------
+// One invocation a pixel, and the whole of the port is three lines of it: work out where on the
+// board this pixel is, ask shade, write three floats. Everything above was getting the field here.
+//
+// THE COORDINATE CONTRACT, AND IT IS NOT THE PAINTER'S. The CPU walks the canvas's own inverse
+// affine incrementally - solve the row start, then one add per column - which is general for any
+// transform and exact in slab space. A shader has no previous pixel to add to, so it would have to
+// evaluate the affine per invocation; and for the tiling an export actually uses that affine is
+// DIAGONAL, which makes the whole thing equal to normalising the pixel's position on the sheet.
+// That is what the glass path does, so wood does the same and the two cannot drift apart over what
+// a tile coordinate means. A rotated transform would need the real inverse and the pool refuses
+// instead, because approximating one silently would move every pixel.
+//
+// zi TRUNCATES TOWARD ZERO on both sides - JS `| 0` and WGSL i32() agree - and cu cannot be
+// negative after the clamp, so the low end needs no guard and the high end gets the app's own.
+//
+// THE SURROUND IS NOT A COLOUR THE SHADER CHOOSES. shade returns w = 0 outside the log, and a plank
+// set wider than the tree is a LIVE EDGE rather than a failure; the app paints STONE_BG there and
+// so does this, from the uniform, because deciding it here would be a second opinion about what
+// the board's background is.
+WGSL.woodMain = `
+@group(0) @binding(0) var<storage, read_write> PX: array<f32>;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let n = u32(E.tileW * E.tileH);
+  // TWO DIMENSIONS WHEN IT HAS TO BE. A 4096 px export tile plus bleed is past the 65,535
+  // workgroups-per-dimension limit every implementation has, so the grid is split and this puts it
+  // back together; a one-dimensional dispatch has nw.x alone and collapses to g.x.
+  let gi = g.x + g.y * nw.x * 64u;
+  if (gi >= n) { return; }
+  let px = i32(gi) % E.tileW;
+  let py = i32(gi) / E.tileW;
+
+  let fw = f32(E.fullW);
+  let su = (f32(E.tileX + px) + 0.5) / fw;
+  let sv = (f32(E.tileY + py) + 0.5) / fw;
+  // CLAMP, NEVER SKIP: the field extends by at most a pixel at its own edge, which is what any
+  // sampler does. Skipping would leave the pixel unwritten, and that erases.
+  let cu = clamp(su, 0.0, 1.0);
+  let cvv = clamp(sv, 0.0, E.H);
+
+  var zi = i32(cu * E.len * E.ZS);
+  if (zi > E.Z - 1) { zi = E.Z - 1; }
+  let yy = E.y0 + E.bandY + (cvv / E.H) * E.wid;      // across the plank, along the cut plane
+  let c = woodShade(E.pcx - yy * E.cuy - aPAX(zi), E.pcy + yy * E.cux - aPAY(zi),
+                    zi, cu * E.len, cu, cvv);
+  let rgb = select(vec3<f32>(E.surR, E.surG, E.surB), c.xyz, c.w > 0.0);
+  let o = gi * 3u;
+  PX[o] = rgb.x;
+  PX[o + 1u] = rgb.y;
+  PX[o + 2u] = rgb.z;
+}`;
+
+// ---- THE WHOLE MODULE, ASSEMBLED ---------------------------------------------------------------------
+// WOOD DOES NOT OWN EVERY FUNCTION IT CALLS. woodAtan2, woodHash and fbm2 were ported for glass and
+// are already proven bit-identical to the app by gpu-port-harness, so wood inherits them rather than
+// a second copy going unverified beside them. All three are pure - no E.*, no buffer - which is what
+// makes them safe to lift into a module with a completely different Env.
+//
+// THE DEPENDENCY SET IS COMPUTED, NOT LISTED. A list would be a replica of the call sites, and the
+// thing it would miss is the transitive step: fbm2 calls vnoise, vnoise calls nz, and neither of
+// those appears anywhere in wood's own text. So this closes over the calls instead - take what is
+// called and not defined, find the block that defines it, repeat - and a new call in a wood block
+// pulls its dependency in with no edit here.
+//
+// NO EXEMPTION LIST OF BUILTINS, DELIBERATELY. An unresolved name is simply one no block defines, so
+// clamp and select and `if` fall out for free; and a builtin wrongly left off such a list would have
+// cost nothing anyway, which is the test of whether the list was load-bearing.
+//
+// THE ORDER OF WOOD'S OWN BLOCKS IS A FACT ABOUT THE SHADER and is written down: woodEnv declares the
+// struct and the two bindings everything else reads, woodFields the record indices, and woodMain is
+// the entry point that calls all of it. A block added and not placed here goes red rather than
+// landing wherever the object happened to put it.
+export const WOOD_ORDER = ['woodEnv', 'woodFields', 'woodEye', 'woodStain', 'woodArena',
+                           'woodShadeBody', 'woodKnot', 'woodShade', 'woodMain'];
+
+export function woodSource(GW) {
+  const unordered = Object.keys(WGSL).filter(k => WOOD_ORDER.indexOf(k) < 0);
+  if (unordered.length) throw new Error('woodSource: unplaced block(s) ' + unordered.join(', '));
+  const mine = WOOD_ORDER.map(k => WGSL[k]).join(LF);
+
+  const defs = s => [...s.matchAll(/fn ([A-Za-z_][A-Za-z0-9_]*)[ ]*[(]/g)].map(m => m[1]);
+  const defined = new Set(defs(mine));
+  const taken = [];
+  // EIGHT PASSES IS NOT A GUESS AT THE DEPTH, it is a refusal to loop forever on a cycle. The real
+  // chain is three deep today and the loop stops as soon as a pass adds nothing.
+  for (let pass = 0; pass < 8; pass++) {
+    const text = taken.map(k => GW[k]).join(LF) + LF + mine;
+    const called = new Set([...text.matchAll(/([A-Za-z_][A-Za-z0-9_]*)[ ]*[(]/g)].map(m => m[1]));
+    const add = [];
+    for (const n of called) {
+      if (defined.has(n)) continue;
+      // THE BLOCK THAT DEFINES IT, if any block does. A name nothing defines is a builtin or a
+      // keyword and needs no entry anywhere.
+      const k = Object.keys(GW).find(k2 => typeof GW[k2] === 'string'
+        && GW[k2].indexOf('fn ' + n + '(') >= 0);
+      if (k && taken.indexOf(k) < 0 && add.indexOf(k) < 0) add.push(k);
+    }
+    if (!add.length) break;
+    for (const k of add) { for (const d of defs(GW[k])) defined.add(d); }
+    for (const k of add) taken.push(k);
+  }
+
+  // AND SORTED INTO GLASS'S OWN DECLARATION ORDER AT THE END, which is the correction that mattered.
+  // Sorting per pass does not work: the first pass takes fbm2 and the second the vnoise it calls, so
+  // appending by pass puts a function before the one it depends on. WGSL wants declaration before
+  // use, so that is a compile error rather than a wrong picture - but it is a compile error nothing
+  // in this repo can run, which makes it a defect that reaches a GPU to be found. glass-gpu.mjs is
+  // written in dependency order already: nz, then vnoise, then fbm2.
+  const order = Object.keys(GW);
+  taken.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+
+  // AND THE READBACK, WHICH THE CLOSURE CANNOT FIND. pack, packTex, vfull and fblit are ENTRY
+  // POINTS: the pool names them to createPipeline and no shader function calls them, so closing over
+  // the call sites reaches none of the four. They are named here for exactly that reason and for no
+  // other - a hand-written dependency is a liability, and the one that earns it is the one a
+  // discoverable rule provably cannot discover.
+  //
+  // THEY NEED NOTHING OF GLASS. All four read PX, E.tileW, E.tileH and the Band uniform, every one
+  // of which wood's Env also declares, so the two materials share one readback rather than wood
+  // getting a second copy of the rounding argument that cost 76 channels to settle.
+  const ENTRY = ['pack', 'tex'];
+  const entry = ENTRY.filter(k => typeof GW[k] === 'string');
+
+  return {
+    code: taken.concat(entry).map(k => GW[k]).join(LF) + LF + mine,
+    borrowed: taken.concat(entry),
+  };
+}

@@ -28,6 +28,11 @@ export const CLOSE = '  // GPU-SYNC>>>';
 function strip(path, drop) {
   let s = readFileSync(join(ROOT, 'tools', 'lib', path), 'utf8').split(chr13NL).join(NL);
   for (const re of drop) s = s.replace(re, '');
+  // AN IMPORT CAN SPAN LINES, and wood-gpu.mjs's does. The negated class crosses newlines on its
+  // own, so this takes the whole statement up to its semicolon rather than one line of it - a
+  // half-removed import is a syntax error in the app, which is the one failure mode that at least
+  // announces itself.
+  s = s.replace(/^import [^;]*;/gm, '');
   s = s.replace(/^export [{][^}]*[}];?[ ]*$/gm, '');
   s = s.replace(/^export (?=(?:const|let|var|function|async|class) )/gm, '');
   // ANY remaining `export` keyword, not a list of the ones that exist today. glass-gpu.mjs carries
@@ -43,6 +48,12 @@ export function generate() {
   const wgsl = strip('glass-gpu.mjs', [/^const WGSL = \{\};\s*$/m]);
   // glass-real.mjs exports a function and a constant and declares its own NL.
   const real = strip('glass-real.mjs', [/^const NL = String\.fromCharCode\(10\);\s*$/m]);
+  // WOOD'S TWO, WHICH GO IN A SCOPE OF THEIR OWN. Both materials call their arena parts PART_NAMES
+  // and both declare an f32 coercion, so at the top level the second one is a redeclaration and the
+  // whole app stops parsing. A block is the cheapest fix and it is also the honest one: these are
+  // two materials, not one namespace, and nothing of wood's is meant to be visible to glass.
+  const woodReal = strip('wood-real.mjs', []);
+  const woodGpu = strip('wood-gpu.mjs', [/^const WGSL = \{\};\s*$/m]);
 
   const body = [
     OPEN,
@@ -55,9 +66,48 @@ export function generate() {
     indent(wgsl),
     '',
     indent(real),
+    '',
+    '  // ---- AND WOOD, the second material through the same path. Its shader is assembled rather',
+    '  // than concatenated: woodSource closes over the calls and borrows woodAtan2, woodHash, fbm2',
+    '  // and what those call in turn from the glass blocks above, so the three functions both',
+    '  // materials use have one definition and one set of probes behind them.',
+    '  //',
+    '  // IN A BLOCK, because both materials name their arena parts PART_NAMES. Four values come out',
+    '  // of it and the pool uses only those.',
+    '  let WOOD_SRC = null, WOOD_PACK = null, WOOD_UNI_OFF = null, WOOD_UNI_BYTES = 0;',
+    '  // CAPTURED OUT HERE, AND THAT IS NOT A STYLE CHOICE. wood-gpu.mjs declares a WGSL of its own',
+    '  // and it keeps it, so inside the block that name is the WOOD one - which makes a capture in',
+    '  // there a read of a const in its own temporal dead zone. The app threw on load and started',
+    '  // nothing: gates green, the shader compiling on a real device, and no studio.',
+    '  const GLASS_WGSL = WGSL;',
+    '  {',
+    indent2(woodReal),
+    '',
+    indent2(woodGpu),
+    '',
+    '    // LAZY, because assembling it measures 1.24 ms and most loads never export wood at',
+    '    // all. gpuModule calls it once and memoises the compiled module.',
+    '    WOOD_SRC = () => woodSource(GLASS_WGSL).code;',
+    '    WOOD_PACK = packWood;',
+    '    WOOD_UNI_OFF = uniOffset;',
+    '    WOOD_UNI_BYTES = UNI_BYTES;',
+    '  }',
     CLOSE,
   ].join(NL);
   return body;
+}
+
+// FOUR SPACES, for what sits inside the wood block. Same template-literal rule: a space inside a
+// backtick is shader source and must not be touched.
+function indent2(s) {
+  const out = [];
+  let inTpl = false;
+  for (const line of s.split(NL)) {
+    out.push(inTpl ? line : (line.length ? '    ' + line : line));
+    const ticks = (line.match(/`/g) || []).length;
+    if (ticks % 2 === 1) inTpl = !inTpl;
+  }
+  return out.join(NL);
 }
 
 function indent(s) {

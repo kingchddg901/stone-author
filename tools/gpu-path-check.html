@@ -43,6 +43,7 @@
 <code>gpuPool(W,&nbsp;p).tile(n)</code> against <code>renderOneTile</code>. The pieces are proved
 elsewhere; this is the path.</p>
 <label>width <select id="w"><option>2048</option><option selected>4096</option><option>8192</option><option>16384</option></select></label>
+<label>material <select id="mat"><option value="glass" selected>glass (the saved slab)</option><option value="wood">wood (the app defaults)</option></select></label>
 <label>tiles <input id="n" type="number" value="6" min="1" max="64" style="width:4em"></label>
 <button id="run">Run</button>
 <div id="res"></div>
@@ -94,8 +95,23 @@ document.getElementById('run').onclick = async () => {
     const N = Math.max(1, Math.min(64, +document.getElementById('n').value | 0));
     const w = await load();
     const sa = w.__sa;
-    const slab = await (await fetch('/harness/dist/slab.json')).json();
-    sa.deserialize(slab); sa.render();
+    // WHICH MATERIAL. The comparison below never mentions glass - it asks gpuPool for a tile and
+    // renderOneTile for the same tile - so a second material needs a document and nothing else.
+    // Glass gets the saved slab, because its shader has features no default carries; wood gets the
+    // app's own defaults through its own button, which is also the only way to set the material
+    // from out here and is how a person would do it.
+    const mat = document.getElementById('mat').value;
+    if (mat === 'wood') {
+      const b = w.document.getElementById('m-wood');
+      if (!b) throw new Error('the hooked build has no wood button');
+      b.click();
+      await new Promise(r => setTimeout(r, 300));
+    } else {
+      const slab = await (await fetch('/harness/dist/slab.json')).json();
+      sa.deserialize(slab);
+    }
+    sa.render();
+    pair('material', mat);
 
     head('this device, this document');
     const cap = await sa.gpuCapability();
