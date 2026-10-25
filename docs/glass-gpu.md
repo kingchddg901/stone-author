@@ -1095,6 +1095,72 @@ four-channel: the alpha drop landed at 207. Against its proper three-channel twi
 2.767, in line with the rest. The confounder had already been identified an hour earlier and was not
 carried back to the conclusion it invalidated.
 
+### Per-op grids: one shape, three instances, and what the pictures say
+
+The arena carried ONE warp grid, ONE roller grid and ONE stamp list for a whole document, while the
+app's own painter has them per op. Three instances of a single shape, and they failed three different
+ways:
+
+| | before | how it showed |
+|---|---|---|
+| warps | refused the document | `exp.gpu.failed`, straight to the CPU painter |
+| rollers | took `ROLL[0]` for every press | **nothing at all** |
+| stamps | took the first stamped op's list | **nothing at all** |
+
+**The refusal was the lucky one.** A glass with three stir ranges rendered on the CPU painter at
+102 s against 4.1 s, and that was recoverable because something stopped. The other two draw a picture
+the CPU painter does not, at full speed, with no throw and no console line. The roller had a guard
+four lines below the warp's and did not; the stamps had none. **A guard that exists reads as
+complete**, which is how the shoulder beside one stayed unchecked for as long as the path has existed.
+
+#### What it cost to fix, which was less than it looked
+
+`glassUnwarp` was already being called INSIDE the `k == 5` branch, once per stir - it was reading the
+one global grid each time. The walk never needed restructuring; the grids needed addressing. So:
+
+- **warps take a stride.** Every distinct grid packed end to end, grid `w` at `w * nx * ny`. The
+  grids come from one generator and agree on size, so `nx`, `ny` and `WPH` stay single uniform fields.
+- **rollers and stamps take metadata.** They do NOT agree - `test work` carries four rollers of four
+  sizes - so `RMETA` and `SMETA` carry each entry's own base and dimensions.
+- **the op record names them.** Slots 11, 12 and 13 hold the stamp, roller and warp index PLUS ONE,
+  so zero still means "none" and every `aOP(i, n) != 0.0` test in the shader is untouched. Slots 14
+  and 15, never used before, carry the roller's height and total.
+
+**The 304-byte uniform did not grow and the `Env` struct did not move a field.** `pad3` and `pad4`
+became the two metadata bases. A base of zero means ABSENT, which is sound only because `WU` is first
+in `PART_NAMES` and so owns offset zero - gated, with that invariant gated beside it, because the
+probe pages build their own uniform and rely on the fallback.
+
+#### Three verifications, on hardware, against the CPU painter
+
+Nothing in the 52 gates executes WGSL, so none of this was proven by them. Each piece was measured by
+rendering the same document on both renderers at 32,768 and comparing all 2,013,265,920 channels:
+
+| | speedup | channels differing | worst | worst tile | per-tile min / median / max |
+|---|---|---|---|---|---|
+| Glass Master Source - ONE warp, the known-good control | - | 2.955% | 111 | 128 | 0.01 / 0.67 / **20.55%** |
+| disco - three warps | 23x | 0.029% | 175 | 16 | 0.01 / 0.02 / 0.15% |
+| test work - four rollers, two stamp lists | 33.7x | **0.008%** | 108 | 98 | **0.01 / 0.01 / 0.01%** |
+| disco + a roller - both schemes, one arena | **56.2x** | 0.028% | 175 | **16** | 0.01 / 0.02 / 0.15% |
+
+**THE PER-TILE SPREAD IS THE TEST, NOT THE PERCENTAGE.** fp32 divergence is SCATTERED - every row
+above sits at 0.01% on its quietest tile. A mis-addressed grid is GEOMETRIC: it displaces the ops that
+read it, and that concentrates. The control shows what concentration looks like when it is innocent -
+one tile at 20.55%, where the field is most sensitive - and the three suspects show none of it.
+
+The last row is the one that could only have gone wrong: a stride-indexed warp and a
+metadata-indexed roller live in the same arena. Against disco without the roller it is the same worst
+delta, **the same worst tile**, and the same distribution to two decimals. The hotspot not moving is
+what would have broken first.
+
+#### And a refusal now reaches the record
+
+`gpu` was written as `true` or absent, so a master drawn on the CPU because the GPU would not take it
+was indistinguishable from one drawn on the CPU because nobody asked. The reason lived in a console.
+Recovering one cost a morning on 2026-10-25; the second took one line, because the master said
+`packReal: 4 roller grids, 1 stride` in its own record. `gpu: false`, `gpuWhy` and `gpuDetail` now
+ride with every refused render. The toggle being off is not a refusal and stays absent.
+
 ## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
 
 **His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,
