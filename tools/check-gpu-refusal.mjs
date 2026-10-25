@@ -13,8 +13,8 @@
 // a morning on 2026-10-25, which is why `gpu: false`, `gpuWhy` and `gpuDetail` now exist.
 //
 // WHAT THIS HAS TO PROVE:
-//   1  two disagreeing warp states are refused, and the message names the count
-//   2  two disagreeing press rollers are refused the same way
+//   1  two warps of one size are PACKED, end to end, with each stir naming its own by index
+//   2  two disagreeing press rollers are still refused, and the message names the count
 //   3  the guards are discriminating, not blanket - one shared roller passes, and so does none
 //   4  a document with one of each gets past both
 //   5  the app carries the failure sentence out of both places the pool gives up
@@ -33,8 +33,9 @@ const ok = (name, cond, detail) => {
 // A DOCUMENT REDUCED TO WHAT THE GUARDS READ. packReal takes SLAB and H, finds a warp, finds a
 // roller, collects the stamps - none of which needs a real slab - and then checks the two sets. So
 // the guards are reachable on a skeleton, and anything thrown after them is a different sentence.
-const WARP_A = { u: new Float32Array(4), v: new Float32Array(4) };
-const WARP_B = { u: new Float32Array(4), v: new Float32Array(4) };
+const WARP_A = { u: new Float32Array([10, 11, 12, 13]), v: new Float32Array([14, 15, 16, 17]), nx: 2, ny: 2 };
+const WARP_B = { u: new Float32Array([20, 21, 22, 23]), v: new Float32Array([24, 25, 26, 27]), nx: 2, ny: 2 };
+const WARP_BIG = { u: new Float32Array(9), v: new Float32Array(9), nx: 3, ny: 3 };
 const ROLL_A = { s: new Float32Array(4), v: new Float32Array(4), R: {} };
 const ROLL_B = { s: new Float32Array(4), v: new Float32Array(4), R: {} };
 const stir = S => ({ k: 5, S, raw: {} });
@@ -46,12 +47,49 @@ const run = OPC => {
 };
 const says = (msg, what) => !!msg && msg.indexOf(what) >= 0;
 
-// ---- 1: disagreeing warps ------------------------------------------------------------------------
+// ---- 1: disagreeing warps are DRAWN now, not refused ----------------------------------------------
+// This is the capability, and the reason the refusal it replaces was worth removing: a glass with
+// three stir ranges took the CPU painter at 25x the cost because of it.
 {
   const m = run([stir(WARP_A), stir(WARP_B)]);
-  ok('two warp states are refused', says(m, 'warp states'), m);
-  ok('and the message names the count', says(m, '2 warp states'), m);
-  ok('and says why rather than just no', says(m, 'per-op grids not built'), m);
+  ok('two warps of one size are no longer refused', !says(m, 'warp'), m);
+  const big = run([stir(WARP_A), stir(WARP_BIG)]);
+  ok('but grids of two SIZES still are - one stride cannot index them', says(big, 'two sizes'), big);
+  ok('and that message counts the grids', says(big, '2 grids'), big);
+}
+
+// ---- 1b: and they are packed where the shader will look for them -----------------------------------
+// wi * nx * ny is the whole addressing scheme, so the grids must be contiguous, in first-appearance
+// order, and each stir's slot 13 must be its index PLUS ONE - zero still meaning no warp at all.
+{
+  const F = {
+    OPC: [stir(WARP_A), { k: 1, a: 0.5, raw: {} }, stir(WARP_B), stir(WARP_A)],
+    H: 3, ROLL: [], SG: {}, S: null, MC: [], MEX: [1, 2], MHL: [3], MD: [4], MRIM: [5],
+  };
+  const r = packReal(F, { SLAB: 12, canes: [[1, 2, 3]], spin: [0.5] });
+  ok('both grids are in the arena, end to end', r.parts.WU.length === 8,
+     r.parts.WU.length + ' floats');
+  ok('grid 0 first, grid 1 after it, in first-appearance order',
+     Array.from(r.parts.WU).join(',') === '10,11,12,13,20,21,22,23', Array.from(r.parts.WU).join(','));
+  ok('and V with it', Array.from(r.parts.WV).join(',') === '14,15,16,17,24,25,26,27');
+  const slot = i => r.parts.OPS[i * 16 + 13];
+  ok('the first stir names grid 0', slot(0) === 1, String(slot(0)));
+  ok('the op between them names none', slot(1) === 0, String(slot(1)));
+  ok('the second stir names grid 1', slot(2) === 2, String(slot(2)));
+  ok('a REPEAT of the first warp names grid 0 again, not a third copy',
+     slot(3) === 1 && r.parts.WU.length === 8, String(slot(3)));
+}
+
+// ---- 1c: the no-op claim, which is the one that protects every master already written ---------------
+// One warp must pack exactly as it did before any of this was per-op: index 0, one grid, slot 13 = 1.
+// Measured against the packer at 13ce5b7 on 2026-10-25: arena and uniform byte for byte identical.
+{
+  const F = { OPC: [stir(WARP_A), stir(WARP_A)], H: 3, ROLL: [], SG: {}, S: null,
+              MC: [], MEX: [1, 2], MHL: [3], MD: [4], MRIM: [5] };
+  const r = packReal(F, { SLAB: 12, canes: [], spin: [] });
+  ok('a single-warp document packs ONE grid', r.parts.WU.length === 4, r.parts.WU.length + ' floats');
+  ok('and every stir names it as index 0 (slot 13 == 1)',
+     r.parts.OPS[13] === 1 && r.parts.OPS[16 + 13] === 1);
 }
 
 // ---- 2: disagreeing rollers ------------------------------------------------------------------------
@@ -69,8 +107,6 @@ const says = (msg, what) => !!msg && msg.indexOf(what) >= 0;
   ok('ABLATION two presses sharing ONE roller are not refused for it', !says(shared, 'roller states'), shared);
   const none = run([press(null), press(null)]);
   ok('ABLATION two presses with no roller at all are not refused for it', !says(none, 'roller states'), none);
-  const oneStir = run([stir(WARP_A), stir(WARP_A)]);
-  ok('ABLATION two stirs sharing ONE warp are not refused for it', !says(oneStir, 'warp states'), oneStir);
   // three presses, two rollers: the count must follow the SET, not the op count
   const three = run([press(ROLL_A), press(ROLL_A), press(ROLL_B)]);
   ok('the count is of distinct rollers, not of presses', says(three, '2 roller states'), three);

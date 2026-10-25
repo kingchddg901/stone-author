@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.217';
+  const BUILD = '2026.10.25.218';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14154,7 +14154,7 @@ fn glassFlow(ox: f32, oy: f32, form: i32) -> vec2<f32> {
   // `fx | 0`, which truncates toward zero; i32() does the same, and cu is bounded to [0,1] so the two
   // cannot part company on a negative.
   WGSL.glassUnwarp = `
-fn glassUnwarp(cu: f32, cvv: f32) -> vec2<f32> {
+fn glassUnwarp(wi: i32, cu: f32, cvv: f32) -> vec2<f32> {
   let fx = cu * f32(E.WPnx - 1); let fy = (cvv / E.WPH) * f32(E.WPny - 1);
   var i0 = i32(fx); var j0 = i32(fy);
   if (i0 > E.WPnx - 2) { i0 = E.WPnx - 2; } if (i0 < 0) { i0 = 0; }
@@ -14172,7 +14172,11 @@ fn glassUnwarp(cu: f32, cvv: f32) -> vec2<f32> {
   // an f64 reference over the real coordinate windows: worst error 1.01e-4 the old way, 2.72e-6
   // this way, a factor of 37, and within about 6 ulps of what f32 can represent at all.
   let tx = fx - f32(i0); let ty = fy - f32(j0);
-  let k = j0 * E.WPnx + i0; let k2 = k + E.WPnx;
+  // WHICH GRID, BY STRIDE. The arena carries every distinct warp end to end and they are all one
+  // size - packReal refuses a document whose grids differ, which is all that is left of the old
+  // refusal - so grid wi starts at wi * nx * ny and k2 inherits the base from k. A document with
+  // one warp passes wi = 0 and this is the arithmetic it had before any of it was per-op.
+  let k = wi * E.WPnx * E.WPny + j0 * E.WPnx + i0; let k2 = k + E.WPnx;
   let ua = aWU(k) + tx * (aWU(k + 1) - aWU(k));
   let ub = aWU(k2) + tx * (aWU(k2 + 1) - aWU(k2));
   let va = aWV(k) + tx * (aWV(k + 1) - aWV(k));
@@ -14545,7 +14549,9 @@ fn glassUnform(x0: f32, y0: f32) -> vec3<f32> {
       if (aOP(i, 13) != 0.0) {
         let cu = (x - E.PX) * 12.0 / E.SLAB + 0.5;
         let cvv = (y - E.PY) * 12.0 / E.SLAB + 0.5 * E.WPH;
-        let w = glassUnwarp(cu, cvv);
+        // SLOT 13 IS THE GRID INDEX PLUS ONE, so the test above doubles as "has a warp at all"
+        // and the subtraction is only reached when it does.
+        let w = glassUnwarp(i32(aOP(i, 13)) - 1, cu, cvv);
         x = x + w.x * E.SLAB / 12.0;
         y = y + w.y * E.SLAB / 12.0;
       }
@@ -14770,13 +14776,28 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
   const f32 = a => a instanceof Float32Array ? a : new Float32Array(a || []);
 
-  // one op is sixteen floats; the same record glass-scene.mjs writes, read off the app's own OPC
-  function opRow(op) {
+  // GRIDS OF ONE SIZE, LAID END TO END. Their equal length is what the caller has already required,
+  // so the stride is the first one's and grid w starts at w * stride.
+  function catGrids(list, pick) {
+    if (!list.length) return new Float32Array(0);
+    const first = f32(pick(list[0])), n = first.length;
+    const a = new Float32Array(n * list.length);
+    list.forEach((g, i) => a.set(f32(pick(g)), i * n));
+    return a;
+  }
+
+  // one op is sixteen floats; the same record glass-scene.mjs writes, read off the app's own OPC.
+  // `wi` is this op's index into the packed warp grids, or -1 for an op that has none.
+  function opRow(op, wi) {
     const a = new Float32Array(16);
     a[0] = op.k; a[1] = op.ox; a[2] = op.oy; a[3] = op.a; a[4] = op.s;
     a[5] = op.rot ? 1 : 0; a[6] = op.cd; a[7] = op.sd; a[8] = op.u0;
     a[9] = op.face; a[10] = op.bite;
-    a[11] = op.st ? 1 : 0; a[12] = op.B ? 1 : 0; a[13] = op.S ? 1 : 0;
+    // SLOT 13 IS AN INDEX NOW, PLUS ONE, so zero still reads as "this op has no warp" and the
+    // shader's existing `aOP(i, 13) != 0.0` test is unchanged. A document with one warp packs 1 for
+    // every stir and indexes grid 0, which is the arithmetic it had before this was per-op.
+    a[11] = op.st ? 1 : 0; a[12] = op.B ? 1 : 0;
+    a[13] = (op.S && wi >= 0) ? wi + 1 : 0;
     return a;
   }
 
@@ -14795,20 +14816,31 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
   function packReal(F, extra) {
     const SLAB = extra.SLAB, H = F.H;
-    const S = F.S || (F.OPC.find(o => o.S) || {}).S || null;
+    // EVERY DISTINCT WARP, IN FIRST-APPEARANCE ORDER. The arena carries them end to end and each
+    // stir names its own by index, so a document whose stirs disagree is DRAWN rather than refused.
+    // That refusal is what sent a glass with three stir ranges onto the CPU painter at 25x the cost,
+    // silently, on 2026-10-25.
+    const warpList = [];
+    for (const o of F.OPC) if (o.k === 5 && o.S && warpList.indexOf(o.S) < 0) warpList.push(o.S);
+    if (!warpList.length && F.S) warpList.push(F.S);
+    const S = warpList[0] || null;
     const B = (F.ROLL && F.ROLL[0]) || null;
     const stamp = stampsOf(F);
 
-    // every stir must agree on its warp state, or one grid is the wrong answer rather than a shortcut
-    const stirs = F.OPC.filter(o => o.k === 5 && o.S);
-    const warps = new Set(stirs.map(o => o.S));
-    if (warps.size > 1) {
-      // SHORT PIECES ON PURPOSE. This file is inlined into the app, where check-i18n reads every
-      // string literal and asks why a sentence is not routed through a pack. A developer-facing
-      // Error is not translatable prose, and the gate cannot tell the difference - so it is written
-      // as fragments none of which read like a sentence.
-      throw new Error('packReal: ' + warps.size + ' warp states, 1 grid'
-        + ' (per-op grids not built)');
+    // THEY MUST STILL AGREE ON THEIR DIMENSIONS, and that is the whole of what is left of the old
+    // refusal. One stride indexes the lot - grid w starts at w * nx * ny - which is what lets nx, ny
+    // and WPH stay single fields in a 304-byte uniform and leaves the Env struct untouched. Grids of
+    // two sizes would need a per-grid table and a wider uniform; no document has produced one.
+    //
+    // SHORT PIECES ON PURPOSE. This file is inlined into the app, where check-i18n reads every
+    // string literal and asks why a sentence is not routed through a pack. A developer-facing
+    // Error is not translatable prose, and the gate cannot tell the difference - so it is written
+    // as fragments none of which read like a sentence.
+    for (const w of warpList) {
+      if (w.nx !== S.nx || w.ny !== S.ny) {
+        throw new Error('packReal: warp grids of two sizes'
+          + ' (one stride, ' + warpList.length + ' grids)');
+      }
     }
 
     // AND EVERY PRESS ON ITS ROLLER, for the same reason and with a worse failure when it is not
@@ -14825,7 +14857,8 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     }
 
     const parts = {
-      WU: f32(S && S.u), WV: f32(S && S.v),
+      // END TO END, grid 0 first. With one warp this is byte for byte what it packed before.
+      WU: catGrids(warpList, w => w.u), WV: catGrids(warpList, w => w.v),
       MEX: f32(F.MEX), MHL: f32(F.MHL), MD: f32(F.MD), MRIM: f32(F.MRIM),
       BS: f32(B && B.s), BV: f32(B && B.v),
       RPR: f32(B && B.R && B.R.pr), RTL: f32(B && B.R && B.R.tl),
@@ -14833,7 +14866,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       MCC: f32((F.MC || []).map(c => c.c | 0)),
       SPIN: f32(extra.spin),
       OPS: (() => { const a = new Float32Array(F.OPC.length * 16);
-        F.OPC.forEach((op, i) => a.set(opRow(op), i * 16)); return a; })(),
+        F.OPC.forEach((op, i) => a.set(opRow(op, warpList.indexOf(op.S)), i * 16)); return a; })(),
       CANE: f32([].concat(...(extra.canes || []))),
     };
 

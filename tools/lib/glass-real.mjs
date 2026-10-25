@@ -24,13 +24,28 @@ const PART_NAMES = ['WU', 'WV', 'MEX', 'MHL', 'MD', 'MRIM', 'BS', 'BV', 'RPR', '
 
 const f32 = a => a instanceof Float32Array ? a : new Float32Array(a || []);
 
-// one op is sixteen floats; the same record glass-scene.mjs writes, read off the app's own OPC
-function opRow(op) {
+// GRIDS OF ONE SIZE, LAID END TO END. Their equal length is what the caller has already required,
+// so the stride is the first one's and grid w starts at w * stride.
+function catGrids(list, pick) {
+  if (!list.length) return new Float32Array(0);
+  const first = f32(pick(list[0])), n = first.length;
+  const a = new Float32Array(n * list.length);
+  list.forEach((g, i) => a.set(f32(pick(g)), i * n));
+  return a;
+}
+
+// one op is sixteen floats; the same record glass-scene.mjs writes, read off the app's own OPC.
+// `wi` is this op's index into the packed warp grids, or -1 for an op that has none.
+function opRow(op, wi) {
   const a = new Float32Array(16);
   a[0] = op.k; a[1] = op.ox; a[2] = op.oy; a[3] = op.a; a[4] = op.s;
   a[5] = op.rot ? 1 : 0; a[6] = op.cd; a[7] = op.sd; a[8] = op.u0;
   a[9] = op.face; a[10] = op.bite;
-  a[11] = op.st ? 1 : 0; a[12] = op.B ? 1 : 0; a[13] = op.S ? 1 : 0;
+  // SLOT 13 IS AN INDEX NOW, PLUS ONE, so zero still reads as "this op has no warp" and the
+  // shader's existing `aOP(i, 13) != 0.0` test is unchanged. A document with one warp packs 1 for
+  // every stir and indexes grid 0, which is the arithmetic it had before this was per-op.
+  a[11] = op.st ? 1 : 0; a[12] = op.B ? 1 : 0;
+  a[13] = (op.S && wi >= 0) ? wi + 1 : 0;
   return a;
 }
 
@@ -49,20 +64,31 @@ function stampsOf(F) {
 
 export function packReal(F, extra) {
   const SLAB = extra.SLAB, H = F.H;
-  const S = F.S || (F.OPC.find(o => o.S) || {}).S || null;
+  // EVERY DISTINCT WARP, IN FIRST-APPEARANCE ORDER. The arena carries them end to end and each
+  // stir names its own by index, so a document whose stirs disagree is DRAWN rather than refused.
+  // That refusal is what sent a glass with three stir ranges onto the CPU painter at 25x the cost,
+  // silently, on 2026-10-25.
+  const warpList = [];
+  for (const o of F.OPC) if (o.k === 5 && o.S && warpList.indexOf(o.S) < 0) warpList.push(o.S);
+  if (!warpList.length && F.S) warpList.push(F.S);
+  const S = warpList[0] || null;
   const B = (F.ROLL && F.ROLL[0]) || null;
   const stamp = stampsOf(F);
 
-  // every stir must agree on its warp state, or one grid is the wrong answer rather than a shortcut
-  const stirs = F.OPC.filter(o => o.k === 5 && o.S);
-  const warps = new Set(stirs.map(o => o.S));
-  if (warps.size > 1) {
-    // SHORT PIECES ON PURPOSE. This file is inlined into the app, where check-i18n reads every
-    // string literal and asks why a sentence is not routed through a pack. A developer-facing
-    // Error is not translatable prose, and the gate cannot tell the difference - so it is written
-    // as fragments none of which read like a sentence.
-    throw new Error('packReal: ' + warps.size + ' warp states, 1 grid'
-      + ' (per-op grids not built)');
+  // THEY MUST STILL AGREE ON THEIR DIMENSIONS, and that is the whole of what is left of the old
+  // refusal. One stride indexes the lot - grid w starts at w * nx * ny - which is what lets nx, ny
+  // and WPH stay single fields in a 304-byte uniform and leaves the Env struct untouched. Grids of
+  // two sizes would need a per-grid table and a wider uniform; no document has produced one.
+  //
+  // SHORT PIECES ON PURPOSE. This file is inlined into the app, where check-i18n reads every
+  // string literal and asks why a sentence is not routed through a pack. A developer-facing
+  // Error is not translatable prose, and the gate cannot tell the difference - so it is written
+  // as fragments none of which read like a sentence.
+  for (const w of warpList) {
+    if (w.nx !== S.nx || w.ny !== S.ny) {
+      throw new Error('packReal: warp grids of two sizes'
+        + ' (one stride, ' + warpList.length + ' grids)');
+    }
   }
 
   // AND EVERY PRESS ON ITS ROLLER, for the same reason and with a worse failure when it is not
@@ -79,7 +105,8 @@ export function packReal(F, extra) {
   }
 
   const parts = {
-    WU: f32(S && S.u), WV: f32(S && S.v),
+    // END TO END, grid 0 first. With one warp this is byte for byte what it packed before.
+    WU: catGrids(warpList, w => w.u), WV: catGrids(warpList, w => w.v),
     MEX: f32(F.MEX), MHL: f32(F.MHL), MD: f32(F.MD), MRIM: f32(F.MRIM),
     BS: f32(B && B.s), BV: f32(B && B.v),
     RPR: f32(B && B.R && B.R.pr), RTL: f32(B && B.R && B.R.tl),
@@ -87,7 +114,7 @@ export function packReal(F, extra) {
     MCC: f32((F.MC || []).map(c => c.c | 0)),
     SPIN: f32(extra.spin),
     OPS: (() => { const a = new Float32Array(F.OPC.length * 16);
-      F.OPC.forEach((op, i) => a.set(opRow(op), i * 16)); return a; })(),
+      F.OPC.forEach((op, i) => a.set(opRow(op, warpList.indexOf(op.S)), i * 16)); return a; })(),
     CANE: f32([].concat(...(extra.canes || []))),
   };
 

@@ -106,7 +106,7 @@ fn glassFlow(ox: f32, oy: f32, form: i32) -> vec2<f32> {
 // `fx | 0`, which truncates toward zero; i32() does the same, and cu is bounded to [0,1] so the two
 // cannot part company on a negative.
 WGSL.glassUnwarp = `
-fn glassUnwarp(cu: f32, cvv: f32) -> vec2<f32> {
+fn glassUnwarp(wi: i32, cu: f32, cvv: f32) -> vec2<f32> {
   let fx = cu * f32(E.WPnx - 1); let fy = (cvv / E.WPH) * f32(E.WPny - 1);
   var i0 = i32(fx); var j0 = i32(fy);
   if (i0 > E.WPnx - 2) { i0 = E.WPnx - 2; } if (i0 < 0) { i0 = 0; }
@@ -124,7 +124,11 @@ fn glassUnwarp(cu: f32, cvv: f32) -> vec2<f32> {
   // an f64 reference over the real coordinate windows: worst error 1.01e-4 the old way, 2.72e-6
   // this way, a factor of 37, and within about 6 ulps of what f32 can represent at all.
   let tx = fx - f32(i0); let ty = fy - f32(j0);
-  let k = j0 * E.WPnx + i0; let k2 = k + E.WPnx;
+  // WHICH GRID, BY STRIDE. The arena carries every distinct warp end to end and they are all one
+  // size - packReal refuses a document whose grids differ, which is all that is left of the old
+  // refusal - so grid wi starts at wi * nx * ny and k2 inherits the base from k. A document with
+  // one warp passes wi = 0 and this is the arithmetic it had before any of it was per-op.
+  let k = wi * E.WPnx * E.WPny + j0 * E.WPnx + i0; let k2 = k + E.WPnx;
   let ua = aWU(k) + tx * (aWU(k + 1) - aWU(k));
   let ub = aWU(k2) + tx * (aWU(k2 + 1) - aWU(k2));
   let va = aWV(k) + tx * (aWV(k + 1) - aWV(k));
@@ -497,7 +501,9 @@ fn glassUnform(x0: f32, y0: f32) -> vec3<f32> {
       if (aOP(i, 13) != 0.0) {
         let cu = (x - E.PX) * 12.0 / E.SLAB + 0.5;
         let cvv = (y - E.PY) * 12.0 / E.SLAB + 0.5 * E.WPH;
-        let w = glassUnwarp(cu, cvv);
+        // SLOT 13 IS THE GRID INDEX PLUS ONE, so the test above doubles as "has a warp at all"
+        // and the subtraction is only reached when it does.
+        let w = glassUnwarp(i32(aOP(i, 13)) - 1, cu, cvv);
         x = x + w.x * E.SLAB / 12.0;
         y = y + w.y * E.SLAB / 12.0;
       }

@@ -232,7 +232,7 @@ function cases(app) {
 
     { name: 'glassUnwarp', kind: 'f32', needs: ['env', 'glassUnwarp'],
       uni: () => envUni(), arrays: allArrays,
-      call: TOUCH_ALL + '  let w = glassUnwarp(IN[i * 2], IN[i * 2 + 1]);\n'
+      call: TOUCH_ALL + '  let w = glassUnwarp(0, IN[i * 2], IN[i * 2 + 1]);\n'
           + '  OUT[i * 2] = w.x; OUT[i * 2 + 1] = w.y;',
       inputs: () => { const a = new Float32Array(N * 2);
         for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i % 211) / 210);
