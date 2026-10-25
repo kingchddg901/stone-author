@@ -75,19 +75,24 @@ function catSame(list, pick, what) {
 // AND IT IS A POWER OF TWO ON PURPOSE. The first spelling was 1e30, which is not representable in
 // f32 and came back as 1.0000000150474662e30 - fine for a greater-than, wrong the moment anything
 // compares a sentinel for equality, which is what a sentinel invites. 2^100 round trips exact.
-export const FE_STRIDE = 22;
+// THE RECORD'S LAYOUT, NAMED. The shader indexes these by number, so the two have to agree and a
+// list is the only thing that makes the agreement checkable. `wl` is NOT here - it is a table and
+// lives in FEWL - and when it left it took index 4 with it, leaving a hole that is now closed.
+export const FE_FIELDS = ['amp', 'ux', 'uy', 'zc', 'ax', 'ay', 'az', 'px', 'py',
+                          'qx', 'qy', 'qz', 'kn', 'kp', 'r0', 'dead', 'rDie',
+                          'prune', 'ageN', 'rbMax'];
+export const FE_STRIDE = FE_FIELDS.length;
 export const NEVER_DIES = 2 ** 100;
 
 export function feRow(f) {
   const a = new Float32Array(FE_STRIDE);
-  a[0] = f.amp; a[1] = f.ux; a[2] = f.uy; a[3] = f.zc;   // wl is a TABLE and lives in FEWL
-  a[5] = f.ax; a[6] = f.ay; a[7] = f.az;
-  a[8] = f.px; a[9] = f.py;
-  a[10] = f.qx; a[11] = f.qy; a[12] = f.qz;
-  a[13] = f.kn; a[14] = f.kp; a[15] = f.r0;
-  a[16] = f.dead ? 1 : 0;
-  a[17] = Number.isFinite(f.rDie) ? f.rDie : NEVER_DIES;
-  a[18] = f.prune; a[19] = f.ageN; a[20] = f.rbMax;
+  // WRITTEN THROUGH THE NAMED LIST, so a field cannot land at an index nobody meant. The one
+  // substitution is rDie, below.
+  FE_FIELDS.forEach((k, i) => {
+    if (k === 'dead') { a[i] = f.dead ? 1 : 0; return; }
+    if (k === 'rDie') { a[i] = Number.isFinite(f.rDie) ? f.rDie : NEVER_DIES; return; }
+    a[i] = f[k];
+  });
   return a;
 }
 

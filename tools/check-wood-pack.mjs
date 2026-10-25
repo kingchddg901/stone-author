@@ -14,7 +14,7 @@
 //   6  a graft is carried as a second field rather than folded into the first
 //
 //   node tools/check-wood-pack.mjs
-import { packWood, feRow, PART_NAMES, FE_STRIDE, NEVER_DIES, UNI_BYTES, UNI_FLOATS } from './lib/wood-real.mjs';
+import { packWood, feRow, PART_NAMES, FE_STRIDE, FE_FIELDS, NEVER_DIES, UNI_BYTES, UNI_FLOATS } from './lib/wood-real.mjs';
 
 let fails = 0;
 const ok = (name, cond, detail) => {
@@ -28,18 +28,19 @@ const ok = (name, cond, detail) => {
 // Z long - which is the correction this fixture exists to hold: the first version of it had them as
 // numbers, because the author did, and so it agreed with the mistake instead of the app.
 const NA = 5, ZN = 8;
-const feat = (base, dead) => ({
-  amp: base + 1, ux: base + 2, uy: base + 3, zc: base + 4,
-  ax: base + 6, ay: base + 7, az: base + 8,
-  px: base + 9, py: base + 10,
-  qx: base + 11, qy: base + 12, qz: base + 13,
-  kn: base + 14, kp: base + 15, r0: base + 16,
-  dead, rDie: dead ? base + 17 : Infinity,
-  prune: base + 18, ageN: base + 19, rbMax: base + 20,
-  wl: new Float32Array(6).fill(base + 80),
-  al: new Float32Array(NA).fill(base + 90),
-  zw: new Float32Array(ZN).fill(base + 91),
-});
+// BUILT FROM THE NAMED LIST, so field i carries base + i and a reordering cannot hide. The fixture
+// used to spell the order out by hand and drifted twice when the record changed - a test that
+// repeats a layout is a second copy of it.
+const feat = (base, dead) => {
+  const f = { wl: new Float32Array(6).fill(base + 80),
+              al: new Float32Array(NA).fill(base + 90),
+              zw: new Float32Array(ZN).fill(base + 91) };
+  FE_FIELDS.forEach((k, i) => { f[k] = base + i; });
+  f.dead = dead;
+  f.rDie = dead ? base + FE_FIELDS.indexOf('rDie') : Infinity;
+  return f;
+};
+const AT = k => FE_FIELDS.indexOf(k);
 
 const field = (n, feats) => ({
   lut: new Float32Array(n).fill(1), tv: new Float32Array(n).fill(2),
@@ -64,16 +65,18 @@ const field = (n, feats) => ({
   const r = feRow(feat(100, true));
   ok('a feature is ' + FE_STRIDE + ' floats', r.length === FE_STRIDE, r.length + '');
   // every field distinct means the row must be strictly increasing over the fields that carry base+k
-  const want = [101, 102, 103, 104];
-  ok('the leading fields are in their fixed order',
-     want.every((v, i) => r[i] === v), Array.from(r.slice(0, 4)).join(','));
-  ok('dead is a flag, not a value', r[16] === 1);
-  ok('and the three tail fields follow it', r[18] === 118 && r[19] === 119 && r[20] === 120,
-     r[18] + ',' + r[19] + ',' + r[20]);
-  ok('the lobe and the z window are NOT in the record', r.length === 22, r.length + ' floats');
+  const plain = FE_FIELDS.filter(k => k !== 'dead' && k !== 'rDie');
+  ok('every field lands at its own index',
+     plain.every(k => r[AT(k)] === 100 + AT(k)),
+     plain.filter(k => r[AT(k)] !== 100 + AT(k)).join(',') || 'all in place');
+  ok('dead is a flag, not a value', r[AT('dead')] === 1);
+  ok('the record is exactly the named fields', r.length === FE_FIELDS.length,
+     r.length + ' floats for ' + FE_FIELDS.length + ' names');
+  ok('and wl, al and zw are NOT among them',
+     !FE_FIELDS.includes('wl') && !FE_FIELDS.includes('al') && !FE_FIELDS.includes('zw'));
 
   const alive = feRow(feat(200, false));
-  const AT_RDIE = 17;
+  const AT_RDIE = AT('rDie');
   ok('a feature that never dies does NOT pack Infinity', Number.isFinite(alive[AT_RDIE]), String(alive[AT_RDIE]));
   ok('it packs the sentinel instead', alive[AT_RDIE] === NEVER_DIES, String(alive[AT_RDIE]));
   ok('which is past any radius a tree in feet can reach', NEVER_DIES > 1e20);
@@ -81,7 +84,7 @@ const field = (n, feats) => ({
   ok('ABLATION Infinity would not have survived a Float32Array round trip as a comparable number',
      !Number.isFinite(new Float32Array([Infinity])[0]));
   const dies = feRow(feat(300, true));
-  ok('and a feature that DOES die keeps its real radius', dies[AT_RDIE] === 317, String(dies[AT_RDIE]));
+  ok('and a feature that DOES die keeps its real radius', dies[AT_RDIE] === 300 + AT('rDie'), String(dies[AT_RDIE]));
 }
 
 // ---- 3, 4, 5: the arena and the uniform --------------------------------------------------------------
@@ -118,7 +121,7 @@ const field = (n, feats) => ({
   ok('the feature count rides with it', d.getInt32(UNI_FLOATS * 4 + 4 * 4, true) === 2);
   ok('FE holds both features end to end', r.parts.FE.length === 2 * FE_STRIDE,
      r.parts.FE.length + '');
-  ok('the second starts where the first ends', r.parts.FE[FE_STRIDE] === 51,
+  ok('the second starts where the first ends', r.parts.FE[FE_STRIDE] === 50,
      String(r.parts.FE[FE_STRIDE]));
   // THE TABLES THAT ARE NOT IN THE RECORD, laid end to end at their own strides
   ok('each feature contributes a lobe of NA', r.parts.FEAL.length === 2 * 5, r.parts.FEAL.length + '');
