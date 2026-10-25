@@ -103,9 +103,21 @@ back. A damped crossing, not a decay.
 
 **Which is the real result, and it is about sampling rather than about compression.** Enough averaging
 erases where you started. The base sampling rate decides the top of a pyramid and stops mattering
-somewhere around a 128:1 reduction - so for any view served from a deep level, rendering at ss=4 buys
+below some depth - so for any view served from a level deeper than that, rendering at ss=4 buys
 nothing a box filter would not have given, and the 2.9 hours it cost over ss=1 bought only the levels
 near the top and the base itself.
+
+**128:1 IS THAT DEPTH FOR ONE SLAB, AND IT IS THE WORST CASE RATHER THAN A CONSTANT.** Both pyramids
+here are of `Glass Master Source`, which is picked for maximum sub-pixel content - stirred cane packed
+below the pixel everywhere, the slab that does not resolve at any zoom and whose supersample ratio in
+`glass-gpu.md` stays flat at 2.78 across a 128x range of widths. A field like that is the slowest
+possible case for this convergence, because averaging only erases the base rate once it has averaged
+across structure, and this one keeps supplying structure the whole way down.
+
+So read 128:1 as a **ceiling**. A material with a characteristic feature size has its base sampling
+erased far sooner - and one with nothing below the pixel converges at the first halving, where the two
+pyramids here were still 2x apart. The measurement below is one slab at one extreme; where the
+crossing lands for stone, for wood, or for a tamer glass is unmeasured.
 
 Both masters were deleted after measurement. The per-tile byte counts of both pyramids - 54,617
 numbers each, which no sidecar records - are kept beside their sidecars as `.levels.json`.
