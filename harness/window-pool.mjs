@@ -42,9 +42,15 @@ if (!existsSync(hookedPath)) {
 
 // The anchor is the COMPACT form, which only the generated worker source carries; the main thread's
 // own block is spaced and so cannot be hit by accident.
+//
+// IT MOVED ONCE AND THE GATE CAUGHT IT. The anchor was `if(win.show==null)continue;` until windows
+// became per authored material: that guard left the loop for windowMasks(), the ablation found
+// nothing to patch, and this harness refused to claim a result rather than passing on a run where
+// nothing had been ablated. The new anchor gives the loop an empty list, which is the same failure
+// in one fewer step - a worker that composites no windows at all.
 const CODE_AB = {
   skip: { what: "the worker's window loop skips every window",
-          from: 'if(win.show==null)continue;', to: 'if(win.show!=null)continue;' },
+          from: 'var __W=windowMasks();', to: 'var __W=[];' },
 };
 const VACUOUS_AB = { nowin: 'the slab carries no window, so both paths agree trivially' };
 
