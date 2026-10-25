@@ -108,7 +108,7 @@ export function packReal(F, extra) {
     offs.BS, offs.BV, offs.RPR, offs.RTL, offs.STS, offs.MCC,
     offs.SPIN, offs.OPS, F.OPC.length, offs.CANE,
     (extra.canes || []).length, extra.tileW || 0, extra.tileX || 0, extra.tileY || 0,
-    extra.fullW || 0, extra.tileH || extra.tileW || 0, 0, 0,
+    extra.fullW || 0, extra.tileH || extra.tileW || 0, extra.ss || 1, 0,
   ];
   IN.forEach((v, i) => d.setInt32(160 + i * 4, v, true));
 

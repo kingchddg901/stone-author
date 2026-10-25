@@ -42,7 +42,11 @@ struct Env {
   // intermediate is 202 MB, against a 128 MiB storage binding limit that every implementation
   // has - so the app renders such a tile in horizontal BANDS, each a short tile with its own
   // tileY. Below this line a band and a tile are the same thing.
-  fullW: i32, tileH: i32, pad7: i32, pad8: i32,
+  // ss IS SAMPLES PER PIXEL ON A SIDE, so 4 means a 4x4 grid and sixteen samples. It took the
+  // first of the two pad words rather than a binding of its own: main's bind group is built
+  // independently by four probe pages, and a required binding added here would break every one of
+  // them. glass-real.mjs packs it at the same index - that pair is a replica and moves together.
+  fullW: i32, tileH: i32, ss: i32, pad8: i32,
 };
 @group(0) @binding(2) var<uniform> E: Env;
 @group(0) @binding(3) var<storage, read> ARR: array<f32>;
@@ -528,10 +532,29 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
   let px = i32(gi) % E.tileW;
   let py = i32(gi) / E.tileW;
 
-  // where this pixel sits on the sheet, exactly as the paint loop computes it
+  // SAMPLES PER PIXEL, AND ONE SAMPLE IS EXACTLY TODAY. The offset (k + 0.5)/N - 0.5 is 0.0 when
+  // N is 1, so a single-sample tile adds 0.0 and divides by 1 - the same unchanged-when-off
+  // property the CPU painter's own comment claims for the loop this is a port of.
+  //
+  // WHY IT IS WORTH PORTING AT ALL: supersampling is per-pixel work, and per-pixel work is the one
+  // thing the shader made cheap. The GPU clock puts the shader at 18.7% of a packed tile and the
+  // bus at the rest, so sixteen samples multiply only that share - about 4x a tile rather than the
+  // 16x the CPU pays. Measured share, linear assumption, stated as such.
+  //
+  // THE OFFSET IS IN DEVICE SPACE, added before the divide, which is what the CPU does: its
+  // su + B.iv.a * SSO[jx] reduces to exactly this because the export's inverse affine is
+  // diagonal - an axis-aligned tiling of the sheet, no rotation. On a rotated affine jx would
+  // have to reach v as well, and this would be wrong.
   let fw = f32(E.fullW);
-  let ssu = (f32(E.tileX + px) + 0.5) / fw;
-  let ssv = (f32(E.tileY + py) + 0.5) / fw;
+  let nss = max(1, E.ss);
+  let fss = f32(nss);
+  var aR = 0.0; var aG = 0.0; var aB = 0.0;
+  for (var jy = 0; jy < nss; jy = jy + 1) {
+  for (var jx = 0; jx < nss; jx = jx + 1) {
+  let offx = (f32(jx) + 0.5) / fss - 0.5;
+  let offy = (f32(jy) + 0.5) / fss - 0.5;
+  let ssu = (f32(E.tileX + px) + 0.5 + offx) / fw;
+  let ssv = (f32(E.tileY + py) + 0.5 + offy) / fw;
   let cu = clamp(ssu, 0.0, 1.0);
   let cvv = clamp(ssv, 0.0, E.H2);
   let ox = E.PX + (cu - 0.5) * E.SLAB / 12.0;
@@ -564,10 +587,21 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       }
     }
   }
+  // ACCUMULATED IN THE SAME PLACE THE SINGLE SAMPLE USED TO BE WRITTEN, so every line between the
+  // loop head and here is untouched - the port is the loop, not the shading.
+  aR = aR + E.LBR * exp(-ar * T) * m;
+  aG = aG + E.LBG * exp(-ag * T) * m;
+  aB = aB + E.LBB * exp(-ab * T) * m;
+  }
+  }
+  // DIVIDED, NOT MULTIPLIED BY A RECIPROCAL. The CPU painter holds SSN = 1/(SS*SS) and multiplies;
+  // at SS=1 both spellings are exact, and above it they can differ in the last place. Matching the
+  // CPU matters more than saving a divide that happens once a pixel.
+  let sn = fss * fss;
   let o = i32(gi) * 3;
-  PX[o] = E.LBR * exp(-ar * T) * m;
-  PX[o + 1] = E.LBG * exp(-ag * T) * m;
-  PX[o + 2] = E.LBB * exp(-ab * T) * m;
+  PX[o] = aR / sn;
+  PX[o + 1] = aG / sn;
+  PX[o + 2] = aB / sn;
 }`;
 
 // PACKING TO BYTES ON THE GPU, SO THE FLOATS NEVER CROSS THE BUS.
