@@ -311,7 +311,11 @@ function cases(app) {
     // ---- WOOD. The first two blocks of the wood port, and the reason they come before `shade`:
     // each has a CPU twin that can be driven with the same inputs, and 130 lines in one function
     // cannot be bisected that way. Prove the plumbing here while a disagreement is still findable.
+    // STAYS RED ON PURPOSE, the way glassUnform does. The gate is NOT widened to fit the port:
+    // the residual is characterised below and the row says so, which is worth more than a green
+    // tick bought by moving the line it failed against.
     { name: 'woodEye', kind: 'f32', needs: ['woodHash', 'woodEye'], gpuTranscendental: true,
+      gateWhy: 'delta/r at the smallest eye; 2.2e-4 is 0.056 levels, and 0 pixels differ in a render',
       // FIVE ARGUMENTS, ALL VARIED, AND ALL INSIDE WHAT THE PAINTER CAN PASS. The first sweep was
       // not: it ran cell down to 0.004 and wFt up to 0.052, and failed 108 of 4096 there. Neither is
       // a tree. The call site is
