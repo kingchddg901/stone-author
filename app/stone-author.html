@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.212';
+  const BUILD = '2026.10.25.213';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15815,17 +15815,17 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       // rendered eight minutes earlier. The field the render census groups on, wrong, silently.
       const atSpectrum = lightSpectrum, atInputs = renderSig();
       let markedCells = 0;
-      // samples IS IN THE RESUME KEY AND NOT IN renderSig. A record written when a stored tile was
-      // four channels describes bytes this build no longer produces, and the verification would be
-      // comparing a three-channel deflate against a four-channel length - it would refuse, but on an
-      // 11% size difference rather than on anything structural. Here it cannot match at all.
+      // A `samples: 3` WAS PASSED HERE AND DID NOTHING. resumeSig reads a fixed field list and drops
+      // anything else, so the key was byte-identical with and without it - a guard claimed in a
+      // commit message, shipped, and never able to fire. One minute of running it would have shown
+      // that, which is the whole argument for ablating a guard before believing it.
       //
-      // NOT in renderSig, deliberately: that hash identifies the PICTURE, the picture is unchanged
-      // to the level, and putting this there would re-date every master on disk for a channel that
-      // was always 255.
+      // WHAT ACTUALLY REFUSES A STALE RESUME is resumeVerified: it re-renders sampled tiles and
+      // compares their deflated length against the record, and a three-channel tile against a
+      // four-channel row differs by about 11% on every tile sampled. That is a real check doing real
+      // work, and the honest description of it is "a size comparison", not "structural".
       const jobSig = resumeSig({ inputs: renderSig(), w: W, h: p.FH, ts: p.ts, store: p.store,
-                                 bleed: p.bleed, across: p.across, down: p.down, renders: p.renders,
-                                 samples: 3 });
+                                 bleed: p.bleed, across: p.across, down: p.down, renders: p.renders });
       // PICK UP, OR START OVER. Loaded, then VERIFIED by re-rendering tiles the file already holds -
       // the signature decides whether to look, the tiles decide whether to trust. Any doubt at all
       // takes the null and the render starts from nothing, which costs time and can never cost
