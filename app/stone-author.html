@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.210';
+  const BUILD = '2026.10.25.211';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3335,12 +3335,36 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let _wmask = [];
   function gatherMasks() {
     const out = [];
-    if (Array.isArray(G.warpMask)) for (const e of G.warpMask) out.push({ x: e.x, y: e.y, r: e.r || 0, feather: e.feather || 0, invert: !!e.invert, show: ('show' in e) ? e.show : null });
+    if (Array.isArray(G.warpMask)) for (const e of G.warpMask) out.push({ x: e.x, y: e.y, r: e.r || 0, feather: e.feather || 0, invert: !!e.invert, show: ('show' in e) ? e.show : null, mat: e.mat || 'stone' });
     for (const m of marks) if (m.kind === 'mask') {
       const P = m.p || {};
       // maskSpec is the window's own light; a slab saved before it existed carries maskWin alone and means daylight.
-      out.push({ x: m.at[0], y: m.at[1], r: m.r || 0, feather: P.maskFeather || 0, invert: !!P.maskInvert, show: P.maskWin ? (P.maskSpec != null ? +P.maskSpec : 0) : null });
+      out.push({ x: m.at[0], y: m.at[1], r: m.r || 0, feather: P.maskFeather || 0, invert: !!P.maskInvert, show: P.maskWin ? (P.maskSpec != null ? +P.maskSpec : 0) : null, mat: P.maskMat || 'stone' });
     }
+    return out;
+  }
+  // WHICH WINDOWS THIS RENDER SHOWS, and the question is AUTHORSHIP rather than capability.
+  //
+  // "Does this material support windows" is a list, and a list has to be edited every time the
+  // answer changes. "Does this material have a window authored into it" is data: a mask carries the
+  // material it was made on, a render shows the ones made for what it is drawing, and opening
+  // windows to glass later is the tool writing a field rather than anybody editing a predicate.
+  //
+  // EVERY MASK ON DISK WAS AUTHORED ON STONE. The tool has always carried data-mat-only="stone", so
+  // an absent field means stone and every slab already saved reads correctly with no migration.
+  //
+  // WHAT THIS FIXES. The tool was gated and gatherMasks was not, so a mask made on stone composited
+  // as a reality window into glass and wood renders - which the UI would never have let anybody
+  // author there. Measured on a slab that had stone added to it: the glass and the wood masters
+  // both carried windows=1, and a window is not a decoration. It forces a second render - `const
+  // live = ... ? 2 : 1; // strip + the window's alt render` - and composites per tile on top.
+  //
+  // NOT ON gatherMasks ITSELF, because the discs have a second consumer: stone warps its geometry
+  // through them and glass samples its field back through them, so the GEOMETRY is shared on
+  // purpose. Only the window is per material.
+  function windowMasks() {
+    const cur = currentMaterial(), out = [];
+    for (const w of gatherMasks()) if (w.show != null && (w.mat || 'stone') === cur) out.push(w);
     return out;
   }
   function warpMaskAt(x, y) {
@@ -4744,12 +4768,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     alt.width = 1; alt.height = 1; tmp.width = 1; tmp.height = 1;      // both are large; hand them back now
   }
   function applyWindows(canvas, W) {                                    // export path: full-slab transform (0..1 → 0..W)
-    const wins = gatherMasks().filter(m => m.show != null); if (!wins.length) return;
+    const wins = windowMasks(); if (!wins.length) return;
     const cx = canvas.getContext('2d'), h = canvas.height;
     for (const win of wins) compositeWindow(cx, win, W, h, [W, 0, 0, W, 0, 0], W / COAT_REF, win.x * W, win.y * W, W);
   }
   function applyWindowsScreen() {                                       // interactive path: the live view transform
-    const wins = gatherMasks().filter(m => m.show != null); if (!wins.length) return;
+    const wins = windowMasks(); if (!wins.length) return;
     const prevSuppress = glowSuppress; glowSuppress = true;             // the preview never draws per-element glow
     try {
     const k = Wc * V.z * dpr, ex = (Wc / 2 - V.cx * Wc * V.z) * dpr, ey = (Hc / 2 - V.cy * Wc * V.z) * dpr;
@@ -4839,7 +4863,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function stripPlan(W, opts) {
     opts = opts || {};
     const FW = W, FH = Math.round(W * H);
-    const live = gatherMasks().filter(m => m.show != null).length ? 2 : 1;   // strip + the window's alt render
+    const live = windowMasks().length ? 2 : 1;               // strip + the window's alt render
     // Measured on a 16 GB desktop: a peak near 940 MB completed 65535 repeatedly; near 1.5 GB killed the
     // renderer outright. So 900 MB is the ceiling whatever the machine claims, and deviceMemory (coarse,
     // and capped at 8) is only ever used to reduce it.
@@ -4968,8 +4992,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // missing its islands. Hero's window shows DAYLIGHT (maskSpec 0), which is invisible in a daylight
     // master and the most prominent object in the picture under black light: that is how it survived a
     // week of exports. Composite per tile in the tile's own transform, and only for tiles a disc reaches.
-    for (const win of gatherMasks()) {
-      if (win.show == null) continue;
+    for (const win of windowMasks()) {
       const wx = win.x * finalW, wy = win.y * finalW, wr = (win.r + win.feather) * finalW;
       if (wx + wr < ex0 || wx - wr > ex0 + ew || wy + wr < ey0 || wy - wr > ey0 + eh) continue;
       // The alt needs the KEPT square plus its OWN light's reach — not this tile's bleed, which is sized
@@ -5062,6 +5085,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // its first glass pixel.
       compileOps,
       rollStamp, rollStampAt, rollerAt, rollerHand, rollerPath, moonDisp, warpMaskAt, gatherMasks,
+      // THE WORKER ASKS WHICH MATERIAL IT IS DRAWING, the same way the main thread does. setMaterial
+      // already travels and runs at init, so currentMaterial answers there too.
+      currentMaterial, windowMasks,
       // surfaceGloss asks the fork how glossy the surface is on its own account, and applyCoat asks it
       // for EVERY material on every tile - so leaving it out did not break wood, it broke the pool.
       // It is self-contained here: the discriminator is declared by MATERIAL_DECL and WOOD is
@@ -5240,7 +5266,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // the same skip test renderOneTile uses, because a window composites over a FINISHED tile and a
     // tile the disc misses must not pay for one. Line for line the main thread's block; any
     // divergence here is a windowed master that differs by which path drew it.
-    s += `var __W=gatherMasks();for(var wi=0;wi<__W.length;wi++){var win=__W[wi];if(win.show==null)continue;` + NL;
+    s += `var __W=windowMasks();for(var wi=0;wi<__W.length;wi++){var win=__W[wi];` + NL;
     s += `var wx=win.x*d.finalW,wy=win.y*d.finalW,wr=(win.r+win.feather)*d.finalW;` + NL;
     s += `if(wx+wr<d.ex0||wx-wr>d.ex0+d.ew||wy+wr<d.ey0||wy-wr>d.ey0+d.eh)continue;` + NL;
     s += `var ab=Math.min(d.bleed,coatReachAt(d.bs,win.show));` + NL;
@@ -9872,7 +9898,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                                                            // multi-band arithmetic is otherwise unreachable
                                                            // at any width small enough to test everywhere
     if (W > sideCap()) throw new Error(TR('exp.err.side-cap', { px: sideCap() }));   // measured, not assumed
-    const wins = gatherMasks().filter(m => m.show != null);
+    const wins = windowMasks();
     const cs = new CompressionStream('deflate');
     const writer = cs.writable.getWriter(), reader = cs.readable.getReader();
     const idats = []; let pend = [], plen = 0;
@@ -13494,7 +13520,7 @@ self.onmessage = async (e) => {
         // That is not an inconsistency: the shortlist is a RECOMMENDATION, and refusing a size on a
         // guessed budget would mislead. This is a SAFETY check on an allocation about to happen, where
         // the guess costs an untested size and being wrong the other way costs the tab.
-        const probeWins = gatherMasks().filter(m => m.show != null).length;
+        const probeWins = windowMasks().length;
         const probeSurf = (probeWins ? 3 : 1) + (sigma > 0 ? 1 : 0);
         const probeCap = MEM_EASY * memBudget();
         const pass = [], tooBig = [];
@@ -13647,7 +13673,7 @@ self.onmessage = async (e) => {
     // The widest blur this slab actually applies, in render pixels. Zero when nothing blurs (Hero in
     // daylight has subsurface 0 and specular 0), and then there is no bloom to lose and nothing to probe.
     const sigma = coatRadius(W / COAT_REF);
-    const wins = gatherMasks().filter(m => m.show != null).length;   // each one costs surfaces, per tile
+    const wins = windowMasks().length;                     // each one costs surfaces, per tile
     // What is alive AT ONCE at the peak: this tile, and inside compositeWindow the alternate-light render
     // and the masked copy too, plus one transient scratch if anything blurs. Recorded in the trail so a
     // master can explain its own cost — it no longer REFUSES anything, since the attempt answers better.

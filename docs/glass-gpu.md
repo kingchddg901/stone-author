@@ -883,6 +883,43 @@ there would re-date every master on disk for a channel that was always 255.
 another B would have proved nothing: a helper that dropped the wrong channel would be wrong
 identically in both arms and read as agreement.
 
+### A window is authored on a material, and the engine did not know that
+
+Adding stone to a slab made its glass render 4.6x slower - 62.5 s against 13.7 for a 65,535 - and the
+cause was not the coat. All 33 `G` tokens were identical between the two slabs. What differed was
+that the stone brought its layer spine, which `MAT_PART` says it keeps, and in it a **mask mark**.
+
+The mask tool carries `data-mat-only="stone"`. `gatherMasks()` carried no material check at all. So a
+mask authored on stone composited as a reality window into glass and wood renders that the UI would
+never have let anybody author one on - and a window is not a decoration. It forces a second render
+(`const live = ... ? 2 : 1; // strip + the window's alt render`) and composites per tile on top. Both
+masters made from that slab carried `windows: 1`.
+
+**RULING: windows belong to the material they were authored on.** Not a capability list - "does this
+material support windows" has to be edited every time the answer changes - but a property of the
+mask: *does this material have a window authored into it*. A mask carries the material it was made
+on, a render shows the ones made for what it is drawing, and opening windows to glass later is the
+tool writing a field rather than anybody editing a predicate. Wood is a log that was cut; nothing
+here decides that question, because nothing can author one there.
+
+Every mask on disk was authored on stone - the tool has always been gated - so an absent field reads
+as stone, every saved slab is correct, and there is no migration.
+
+**It does NOT go on `gatherMasks`**, because the discs have a second consumer: stone warps its
+geometry through them and glass samples its field back through them. Scoping the geometry would move
+every glass picture ever made. Only the window is per material, so `windowMasks()` is the one place
+that asks, and nine call sites use it where eight used to ask independently.
+
+`tools/check-bleed.mjs` followed the guard rather than the line. It asserted `renderOneTile` carried
+`win.show == null) continue`, which moved into `windowMasks()`; it now pins four things - that
+`renderOneTile` iterates `windowMasks`, that `windowMasks` filters on `show`, that it scopes to the
+authoring material, and that `gatherMasks` does **not** filter by material. Each ablated red.
+
+**One measurement is contaminated by this and is worth restating.** The wood figure of 17.3 Mpx/s was
+rendered with a stone window composited into it. Wood is faster than that, which widens rather than
+narrows its distance from glass. The pool 8-against-12 ratio is unaffected: both arms carried the
+same window.
+
 ## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
 
 **His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,

@@ -498,7 +498,24 @@ if (!/proveTile\(0, W\)/.test(plan)) fail.push('a remembered plan that stops cal
 // picture under black light. It composites per tile now, and must keep doing so.
 const oneTile = app.slice(app.indexOf('function renderOneTile'), app.indexOf('async function renderTiledStepped'));
 if (!/compositeWindow\(cx, win, ew, eh/.test(oneTile)) fail.push('renderOneTile does not composite reality windows: every tiled master would lose its islands');
-if (!/win\.show == null\) continue/.test(oneTile)) fail.push('renderOneTile composites masks that are not windows');
+// THE GUARD MOVED RATHER THAN WENT. renderOneTile iterated gatherMasks() and skipped the entries
+// with no `show`. It iterates windowMasks() now, which asks a second question as well - was this
+// window authored on the material being drawn - because the mask tool is stone-only in the UI and
+// gatherMasks was not, so a mask made on stone composited into glass and wood renders that could
+// never have authored one. So the test follows the claim to where it lives, and pins both halves.
+if (!/for \(const win of windowMasks\(\)\)/.test(oneTile))
+  fail.push('renderOneTile does not iterate windowMasks: it would composite masks that are not windows');
+const wmask = app.slice(app.indexOf('function windowMasks'), app.indexOf('function warpMaskAt'));
+if (!/w\.show != null/.test(wmask))
+  fail.push('windowMasks does not filter on show: every mask would composite as a reality window');
+if (!/\(w\.mat \|\| 'stone'\) === cur/.test(wmask))
+  fail.push('windowMasks does not scope a window to the material it was authored on');
+// AND gatherMasks MUST NOT. The discs have a second consumer - stone warps its geometry through them
+// and glass samples its field back through them - so a material filter there would move every glass
+// picture ever made. The scoping belongs to the window, not to the geometry.
+const gmask = app.slice(app.indexOf('function gatherMasks'), app.indexOf('function windowMasks'));
+if (/currentMaterial\(\)/.test(gmask))
+  fail.push('gatherMasks filters by material: that is the geometry, and scoping it would move every glass picture');
 // Presence only: it catches the line being deleted, not the condition being neutered — `if (false && …)`
 // still reads as present. Say so rather than let it look stronger than it is.
 if (!/wx \+ wr < ex0 \|\| wx - wr > ex0 \+ ew/.test(oneTile)) fail.push('renderOneTile has no intersection test: every tile would pay for every window');
