@@ -127,6 +127,11 @@ async function loadShader() {
   if (WGSL) return;
   const m = await import('./lib/glass-gpu.mjs');
   WGSL = m.WGSL;
+  // WOOD'S BLOCKS JOIN GLASS'S IN ONE NAMESPACE. They are separate files because they are separate
+  // ports, and one object because `needs` names a block without caring which port wrote it -
+  // woodEye needs woodHash, which glass brought.
+  const w = await import('./lib/wood-gpu.mjs');
+  Object.assign(WGSL, w.WGSL);
   SCENE = await import('./lib/glass-scene.mjs');
   ({ FORM, NRIB, MOB, MST, RIBD, W, RNX, RNY, RH, RPROF, RTOTAL, ROLD, BLV, STD, FV,
      MCC_COL, MCCARR, WNX, WNY, WH, PANEX, PANEY, OPS_IN, stampArr, envUni, allArrays,
@@ -303,6 +308,50 @@ function cases(app) {
       cpu: a => { const o = new Float64Array(N * 2);
         for (let i = 0; i < N; i++) o[2 * i] = app.woodHash(a[2 * i], a[2 * i + 1]); return o; } },
 
+    // ---- WOOD. The first two blocks of the wood port, and the reason they come before `shade`:
+    // each has a CPU twin that can be driven with the same inputs, and 130 lines in one function
+    // cannot be bisected that way. Prove the plumbing here while a disagreement is still findable.
+    { name: 'woodEye', kind: 'f32', needs: ['woodHash', 'woodEye'], gpuTranscendental: true,
+      // FIVE ARGUMENTS, ALL VARIED. Holding cell, wFt or rad fixed would leave the near-pith cap
+      // untested - it only bites when wFt exceeds half a cell times the radius - and the cap is the
+      // branch most likely to have been ported wrong.
+      call: '  OUT[i * 2] = woodEye(IN[i * 8], IN[i * 8 + 1], IN[i * 8 + 2], IN[i * 8 + 3], IN[i * 8 + 4]);'
+          + '
+  OUT[i * 2 + 1] = 0.0;',
+      inputs: () => { const a = new Float32Array(N * 8);
+        for (let i = 0; i < N; i++) {
+          // theta runs NEGATIVE as well, which is the floor-before-convert case: a board on the far
+          // side of the pith. A positive-only sweep would pass with a bare i32().
+          a[8 * i]     = Math.fround(((i % 401) - 200) / 60);
+          a[8 * i + 1] = Math.fround(((i * 17) % 353) / 11);
+          a[8 * i + 2] = Math.fround(0.004 + ((i * 7) % 97) / 97 * 0.09);
+          a[8 * i + 3] = Math.fround(0.002 + ((i * 29) % 83) / 83 * 0.05);
+          a[8 * i + 4] = Math.fround(0.05 + ((i * 11) % 131) / 131 * 2.4);
+        } return a; },
+      cpu: a => { const o = new Float64Array(N * 2);
+        for (let i = 0; i < N; i++)
+          o[2 * i] = app.woodEye(a[8 * i], a[8 * i + 1], a[8 * i + 2], a[8 * i + 3], a[8 * i + 4]);
+        return o; } },
+
+    { name: 'woodStain', kind: 'f32', needs: ['nz', 'vnoise', 'fbm2', 'woodStain'], gpuTranscendental: true,
+      // Swept across the threshold on purpose: below it the answer is a hard zero, above it a ramp
+      // that saturates at 1. Both sides and the knee, or the clamp goes unexercised.
+      call: '  OUT[i * 2] = woodStain(IN[i * 8], IN[i * 8 + 1], IN[i * 8 + 2], IN[i * 8 + 3], IN[i * 8 + 4]);'
+          + '
+  OUT[i * 2 + 1] = 0.0;',
+      inputs: () => { const a = new Float32Array(N * 8);
+        for (let i = 0; i < N; i++) {
+          a[8 * i]     = Math.fround(((i % 397) - 198) / 50);
+          a[8 * i + 1] = Math.fround(0.02 + ((i * 13) % 211) / 211 * 1.8);
+          a[8 * i + 2] = Math.fround(((i * 23) % 307) / 7);
+          a[8 * i + 3] = Math.fround(4 + ((i * 31) % 89) / 89 * 60);
+          a[8 * i + 4] = Math.fround(0.40 + ((i * 37) % 53) / 53 * 0.52);
+        } return a; },
+      cpu: a => { const o = new Float64Array(N * 2);
+        for (let i = 0; i < N; i++)
+          o[2 * i] = app.woodStain(a[8 * i], a[8 * i + 1], a[8 * i + 2], a[8 * i + 3], a[8 * i + 4]);
+        return o; } },
+
     { name: 'glassFormT', kind: 'f32', needs: ['env', 'nz', 'vnoise', 'fbm2', 'glassFormT'],
       uni: () => envUni({ form: CURFORM }), arrays: allArrays, perForm: true, gpuTranscendental: true,
       call: TOUCH_ALL + '  let fv = vec2<f32>(IN[i * 4 + 2], IN[i * 4 + 3]);\n'
@@ -454,7 +503,8 @@ document.getElementById('run').onclick = async () => {
     const { app, from, SLAB_FT: SLABFT } = await liftFromApp(['nz', 'woodAtan2', 'glassFlow', 'glassUnwarp', 'vnoise', 'vnoiseC', 'vnoiseCfill',
       'fbm2C', 'glassCellSDF', 'glassDepth', 'rollerAt', 'rollerHand', 'woodHash', 'glassFormT',
       'glassMelt', 'glassBlob', 'glassBlobDepth', 'rollStampAt', 'starR', 'glassLay',
-      'compileOps', 'spinTable', 'glassUnform']);
+      'compileOps', 'spinTable', 'glassUnform',
+      'fbm2', 'woodEye', 'woodStain']);
     if (!navigator.gpu) throw new Error('no WebGPU on this device');
     const ad = await navigator.gpu.requestAdapter();
     if (!ad) throw new Error('no adapter');
