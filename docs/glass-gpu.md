@@ -1025,17 +1025,29 @@ point; average sixteen and few land on the wrong side.
 
 #### What it costs
 
-| | 1 sample | 4x4 | |
-| --- | --- | --- | --- |
-| 65,535 | 19.7 s | 41.9 s | **2.1x** |
-| 131,072 | 75.4 s | 165.4 s | **2.2x** |
-| 262,144 | 170.1 s | 659.1 s | **3.9x** |
+| | tiles | 1 sample | 4x4 | multiple | 4x4 per tile | 4x4 bytes/tile |
+| --- | --- | --- | --- | --- | --- | --- |
+| 65,535 | 640 | 19.7 s | 41.9 s | **2.1x** | 65.5 ms | 1,588 KB |
+| 131,072 | 2,560 | 75.4 s | 165.4 s | **2.2x** | 64.6 ms | 1,270 KB |
+| 262,144 | 10,240 | 170.1 s | 659.1 s | **3.9x** | 64.4 ms | 1,056 KB |
+| 1,048,576 | 163,840 | 2,842.5 s | 8,310.4 s | **2.9x** | **50.7 ms** | 729 KB |
 
 Against the 16x the warning copy quotes - which stays honest as an upper bound, because the CPU path
-would pay it. **At 4x4 a tile costs about 65 ms regardless of render size**, so the multiple varies
-only because the one-sample denominator shrinks with size: larger renders have leaner tiles, so there
-is less to beat. A 4x4 1,048,576 is therefore 163,840 tiles x ~65 ms, around **3 hours**, rather than
-a multiple that keeps inflating.
+would pay it.
+
+**THE FLAT PER-TILE COST HOLDS ACROSS THE MIDDLE AND BREAKS AT THE TOP.** 65.5, 64.6 and 64.4 ms are
+one number; 50.7 ms at 1,048,576 is 21% under it. This section used to say "about 65 ms regardless of
+render size" and predict "around 3 hours" for a 4x4 terapixel. It came in at **138.5 minutes**, and
+the claim is corrected here rather than rounded into agreement.
+
+**THE CAUSE IS NOT ESTABLISHED, and the obvious explanation does not survive the table.** Deflate
+output per tile falls monotonically across all four rows - 1,588, 1,270, 1,056, 729 KB - while the
+time is flat for the first three and then drops. A cost proportional to bytes written would have bled
+away steadily from 65,535 onward; it did not. Whatever makes the terapixel cheaper per tile does not
+show up between 65,535 and 262,144, so it is not simply leaner tiles. Candidates not yet separated:
+a fixed start-up amortised over sixteen times more tiles, or a pool that only reaches steady state on
+a long run. **Two points were enough to fit a line through this and the line was wrong** - it predicted
+85 ms at 65,535 against the 65.5 measured - which is why no model is quoted here.
 
 **And supersampling flattens the density tail.** The 262,144's per-tile cost by quarter runs
 15.0 / 14.8 / 13.2 / 23.4 ms at one sample and 63.0 / 64.7 / 65.5 / 67.2 at 4x4 - a per-quarter
