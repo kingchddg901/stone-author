@@ -35,12 +35,46 @@ a quarter of its pixels - about 1.7x the bytes per pixel. Reducing fine stone te
 rather than smoothing it, so deflate does worse on an overview than on the picture it came from. This
 document said the opposite until it was measured.
 
-**Confirmed at the top of the range on 2026-10-25.** Sampling the 1,048,576 master across the sheet,
-a level-1 tile deflates to **309 KB where its four sources hold 784 KB** - 0.39x rather than the 0.25x
-pixel arithmetic predicts, so bytes per pixel rises **1.58x per halving**. The series then sums to
-about **21 GB on a 44.7 GB master**, close to half again rather than a third. The 1.7x figure measured
-at 65,535 and this 1.58x at 1,048,576 are the same effect, and it does not weaken with scale - which
-is the ladder in `glass-gpu.md` seen from the other end: coarser is noisier per pixel.
+### Measured on the terapixel, 2026-10-25: a pyramid level is a SUPERSAMPLED render
+
+Nine levels were appended to the 1,048,576 master and every tile counted. It added **40.18 GB to a
+44.69 GB base - 89.9% larger**, against the 33.3% pixel arithmetic predicts and the 66.1% measured at
+65,535. Every byte below is read back out of the file's own directories, not sampled:
+
+| level | width | tiles | GB | B/px | vs the level above | averages | native ss=4 at that width |
+|---|---|---|---|---|---|---|---|
+| base | 1,048,576 | 163,840 | 44.689 | 0.06503 | — | 1 | — |
+| 1 | 524,288 | 40,960 | 23.433 | 0.13640 | 2.097 | 4 | — |
+| 2 | 262,144 | 10,240 | 11.341 | 0.26406 | 1.936 | 16 | **0.2579** |
+| 3 | 131,072 | 2,560 | 3.901 | 0.36333 | 1.376 | 64 | 0.3100 |
+| 4 | 65,536 | 640 | 1.068 | 0.39795 | 1.095 | 256 | — |
+| 5 | 32,768 | 160 | 0.298 | 0.44347 | 1.114 | 1,024 | **0.4673** |
+| 6 | 16,384 | 40 | 0.089 | 0.53063 | 1.197 | 4,096 | 0.5811 |
+| 7 | 8,192 | 12 | 0.029 | 0.68568 | 1.292 | 16,384 | 0.7372 |
+| 8 | 4,096 | 4 | 0.010 | 0.91844 | 1.339 | 65,536 | 0.9546 |
+| 9 | 2,048 | 1 | 0.003 | 1.19578 | 1.302 | 262,144 | 1.2377 |
+
+**The per-halving ratio is not a constant** - 2.10 at the first halving, 1.10 by the fourth - so there
+is no single multiplier to quote, which is what the previous version of this section got wrong.
+
+**But the last two columns say what is going on.** A reduced level sits within about 9% of a NATIVE
+4x4-supersampled render at the same width, across seven levels, and 2.4-4x ABOVE a plain ss=1 one.
+Which is the mechanism rather than a coincidence: **reducing by 2^k averages 4^k source samples, and
+averaging samples is what supersampling does.** The ladder in `glass-gpu.md` measured that
+supersampling costs a flat 2.78x the bytes at every resolution, so a pyramid level's size was
+predictable from it all along. The one outlier is level 3 at +17%; the rest fall just under.
+
+It also answers why the levels do not keep getting cheaper per pixel relative to the base. They are
+not smoothed copies of the picture - they are the picture, sampled properly.
+
+**WHY THE ESTIMATE AHEAD OF THIS RUN WAS 21 GB, OR 1.9x LOW.** The prediction came from timing 24
+output tiles, and it was wrong twice over. The sampler took `ox` and `oy` from the same loop variable,
+so its 24 "spread across the sheet" tiles were **24 points on a diagonal line** through a 256x160
+grid. Worse, no 24 tiles could have carried it: level 1's tiles run **12 KB to 6,203 KB with a median
+of 86 KB and a mean of 559 KB**, so the total is set by a dense minority that a small sample misses by
+construction - 24 tiles on a coprime stride still came out 16% low. The diagonal gave 309 KB a tile
+and predicted 12.98 GB for a level that holds 23.43. A heavy-tailed per-tile distribution has no cheap
+mean; count them all, or quote the ladder's 2.78x instead.
 
 ## Build it as a post-pass, not inline
 
