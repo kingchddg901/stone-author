@@ -996,6 +996,93 @@ rendered with a stone window composited into it. Wood is faster than that, which
 narrows its distance from glass. The pool 8-against-12 ratio is unaffected: both arms carried the
 same window.
 
+### Supersampling in the shader, and what a matched ladder says about the field
+
+`gpuWhyNot` refused `ss > 1` and it was never a safety clause: the shader drew one sample where the
+CPU painter drew SSxSS, so the two would simply have disagreed. His observation reframed it -
+**supersampling is per-pixel work, and per-pixel work is the one thing this path made cheap.** The GPU
+clock puts the shader at 18.7% of a packed tile and the bus at the rest, so sixteen samples multiply
+only that share.
+
+The loop is the CPU painter's own arithmetic: a regular SSxSS grid, offsets `(k + 0.5)/N - 0.5` added
+in DEVICE space before the divide, accumulated, divided by N squared. `E.ss` took the first spare pad
+word of the 304-byte uniform rather than a binding of its own, because `main`'s bind group is built
+independently by four probe pages and a required binding would have broken every one.
+
+**Verified against the previous build rather than argued.** Both were kept side by side:
+
+| | |
+| --- | --- |
+| `ss=1` | **byte-identical** - FNV digest `1dc18eb3`, mean 98.631396 over 12,582,912 channels, on both builds |
+| `ss=2`, `ss=4` | distinct digests, so the loop runs rather than compiling away |
+| `ss=4` vs the CPU painter | worst **23** levels where `ss=1` gives **104**, mean gap narrowed 4.2x |
+
+That last row is the real check. A wrong offset mapping would have the GPU averaging different points
+than the CPU, which makes the divergence WORSE. It got better - and that is a finding in itself:
+**supersampling suppresses the f32 divergence that has been this path's signature.** The 104-level gap
+is catastrophic cancellation in the stir's extrapolation flipping a cane selection at one sample
+point; average sixteen and few land on the wrong side.
+
+#### What it costs
+
+| | 1 sample | 4x4 | |
+| --- | --- | --- | --- |
+| 65,535 | 19.7 s | 41.9 s | **2.1x** |
+| 131,072 | 75.4 s | 165.4 s | **2.2x** |
+| 262,144 | 170.1 s | 659.1 s | **3.9x** |
+
+Against the 16x the warning copy quotes - which stays honest as an upper bound, because the CPU path
+would pay it. **At 4x4 a tile costs about 65 ms regardless of render size**, so the multiple varies
+only because the one-sample denominator shrinks with size: larger renders have leaner tiles, so there
+is less to beat. A 4x4 1,048,576 is therefore 163,840 tiles x ~65 ms, around **3 hours**, rather than
+a multiple that keeps inflating.
+
+**And supersampling flattens the density tail.** The 262,144's per-tile cost by quarter runs
+15.0 / 14.8 / 13.2 / 23.4 ms at one sample and 63.0 / 64.7 / 65.5 / 67.2 at 4x4 - a per-quarter
+multiple of 4.20 / 4.36 / 4.98 / **2.87**. The dense bottom quarter pays the least extra, because the
+shader term is content-independent while the deflate term is not, and multiplying the uniform one
+drowns the variable one.
+
+#### THE LADDER: the field is scale-invariant, and it is not running out
+
+Nine renders of one slab, every one three-channel, each size run at both sampling rates:
+
+| width | `ss=1` B/px | `ss=4` B/px | ratio |
+| --- | --- | --- | --- |
+| 2,048 | 0.4412 | 1.2377 | 2.805 |
+| 4,096 | 0.3441 | 0.9546 | 2.774 |
+| 8,192 | 0.2664 | 0.7372 | 2.767 |
+| 16,384 | 0.2092 | 0.5811 | 2.778 |
+| 32,768 | 0.1681 | 0.4673 | 2.780 |
+| 65,535 | 0.1368 | 0.3785 | 2.767 |
+| 131,072 | 0.1111 | 0.3100 | 2.790 |
+| 262,144 | 0.0910 | 0.2579 | **2.834** |
+| 1,048,576 | 0.0650 | - | - |
+
+**Flat at 2.78, within 1.2%, across a 128x range of widths.** At every resolution, sixteen samples
+find the same PROPORTIONAL amount of information that one sample misses. A field with a characteristic
+size would not do that; one with no resolution of its own does. It is the claim the app's own warning
+has always made, now measured:
+
+> The field is procedural and has no resolution of its own, so a larger render keeps finding structure
+> rather than magnifying what it already had.
+
+**And the question it was built to answer - is it running out of detail at a terapixel - is answered
+no.** A field exhausting its sub-pixel structure would have sixteen samples converging on one and the
+ratio falling toward 1. The highest ratio on the ladder is the largest render.
+
+The `ss=1` column is the other half of it: 0.4412 down to 0.0650 bytes a pixel, about 0.78x per
+doubling. That is the noise resolving into bands - structure becoming legible, and therefore
+compressible, as it stops being sampled below its own scale. It applies to both sampling rates
+equally, which is exactly why the ratio stays flat.
+
+**THIS CORRECTS AN EARLIER READING IN THIS DOCUMENT'S OWN HISTORY.** Two points taken before the
+ladder existed - 2.44 at 65,535 and 2.83 at 262,144 - were read as a rising ratio and written up as
+aliasing worsening with resolution. The 2.44 used a one-sample reference from build 205, which is
+four-channel: the alpha drop landed at 207. Against its proper three-channel twin that figure is
+2.767, in line with the rest. The confounder had already been identified an hour earlier and was not
+carried back to the conclusion it invalidated.
+
 ## 2a. RULING 2026-10-24: a hard toggle, with its trade-offs plain
 
 **His call, and it decides the shape before any code.** The GPU path is a toggle the person throws,
