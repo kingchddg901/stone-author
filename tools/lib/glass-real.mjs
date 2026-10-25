@@ -20,7 +20,15 @@ const NL = String.fromCharCode(10);
 
 // the arena's parts, in the order the Env's offsets name them
 const PART_NAMES = ['WU', 'WV', 'MEX', 'MHL', 'MD', 'MRIM', 'BS', 'BV', 'RPR', 'RTL',
-                    'STS', 'MCC', 'SPIN', 'OPS', 'CANE'];
+                    'STS', 'MCC', 'SPIN', 'OPS', 'CANE', 'RMETA', 'SMETA'];
+
+// RMETA AND SMETA ARE APPENDED, never inserted, so every offset that existed before this keeps its
+// place. They are also why offset ZERO can mean ABSENT: WU is first in this list, so a real RMETA
+// offset is always greater than zero, and a caller that builds its own uniform - gpu-port-harness
+// does - leaves the field at zero and gets the single-entry behaviour it had before.
+//
+// RMETA is eight floats a roller:  offS, offV, offPR, offTL, nx, ny, prN, -
+// SMETA is four floats an entry:   offST (in STAMPS), n, C, -
 
 const f32 = a => a instanceof Float32Array ? a : new Float32Array(a || []);
 
@@ -34,10 +42,48 @@ function catGrids(list, pick) {
   return a;
 }
 
+// THE SAME THING WITHOUT THE EQUAL-LENGTH ASSUMPTION, which is what `test work` broke on 2026-10-25:
+// four rollers, four grid sizes, refused by a stride that could not index them. Each entry's offset
+// is recorded instead of computed, in units of `unit` elements - 1 for a flat grid, 4 for a stamp.
+function catVar(list, pick, unit) {
+  const arrs = list.map(g => f32(pick(g) || []));
+  const offs = []; let at = 0;
+  for (const a of arrs) { offs.push(at / unit); at += a.length; }
+  const out = new Float32Array(at);
+  let q = 0;
+  for (const a of arrs) { out.set(a, q); q += a.length; }
+  return { data: out, offs };
+}
+
+// ONE ENTRY PER DISTINCT STAMP LIST **AND** TURN COUNT. D belongs to the op rather than the list, so
+// two ops sharing a list but turning differently are two entries; two ops agreeing on both are one.
+// Before this only the FIRST stamped op's list was packed, for the whole document - the same shape
+// as ROLL[0], unguarded, and `test work` hit it: four presses, one at r 0.1 and three at r 2.2.
+function stampEntries(F) {
+  const out = [];
+  for (const o of F.OPC) {
+    if (!(o.st && o.raw && o.raw.st && o.raw.st.length)) continue;
+    const D = +o.raw.D || 6;
+    if (out.some(e => e.st === o.raw.st && e.D === D)) continue;
+    out.push({ st: o.raw.st, D });
+  }
+  return out;
+}
+const stampIndex = (entries, op) => (op && op.st && op.raw && op.raw.st)
+  ? entries.findIndex(e => e.st === op.raw.st && e.D === (+op.raw.D || 6)) : -1;
+const stampFloats = (st) => {
+  const a = new Float32Array(st.length * 4);
+  st.forEach((s, i) => {
+    a[4 * i] = +s.a || 0; a[4 * i + 1] = +s.x || 0;
+    a[4 * i + 2] = +s.r || 1; a[4 * i + 3] = +s.rot || 0;
+  });
+  return a;
+};
+
 // one op is sixteen floats; the same record glass-scene.mjs writes, read off the app's own OPC.
 // `wi` and `ri` are this op's indices into the packed warp and roller grids, or -1 for an op with
 // none. `H` is the document height, which is what a roller with no height of its own falls back to.
-function opRow(op, wi, ri, H) {
+function opRow(op, wi, ri, si, H) {
   const a = new Float32Array(16);
   a[0] = op.k; a[1] = op.ox; a[2] = op.oy; a[3] = op.a; a[4] = op.s;
   a[5] = op.rot ? 1 : 0; a[6] = op.cd; a[7] = op.sd; a[8] = op.u0;
@@ -45,7 +91,9 @@ function opRow(op, wi, ri, H) {
   // SLOT 13 IS AN INDEX NOW, PLUS ONE, so zero still reads as "this op has no warp" and the
   // shader's existing `aOP(i, 13) != 0.0` test is unchanged. A document with one warp packs 1 for
   // every stir and indexes grid 0, which is the arithmetic it had before this was per-op.
-  a[11] = op.st ? 1 : 0;
+  // SLOT 11 WAS A HAS-STAMPS FLAG and is now that op's stamp entry plus one, by the same rule as
+  // 12 and 13: zero still means none, so every `aOP(i, 11) != 0.0` test in the shader is unchanged.
+  a[11] = (op.st && si >= 0) ? si + 1 : 0;
   a[12] = (op.B && ri >= 0) ? ri + 1 : 0;
   a[13] = (op.S && wi >= 0) ? wi + 1 : 0;
   // THE ROLLER'S OWN HEIGHT AND TOTAL, in the two floats this record has never used. They are the
@@ -93,7 +141,7 @@ export function packReal(F, extra) {
   // them, and a layout that moves for a document whose picture cannot move is a change nobody
   // asked for and nobody could see.
   const packList = rollList.length ? rollList : (B ? [B] : []);
-  const stamp = stampsOf(F);
+  const stamp = stampsOf(F);   // entry 0's count and turn, which the uniform still carries
 
   // THEY MUST STILL AGREE ON THEIR DIMENSIONS, and that is the whole of what is left of the old
   // refusal. One stride indexes the lot - grid w starts at w * nx * ny - which is what lets nx, ny
@@ -117,29 +165,43 @@ export function packReal(F, extra) {
   // throw, no console line and no refusal. The warp check above has been here since this path
   // shipped and this shoulder had not, which is the shape where a guard that exists reads as
   // complete. Same fragments, same reason: check-i18n reads every string literal in this file.
-  // ONE STRIDE FOR THE ROLLERS TOO, so their grids must agree on size. Everything else about a
-  // roller that differs - its height and its total - rides in the op record instead.
-  for (const r of rollList) {
-    const prN = (r.R && r.R.pr && r.R.pr.length) || 0;
-    const b0 = (B.R && B.R.pr && B.R.pr.length) || 0;
-    if (r.nx !== B.nx || r.ny !== B.ny || prN !== b0) {
-      throw new Error('packReal: ' + rollList.length + ' roller'
-        + ' grids, 1 stride');
-    }
-  }
+  // NO SIZE REFUSAL FOR ROLLERS. There was one for a day: a stride indexed them, so they had to
+  // agree on dimensions, and `test work` refused with "4 roller grids, 1 stride" because real
+  // documents do not. Each roller now carries its own offsets and dimensions in RMETA, so any mix
+  // packs. The warps keep the stride - three grids of one size, verified drawing correctly on
+  // hardware - and keep their narrower refusal with it.
+
+  // THE VARIABLE-LENGTH PACKS, built before the parts that hold them so the offsets exist.
+  const rBS = catVar(packList, r => r.s, 1), rBV = catVar(packList, r => r.v, 1);
+  const rPR = catVar(packList, r => r.R && r.R.pr, 1);
+  const rTL = catVar(packList, r => r.R && r.R.tl, 1);
+  const sEntries = stampEntries(F);
+  const sSTS = catVar(sEntries, e => stampFloats(e.st), 4);
 
   const parts = {
     // END TO END, grid 0 first. With one warp this is byte for byte what it packed before.
     WU: catGrids(warpList, w => w.u), WV: catGrids(warpList, w => w.v),
     MEX: f32(F.MEX), MHL: f32(F.MHL), MD: f32(F.MD), MRIM: f32(F.MRIM),
-    BS: catGrids(packList, r => r.s), BV: catGrids(packList, r => r.v),
-    RPR: catGrids(packList, r => r.R && r.R.pr), RTL: catGrids(packList, r => r.R && r.R.tl),
-    STS: stamp.arr,
+    BS: rBS.data, BV: rBV.data, RPR: rPR.data, RTL: rTL.data,
+    STS: sSTS.data,
+    RMETA: (() => { const a = new Float32Array(packList.length * 8);
+      packList.forEach((r, i) => {
+        a[i * 8] = rBS.offs[i]; a[i * 8 + 1] = rBV.offs[i];
+        a[i * 8 + 2] = rPR.offs[i]; a[i * 8 + 3] = rTL.offs[i];
+        a[i * 8 + 4] = r.nx || 0; a[i * 8 + 5] = r.ny || 0;
+        a[i * 8 + 6] = (r.R && r.R.pr && r.R.pr.length) || 0;
+      }); return a; })(),
+    SMETA: (() => { const a = new Float32Array(sEntries.length * 4);
+      sEntries.forEach((e, i) => {
+        a[i * 4] = sSTS.offs[i]; a[i * 4 + 1] = e.st.length;
+        a[i * 4 + 2] = Math.PI * e.D / 12;
+      }); return a; })(),
     MCC: f32((F.MC || []).map(c => c.c | 0)),
     SPIN: f32(extra.spin),
     OPS: (() => { const a = new Float32Array(F.OPC.length * 16);
       F.OPC.forEach((op, i) => a.set(
-        opRow(op, warpList.indexOf(op.S), rollList.indexOf(op.B), H), i * 16)); return a; })(),
+        opRow(op, warpList.indexOf(op.S), packList.indexOf(op.B),
+              stampIndex(sEntries, op), H), i * 16)); return a; })(),
     CANE: f32([].concat(...(extra.canes || []))),
   };
 
@@ -168,7 +230,10 @@ export function packReal(F, extra) {
   const IN = [
     FORMI[F.form] || 4, F.MR ? 1 : 0, F.MB ? 1 : 0, (F.MC && F.MC.length) || 0,
     stamp.n, (S && S.nx) || 0, (S && S.ny) || 0, (B && B.nx) || 0,
-    (B && B.ny) || 0, (B && B.R && B.R.pr.length) || 0, 0, 0,
+    // THE TWO PADS BECOME THE METADATA BASES. Nothing grew: these were already in the 304 bytes,
+    // and a reader that leaves them at zero gets the single-entry behaviour it had before, because
+    // WU is first in PART_NAMES so a real base can never BE zero.
+    (B && B.ny) || 0, (B && B.R && B.R.pr.length) || 0, offs.RMETA, offs.SMETA,
     offs.WU, offs.WV, offs.MEX, offs.MHL, offs.MD, offs.MRIM,
     offs.BS, offs.BV, offs.RPR, offs.RTL, offs.STS, offs.MCC,
     offs.SPIN, offs.OPS, F.OPC.length, offs.CANE,

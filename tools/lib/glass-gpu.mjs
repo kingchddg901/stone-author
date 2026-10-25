@@ -32,7 +32,11 @@ struct Env {
   // the integers
   form: i32, MR: i32, MB: i32, MCn: i32,
   STn: i32, WPnx: i32, WPny: i32, RLnx: i32,
-  RLny: i32, RLn: i32, pad3: i32, pad4: i32,
+  // oRMETA and oSMETA WERE pad3 AND pad4. Nothing grew to carry them: they were already inside the
+  // 304 bytes, and glass-real.mjs packs them at the same index - that pair is a replica and moves
+  // together. ZERO MEANS ABSENT, which is safe because WU is first in PART_NAMES so a real base is
+  // never zero; a caller that builds its own uniform gets the single-entry behaviour it had.
+  RLny: i32, RLn: i32, oRMETA: i32, oSMETA: i32,
   oWU: i32, oWV: i32, oMEX: i32, oMHL: i32,
   oMD: i32, oMRIM: i32, oBS: i32, oBV: i32,
   oRPR: i32, oRTL: i32, oSTS: i32, oMCC: i32,
@@ -192,31 +196,42 @@ fn rollerAt(ri: i32, rh: f32, cu: f32, cvv: f32) -> vec2<f32> {
   // ri NAMES THE GRID and rh is that roller's own height, which the op record carries because it is
   // the one per-roller quantity that is not grid data. E.RLH is still roller 0's and still what the
   // probe pages pass; nothing about the uniform moved.
-  let fx = cu * f32(E.RLnx - 1); let fy = (cvv / rh) * f32(E.RLny - 1);
+  // THIS ROLLER'S OWN GRID. Rollers do not agree on size in real documents - test work carries
+  // four of four sizes - so each one's base and dimensions are read rather than strided to.
+  var nx = E.RLnx; var ny = E.RLny; var bS = 0; var bV = 0;
+  if (E.oRMETA != 0 && ri >= 0) {
+    let m = E.oRMETA + ri * 8;
+    bS = i32(ARR[m]); bV = i32(ARR[m + 1]);
+    nx = i32(ARR[m + 4]); ny = i32(ARR[m + 5]);
+  }
+  let fx = cu * f32(nx - 1); let fy = (cvv / rh) * f32(ny - 1);
   var i0 = i32(fx); var j0 = i32(fy);
-  if (i0 > E.RLnx - 2) { i0 = E.RLnx - 2; } if (i0 < 0) { i0 = 0; }
-  if (j0 > E.RLny - 2) { j0 = E.RLny - 2; } if (j0 < 0) { j0 = 0; }
+  if (i0 > nx - 2) { i0 = nx - 2; } if (i0 < 0) { i0 = 0; }
+  if (j0 > ny - 2) { j0 = ny - 2; } if (j0 < 0) { j0 = 0; }
   // the same stable spelling, for the same reason; see the note on glassUnwarp above
   let tx = fx - f32(i0); let ty = fy - f32(j0);
-  let k = ri * E.RLnx * E.RLny + j0 * E.RLnx + i0; let k2 = k + E.RLnx;
-  let sa = aBS(k) + tx * (aBS(k + 1) - aBS(k));
-  let sb = aBS(k2) + tx * (aBS(k2 + 1) - aBS(k2));
-  let va = aBV(k) + tx * (aBV(k + 1) - aBV(k));
-  let vb = aBV(k2) + tx * (aBV(k2 + 1) - aBV(k2));
+  let k = j0 * nx + i0; let k2 = k + nx;
+  let sa = aBS(bS + k) + tx * (aBS(bS + k + 1) - aBS(bS + k));
+  let sb = aBS(bS + k2) + tx * (aBS(bS + k2 + 1) - aBS(bS + k2));
+  let va = aBV(bV + k) + tx * (aBV(bV + k + 1) - aBV(bV + k));
+  let vb = aBV(bV + k2) + tx * (aBV(bV + k2 + 1) - aBV(bV + k2));
   let s = sa + ty * (sb - sa);
   let v = va + ty * (vb - va);
   return vec2<f32>(s, v);
 }
 fn rollerHand(ri: i32, rtot: f32, s: f32) -> vec2<f32> {
-  let n = E.RLn;
+  var n = E.RLn; var bP = 0; var bT = 0;
+  if (E.oRMETA != 0 && ri >= 0) {
+    let m = E.oRMETA + ri * 8;
+    bP = i32(ARR[m + 2]); bT = i32(ARR[m + 3]); n = i32(ARR[m + 6]);
+  }
   var u = 0.0;
   if (rtot > 0.0) { u = s / rtot; }
   let f = clamp(u, 0.0, 1.0) * f32(n - 1);
   var i = i32(f); if (i > n - 2) { i = n - 2; } if (i < 0) { i = 0; }
   let g = f - f32(i);
-  let b = ri * n;
-  return vec2<f32>(aRPR(b + i) + (aRPR(b + i + 1) - aRPR(b + i)) * g,
-                   aRTL(b + i) + (aRTL(b + i + 1) - aRTL(b + i)) * g);
+  return vec2<f32>(aRPR(bP + i) + (aRPR(bP + i + 1) - aRPR(bP + i)) * g,
+                   aRTL(bT + i) + (aRTL(bT + i + 1) - aRTL(bT + i)) * g);
 }`;
 
 
@@ -359,13 +374,21 @@ fn starR(th: f32, R: f32) -> f32 {
 }
 // A VARIABLE-LENGTH LOOP WITH FOUR EARLY EXITS AND A RETURN FROM THE MIDDLE. Threads take different
 // numbers of iterations, so this is the first genuinely divergent function in the port.
-fn rollStampAt(s: f32, v: f32) -> f32 {
-  if (E.STn <= 0) { return 0.0; }
-  let C = E.STC;
+fn rollStampAt(si: i32, s: f32, v: f32) -> f32 {
+  // THIS OP'S STAMP LIST. Only the first stamped op's list used to be packed, for the whole
+  // document - the same shape as ROLL[0], and unguarded, so a document with two stamp geometries
+  // drew the first one everywhere. test work has exactly that: one press at r 0.1, three at 2.2.
+  var n = E.STn; var C = E.STC; var b = 0;
+  if (E.oSMETA != 0) {
+    if (si < 0) { return 0.0; }
+    let m = E.oSMETA + si * 4;
+    b = i32(ARR[m]); n = i32(ARR[m + 1]); C = ARR[m + 2];
+  }
+  if (n <= 0) { return 0.0; }
   var u = s % C;
   if (u < 0.0) { u = u + C; }
-  for (var i = 0; i < E.STn; i = i + 1) {
-    let st = aSTS(i);
+  for (var i = 0; i < n; i = i + 1) {
+    let st = aSTS(b + i);
     let R = st.z / 24.0;
     var du = u - (((st.x / 360.0) % 1.0 + 1.0) % 1.0) * C;
     if (du > C * 0.5) { du = du - C; } else if (du < -C * 0.5) { du = du + C; }
@@ -477,7 +500,7 @@ fn glassUnform(x0: f32, y0: f32) -> vec3<f32> {
     } else if (k == 3) {
       let cd = aOP(i, 6); let sd = aOP(i, 7);
       if (aOP(i, 11) != 0.0) {
-        let h = rollStampAt(x * cd + y * sd - aOP(i, 8), -x * sd + y * cd);
+        let h = rollStampAt(i32(aOP(i, 11)) - 1, x * cd + y * sd - aOP(i, 8), -x * sd + y * cd);
         press = max(press, h);
       }
       let s = aOP(i, 4);
@@ -499,7 +522,7 @@ fn glassUnform(x0: f32, y0: f32) -> vec3<f32> {
           let hh = rollerHand(ri, aOP(i, 15), r.x);
           let bite = aOP(i, 10) * hh.x * (1.0 + hh.y * (r.y / half));
           if (bite > 0.0) {
-            let h = rollStampAt(r.x, r.y);
+            let h = rollStampAt(i32(aOP(i, 11)) - 1, r.x, r.y);
             if (h > 0.0) { press = max(press, h * min(bite, 1.0)); }
           }
         }

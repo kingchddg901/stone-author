@@ -355,7 +355,7 @@ function cases(app) {
 
     { name: 'rollStampAt', kind: 'f32', needs: ['env', 'stamp'], gpuTranscendental: true,
       uni: () => envUni(), arrays: allArrays,
-      call: TOUCH_ALL + '  OUT[i * 2] = rollStampAt(IN[i * 2], IN[i * 2 + 1]); OUT[i * 2 + 1] = 0.0;',
+      call: TOUCH_ALL + '  OUT[i * 2] = rollStampAt(0, IN[i * 2], IN[i * 2 + 1]); OUT[i * 2 + 1] = 0.0;',
       // s sweeps several circumferences so the modulo wraps; v spans past the stamps both ways
       inputs: () => { const a = new Float32Array(N * 2);
         for (let i = 0; i < N; i++) { a[2 * i] = Math.fround((i / N) * 5.3 - 1.1);

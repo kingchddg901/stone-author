@@ -14,7 +14,8 @@
 //
 // WHAT THIS HAS TO PROVE:
 //   1  two warps of one size are PACKED, end to end, with each stir naming its own by index
-//   2  two disagreeing press rollers are packed the same way, each press naming its own
+//   2  rollers of ANY sizes are packed, each press naming its own through RMETA
+//   2d stamp lists are per-op too, and a list at two turn counts is two entries
 //   3  the guards are discriminating, not blanket - one shared roller passes, and so does none
 //   4  a document with one of each gets past both
 //   5  the app carries the failure sentence out of both places the pool gives up
@@ -104,10 +105,11 @@ const says = (msg, what) => !!msg && msg.indexOf(what) >= 0;
 // different picture from the CPU painter's with nothing said. Guarded on 2026-10-25, built the same day.
 {
   const m = run([press(ROLL_A), press(ROLL_B)]);
-  ok('two rollers of one size are no longer refused', !says(m, 'roller'), m);
+  ok('two rollers of one size are not refused', !says(m, 'roller'), m);
+  // AND NEITHER ARE TWO OF DIFFERENT SIZES, which is the whole of this change. A stride needed them
+  // to agree; `test work` carries four rollers of four sizes and was refused by exactly that.
   const big = run([press(ROLL_A), press(ROLL_BIG)]);
-  ok('but roller grids of two SIZES still are', says(big, '1 stride'), big);
-  ok('and that message counts the grids', says(big, '2 roller'), big);
+  ok('nor are roller grids of two SIZES - RMETA indexes any mix', !says(big, 'roller'), big);
 }
 
 // ---- 2b: and the per-roller quantities ride where the shader looks ---------------------------------
@@ -133,6 +135,47 @@ const says = (msg, what) => !!msg && msg.indexOf(what) >= 0;
      f(0, 15) + ',' + f(1, 15) + ',' + f(2, 15));
 }
 
+// ---- 2d: ROLLERS OF ANY SIZE, and stamp lists per op ------------------------------------------------
+// The metadata is what replaced the stride. Each roller names its own base and dimensions; each
+// stamped op names its own list; and an entry is keyed by the LIST AND THE TURN COUNT, because D
+// belongs to the op rather than the list.
+{
+  const st1 = [{ a: 0, x: 0, r: 0.1, rot: 45 }];
+  const st2 = [{ a: 0, x: 0, r: 2.2, rot: 45 }, { a: 90, x: 1, r: 2.2, rot: 45 }];
+  const pr = (B, st, D) => ({ k: 4, B, st: 1, raw: { st, D } });
+  const F = { OPC: [pr(ROLL_A, st1, 6), pr(ROLL_BIG, st2, 6), pr(ROLL_B, st2, 6), pr(ROLL_A, st2, 12)],
+              H: 3, ROLL: [ROLL_A, ROLL_BIG, ROLL_B], SG: {}, S: null,
+              MC: [], MEX: [1], MHL: [2], MD: [3], MRIM: [4] };
+  const r = packReal(F, { SLAB: 12, canes: [], spin: [] });
+  const m = (i, f) => r.parts.RMETA[i * 8 + f];
+  ok('three rollers, three metadata rows', r.parts.RMETA.length === 24, r.parts.RMETA.length + ' floats');
+  ok('each row carries ITS OWN dimensions', m(0, 4) === 2 && m(1, 4) === 3 && m(2, 4) === 2,
+     m(0, 4) + ',' + m(1, 4) + ',' + m(2, 4));
+  ok('and its own base, which follows the one before it',
+     m(0, 0) === 0 && m(1, 0) === 4 && m(2, 0) === 13, m(0, 0) + ',' + m(1, 0) + ',' + m(2, 0));
+  const s = (i, f) => r.parts.SMETA[i * 4 + f];
+  ok('two lists at three turn counts make THREE stamp entries',
+     r.parts.SMETA.length === 12, r.parts.SMETA.length / 4 + ' entries');
+  ok('entries 1 and 2 share a list but not a turn count', s(1, 1) === 2 && s(2, 1) === 2 &&
+     Math.abs(s(2, 2) - s(1, 2) * 2) < 1e-6, s(1, 2) + ' vs ' + s(2, 2));
+  const f = (i, k) => r.parts.OPS[i * 16 + k];
+  ok('each press names its own stamp entry', f(0, 11) === 1 && f(1, 11) === 2 && f(2, 11) === 2 &&
+     f(3, 11) === 3, [0, 1, 2, 3].map(i => f(i, 11)).join(','));
+  ok('and two ops agreeing on list AND turn share one entry', f(1, 11) === f(2, 11));
+}
+
+// ---- 2e: the ABSENT sentinel is safe ----------------------------------------------------------------
+// The shader treats a metadata base of ZERO as "not built", which is only sound because WU is first
+// in PART_NAMES. If a real base could ever be zero, a document would silently take the fallback.
+{
+  const F = { OPC: [press(ROLL_A)], H: 3, ROLL: [ROLL_A], SG: {}, S: null,
+              MC: [], MEX: [1], MHL: [2], MD: [3], MRIM: [4] };
+  const r = packReal(F, { SLAB: 12, canes: [], spin: [] });
+  ok('a real RMETA base is never zero', r.offs.RMETA > 0, String(r.offs.RMETA));
+  ok('a real SMETA base is never zero', r.offs.SMETA > 0, String(r.offs.SMETA));
+  ok('because WU is first and so owns offset zero', r.offs.WU === 0, String(r.offs.WU));
+}
+
 // ---- 2c: a document with NO press keeps the layout it had ------------------------------------------
 // Roller data can exist that no press uses - a roll op is k 3 and takes none - and the shader reads
 // these parts only inside the press branch. They are packed anyway, because not packing them would
@@ -153,9 +196,6 @@ const says = (msg, what) => !!msg && msg.indexOf(what) >= 0;
 {
   const none = run([press(null), press(null)]);
   ok('ABLATION two presses with no roller at all are not refused for it', !says(none, 'roller'), none);
-  // three presses over two SIZES: the count must follow the SET, not the op count
-  const three = run([press(ROLL_A), press(ROLL_A), press(ROLL_BIG)]);
-  ok('the size refusal counts distinct rollers, not presses', says(three, '2 roller'), three);
 }
 
 // ---- 4: one of each gets past both -----------------------------------------------------------------

@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.220';
+  const BUILD = '2026.10.25.221';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14081,7 +14081,11 @@ struct Env {
   // the integers
   form: i32, MR: i32, MB: i32, MCn: i32,
   STn: i32, WPnx: i32, WPny: i32, RLnx: i32,
-  RLny: i32, RLn: i32, pad3: i32, pad4: i32,
+  // oRMETA and oSMETA WERE pad3 AND pad4. Nothing grew to carry them: they were already inside the
+  // 304 bytes, and glass-real.mjs packs them at the same index - that pair is a replica and moves
+  // together. ZERO MEANS ABSENT, which is safe because WU is first in PART_NAMES so a real base is
+  // never zero; a caller that builds its own uniform gets the single-entry behaviour it had.
+  RLny: i32, RLn: i32, oRMETA: i32, oSMETA: i32,
   oWU: i32, oWV: i32, oMEX: i32, oMHL: i32,
   oMD: i32, oMRIM: i32, oBS: i32, oBV: i32,
   oRPR: i32, oRTL: i32, oSTS: i32, oMCC: i32,
@@ -14241,31 +14245,42 @@ fn rollerAt(ri: i32, rh: f32, cu: f32, cvv: f32) -> vec2<f32> {
   // ri NAMES THE GRID and rh is that roller's own height, which the op record carries because it is
   // the one per-roller quantity that is not grid data. E.RLH is still roller 0's and still what the
   // probe pages pass; nothing about the uniform moved.
-  let fx = cu * f32(E.RLnx - 1); let fy = (cvv / rh) * f32(E.RLny - 1);
+  // THIS ROLLER'S OWN GRID. Rollers do not agree on size in real documents - test work carries
+  // four of four sizes - so each one's base and dimensions are read rather than strided to.
+  var nx = E.RLnx; var ny = E.RLny; var bS = 0; var bV = 0;
+  if (E.oRMETA != 0 && ri >= 0) {
+    let m = E.oRMETA + ri * 8;
+    bS = i32(ARR[m]); bV = i32(ARR[m + 1]);
+    nx = i32(ARR[m + 4]); ny = i32(ARR[m + 5]);
+  }
+  let fx = cu * f32(nx - 1); let fy = (cvv / rh) * f32(ny - 1);
   var i0 = i32(fx); var j0 = i32(fy);
-  if (i0 > E.RLnx - 2) { i0 = E.RLnx - 2; } if (i0 < 0) { i0 = 0; }
-  if (j0 > E.RLny - 2) { j0 = E.RLny - 2; } if (j0 < 0) { j0 = 0; }
+  if (i0 > nx - 2) { i0 = nx - 2; } if (i0 < 0) { i0 = 0; }
+  if (j0 > ny - 2) { j0 = ny - 2; } if (j0 < 0) { j0 = 0; }
   // the same stable spelling, for the same reason; see the note on glassUnwarp above
   let tx = fx - f32(i0); let ty = fy - f32(j0);
-  let k = ri * E.RLnx * E.RLny + j0 * E.RLnx + i0; let k2 = k + E.RLnx;
-  let sa = aBS(k) + tx * (aBS(k + 1) - aBS(k));
-  let sb = aBS(k2) + tx * (aBS(k2 + 1) - aBS(k2));
-  let va = aBV(k) + tx * (aBV(k + 1) - aBV(k));
-  let vb = aBV(k2) + tx * (aBV(k2 + 1) - aBV(k2));
+  let k = j0 * nx + i0; let k2 = k + nx;
+  let sa = aBS(bS + k) + tx * (aBS(bS + k + 1) - aBS(bS + k));
+  let sb = aBS(bS + k2) + tx * (aBS(bS + k2 + 1) - aBS(bS + k2));
+  let va = aBV(bV + k) + tx * (aBV(bV + k + 1) - aBV(bV + k));
+  let vb = aBV(bV + k2) + tx * (aBV(bV + k2 + 1) - aBV(bV + k2));
   let s = sa + ty * (sb - sa);
   let v = va + ty * (vb - va);
   return vec2<f32>(s, v);
 }
 fn rollerHand(ri: i32, rtot: f32, s: f32) -> vec2<f32> {
-  let n = E.RLn;
+  var n = E.RLn; var bP = 0; var bT = 0;
+  if (E.oRMETA != 0 && ri >= 0) {
+    let m = E.oRMETA + ri * 8;
+    bP = i32(ARR[m + 2]); bT = i32(ARR[m + 3]); n = i32(ARR[m + 6]);
+  }
   var u = 0.0;
   if (rtot > 0.0) { u = s / rtot; }
   let f = clamp(u, 0.0, 1.0) * f32(n - 1);
   var i = i32(f); if (i > n - 2) { i = n - 2; } if (i < 0) { i = 0; }
   let g = f - f32(i);
-  let b = ri * n;
-  return vec2<f32>(aRPR(b + i) + (aRPR(b + i + 1) - aRPR(b + i)) * g,
-                   aRTL(b + i) + (aRTL(b + i + 1) - aRTL(b + i)) * g);
+  return vec2<f32>(aRPR(bP + i) + (aRPR(bP + i + 1) - aRPR(bP + i)) * g,
+                   aRTL(bT + i) + (aRTL(bT + i + 1) - aRTL(bT + i)) * g);
 }`;
 
 
@@ -14408,13 +14423,21 @@ fn starR(th: f32, R: f32) -> f32 {
 }
 // A VARIABLE-LENGTH LOOP WITH FOUR EARLY EXITS AND A RETURN FROM THE MIDDLE. Threads take different
 // numbers of iterations, so this is the first genuinely divergent function in the port.
-fn rollStampAt(s: f32, v: f32) -> f32 {
-  if (E.STn <= 0) { return 0.0; }
-  let C = E.STC;
+fn rollStampAt(si: i32, s: f32, v: f32) -> f32 {
+  // THIS OP'S STAMP LIST. Only the first stamped op's list used to be packed, for the whole
+  // document - the same shape as ROLL[0], and unguarded, so a document with two stamp geometries
+  // drew the first one everywhere. test work has exactly that: one press at r 0.1, three at 2.2.
+  var n = E.STn; var C = E.STC; var b = 0;
+  if (E.oSMETA != 0) {
+    if (si < 0) { return 0.0; }
+    let m = E.oSMETA + si * 4;
+    b = i32(ARR[m]); n = i32(ARR[m + 1]); C = ARR[m + 2];
+  }
+  if (n <= 0) { return 0.0; }
   var u = s % C;
   if (u < 0.0) { u = u + C; }
-  for (var i = 0; i < E.STn; i = i + 1) {
-    let st = aSTS(i);
+  for (var i = 0; i < n; i = i + 1) {
+    let st = aSTS(b + i);
     let R = st.z / 24.0;
     var du = u - (((st.x / 360.0) % 1.0 + 1.0) % 1.0) * C;
     if (du > C * 0.5) { du = du - C; } else if (du < -C * 0.5) { du = du + C; }
@@ -14526,7 +14549,7 @@ fn glassUnform(x0: f32, y0: f32) -> vec3<f32> {
     } else if (k == 3) {
       let cd = aOP(i, 6); let sd = aOP(i, 7);
       if (aOP(i, 11) != 0.0) {
-        let h = rollStampAt(x * cd + y * sd - aOP(i, 8), -x * sd + y * cd);
+        let h = rollStampAt(i32(aOP(i, 11)) - 1, x * cd + y * sd - aOP(i, 8), -x * sd + y * cd);
         press = max(press, h);
       }
       let s = aOP(i, 4);
@@ -14548,7 +14571,7 @@ fn glassUnform(x0: f32, y0: f32) -> vec3<f32> {
           let hh = rollerHand(ri, aOP(i, 15), r.x);
           let bite = aOP(i, 10) * hh.x * (1.0 + hh.y * (r.y / half));
           if (bite > 0.0) {
-            let h = rollStampAt(r.x, r.y);
+            let h = rollStampAt(i32(aOP(i, 11)) - 1, r.x, r.y);
             if (h > 0.0) { press = max(press, h * min(bite, 1.0)); }
           }
         }
@@ -14780,7 +14803,15 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
   // the arena's parts, in the order the Env's offsets name them
   const PART_NAMES = ['WU', 'WV', 'MEX', 'MHL', 'MD', 'MRIM', 'BS', 'BV', 'RPR', 'RTL',
-                      'STS', 'MCC', 'SPIN', 'OPS', 'CANE'];
+                      'STS', 'MCC', 'SPIN', 'OPS', 'CANE', 'RMETA', 'SMETA'];
+
+  // RMETA AND SMETA ARE APPENDED, never inserted, so every offset that existed before this keeps its
+  // place. They are also why offset ZERO can mean ABSENT: WU is first in this list, so a real RMETA
+  // offset is always greater than zero, and a caller that builds its own uniform - gpu-port-harness
+  // does - leaves the field at zero and gets the single-entry behaviour it had before.
+  //
+  // RMETA is eight floats a roller:  offS, offV, offPR, offTL, nx, ny, prN, -
+  // SMETA is four floats an entry:   offST (in STAMPS), n, C, -
 
   const f32 = a => a instanceof Float32Array ? a : new Float32Array(a || []);
 
@@ -14794,10 +14825,48 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     return a;
   }
 
+  // THE SAME THING WITHOUT THE EQUAL-LENGTH ASSUMPTION, which is what `test work` broke on 2026-10-25:
+  // four rollers, four grid sizes, refused by a stride that could not index them. Each entry's offset
+  // is recorded instead of computed, in units of `unit` elements - 1 for a flat grid, 4 for a stamp.
+  function catVar(list, pick, unit) {
+    const arrs = list.map(g => f32(pick(g) || []));
+    const offs = []; let at = 0;
+    for (const a of arrs) { offs.push(at / unit); at += a.length; }
+    const out = new Float32Array(at);
+    let q = 0;
+    for (const a of arrs) { out.set(a, q); q += a.length; }
+    return { data: out, offs };
+  }
+
+  // ONE ENTRY PER DISTINCT STAMP LIST **AND** TURN COUNT. D belongs to the op rather than the list, so
+  // two ops sharing a list but turning differently are two entries; two ops agreeing on both are one.
+  // Before this only the FIRST stamped op's list was packed, for the whole document - the same shape
+  // as ROLL[0], unguarded, and `test work` hit it: four presses, one at r 0.1 and three at r 2.2.
+  function stampEntries(F) {
+    const out = [];
+    for (const o of F.OPC) {
+      if (!(o.st && o.raw && o.raw.st && o.raw.st.length)) continue;
+      const D = +o.raw.D || 6;
+      if (out.some(e => e.st === o.raw.st && e.D === D)) continue;
+      out.push({ st: o.raw.st, D });
+    }
+    return out;
+  }
+  const stampIndex = (entries, op) => (op && op.st && op.raw && op.raw.st)
+    ? entries.findIndex(e => e.st === op.raw.st && e.D === (+op.raw.D || 6)) : -1;
+  const stampFloats = (st) => {
+    const a = new Float32Array(st.length * 4);
+    st.forEach((s, i) => {
+      a[4 * i] = +s.a || 0; a[4 * i + 1] = +s.x || 0;
+      a[4 * i + 2] = +s.r || 1; a[4 * i + 3] = +s.rot || 0;
+    });
+    return a;
+  };
+
   // one op is sixteen floats; the same record glass-scene.mjs writes, read off the app's own OPC.
   // `wi` and `ri` are this op's indices into the packed warp and roller grids, or -1 for an op with
   // none. `H` is the document height, which is what a roller with no height of its own falls back to.
-  function opRow(op, wi, ri, H) {
+  function opRow(op, wi, ri, si, H) {
     const a = new Float32Array(16);
     a[0] = op.k; a[1] = op.ox; a[2] = op.oy; a[3] = op.a; a[4] = op.s;
     a[5] = op.rot ? 1 : 0; a[6] = op.cd; a[7] = op.sd; a[8] = op.u0;
@@ -14805,7 +14874,9 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     // SLOT 13 IS AN INDEX NOW, PLUS ONE, so zero still reads as "this op has no warp" and the
     // shader's existing `aOP(i, 13) != 0.0` test is unchanged. A document with one warp packs 1 for
     // every stir and indexes grid 0, which is the arithmetic it had before this was per-op.
-    a[11] = op.st ? 1 : 0;
+    // SLOT 11 WAS A HAS-STAMPS FLAG and is now that op's stamp entry plus one, by the same rule as
+    // 12 and 13: zero still means none, so every `aOP(i, 11) != 0.0` test in the shader is unchanged.
+    a[11] = (op.st && si >= 0) ? si + 1 : 0;
     a[12] = (op.B && ri >= 0) ? ri + 1 : 0;
     a[13] = (op.S && wi >= 0) ? wi + 1 : 0;
     // THE ROLLER'S OWN HEIGHT AND TOTAL, in the two floats this record has never used. They are the
@@ -14853,7 +14924,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     // them, and a layout that moves for a document whose picture cannot move is a change nobody
     // asked for and nobody could see.
     const packList = rollList.length ? rollList : (B ? [B] : []);
-    const stamp = stampsOf(F);
+    const stamp = stampsOf(F);   // entry 0's count and turn, which the uniform still carries
 
     // THEY MUST STILL AGREE ON THEIR DIMENSIONS, and that is the whole of what is left of the old
     // refusal. One stride indexes the lot - grid w starts at w * nx * ny - which is what lets nx, ny
@@ -14877,29 +14948,43 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     // throw, no console line and no refusal. The warp check above has been here since this path
     // shipped and this shoulder had not, which is the shape where a guard that exists reads as
     // complete. Same fragments, same reason: check-i18n reads every string literal in this file.
-    // ONE STRIDE FOR THE ROLLERS TOO, so their grids must agree on size. Everything else about a
-    // roller that differs - its height and its total - rides in the op record instead.
-    for (const r of rollList) {
-      const prN = (r.R && r.R.pr && r.R.pr.length) || 0;
-      const b0 = (B.R && B.R.pr && B.R.pr.length) || 0;
-      if (r.nx !== B.nx || r.ny !== B.ny || prN !== b0) {
-        throw new Error('packReal: ' + rollList.length + ' roller'
-          + ' grids, 1 stride');
-      }
-    }
+    // NO SIZE REFUSAL FOR ROLLERS. There was one for a day: a stride indexed them, so they had to
+    // agree on dimensions, and `test work` refused with "4 roller grids, 1 stride" because real
+    // documents do not. Each roller now carries its own offsets and dimensions in RMETA, so any mix
+    // packs. The warps keep the stride - three grids of one size, verified drawing correctly on
+    // hardware - and keep their narrower refusal with it.
+
+    // THE VARIABLE-LENGTH PACKS, built before the parts that hold them so the offsets exist.
+    const rBS = catVar(packList, r => r.s, 1), rBV = catVar(packList, r => r.v, 1);
+    const rPR = catVar(packList, r => r.R && r.R.pr, 1);
+    const rTL = catVar(packList, r => r.R && r.R.tl, 1);
+    const sEntries = stampEntries(F);
+    const sSTS = catVar(sEntries, e => stampFloats(e.st), 4);
 
     const parts = {
       // END TO END, grid 0 first. With one warp this is byte for byte what it packed before.
       WU: catGrids(warpList, w => w.u), WV: catGrids(warpList, w => w.v),
       MEX: f32(F.MEX), MHL: f32(F.MHL), MD: f32(F.MD), MRIM: f32(F.MRIM),
-      BS: catGrids(packList, r => r.s), BV: catGrids(packList, r => r.v),
-      RPR: catGrids(packList, r => r.R && r.R.pr), RTL: catGrids(packList, r => r.R && r.R.tl),
-      STS: stamp.arr,
+      BS: rBS.data, BV: rBV.data, RPR: rPR.data, RTL: rTL.data,
+      STS: sSTS.data,
+      RMETA: (() => { const a = new Float32Array(packList.length * 8);
+        packList.forEach((r, i) => {
+          a[i * 8] = rBS.offs[i]; a[i * 8 + 1] = rBV.offs[i];
+          a[i * 8 + 2] = rPR.offs[i]; a[i * 8 + 3] = rTL.offs[i];
+          a[i * 8 + 4] = r.nx || 0; a[i * 8 + 5] = r.ny || 0;
+          a[i * 8 + 6] = (r.R && r.R.pr && r.R.pr.length) || 0;
+        }); return a; })(),
+      SMETA: (() => { const a = new Float32Array(sEntries.length * 4);
+        sEntries.forEach((e, i) => {
+          a[i * 4] = sSTS.offs[i]; a[i * 4 + 1] = e.st.length;
+          a[i * 4 + 2] = Math.PI * e.D / 12;
+        }); return a; })(),
       MCC: f32((F.MC || []).map(c => c.c | 0)),
       SPIN: f32(extra.spin),
       OPS: (() => { const a = new Float32Array(F.OPC.length * 16);
         F.OPC.forEach((op, i) => a.set(
-          opRow(op, warpList.indexOf(op.S), rollList.indexOf(op.B), H), i * 16)); return a; })(),
+          opRow(op, warpList.indexOf(op.S), packList.indexOf(op.B),
+                stampIndex(sEntries, op), H), i * 16)); return a; })(),
       CANE: f32([].concat(...(extra.canes || []))),
     };
 
@@ -14928,7 +15013,10 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     const IN = [
       FORMI[F.form] || 4, F.MR ? 1 : 0, F.MB ? 1 : 0, (F.MC && F.MC.length) || 0,
       stamp.n, (S && S.nx) || 0, (S && S.ny) || 0, (B && B.nx) || 0,
-      (B && B.ny) || 0, (B && B.R && B.R.pr.length) || 0, 0, 0,
+      // THE TWO PADS BECOME THE METADATA BASES. Nothing grew: these were already in the 304 bytes,
+      // and a reader that leaves them at zero gets the single-entry behaviour it had before, because
+      // WU is first in PART_NAMES so a real base can never BE zero.
+      (B && B.ny) || 0, (B && B.R && B.R.pr.length) || 0, offs.RMETA, offs.SMETA,
       offs.WU, offs.WV, offs.MEX, offs.MHL, offs.MD, offs.MRIM,
       offs.BS, offs.BV, offs.RPR, offs.RTL, offs.STS, offs.MCC,
       offs.SPIN, offs.OPS, F.OPC.length, offs.CANE,
