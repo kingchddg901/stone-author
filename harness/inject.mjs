@@ -20,7 +20,10 @@ const hook = `
     // the strip path: a render larger than a canvas can be, assembled as a PNG stream
     renderStreamedPNG, stripPlan, renderStrip,
     // the grid path: an arbitrary rectangle of the picture, and the tiled container it is written into
-    renderOneTile, tiffPlan, tiffTiled, deflateBytes,
+    // rgbFromRGBA IS THE SHIPPED COMPACTION, not a copy of it. The stored tile is three
+    // channels now and the harness has to build the same bytes the export does; writing the
+    // loop again in the test would be testing the test.
+    renderOneTile, tiffPlan, tiffTiled, deflateBytes, rgbFromRGBA,
     // THE FLOOR, both ways. Without these the harness could not reach the floor at all - it has only
     // ever rendered the tiled SLAB - and a defect that put every output tile's material under one
     // piece went green through CI for as long as it existed. renderFloor builds the whole picture on

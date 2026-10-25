@@ -77,15 +77,23 @@ const res = await page.evaluate(async ({ W, H, TS }) => {
     const c = sa.renderOneTile(W, gx * TS, gy * TS, TS, TS, bleed);
     const px = new Uint8Array(grab(c, bleed, bleed, TS, TS));
     c.width = 1; c.height = 1;
-    raws.push(px); comp.push(await sa.deflateBytes(px));
+    // THREE CHANNELS, THROUGH THE EXPORT'S OWN HELPER. The alpha was 255 in every pixel and the
+    // writer declares SamplesPerPixel 3, so deflating the RGBA here would build a file whose tags
+    // and tiles disagree - which is exactly how this harness caught the change.
+    //
+    // COPIED, because rgbFromRGBA hands back a view of ONE reused scratch buffer. Pushing the view
+    // would leave every tile in raws aliasing the last one, and the per-tile comparison below
+    // would then be comparing the final tile against itself N times and passing.
+    const rgb = new Uint8Array(sa.rgbFromRGBA(px));
+    raws.push(rgb); comp.push(await sa.deflateBytes(rgb));
   }
   const { blob } = sa.tiffTiled(W, H, TS, TS, comp, 'harness');
   const buf = new Uint8Array(await blob.arrayBuffer());
   const b64 = (u8) => { let s = ''; const CH = 0x8000;
     for (let i = 0; i < u8.length; i += CH) s += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
     return btoa(s); };
-  const joined = new Uint8Array(raws.length * TS * TS * 4);
-  raws.forEach((r, i) => joined.set(r, i * TS * TS * 4));
+  const joined = new Uint8Array(raws.length * TS * TS * 3);
+  raws.forEach((r, i) => joined.set(r, i * TS * TS * 3));
   return { bleed, tiles: comp.length, joinL: diff(oneL, splitL), joinR: diff(oneR, splitR),
            reRenderIdentical: same, tiff: b64(buf), rawTiles: b64(joined) };
 }, { W, H, TS });
@@ -127,16 +135,23 @@ const parse = (f) => {
 let tags = null;
 try { tags = parse(tiff); } catch (e) { fail.push(`container: ${e.message}`); }
 if (tags) {
-  const need = { 256: W, 257: H, 259: 8, 262: 2, 277: 4, 322: TS, 323: TS };
+  const need = { 256: W, 257: H, 259: 8, 262: 2, 277: 3, 322: TS, 323: TS };
   for (const [tag, want] of Object.entries(need)) {
     if (!tags[tag]) { fail.push(`missing tag ${tag}`); continue; }
     const got = tags[tag].all()[0];
     if (got !== want) fail.push(`tag ${tag} is ${got}, expected ${want}`);
   }
+  // ExtraSamples DESCRIBES A CHANNEL THAT NO LONGER EXISTS. Checking for its absence rather than
+  // only checking 277, because a file can carry both and be self-contradictory - which is the state
+  // one build shipped in, with 277 saying three and a stale 338 still claiming an alpha.
+  if (tags[338]) fail.push('tag 338 (ExtraSamples) is present over three channels');
+  if (tags[258] && tags[258].all().length !== 3) {
+    fail.push(`BitsPerSample has ${tags[258].all().length} values, expected 3`);
+  }
   const offs = tags[324] && tags[324].all(), cnts = tags[325] && tags[325].all();
   if (!offs || offs.length !== res.tiles) fail.push(`${offs ? offs.length : 0} tile offsets, expected ${res.tiles}`);
   else {
-    const want = TS * TS * 4;
+    const want = TS * TS * 3;
     for (let i = 0; i < offs.length; i++) {
       let px;
       try { px = inflateSync(tiff.subarray(offs[i], offs[i] + cnts[i])); }
@@ -157,7 +172,7 @@ try {
   for (let i = 0; i < o.length && !caught; i++) {
     try {
       const px = inflateSync(bad.subarray(o[i], o[i] + c[i]));
-      if (!px.equals(raw.subarray(i * TS * TS * 4, (i + 1) * TS * TS * 4))) caught = true;
+      if (!px.equals(raw.subarray(i * TS * TS * 3, (i + 1) * TS * TS * 3))) caught = true;
     } catch (_) { caught = true; }
   }
   bit = caught;
