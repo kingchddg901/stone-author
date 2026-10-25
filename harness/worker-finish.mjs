@@ -145,7 +145,11 @@ for (const mode of modes) {
         const pr = sa.storedTilePixels(cx, { bleed, store }, sx, sy, tx, ty, W, plan.markSig);
         const px = pr.px; mk += pr.marked;
         for (let q = 0; q < px.length; q += 400) { const l = (px[q] + px[q + 1] + px[q + 2]) / 3; lS += l; if (l > 40) lU++; lN++; }
-        const z = await sa.deflateBytes(new Uint8Array(px.buffer, px.byteOffset, px.byteLength));
+        // THE LIGHT SAMPLE READS RGBA AND THE DEFLATE TAKES RGB, in that order, because that is
+        // the order the worker uses. Compacting before the sample would walk a stride-400 loop
+        // over three-byte pixels and sample different ones, which changes litSum without
+        // changing a single stored byte - a difference this harness would report as a defect.
+        const z = await sa.deflateBytes(sa.rgbFromRGBA(px));
         parts.push(ty * across + tx + ':' + z.length + ':' + H(z));
       }
       c.width = 1; c.height = 1;

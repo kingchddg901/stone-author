@@ -11400,6 +11400,12 @@ self.onmessage = async (e) => {
   // Hung off the function rather than closed over, because this body is serialised into the finish
   // worker by toString() and a closure variable would not travel with it. Each worker gets its own
   // on first use; the main thread gets one for the sequential and resume paths.
+  //
+  // ONE BUFFER MEANS ONE CALLER AT A TIME, and every caller today is. The worker awaits its deflate
+  // before compacting the next tile, the sequential export awaits, and resumeVerified awaits in a
+  // loop - so the bytes are consumed before anything can overwrite them. Two of these running
+  // concurrently in one realm would deflate the second tile's pixels twice and report no error at
+  // all, which is the failure this note exists to make visible to whoever adds the third caller.
   function rgbFromRGBA(px) {
     const n = (px.length / 4) | 0, need = n * 3;
     if (!rgbFromRGBA.buf || rgbFromRGBA.buf.length < need) rgbFromRGBA.buf = new Uint8Array(need);
