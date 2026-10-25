@@ -28,7 +28,7 @@ export const PART_NAMES = [
   'GINV', 'ZOFF', 'UREL', 'RWL',                           // the taper, and ring width by ring
   'FSP', 'FCZ', 'FWL', 'FCHAR', 'FZW',                     // the fire's tables
   'WVA', 'WZC', 'WZS', 'FIRE',                             // the wave family, by wave and by slice
-  'FE', 'FEAL', 'FEZW',                                    // features: scalars, lobes, z windows
+  'FE', 'FEAL', 'FEZW', 'FEWL',                            // features: scalars, lobes, z windows, ring weights
   'GLUT', 'GTV', 'GTW', 'GEDGE',                           // the graft's, when there is one
 ];
 
@@ -43,7 +43,7 @@ export const FIELD_PARTS = {
   ginv: 'GINV', zoff: 'ZOFF', urel: 'UREL', rwl: 'RWL',
   fsp: 'FSP', fcz: 'FCZ', fwl: 'FWL', fchar: 'FCHAR', fzw: 'FZW',
   wv: 'WVA', WV: 'WZC', 'wave:zc': 'WZC', 'wave:zs': 'WZS', FIRE: 'FIRE',
-  FE: 'FE', 'feature:al': 'FEAL', 'feature:zw': 'FEZW',
+  FE: 'FE', 'feature:al': 'FEAL', 'feature:zw': 'FEZW', 'feature:wl': 'FEWL',
   'graft:lut': 'GLUT', 'graft:tv': 'GTV', 'graft:tw': 'GTW', 'graft:edge': 'GEDGE',
 };
 
@@ -80,7 +80,7 @@ export const NEVER_DIES = 2 ** 100;
 
 export function feRow(f) {
   const a = new Float32Array(FE_STRIDE);
-  a[0] = f.amp; a[1] = f.ux; a[2] = f.uy; a[3] = f.zc; a[4] = f.wl;
+  a[0] = f.amp; a[1] = f.ux; a[2] = f.uy; a[3] = f.zc;   // wl is a TABLE and lives in FEWL
   a[5] = f.ax; a[6] = f.ay; a[7] = f.az;
   a[8] = f.px; a[9] = f.py;
   a[10] = f.qx; a[11] = f.qy; a[12] = f.qz;
@@ -124,6 +124,9 @@ export function packWood(F, extra) {
     })(),
     FEAL: catSame(FE, f => f.al, 'a feature lobe'),
     FEZW: catSame(FE, f => f.zw, 'a feature z window'),
+    // FE[q].wl[gi] - indexed by RING, not by slice, which is why it is its own part and not folded
+    // in with zw. Missed on the first two passes: the gate saw a bare `wl[` and I called it scratch.
+    FEWL: catSame(FE, f => f.wl, 'a feature ring weight'),
     GLUT: f32(G && G.lut), GTV: f32(G && G.tv), GTW: f32(G && G.tw), GEDGE: f32(G && G.edge),
   };
 

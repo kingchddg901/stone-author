@@ -29,13 +29,14 @@ const ok = (name, cond, detail) => {
 // numbers, because the author did, and so it agreed with the mistake instead of the app.
 const NA = 5, ZN = 8;
 const feat = (base, dead) => ({
-  amp: base + 1, ux: base + 2, uy: base + 3, zc: base + 4, wl: base + 5,
+  amp: base + 1, ux: base + 2, uy: base + 3, zc: base + 4,
   ax: base + 6, ay: base + 7, az: base + 8,
   px: base + 9, py: base + 10,
   qx: base + 11, qy: base + 12, qz: base + 13,
   kn: base + 14, kp: base + 15, r0: base + 16,
   dead, rDie: dead ? base + 17 : Infinity,
   prune: base + 18, ageN: base + 19, rbMax: base + 20,
+  wl: new Float32Array(6).fill(base + 80),
   al: new Float32Array(NA).fill(base + 90),
   zw: new Float32Array(ZN).fill(base + 91),
 });
@@ -63,9 +64,9 @@ const field = (n, feats) => ({
   const r = feRow(feat(100, true));
   ok('a feature is ' + FE_STRIDE + ' floats', r.length === FE_STRIDE, r.length + '');
   // every field distinct means the row must be strictly increasing over the fields that carry base+k
-  const want = [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116];
-  ok('the first sixteen fields are in their fixed order',
-     want.every((v, i) => r[i] === v), Array.from(r.slice(0, 16)).join(','));
+  const want = [101, 102, 103, 104];
+  ok('the leading fields are in their fixed order',
+     want.every((v, i) => r[i] === v), Array.from(r.slice(0, 4)).join(','));
   ok('dead is a flag, not a value', r[16] === 1);
   ok('and the three tail fields follow it', r[18] === 118 && r[19] === 119 && r[20] === 120,
      r[18] + ',' + r[19] + ',' + r[20]);

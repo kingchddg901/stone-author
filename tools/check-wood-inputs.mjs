@@ -11,10 +11,12 @@
 // reading, so it agreed with the mistake instead of the app. A fixture derived from the author's
 // belief tests the author's belief.
 //
-// So nothing here is written down by hand. The alias map comes out of woodSampler's own
-// declarations, the subscripted set comes out of shade's own body, and the packer has to account for
-// every name that survives the join. If the app grows a tenth array, this goes red without anybody
-// remembering to update it.
+// ALMOST nothing here is written down by hand, and the exception is where it failed a second time.
+// The alias map comes out of woodSampler's own declarations and the subscripted set out of shade's
+// own body - but the list of names to IGNORE was mine, and I put `wl` in it after seeing a bare
+// `wl[` and calling it scratch. It is `FE[q].wl[gi]`, a per-feature table indexed by ring, and the
+// packer went without it. A hand-written exemption is the hand-written part of a derived gate and
+// it is where the next miss will come from, so every entry below now carries why it is there.
 //
 //   node tools/check-wood-inputs.mjs
 import { readFileSync } from 'fs';
@@ -51,18 +53,35 @@ ok('the alias map is read, not written down', alias.size >= 8, alias.size + ' al
 // ---- what shade subscripts --------------------------------------------------------------------------
 const subs = new Set();
 for (const m of strip(shade).matchAll(/([A-Za-z_$][\w$]*(?:\.[A-Za-z_]\w*)?)\s*\[/g)) subs.add(m[1]);
+// AND A MEMBER OF AN INDEXED THING: `FE[q].wl[gi]` is a per-feature table and the pattern above
+// sees only a bare `wl`. This is the shape that got missed.
+for (const m of strip(shade).matchAll(/([A-Za-z_$][\w$]*)\s*\[[^\]]*\]\s*\.\s*([A-Za-z_]\w*)\s*\[/g))
+  subs.add(m[1] + '[].' + m[2]);
 
-// names that are shade's own locals or its output, not field data
-const LOCAL = new Set(['out', 'sq', 'pn', 'zc', 'zs', 'wl', 'W', 'f', 'd']);
+// EXEMPT, WITH A REASON EACH. These are not field tables, and saying why is the only thing standing
+// between this list and the mistake it already caused once.
+const EXEMPT = new Map([
+  ['out', 'the output triple, a parameter'],
+  ['sq', 'scratch, one slot per feature, filled in this function'],
+  ['pn', 'the face normal - three floats, and it rides in the uniform'],
+  ['zc', 'reached as W.zc, counted there'],
+  ['zs', 'reached as W.zs, counted there'],
+  ['wl', 'reached as FE[].wl, counted there'],
+  ['W', 'the loop variable over the wave family'],
+  ['f', 'the loop variable over the features'],
+  ['d', 'a local'],
+]);
 
 const needed = new Map();                       // field property -> how shade reached it
 for (const n of subs) {
-  if (LOCAL.has(n)) continue;
+  if (EXEMPT.has(n)) continue;
   if (alias.has(n)) { needed.set(alias.get(n), n); continue; }
   const dot = n.match(/^(F|GF)\.([A-Za-z_]\w*)$/);
   if (dot) { needed.set((dot[1] === 'GF' ? 'graft:' : '') + dot[2], n); continue; }
-  const feat = n.match(/^f\.([A-Za-z_]\w*)$/);
+  const feat = n.match(/^f\.([A-Za-z_]\w*)$/) || n.match(/^FE\[\]\.([A-Za-z_]\w*)$/);
   if (feat) { needed.set('feature:' + feat[1], n); continue; }
+  const wave2 = n.match(/^WV\[\]\.([A-Za-z_]\w*)$/);
+  if (wave2) { needed.set('wave:' + wave2[1], n); continue; }
   const wave = n.match(/^W\.([A-Za-z_]\w*)$/);
   if (wave) { needed.set('wave:' + wave[1], n); continue; }
   needed.set(n, n);                             // an alias to something other than F, or a bare name
