@@ -111,6 +111,37 @@ ok('and every mapping names a real part', bogus.length === 0, bogus.map(x => x.j
      'ginv is not in the needed set at all - the extraction is broken');
 }
 
+// ---- THE BRIDGE: does the app hand packWood what packWood reads? -------------------------------------
+// woodSampler computes every one of these for the CPU painter already; the scene only stops them
+// being private to the closure. Both halves are read from source - the keys packWood asks for, and
+// the keys the app's scene literal supplies - so neither can be satisfied by a list I maintain.
+{
+  const PACK = readFileSync(new URL('./lib/wood-real.mjs', import.meta.url), 'utf8');
+  const wantS = new Set([...PACK.matchAll(/[^A-Za-z0-9_]S[.]([A-Za-z_][A-Za-z0-9_]*)/g)].map(m => m[1]));
+  const wantC = new Set([...PACK.matchAll(/col[(]'([A-Za-z][A-Za-z0-9_]*)'/g)].map(m => m[1]));
+
+  const sc = APP.indexOf('const scene = {');
+  ok('the app builds a scene for the packer', sc >= 0);
+  let i = APP.indexOf('{', sc), d = 0;
+  for (;; i++) { if (APP[i] === '{') d++; else if (APP[i] === '}' && --d === 0) break; }
+  const scene = APP.slice(sc, i + 1);
+  const sBlock = scene.slice(scene.indexOf('sampler: {'), scene.indexOf('colours: {'));
+  const cBlock = scene.slice(scene.indexOf('colours: {'));
+
+  const haveS = new Set([...sBlock.matchAll(/([A-Za-z_]\w*)\s*[:,}]/g)].map(m => m[1]));
+  const haveC = new Set([...cBlock.matchAll(/([A-Za-z]\w*)\s*:/g)].map(m => m[1]));
+
+  const missS = [...wantS].filter(k => !haveS.has(k));
+  const missC = [...wantC].filter(k => !haveC.has(k));
+  ok('the scene carries every sampler value the packer reads', missS.length === 0,
+     'missing ' + missS.join(', '));
+  ok('and every colour it resolves', missC.length === 0, 'missing ' + missC.join(', '));
+  ok('it passes the graft through as its own field', /graft:\s*GF/.test(scene));
+  ok('and names which feature carries the knot', /KNI:\s*FE\.findIndex/.test(scene));
+  // ABLATION: a sampler key the packer reads but the scene drops must be seen
+  ok('ABLATION a dropped key is caught', [...wantS].filter(k => !new Set([...haveS].filter(x => x !== 'KS')).has(k)).includes('KS'));
+}
+
 console.log('');
 if (fails) { console.error('check-wood-inputs: ' + fails + ' FAILED'); process.exit(1); }
 console.log('check-wood-inputs: every array shade indexes is packed as one, derived from the app');

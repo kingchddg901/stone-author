@@ -66,6 +66,31 @@ ok('and it actually looked at some script', blocks > 0, blocks + ' block(s)');
   ok('and the same text unbroken is accepted', parses(whole, 'ablate2') === null);
 }
 
+// ---- AND NO INVISIBLE CHARACTERS IN THE TOOLS THEMSELVES ---------------------------------------------
+// FOUR TIMES in one day a generated escape arrived as a control character instead of two visible ones.
+// Python reads a lone backslash-b as BACKSPACE and converts it silently - only backslash-s warns - so a
+// regex ships as /<0x08>S[.]/ which PARSES, RUNS, MATCHES NOTHING and reports green. A dead check is
+// worse than a missing one, because the missing one is at least visible as missing.
+//
+// Nothing legitimate in this directory needs a character below space except tab, newline and return.
+{
+  const names = readdirSync(DIR).filter(f => f.endsWith(".mjs") || f.endsWith(".html"));
+  const dirty = [];
+  for (const f of names) {
+    const src = readFileSync(join(DIR, f), "utf8");
+    for (let i = 0; i < src.length; i++) {
+      const c = src.charCodeAt(i);
+      if (c < 9 || (c > 13 && c < 32)) { dirty.push(f + " at " + i + " (0x" + c.toString(16) + ")"); break; }
+    }
+  }
+  ok(names.length + " tool file(s) carry no control character", dirty.length === 0, dirty.join("; "));
+  // ABLATION: the exact shape that got through, four times
+  const bs = "const re = /" + String.fromCharCode(8) + "S[.]/;";
+  let seen = false;
+  for (let i = 0; i < bs.length; i++) { const c = bs.charCodeAt(i); if (c < 9 || (c > 13 && c < 32)) seen = true; }
+  ok("ABLATION a backspace inside a regex is seen", seen);
+}
+
 console.log('');
 if (fails) { console.error('check-probe-pages: ' + fails + ' FAILED'); process.exit(1); }
 console.log('check-probe-pages: ' + blocks + ' inline script(s) across ' + pages.length +

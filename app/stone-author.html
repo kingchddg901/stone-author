@@ -1829,7 +1829,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.221';
+  const BUILD = '2026.10.25.222';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6546,7 +6546,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       out[2] = cb < 0 ? 0 : cb > 255 ? 255 : cb;
       return true;
     };
-    return { F, KS, ZS, shade, pn };
+    // THE SCENE: everything the board IS before a pixel is drawn, which is what a shader needs and
+    // what `shade` has been closing over all along. glassScene does the same job for glass, and
+    // tools/lib/wood-real.mjs turns this into an arena and a uniform.
+    //
+    // NOTHING HERE IS NEW WORK. Every value was already computed above for the CPU painter; this
+    // only stops them being private to the closure. KNI is the exception and it is one findIndex:
+    // the shader cannot search a list for the feature carrying a knot face, so it is told which.
+    const scene = {
+      F, graft: GF,
+      sampler: {
+        KS, ZS, GKS, MINL, MINV, MTHR, GLOSS, LIT,
+        ffx, ffy, fcIn, fcOut, FSEV, ECELL, ERADFT,
+        eyeDepth: WOOD.eyeDepth, EYES, WAVY,
+        KNI: FE.findIndex(f => f.kn > 0),
+      },
+      colours: {
+        early: [BR, BG, BB], late: [DR, DG, DB], heart: [HR, HG, HB],
+        knot: [KR, KG, KB], mineral: [NR, NG, NB],
+        graftEarly: [GBR, GBG, GBB], graftLate: [GDR, GDG, GDB],
+      },
+      pn,
+    };
+    return { F, KS, ZS, shade, pn, scene };
   }
   // The slab rectangle in DEVICE pixels, rounded INWARD to pixel centres. putImageData replaces alpha
   // as well as colour, so a box one pixel wider than the slab would punch a transparent hairline

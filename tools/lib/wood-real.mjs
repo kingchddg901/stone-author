@@ -168,6 +168,9 @@ export function packWood(F, extra) {
     F.K || 0, F.Z || 0, F.NA || 0, F.NW || 0,
     FE.length, F.n || 0, S.EYES ? 1 : 0, S.WAVY ? 1 : 0,
     (G && G.K) || 0, (G && G.n) || 0, G ? 1 : 0, F.WK || 0,
+    // WHICH FEATURE CARRIES THE KNOT FACE, or -1. The app finds it with FE.find(f => f.kn > 0) once
+    // per paint; a shader cannot search a list per pixel, so it is told.
+    (S.KNI === undefined ? -1 : S.KNI), (F.FIRE && F.FIRE.length) ? 1 : 0, 0, 0,
     ...PART_NAMES.map(n => offs[n]),
     extra.tileX || 0, extra.tileY || 0, extra.tileW || 0, extra.tileH || 0,
   ];
