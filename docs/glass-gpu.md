@@ -541,6 +541,37 @@ pins it doing arithmetic.
 So the GPU question is a glass question. Stone would get nothing, and every 1,048,576 rendered so far
 has been stone.
 
+#### MEASURED 2026-10-25: stone gets nothing, and the thing that binds it is the FILE
+
+Everything above infers stone’s bound from load shape — thread occupancy, package power, the GPU
+already two-thirds busy. That is good evidence and it is not a measurement of the quantity in
+question, which is *what would a port remove*. So the painter was ablated instead
+(`tools/make-probe-builds.mjs --only=ablate`: per-tile painting replaced by a blit of one cached
+tile, which keeps the byte volume and removes the work). One slab, one pane, 65,535 / tile 2048 /
+pool 12:
+
+| stone | render | MB/s in | MB/s out | file | median tile |
+| --- | --- | --- | --- | --- | --- |
+| non-ablated | 15.8 s | 679 | 22.1 | 350.3 MB | 2 ms |
+| painter ablated | **15.8 s** | 681 | 22.3 | 351.4 MB | 2 ms |
+
+**Identical to the digit**, and the mechanism is arithmetic: **350.3 MB ÷ 22.1 MB/s = 15.85 s**.
+Stone’s render time *is* its file going out. A shader removes painting, and stone’s painting costs
+nothing to remove.
+
+**That sharpens “bound by its hand-offs” rather than repeating it.** The hand-off that binds stone is
+the WRITE, which is a quantity a port cannot touch: the same pixels still have to be deflated and
+land on the same disk. It also retires a reading of the GPU numbers in `wood-gpu.md`, which took
+every GPU render writing at about 7 MB/s as a ceiling and told the reader to predict a new material
+from the 215–238 Mpx/s band. Stone writes at 22.1, three times that, so wood’s GPU render at 7.4
+MB/s is not write-bound either and the band is not a predictor.
+
+**And it was measured rather than trusted for a specific reason.** The same class of reasoning —
+*the painter is not what is limiting this, so a shader will not help* — was applied to wood from its
+own stall-bound record hours earlier, concluded “might not speed this up much at all”, and was wrong
+by 8.8×. The conclusion here happens to be the one the argument gave; it had no standing to be, and
+now it does not need any.
+
 ### The controlled matrix, 2026-10-25 — and wood is not stone
 
 **Every figure above crosses something.** The stone-against-glass pair was two slabs; the worker counts

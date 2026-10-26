@@ -146,7 +146,8 @@ run. See [`docs/gallery.md`](docs/gallery.md).
   Carries the three defects that generating the uniform struct exposed (all of which compile, run and
   paint wood), the refusal that was aimed at a path the pool does not serve and the rule that came
   out of it, and the one thing anyone chasing "why is it not on the GPU" needs: the path is reachable
-  from a TIFF export and nothing else.
+  from a TIFF export and nothing else. It also answers the third material: a stone port buys
+  **1.0x**, ablated rather than argued, because stone's render time is its file going out.
 - **`master-size.md`** — what a master costs at each resolution, and why that is a property of the
   MATERIAL. Glass is a power law (0.791 per doubling, 0.4% spread, predicted a rung before it was
   rendered); stone is not (30% spread on matched footing) and its mechanism is inverted. Also: tile

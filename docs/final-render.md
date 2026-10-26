@@ -234,6 +234,8 @@ no coat scales at all, so it cannot go quietly blind.
 
 **Rule:** do not move work to the GPU because it *sounds* like graphics work — measure first, reduce the unnecessary work before choosing the processor. The Fresnel lens is the worked example: it sounded like an obvious GPU feature; once the real requirement was understood, the work was cheap enough to stay CPU-side.
 
+**Corollary, measured 2026-10-25: measure the thing a port would REMOVE, not the thing it would keep.** Glass and wood both went onto a shader and gained 20× and 8.5×; stone was then asked and the answer is **1.0×**. Not because stone is fast — it is — but because its render time is its *file going out*: 350.3 MB at 22.1 MB/s is 15.85 s, and ablating the painter entirely leaves the render at 15.8 s either way. A shader removes painting; stone’s painting costs nothing to remove, so there is nothing for the processor choice to act on. Estimating that share from the *current* bottleneck failed three times running here first — see `glass-gpu.md` §1 and `wood-gpu.md` — which is why the instrument ablates the work rather than reasoning about it.
+
 ## Capability inventory — what an authored (hero) slab can use
 
 The full-spec / hero author draws on all of this; each is a controllable, factored dimension.
