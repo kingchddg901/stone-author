@@ -257,22 +257,25 @@ already ships.
   entry, measured-ish per species rather than two literals for all of them.
 - ~~`tools/check-seam.mjs` is untracked.~~ Tracked.
 
-**Still open, verified 2026-10-25:**
+**Verified 2026-10-25, and then RULED.** Exactly one of these is still wanted — the colour saturation channel. The rest were dropped the same day as *“neat in idea but not worth doing”* and are marked so at every place they are described, not only here.
 
-- **No oak ray fleck, and no ring-porous vessel bands.** Bird’s-eye exists — `woodEye`, plus the
+- **DROPPED — oak ray fleck and ring-porous vessel bands.** Built CPU-complete 2026-10-25 and dropped on the LOOK, then dropped as an item: *“neat in idea but not worth doing.”* Recorded rather than deleted because of what it cost to learn. Bird’s-eye exists — `woodEye`, plus the
   `r_hat · N` dot product that decides eye-versus-fleck by how square the face is to the needle — but
   **medullary rays are a SECOND radial field**, not the ring field, and are not modelled at all.
   `oak` carries `eyes: 0`, so the one species whose defining figure *is* ray fleck renders without it.
 - **No colour saturation channel.** The per-ring walk has two channels and only two: value (`tv`) and
   warmth (`tw`). Saturation is most of what separates a walnut’s broad dark-to-light range from a
   maple’s narrow pale one, and it is the next colour move rather than another amplitude.
-- **No buried wound.** See the accumulated surface below: it was gated on that accumulation, the gate
-  is now open, and nothing takes an arbitrary wound shape.
+- **DROPPED — the buried wound.** The accumulated surface opened its gate and nothing takes an arbitrary wound shape; dropped 2026-10-25 as *“neat in idea but not worth doing.”*
 - `docs/devices.md` is pinned to build `2026.09.27.25` with pre-halo figures — that file now carries
   its own caveat saying so.
 ---
 
-## Open direction — the control surface
+## DROPPED direction — the end-grain control surface
+
+**DROPPED 2026-10-25 — his call: “neat in idea but not worth doing.”** Not paused. Do not propose it, do not list it as open, and do not start it unasked; reopening is his.
+
+The reasoning below is kept because it is a good account of why wood wants a different promise from stone, and that remains true whether or not anyone builds the surface.
 
 The live observation that wood needs **a control surface almost completely different from stone's**,
 and it is right:
@@ -349,13 +352,15 @@ foam folds back through wood that already exists.
   one refinement lands it. The no-transcendentals rule survived: the theta harmonics come from a
   Chebyshev recurrence, not from `sin()`.
 
-**What it RELEASED but did not build: the buried wound.** A carving is two operations — a geometric
+**What it RELEASED but did not build: the buried wound — DROPPED 2026-10-25, not queued.** A carving is two operations — a geometric
 subtraction at year 50, and the growth response afterwards — and it was gated on this accumulation
 because you cannot bury anything in a field of perfect circles. **That gate is open now.** Nothing
 yet accepts an arbitrary wound shape, so it is a real open item rather than a cleared one.
 
 
-### A fork
+### A fork — DROPPED
+
+**DROPPED 2026-10-25 — his call: “neat in idea but not worth doing.”** Not paused. Do not propose it, do not list it as open, and do not start it unasked; reopening is his.
 
 A **fork** is not a parameter. It is a topology change: the field goes from one pith curve to two, and
 the cross-section's connected components go 1 → 2 over the transition years. Concretely that means
