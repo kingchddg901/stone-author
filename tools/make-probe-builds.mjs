@@ -131,10 +131,24 @@ function instrument(src, rec, perOp) {
 // IT REMOVES PAINTING FROM ALL TWELVE WORKERS AT ONCE, which is why it prices the restructure rather
 // than just the arithmetic: the contention that painting causes goes with it.
 //
-// VALIDATE IT BEFORE TRUSTING IT. Wood through the real shader is 12.5 s at 65,535 / tile 2048 / pool
-// 12. If the ablated wood render lands near that, this predicts GPU wall and can be pointed at a
-// material that has no shader. If it lands somewhere else it is measuring something else, and the
-// thing to do is throw it out rather than reason from it.
+// IT DOES NOT PREDICT GPU WALL, AND THAT WAS THE TEST IT WAS BUILT TO PASS. Validated on wood at
+// 65,535 / tile 2048 / pool 12, one slab, one pane, nothing crossed:
+//
+//     non-ablated, CPU pool 12    2.0 min      89 MB/s in     92.235 MB
+//     ABLATED,     CPU pool 12    23.1 s      465 MB/s in     92.423 MB
+//     the real shader, 8 finishers 12.5 s     858 MB/s in     92.235 MB
+//
+// The target was 12.5 s and it came in at 23.1, so as a predictor of GPU wall this FAILED and is not
+// to be used as one. The byte half of the design held - 92.42 against 92.24 MB, 0.2% - so the blit
+// cache does what it was for.
+//
+// WHAT IT DOES MEASURE is the PAINTING SHARE, which is well defined and is the thing usually in
+// dispute: painting is 121/23.1 = 5.2x of wood's CPU render. The shader then buys a further
+// 23.1/12.5 = 1.85x beyond painting being free. That residual is NOT attributed - it could be the
+// blit's own cost, or the restructure into one painter and N finishers, or both - and calling it
+// either without measuring would be the same mistake this tool exists to stop.
+//
+// SO: ask it what painting costs. Do not ask it what a port would buy.
 //
 // FOUR EDITS, because the pooled path paints in a WORKER. The core is serialised with fn.toString()
 // out of its closure, so it keeps the TEXT and loses the SCOPE: the replacement travels, and every
@@ -147,7 +161,11 @@ const ABLATE = [
     if (MATERIAL === 'glass') return paintGlassContent(ident, angleView);
     return paintStoneContent(ident, angleView);
   }`,
-   `  function paintContent(ident, angleView) {
+   `  // THE CACHE LIVES IN BOTH SCOPES. The worker gets its own copy from the preamble below;
+  // this one is the MAIN thread's, which paints the preview and any tile the pool hands back.
+  // Declaring it only in the worker threw on the first preview paint - caught by running it.
+  let __ablCv = null, __ablKey = '';
+  function paintContent(ident, angleView) {
     const cv = g2d.canvas;
     const k = cv.width + 'x' + cv.height + '|' + (ident ? 1 : 0) + '|' + (angleView ? 1 : 0)
             + '|' + (uvMode ? 1 : 0) + '|' + MATERIAL;

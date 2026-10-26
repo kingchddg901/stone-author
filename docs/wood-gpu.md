@@ -30,10 +30,17 @@ nothing.
 
 **And the shader collapses the per-pixel difference between materials.** On the CPU, wood is 2.1×
 cheaper per pixel than glass. On the GPU they land at 214.7 and 238.1 Mpx/s, a 1.1× spread, because
-neither is bound by its field any more. Every GPU render in the archive writes at roughly 7 MB/s out
-while raw pixels come in at 700–860 MB/s; what is left after the port is the bus, and the bus does
-not know which material it is carrying. A third material would be expected to arrive in the same
-band, and *that* is the number worth predicting from — not its CPU cost.
+neither is bound by its field any more.
+
+**WHAT BOUNDS THEM INSTEAD IS NOT KNOWN, and an earlier draft of this line said it was.** It claimed
+the remainder is the bus, on the grounds that every GPU render here writes at about 7 MB/s out while
+raw pixels come in at 700–860 — and concluded that a third material should be predicted from that
+band. Stone falsified both halves the same day. Measured at 65,535 on this slab, stone writes
+**22.1 MB/s out**, three times the rate that was being read as a ceiling; so wood’s GPU render at
+7.4 MB/s is not write-bound either, and 7 MB/s was only wood’s byte volume divided by wood’s time.
+
+**So do not predict a material from that band.** Stone is the counterexample, and it is measured —
+see *What a port would buy stone* at the end.
 
 ---
 
@@ -286,10 +293,32 @@ Assembling the module measures 1.24 ms, so it is lazy — most loads never expor
 
 ## Where this leaves the three materials
 
-**Stone has nothing to gain and no port is wanted.** It renders at 103 Mpx/s on the CPU because it
-issues canvas commands the browser already runs on the GPU; it is already at the rate the shader
-reaches. `gpuWhyNot` answers `exp.gpu.nomaterial` for it, named for the absence rather than for
-whichever material happens to be missing a shader.
+### What a port would buy stone: measured at 1.0×
+
+**Stone has nothing to gain, and this is the measurement rather than the argument.** The argument was
+available from worker scaling and was not trusted, because reasoning from the current bottleneck has
+failed every time it was tried here — wood was called *“might not speed this up much at all”* from
+its own stall-bound record and went 8.8×.
+
+So the painter was ablated instead. `tools/make-probe-builds.mjs --only=ablate` builds the app with
+per-tile painting replaced by a blit of one cached tile, which keeps the byte volume and removes the
+work. One slab, one pane, 65,535 / tile 2048 / pool 12, nothing crossed:
+
+| stone | render | MB/s in | MB/s out | file | median tile |
+| --- | --- | --- | --- | --- | --- |
+| non-ablated | 15.8 s | 679 | 22.1 | 350.3 MB | 2 ms |
+| painter ablated | **15.8 s** | 681 | 22.3 | 351.4 MB | 2 ms |
+
+Identical to the digit, and the mechanism is arithmetic: **350.3 MB ÷ 22.1 MB/s = 15.85 s.** Stone’s
+render time *is* its file going out. A shader removes painting, and stone’s painting costs nothing
+to remove.
+
+The ablation swaps painting for a blit, so a null result could in principle mean the two cost the
+same. Two independent readings say it does not: the median tile is 2 ms in **both** arms, and the
+write alone accounts for the whole render without reference to painting at all.
+
+`gpuWhyNot` answers `exp.gpu.nomaterial` for stone, named for the absence rather than for whichever
+material happens to be missing a shader.
 
 **Glass and wood are both on the shader**, and land within 1.1× of each other there against 2.1×
 apart on the CPU.
