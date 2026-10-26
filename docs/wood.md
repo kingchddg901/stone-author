@@ -42,6 +42,14 @@ not copied.
 
 All four pushed to `master`. CI green on each, including the browser harness.
 
+**AND THE TABLE STOPS THERE.** 260 commits have touched `app/stone-author.html` since `37ac907` —
+knots, fire scars, the graft, the wave family, bird’s-eye, the species table, heartwood conversion,
+and the whole GPU port (see [`wood-gpu.md`](wood-gpu.md)). **Read what follows as written at
+`37ac907` and reconciled in places since; `git log` is the history and this is only the origin.**
+Sections carrying a RECONCILED marker have been checked against the code on 2026-10-25. Sections
+without one have not, and may describe a gap that has since been filled — which is exactly what three
+of the entries below turned out to be.
+
 ---
 
 ## The GPU path
@@ -232,23 +240,36 @@ left alone** because it is shared by link and viewers see updates immediately.
 
 ## Known debts
 
-- ~~Colour is two hard-coded literals.~~ **Cleared.** Wood's two colours are now tokens
-  (`COL.woodEarly` / `COL.woodLate`) resolved at draw time like every other colour, and the colour
-  varies with the ring index as a correlated walk — see below.
-- No vessel/pore structure and no rays. That is what a second species actually needs — oak's ring-porous
-  earlywood bands and its ray fleck are not in the model at all.
-- No heartwood/sapwood transition. It is the other big radial colour fact and it is not modelled, and
-  it is the one that breaks "colour is a function of growth year" — heartwood colour forms long after
-  the ring did.
-- Colour has two channels, value and warmth. **No saturation, and no per-species bounds.** Those bounds
-  are most of what separates one species' colour from another's — a walnut wants a broad dark-to-light
-  range, a maple a narrow pale one with subtle warmth — so this is the next colour move, not another
-  amplitude.
-- Rings are perfectly round. See "the accumulated surface" below; it gates most of the event list.
-- `docs/devices.md` is still pinned to build `2026.09.27.25` with pre-halo figures.
-- `tools/check-seam.mjs` is untracked in the working tree — a TIFF master seam tool from an earlier
-  investigation, not part of this work.
+**RECONCILED 2026-10-25 against the code.** Four entries here had been cleared by work that landed
+after this document was written and were still listed as open. They are struck rather than deleted,
+because *“the doc said this was missing”* is how an afternoon gets spent rebuilding something that
+already ships.
 
+- ~~Colour is two hard-coded literals.~~ **Cleared.** Wood’s two colours are now tokens
+  (`COL.woodEarly` / `COL.woodLate`) resolved at draw time like every other colour, and the colour
+  varies with the ring index as a correlated walk.
+- ~~No heartwood/sapwood transition.~~ **Cleared.** `SPECIES` carries `sapRings` and `sapFade`, the
+  field bakes a conversion fraction per ring into `th[]`, and `shade` blends toward the heart colour
+  while the ring keeps its own light and dark rather than being replaced by a flat one.
+- ~~Rings are perfectly round.~~ **Cleared** — see *the accumulated surface* below, which was a
+  design when this was written and is now the shipped inversion.
+- ~~No per-species colour bounds.~~ **Cleared.** `SPECIES` carries `early`, `late_` and `heart` per
+  entry, measured-ish per species rather than two literals for all of them.
+- ~~`tools/check-seam.mjs` is untracked.~~ Tracked.
+
+**Still open, verified 2026-10-25:**
+
+- **No oak ray fleck, and no ring-porous vessel bands.** Bird’s-eye exists — `woodEye`, plus the
+  `r_hat · N` dot product that decides eye-versus-fleck by how square the face is to the needle — but
+  **medullary rays are a SECOND radial field**, not the ring field, and are not modelled at all.
+  `oak` carries `eyes: 0`, so the one species whose defining figure *is* ray fleck renders without it.
+- **No colour saturation channel.** The per-ring walk has two channels and only two: value (`tv`) and
+  warmth (`tw`). Saturation is most of what separates a walnut’s broad dark-to-light range from a
+  maple’s narrow pale one, and it is the next colour move rather than another amplitude.
+- **No buried wound.** See the accumulated surface below: it was gated on that accumulation, the gate
+  is now open, and nothing takes an arbitrary wound shape.
+- `docs/devices.md` is pinned to build `2026.09.27.25` with pre-halo figures — that file now carries
+  its own caveat saying so.
 ---
 
 ## Open direction — the control surface
@@ -269,13 +290,18 @@ cross-section is free — the same field queried on a `z = const` plane instead 
 a cut is a line you could drag. That turns "Cut 0.27, Board position 0.20" into aiming a saw.
 A sketch of this (separate code, not the app) is in the session scratchpad as `wa/endgrain.py`.
 
-### The accumulated surface — the one real architectural gap
+### The accumulated surface — designed here, since BUILT
 
-**What is built:** rings are concentric circles about a pith curve. `r = hypot(dx, dy)`, then a LUT
-from radius to ring. Ring *widths* vary with age and the pith wanders with height, but every ring is
+**RECONCILED 2026-10-25.** This was *“the one real architectural gap”* when it was written and it is
+now the shipped inversion. The section is kept, because the reasoning below is still the explanation
+of why `shade` looks the way it does — read it as the design note it turned out to be, not as a
+backlog item.
+
+**What it was:** rings as concentric circles about a pith curve. `r = hypot(dx, dy)`, then a LUT from
+radius to ring. Ring *widths* varied with age and the pith wandered with height, but every ring was
 perfectly round at every height.
 
-**What is not:** rings that inherit the previous ring's shape.
+**What was missing:** rings that inherit the previous ring’s shape.
 
 ```
 R(n+1, theta, z) = R(n, theta, z) + G(n, theta, z)
@@ -307,6 +333,27 @@ and a divide, not four `sin()` calls. The no-transcendentals rule survives intac
 
 Two constraints to carry: growth must stay non-negative, and surfaces must not self-intersect, or the
 foam folds back through wood that already exists.
+
+**WHAT SHIPPED, against the proposal above — all of it.**
+
+- The deviation **is** a field rather than 220 stored surfaces. Each feature contributes
+  `amp × al[angle] × zw[slice]`, weighted per ring by its own `wl[]`; the wave family, the eye
+  dimple and the fire deficit are added the same way.
+- It **accumulates across years** exactly as `R(n+1) = R(n) + G(n)` asks: `devAcc[q] +=` is monotone
+  and non-negative, so a bulge laid down in year 30 is still in the radius at year 150.
+- **Both constraints are coded.** Growth stays non-negative and the surface only ever moves outward,
+  so the layers cannot fold back through wood that already exists.
+- **The inversion is the one Newton step.** Take the concentric ring index as the first guess,
+  correct by the deviation accumulated there, read again. `shade` runs it twice on purpose, and the
+  WGSL port spells the same two passes — the deviation moves by well under a ring width per ring, so
+  one refinement lands it. The no-transcendentals rule survived: the theta harmonics come from a
+  Chebyshev recurrence, not from `sin()`.
+
+**What it RELEASED but did not build: the buried wound.** A carving is two operations — a geometric
+subtraction at year 50, and the growth response afterwards — and it was gated on this accumulation
+because you cannot bury anything in a field of perfect circles. **That gate is open now.** Nothing
+yet accepts an arbitrary wound shape, so it is a real open item rather than a cleared one.
+
 
 ### A fork
 
@@ -406,6 +453,12 @@ environment. CI is its first run; do not gate anything on having verified it her
 
 Wood is **closed for now**. More species may come; nothing else is planned. Everything below is on
 `master`, each piece committed with its measurement in the message.
+
+**RECONCILED 2026-10-25 — still true as a FEATURE freeze, and the renderer moved anyway.** Wood went
+onto the GPU: see [`wood-gpu.md`](wood-gpu.md). That changed no setting and no pixel the painter
+would not have drawn — measured at 0.012% of channels, worst 25 levels, all of it the f32 ring
+quantiser — and three defects it exposed on the way out are recorded there. The invariants in this
+section all still hold; the live backlog is *Known debts* above, not this heading.
 
 ### The invariants, and what each one cost to learn
 
