@@ -1833,7 +1833,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.225';
+  const BUILD = '2026.10.25.226';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6441,14 +6441,26 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         + (woodHash(fv * 2600, 7) - 0.5) * 0.06                // lengthwise fibre streak
         + (woodHash(fu * 1700, fv * 2600) - 0.5) * 0.035;      // fine grain. Without it wood reads as plastic.
       if (w < 0) w = 0; else if (w > 1.25) w = 1.25;
-      const mv = 1 + F.tv[li], mw = F.tw[li] * 26;             // this ring's value scale and warmth shift
-      let cr = (DR + (BR - DR) * w) * mv + mw, cg = (DG + (BG - DG) * w) * mv,
-          cb = (DB + (BB - DB) * w) * mv - mw;
-      const h = F.th[li];                                      // ...then the material state, on top of it
+      let cr = DR + (BR - DR) * w, cg = DG + (BG - DG) * w, cb = DB + (BB - DB) * w;
+      const h = F.th[li];                                      // the material state FIRST, now
       if (h) {                                                 // the ring keeps its own light and dark through the conversion
         const s = 0.55 + 0.45 * w;
         cr += (HR * s - cr) * h; cg += (HG * s - cg) * h; cb += (HB * s - cb) * h;
       }
+      // VALUE AND WARMTH, BELOW THE BLEND - moved there 2026-10-25, and it changes pictures.
+      //
+      // The conversion above is a LERP, so at h = 1 it is a full replacement and every per-ring
+      // colour modulation applied before it was simply wiped. Measured on a 3,200-ring log with 18
+      // sapwood rings - which is to say across the whole board - `drift` at 0 and at 1.2 returned
+      // colours identical to two decimal places. The walk this file describes at length, the OU
+      // process with its reversion normalised so the two controls do not fight, was reaching
+      // nothing but the sapwood shell.
+      //
+      // SAPWOOD IS BIT-IDENTICAL EITHER WAY. At h = 0 this is `(DR + (BR-DR)*w) * mv + mw`, the
+      // same expression in the same order as before the move, so the only pixels that change are
+      // the ones that were being overwritten.
+      const mv = 1 + F.tv[li], mw = F.tw[li] * 26;             // this ring's value scale and warmth shift
+      cr = cr * mv + mw; cg = cg * mv; cb = cb * mv - mw;
       // SATURATION, THE THIRD CHANNEL: a scale about this pixel's OWN luma. Value moves all three
       // together and warmth trades red against blue; neither can make wood more or less COLOURED,
       // which is the axis a walnut's broad range and a maple's narrow pale one differ on.
@@ -10104,7 +10116,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // shape that is UNCHANGED WHEN OFF. Stone is off, so every signature already on disk is
         // byte-identical; wood starts its own. This is also why the wood settings are not in G: G is
         // hashed wholesale, so one key added there would have moved every master that exists.
-        ...(s.material === 'wood' ? { material: s.material, wood: s.wood } : {}),
+        // woodColour 2 IS THE COLOUR MODEL, and it is here because the picture moved under a
+        // slab that did not. Value and warmth now apply BELOW the heartwood blend; before that they
+        // were wiped wherever the wood had converted, which is most of most boards. Without this a
+        // wood master written yesterday and a re-render today would carry the same `inputs` and not
+        // be the same picture - the exact failure the renderer key below was added for, and the one
+        // this file already records twice.
+        //
+        // IT RE-DATES EVERY WOOD MASTER, including the sapwood-only ones whose pixels did not in
+        // fact move. That is the conservative direction: a signature that changes when the picture
+        // did not costs a resume and a false alarm, and one that does not change when the picture
+        // did is a master lying about itself.
+        ...(s.material === 'wood' ? { material: s.material, wood: s.wood, woodColour: 2 } : {}),
         // A WINDOW THIS RENDER DOES NOT SHOW, which is a fact about the picture that `marks` cannot
         // carry. The mask is hashed either way, so when windows became per authored material the
         // glass and wood renders of a slab holding a stone window changed picture and kept their
@@ -15653,11 +15676,9 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
         + (woodHash(i32(fv * 2600.0), 7) - 0.5) * 0.06
         + (woodHash(i32(fu * 1700.0), i32(fv * 2600.0)) - 0.5) * 0.035;
   w = clamp(w, 0.0, 1.25);
-  let mv = 1.0 + aTV(li);
-  let mw = aTW(li) * 26.0;
-  var cr = (E.lateR + (E.earlyR - E.lateR) * w) * mv + mw;
-  var cg = (E.lateG + (E.earlyG - E.lateG) * w) * mv;
-  var cb = (E.lateB + (E.earlyB - E.lateB) * w) * mv - mw;
+  var cr = E.lateR + (E.earlyR - E.lateR) * w;
+  var cg = E.lateG + (E.earlyG - E.lateG) * w;
+  var cb = E.lateB + (E.earlyB - E.lateB) * w;
 
   let h = aTH(li);
   if (h != 0.0) {
@@ -15666,6 +15687,16 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
     cg = cg + (E.heartG * s - cg) * h;
     cb = cb + (E.heartB * s - cb) * h;
   }
+
+  // VALUE AND WARMTH, BELOW THE BLEND, mirroring the painter. The conversion above is a lerp, so at
+  // h = 1 it is a full replacement and anything applied before it is wiped - which on a log whose
+  // sapwood is a thin shell is the whole board. At h = 0 this is the same expression in the same
+  // order as before the move, so sapwood is bit-identical and only the overwritten pixels change.
+  let mv = 1.0 + aTV(li);
+  let mw = aTW(li) * 26.0;
+  cr = cr * mv + mw;
+  cg = cg * mv;
+  cb = cb * mv - mw;
   // SATURATION, a scale about this pixel's OWN luma. Value moves all three channels together and
   // warmth trades red against blue; neither can make wood more or less COLOURED.
   //

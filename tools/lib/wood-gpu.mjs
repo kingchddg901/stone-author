@@ -239,11 +239,9 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
         + (woodHash(i32(fv * 2600.0), 7) - 0.5) * 0.06
         + (woodHash(i32(fu * 1700.0), i32(fv * 2600.0)) - 0.5) * 0.035;
   w = clamp(w, 0.0, 1.25);
-  let mv = 1.0 + aTV(li);
-  let mw = aTW(li) * 26.0;
-  var cr = (E.lateR + (E.earlyR - E.lateR) * w) * mv + mw;
-  var cg = (E.lateG + (E.earlyG - E.lateG) * w) * mv;
-  var cb = (E.lateB + (E.earlyB - E.lateB) * w) * mv - mw;
+  var cr = E.lateR + (E.earlyR - E.lateR) * w;
+  var cg = E.lateG + (E.earlyG - E.lateG) * w;
+  var cb = E.lateB + (E.earlyB - E.lateB) * w;
 
   let h = aTH(li);
   if (h != 0.0) {
@@ -252,6 +250,16 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
     cg = cg + (E.heartG * s - cg) * h;
     cb = cb + (E.heartB * s - cb) * h;
   }
+
+  // VALUE AND WARMTH, BELOW THE BLEND, mirroring the painter. The conversion above is a lerp, so at
+  // h = 1 it is a full replacement and anything applied before it is wiped - which on a log whose
+  // sapwood is a thin shell is the whole board. At h = 0 this is the same expression in the same
+  // order as before the move, so sapwood is bit-identical and only the overwritten pixels change.
+  let mv = 1.0 + aTV(li);
+  let mw = aTW(li) * 26.0;
+  cr = cr * mv + mw;
+  cg = cg * mv;
+  cb = cb * mv - mw;
   // SATURATION, a scale about this pixel's OWN luma. Value moves all three channels together and
   // warmth trades red against blue; neither can make wood more or less COLOURED.
   //
