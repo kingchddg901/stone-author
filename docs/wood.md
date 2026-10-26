@@ -199,7 +199,12 @@ boot would re-date every master exactly the way a new `G` key would. An unset to
 default, so `COL.woodEarly` exists while `OVR` stays byte-identical, and the keys appear only once
 someone picks a colour — at which point the signature *should* move.
 
-On top of that, colour varies **per ring as a correlated walk**, two channels (value and warmth). The
+**RECONCILED 2026-10-25: THREE channels now, and they apply BELOW the heartwood blend.** The two
+paragraphs below describe the walk itself, which is unchanged. What changed is where its output lands
+and that a third channel exists — see *Where the walk applies* at the end of this section.
+
+On top of that, colour varies **per ring as a correlated walk**, three channels (value, warmth and
+saturation). The
 walk is an OU process whose reversion is `exp(-1/driftRings)`, normalised by `sqrt(1 - rev²)` to unit
 stationary spread so that changing the correlation length does not silently change the amplitude —
 otherwise the two controls fight and neither means anything alone. A small uncorrelated term rides on
@@ -214,6 +219,41 @@ is driven by the growth-time field instead of by `r` and none of the colour code
 it only crosses about 85 of the 220 rings. Colour drift visible *across one board* is therefore about a
 third of the drift across the log. That is correct — a board does not see the whole tree — but it means
 a dramatic drift needs a bigger `drift`, a wider `wid`, or a `y0` nearer the pith.
+
+### Where the walk applies — and where it did not
+
+**Until 2026-10-25 the walk reached almost nothing.** It was applied to the ring’s own colour, and the
+heartwood conversion underneath it is a lerp:
+
+```
+cr += (HR * s - cr) * h
+```
+
+At `h = 1` that is a full replacement, so every per-ring modulation applied above it was wiped
+wherever the wood had converted. On a 3,200-ring log with 18 sapwood rings that is the whole board.
+Measured both ways on the reference slab:
+
+| | `drift` 0 vs 1.2 |
+| --- | --- |
+| applied above the blend | identical to two decimal places at every radius sampled |
+| applied below it | **88.1%** of channels at 0.55, **94.1%** at 1.2, worst 20 and 43 |
+
+**Sapwood was never affected either way.** At `h = 0` the order is `(DR + (BR-DR)*w) * mv + mw`, the
+same expression before and after, so only the overwritten pixels moved — verified at 0 of 1,512,000
+channels on an all-sapwood log.
+
+**Every other wood master moved: 88.05% of channels, worst 20 levels.** So `renderSig` carries
+**`woodColour: 2`** inside its wood-only spread. Without it a master written before the change and a
+re-render after it would share `inputs` and not share a picture, which is the failure the `renderer`
+key beside it exists for. It re-dates sapwood-only masters too, whose pixels did not move; that is the
+conservative direction, because a signature that moves when the picture did not costs a resume, and
+one that does not move when the picture did is a master lying about itself.
+
+**The third channel, saturation**, is a scale about the pixel’s own Rec.601 luma — the axis value and
+warmth cannot reach, since one moves all three channels together and the other trades red against
+blue. It draws from **its own seeded stream** (`sub(seed, 4)`): the value/warmth loop takes four draws
+per ring from `dgs`, so a third channel sharing that stream would have shifted every later draw and
+re-coloured every slab on disk. Same `rev` and `norm`, because one tree has one climate.
 
 The four wander amplitudes were tuned down from `0.03 / 0.015 / 0.024 / 0.011` — the originals read as
 too wavy. `woodField()` memoises on `JSON.stringify(WOOD)` rather than a hand-kept list of the fields
@@ -263,9 +303,9 @@ already ships.
   `r_hat · N` dot product that decides eye-versus-fleck by how square the face is to the needle — but
   **medullary rays are a SECOND radial field**, not the ring field, and are not modelled at all.
   `oak` carries `eyes: 0`, so the one species whose defining figure *is* ray fleck renders without it.
-- **No colour saturation channel.** The per-ring walk has two channels and only two: value (`tv`) and
-  warmth (`tw`). Saturation is most of what separates a walnut’s broad dark-to-light range from a
-  maple’s narrow pale one, and it is the next colour move rather than another amplitude.
+- ~~No colour saturation channel.~~ **Cleared 2026-10-25.** `satDrift` adds a third channel on its
+  own seeded stream, and the walk now applies below the heartwood blend so all three reach the board
+  rather than the sapwood shell. See *Where the walk applies* above.
 - **DROPPED — the buried wound.** The accumulated surface opened its gate and nothing takes an arbitrary wound shape; dropped 2026-10-25 as *“neat in idea but not worth doing.”*
 - `docs/devices.md` is pinned to build `2026.09.27.25` with pre-halo figures — that file now carries
   its own caveat saying so.
