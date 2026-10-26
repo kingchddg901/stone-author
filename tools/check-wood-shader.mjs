@@ -41,7 +41,7 @@ const lift = (sig) => {
   return APP.slice(k, i + 1);
 };
 // comments carry prose numbers - 0.71r, 1-d^2 - that are not constants of the arithmetic
-const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map(l => l.replace(/\/\/.*/, '')).join('\n');
 // A SQUARING IS SPELLED TWO WAYS. `x ** 2` in JS is `x * x` in the WGSL - the same arithmetic, and
 // it leaves the exponent with no counterpart. Counted separately below rather than quietly dropped:
 // an exponent that changed from 2 to 3 is a real defect and must not hide here.

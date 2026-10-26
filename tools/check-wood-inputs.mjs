@@ -36,7 +36,7 @@ const body = (sig) => {
   for (;; i++) { if (APP[i] === '{') d++; else if (APP[i] === '}' && --d === 0) break; }
   return APP.slice(k, i + 1);
 };
-const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map(l => l.replace(/\/\/.*/, '')).join('\n');
 
 const sampler = body('function woodSampler()');
 const shade = body('const shade = (ddx');

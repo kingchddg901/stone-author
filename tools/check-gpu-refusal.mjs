@@ -265,7 +265,7 @@ const has = (re, name) => ok(name, re.test(APP), String(re));
     return APP.slice(k, i + 1);
   };
   const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '')
-                      .split(String.fromCharCode(10)).map(l => l.replace(/\/\/.*$/, ''))
+                      .split(String.fromCharCode(10)).map(l => l.replace(/\/\/.*/, ''))
                       .join(String.fromCharCode(10));
 
   // WHAT THE SHADER IS A PORT OF, per material: the content painter and the scene it reads.

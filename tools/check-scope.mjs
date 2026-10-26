@@ -25,7 +25,7 @@ const SELF = process.argv.includes('--self-test');
 const lines = readFileSync(SRC, 'utf8').split(/\r?\n/);
 
 // a line's code, with line comments and string bodies emptied so a name inside one is not a call
-const code = l => l.replace(/\/\/.*$/, '').replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""').replace(/`[^`]*`/g, '``');
+const code = l => l.replace(/\/\/.*/, '').replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""').replace(/`[^`]*`/g, '``');
 
 const wordish = ch => ch !== undefined && (/[A-Za-z0-9_$]/.test(ch) || ch === '.');
 
