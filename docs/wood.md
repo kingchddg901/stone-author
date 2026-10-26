@@ -460,6 +460,18 @@ would not have drawn — measured at 0.012% of channels, worst 25 levels, all of
 quantiser — and three defects it exposed on the way out are recorded there. The invariants in this
 section all still hold; the live backlog is *Known debts* above, not this heading.
 
+**HELD 2026-10-25.** Everything *Known debts* still lists as open was walked out of the code and is
+accurate — and all of it is now held rather than queued. Oak ray fleck was built CPU-complete and
+dropped on the look. The list stands as a record of what is true, not as a backlog.
+
+**The one thing wood could still use.** This repo’s output contract is greyscale masks plus metadata,
+colour never stored (see [`architecture.md`](architecture.md)); Vacuum Agent reads four of them at
+2048². **Wood emits none.** The tiers are not missing — the ring value, the heartwood fraction, the
+stain, the gloss multiplier and the char are all scalars `shade` already has — but `shade` combines
+them inline and returns RGB, so there is no seam to tap a mask from. Splitting it into *produce
+fields* plus *combine* is a hot-loop change with the WGSL port mirroring it. Named here so the cost
+is known before anyone calls it small.
+
 ### The invariants, and what each one cost to learn
 
 - **CAUSALITY.** Growth at year X reaches outward only. The ring scale is FIXED and the radius is
