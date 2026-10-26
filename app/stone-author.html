@@ -626,6 +626,7 @@
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-drift-note">Colour walks outward from the pith instead of being drawn fresh for each ring, so neighbouring rings are nearly the same and rings two centuries apart can be a different wood. Drift is how far it wanders, Drift scale how many rings it takes to get there. The two ends are tokens: open the Colour editor to set the earlywood and latewood colours.</span></div>
       <div class="sl"><label for="wood-drift"><span data-i18n="sl.wood-drift">Colour drift</span> <output id="wood-driftV"></output></label><input id="wood-drift" type="range" min="0" max="3" step="0.05"></div>
       <div class="sl"><label for="wood-driftRings"><span data-i18n="sl.wood-driftRings">Drift scale</span> <output id="wood-driftRingsV"></output></label><input id="wood-driftRings" type="range" min="3" max="400" step="1"></div>
+      <div class="sl"><label for="wood-satDrift"><span data-i18n="sl.wood-satDrift">Saturation drift</span> <output id="wood-satDriftV"></output></label><input id="wood-satDrift" type="range" min="0" max="1.2" step="0.01"></div>
       <div class="sl"><span class="note" style="grid-column:1/-1;margin:0" data-i18n="ui.wood-heart-note">Heartwood is the second timeline. Growth says when wood formed; this says what happened to it afterwards. Conversion is counted in rings inward from the bark rather than as a fraction of the radius, because a species carries roughly a fixed number of sapwood rings however fast it grew. Sapwood is how many stay pale, Conversion how abrupt the front is.</span></div>
       <div class="sl"><label for="wood-sapRings"><span data-i18n="sl.wood-sapRings">Sapwood</span> <output id="wood-sapRingsV"></output></label><input id="wood-sapRings" type="range" min="0" max="400" step="1"></div>
       <div class="sl"><label for="wood-sapFade"><span data-i18n="sl.wood-sapFade">Conversion</span> <output id="wood-sapFadeV"></output></label><input id="wood-sapFade" type="range" min="1" max="400" step="1"></div>
@@ -1421,6 +1422,7 @@ window.SA_I18N = (() => {
   "sl.wood-wanderFine": "Wander ripple",
   "sl.wood-drift": "Colour drift",
   "sl.wood-driftRings": "Drift scale",
+  "sl.wood-satDrift": "Saturation drift",
   "sl.wood-sapRings": "Sapwood",
   "sl.wood-sapFade": "Conversion",
   "sl.wood-waveAmp": "Out of round",
@@ -1831,7 +1833,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.25.224';
+  const BUILD = '2026.10.25.225';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5737,6 +5739,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     lean: 0.01, leanFine: 0.006,                  // pith motion along the plane's normal -> the stripes breathe wider and tighter
     wander: 0.008, wanderFine: 0.004,             // pith motion across the board -> the stripes bend up and down
     drift: 0.4, driftRings: 90,                   // colour: how FAR it wanders from pith to bark, and how FAST
+    satDrift: 0,                                  // and how far its SATURATION wanders with it, on the same
+                                                  // correlation length but its own amplitude and own stream
     sapRings: 22, sapFade: 8,                     // the SECOND timeline: outer rings still sapwood, and the
                                                   // width of the conversion front, both counted in rings
     waveAmp: 0, waveK: 3, waveZ: 1.2,             // THE WAVE FAMILY: how far out of round, how many lobes round
@@ -6003,6 +6007,19 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       av = av * rev + dgs() * norm; aw = aw * rev + dgs() * norm;
       cv[i] = av + dgs() * 0.2; cw[i] = aw + dgs() * 0.2;
     }
+    // THE THIRD CHANNEL, SATURATION - AND IT DRAWS FROM ITS OWN STREAM, WHICH IS THE WHOLE POINT.
+    // The loop above takes FOUR draws from `dgs` per ring. A third channel taking two more from the
+    // same stream would shift every draw after it and re-colour every slab on disk - value and
+    // warmth included, which are not what changed. A fresh sub-stream leaves that sequence byte for
+    // byte where it was, so this is unchanged-when-off by construction rather than by a default.
+    //
+    // SAME `rev`, SAME `norm`: one tree has one climate, so the correlation length is shared and
+    // only the amplitude is its own. Giving it a second driftRings would be two controls describing
+    // one fact.
+    const [, sgs] = sub(WOOD.seed, 4);
+    const cs = new Float64Array(n);
+    let as_ = 0;
+    for (let i = 0; i < n; i++) { as_ = as_ * rev + sgs() * norm; cs[i] = as_ + sgs() * 0.2; }
     // FIXED DOMAIN, not [0, R]: a grid tied to the trunk radius slides under the rings whenever the log
     // grows, which is causality lost at the last pixel. LMAX is generous enough for any log the ring
     // count can produce; beyond R the loop just repeats the outermost ring, which the painter clamps to
@@ -6016,6 +6033,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const K = Math.min(131072, Math.max(16384, Math.ceil(Math.max(2 * WOOD.trunk, R * 1.02) / PITCH) + 1));
     const LMAX = PITCH * (K - 1);
     const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K), th = new Float32Array(K),
+          ts = new Float32Array(K),                          // saturation, the third colour channel
           urel = new Float32Array(K),                        // where in its ring each radius sits
           rwl = new Float32Array(K);                         // and how wide that ring is, so a depth can be
                                                              // quoted in RINGS rather than in raw units
@@ -6034,6 +6052,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const late = Math.pow(Math.max(0, Math.min(1, (u - (1 - lf)) / lf)), Math.max(WOOD.lateSharp, 0.05));
       lut[i] = (1 - WOOD.late * late) * (1 + 0.05 * Math.sin(k * 2.399));   // + a per-ring value drift
       tv[i] = cv[k] * 0.12 * WOOD.drift; tw[i] = cw[k] * 0.12 * WOOD.drift;
+      ts[i] = cs[k] * 0.30 * WOOD.satDrift;    // its own amplitude; 0.30 because chroma takes more to read
       // How long ago this ring formed, in RINGS, measured from the currently outermost one - wood age,
       // not distance from the bark. Past sapRings it begins converting; sapFade is how abrupt the
       // front is. This is the one thing here that is a function of the PRESENT rather than of the year
@@ -6176,7 +6195,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    const out = { lut, tv, tw, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl, zoff, ginv, fwl, fchar, fzw, FIRE, edge, n };
+    const out = { lut, tv, tw, ts, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl, zoff, ginv, fwl, fchar, fzw, FIRE, edge, n };
     if (_keep) Object.assign(WOOD, JSON.parse(_keep));   // the live tree is put back before anyone reads it
     woodField.cache[sig] = out; woodField.order.push(sig);
     while (woodField.order.length > 4) delete woodField.cache[woodField.order.shift()];
@@ -6299,6 +6318,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const fcIn = Math.cos(Math.min(fhw * 0.75, 3.1)), fcOut = Math.cos(Math.min(fhw * 1.25, 3.14));
     const FSEV = Math.max(0, Math.min(1, WOOD.fireSeverity));
     const EYES = WOOD.eyes;
+    const SATD = WOOD.satDrift;
     // Spacing is a DISTANCE AT ONE FOOT OF RADIUS, and the reference has to be a CONSTANT.
     //
     // It was F.R, the bark radius - which is the sum of every ring, so adding rings at the bark
@@ -6428,6 +6448,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (h) {                                                 // the ring keeps its own light and dark through the conversion
         const s = 0.55 + 0.45 * w;
         cr += (HR * s - cr) * h; cg += (HG * s - cg) * h; cb += (HB * s - cb) * h;
+      }
+      // SATURATION, THE THIRD CHANNEL: a scale about this pixel's OWN luma. Value moves all three
+      // together and warmth trades red against blue; neither can make wood more or less COLOURED,
+      // which is the axis a walnut's broad range and a maple's narrow pale one differ on.
+      //
+      // AFTER THE HEARTWOOD BLEND, NOT BEFORE, AND THAT IS THE WHOLE REASON IT WORKS. At h = 1 the
+      // conversion above is a full replacement - `cr += (HR*s - cr)*1` IS `cr = HR*s` - so anything
+      // applied before it is wiped wherever the wood has fully converted. On a 3,200-ring log with
+      // 18 sapwood rings that is the entire board. Measured: with it placed above, satDrift 0 and
+      // 1.2 returned colours identical to two decimal places at every radius sampled.
+      if (SATD) {
+        const ms = 1 + F.ts[li];
+        const g = 0.299 * cr + 0.587 * cg + 0.114 * cb;        // Rec.601 luma: the grey this point already is
+        cr = g + (cr - g) * ms; cg = g + (cg - g) * ms; cb = g + (cb - g) * ms;
       }
       // THE MINERAL STAIN, before the fibre term so the figure still rides over it: a stained patch
       // has grain like any other. A LERP rather than a multiply, because stain replaces colour
@@ -6560,7 +6594,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       sampler: {
         KS, ZS, GKS, MINL, MINV, MTHR, GLOSS, LIT,
         ffx, ffy, fcIn, fcOut, FSEV, ECELL, ERADFT,
-        eyeDepth: WOOD.eyeDepth, EYES, WAVY,
+        eyeDepth: WOOD.eyeDepth, EYES, WAVY, SATD,
         KNI: FE.findIndex(f => f.kn > 0),
       },
       colours: {
@@ -15102,7 +15136,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     // the arena's parts, in the order the Env's offsets name them
     const PART_NAMES = [
-      'LUT', 'TV', 'TW', 'TH', 'PAX', 'PAY', 'EDGE',          // the trunk's ring tables and pith track
+      'LUT', 'TV', 'TW', 'TS', 'TH', 'PAX', 'PAY', 'EDGE',    // the trunk's ring tables and pith track
       'GINV', 'ZOFF', 'UREL', 'RWL',                           // the taper, and ring width by ring
       'FSP', 'FCZ', 'FWL', 'FCHAR', 'FZW',                     // the fire's tables
       'WVA', 'WZC', 'WZS',                                     // the wave family, by wave and by slice
@@ -15117,7 +15151,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     // `WV` names the wave FAMILY, whose members are objects holding two tables apiece, so it resolves to
     // the first of the two concatenated tables rather than to a part of its own - there is no flat WV.
     const FIELD_PARTS = {
-      lut: 'LUT', tv: 'TV', tw: 'TW', th: 'TH', pax: 'PAX', pay: 'PAY', edge: 'EDGE',
+      lut: 'LUT', tv: 'TV', tw: 'TW', ts: 'TS', th: 'TH', pax: 'PAX', pay: 'PAY', edge: 'EDGE',
       ginv: 'GINV', zoff: 'ZOFF', urel: 'UREL', rwl: 'RWL',
       fsp: 'FSP', fcz: 'FCZ', fwl: 'FWL', fchar: 'FCHAR', fzw: 'FZW',
       wv: 'WVA', WV: 'WZC', 'wave:zc': 'WZC', 'wave:zs': 'WZS',
@@ -15228,7 +15262,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       'gLateR', 'gLateG', 'gLateB', 'pad7',
       // BEYOND THE BARK THERE IS NO BOARD, and the surround is what says so rather than clamped bark.
       'surR', 'surG', 'surB', 'pad8',
-      'pad10', 'pad11', 'pad12', 'pad13',
+      'SATD', 'pad11', 'pad12', 'pad13',
       'pad14', 'pad15', 'pad16', 'pad17',
       'pad18', 'pad19', 'pad20', 'pad21',
       'pad22', 'pad23', 'pad24', 'pad25',
@@ -15279,7 +15313,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       const FE = F.FE || [], WV = F.WV || [];
 
       const parts = {
-        LUT: f32(F.lut), TV: f32(F.tv), TW: f32(F.tw), TH: f32(F.th),
+        LUT: f32(F.lut), TV: f32(F.tv), TW: f32(F.tw), TS: f32(F.ts), TH: f32(F.th),
         PAX: f32(F.pax), PAY: f32(F.pay), EDGE: f32(F.edge),
         GINV: f32(F.ginv), ZOFF: f32(F.zoff), UREL: f32(F.urel), RWL: f32(F.rwl),
         FSP: f32(F.fsp), FCZ: f32(F.fcz), FWL: f32(F.fwl), FCHAR: f32(F.fchar), FZW: f32(F.fzw),
@@ -15326,7 +15360,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         // beside it really is a boolean (waveAmp > 0) and stays an int.
         R: F.R, LMAX: F.LMAX, EYES: S.EYES,
         KS: S.KS, ZS: S.ZS, GKS: S.GKS, MINL: S.MINL, MINV: S.MINV, MTHR: S.MTHR,
-        GLOSS: S.GLOSS, LIT: S.LIT,
+        GLOSS: S.GLOSS, LIT: S.LIT, SATD: S.SATD,
         ffx: S.ffx, ffy: S.ffy, fcIn: S.fcIn, fcOut: S.fcOut,
         FSEV: S.FSEV, ECELL: S.ECELL, ERADFT: S.ERADFT, eyeDepth: S.eyeDepth,
         len: extra.len, wid: extra.wid, y0: extra.y0, H: extra.H,
@@ -15482,6 +15516,7 @@ fn woodStain(th: f32, rad: f32, zp: f32, inv: f32, thr: f32) -> f32 {
 fn aLUT(i: i32) -> f32 { return ARR[E.oLUT + i]; }
 fn aTV(i: i32) -> f32 { return ARR[E.oTV + i]; }
 fn aTW(i: i32) -> f32 { return ARR[E.oTW + i]; }
+fn aTS(i: i32) -> f32 { return ARR[E.oTS + i]; }
 fn aTH(i: i32) -> f32 { return ARR[E.oTH + i]; }
 fn aPAX(i: i32) -> f32 { return ARR[E.oPAX + i]; }
 fn aPAY(i: i32) -> f32 { return ARR[E.oPAY + i]; }
@@ -15624,8 +15659,6 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
   var cg = (E.lateG + (E.earlyG - E.lateG) * w) * mv;
   var cb = (E.lateB + (E.earlyB - E.lateB) * w) * mv - mw;
 
-  // ...then the material state on top of it, and the ring keeps its own light and dark through the
-  // conversion rather than being replaced by a flat heartwood colour.
   let h = aTH(li);
   if (h != 0.0) {
     let s = 0.55 + 0.45 * w;
@@ -15633,6 +15666,23 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
     cg = cg + (E.heartG * s - cg) * h;
     cb = cb + (E.heartB * s - cb) * h;
   }
+  // SATURATION, a scale about this pixel's OWN luma. Value moves all three channels together and
+  // warmth trades red against blue; neither can make wood more or less COLOURED.
+  //
+  // AFTER THE HEARTWOOD BLEND, mirroring the painter, and for the reason recorded there: at h = 1
+  // the conversion is a full replacement, so saturation applied above it is wiped across the whole
+  // board on any log whose sapwood is a thin shell.
+  //
+  // THE BRANCH MIRRORS THE PAINTER'S TOO. With the amplitude at zero every TS entry is zero and ms
+  // is exactly 1, but g + (cr - g) * 1.0 is not bit-identical to cr in f32 - it is a subtract and
+  // an add back. The CPU gates on the same scalar, so gating here is what keeps the two arms equal
+  // rather than nearly equal.
+  if (E.SATD != 0.0) {
+    let ms = 1.0 + aTS(li);
+    let g = 0.299 * cr + 0.587 * cg + 0.114 * cb;
+    cr = g + (cr - g) * ms; cg = g + (cg - g) * ms; cb = g + (cb - g) * ms;
+  }
+
   if (E.MINL != 0.0) {
     let ms = woodStain(woodAtan2(ddy, ddx), rad0, zp, E.MINV, E.MTHR) * E.MINL;
     if (ms > 0.0) {

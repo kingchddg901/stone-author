@@ -102,6 +102,7 @@ WGSL.woodArena = `
 fn aLUT(i: i32) -> f32 { return ARR[E.oLUT + i]; }
 fn aTV(i: i32) -> f32 { return ARR[E.oTV + i]; }
 fn aTW(i: i32) -> f32 { return ARR[E.oTW + i]; }
+fn aTS(i: i32) -> f32 { return ARR[E.oTS + i]; }
 fn aTH(i: i32) -> f32 { return ARR[E.oTH + i]; }
 fn aPAX(i: i32) -> f32 { return ARR[E.oPAX + i]; }
 fn aPAY(i: i32) -> f32 { return ARR[E.oPAY + i]; }
@@ -244,8 +245,6 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
   var cg = (E.lateG + (E.earlyG - E.lateG) * w) * mv;
   var cb = (E.lateB + (E.earlyB - E.lateB) * w) * mv - mw;
 
-  // ...then the material state on top of it, and the ring keeps its own light and dark through the
-  // conversion rather than being replaced by a flat heartwood colour.
   let h = aTH(li);
   if (h != 0.0) {
     let s = 0.55 + 0.45 * w;
@@ -253,6 +252,23 @@ fn woodShadeBody(ddx: f32, ddy: f32, zi: i32, zp: f32, fu: f32, fv: f32) -> vec4
     cg = cg + (E.heartG * s - cg) * h;
     cb = cb + (E.heartB * s - cb) * h;
   }
+  // SATURATION, a scale about this pixel's OWN luma. Value moves all three channels together and
+  // warmth trades red against blue; neither can make wood more or less COLOURED.
+  //
+  // AFTER THE HEARTWOOD BLEND, mirroring the painter, and for the reason recorded there: at h = 1
+  // the conversion is a full replacement, so saturation applied above it is wiped across the whole
+  // board on any log whose sapwood is a thin shell.
+  //
+  // THE BRANCH MIRRORS THE PAINTER'S TOO. With the amplitude at zero every TS entry is zero and ms
+  // is exactly 1, but g + (cr - g) * 1.0 is not bit-identical to cr in f32 - it is a subtract and
+  // an add back. The CPU gates on the same scalar, so gating here is what keeps the two arms equal
+  // rather than nearly equal.
+  if (E.SATD != 0.0) {
+    let ms = 1.0 + aTS(li);
+    let g = 0.299 * cr + 0.587 * cg + 0.114 * cb;
+    cr = g + (cr - g) * ms; cg = g + (cg - g) * ms; cb = g + (cb - g) * ms;
+  }
+
   if (E.MINL != 0.0) {
     let ms = woodStain(woodAtan2(ddy, ddx), rad0, zp, E.MINV, E.MTHR) * E.MINL;
     if (ms > 0.0) {

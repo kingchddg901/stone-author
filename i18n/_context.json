@@ -2826,6 +2826,10 @@
     ],
     "where": "slider: how many rings the colour takes to wander that far - the correlation length, not a count of anything"
   },
+  "sl.wood-satDrift": {
+    "terms": [],
+    "where": "a slider in the Wood panel, shown only while the wood material is selected. The wood colour wanders from ring to ring as the tree ages. Two sliders beside this one already set how FAR it wanders and over how many rings; this one adds how far its SATURATION wanders - how much more or less COLOURED a ring is, as opposed to lighter, darker, warmer or cooler. 0 leaves saturation fixed. \"Drift\" here is the same drift as the two sliders above, so use the same word you used for those."
+  },
   "sl.wood-sapRings": {
     "terms": [
       "sapwood",

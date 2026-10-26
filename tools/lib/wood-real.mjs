@@ -24,7 +24,7 @@
 
 // the arena's parts, in the order the Env's offsets name them
 export const PART_NAMES = [
-  'LUT', 'TV', 'TW', 'TH', 'PAX', 'PAY', 'EDGE',          // the trunk's ring tables and pith track
+  'LUT', 'TV', 'TW', 'TS', 'TH', 'PAX', 'PAY', 'EDGE',    // the trunk's ring tables and pith track
   'GINV', 'ZOFF', 'UREL', 'RWL',                           // the taper, and ring width by ring
   'FSP', 'FCZ', 'FWL', 'FCHAR', 'FZW',                     // the fire's tables
   'WVA', 'WZC', 'WZS',                                     // the wave family, by wave and by slice
@@ -39,7 +39,7 @@ export const PART_NAMES = [
 // `WV` names the wave FAMILY, whose members are objects holding two tables apiece, so it resolves to
 // the first of the two concatenated tables rather than to a part of its own - there is no flat WV.
 export const FIELD_PARTS = {
-  lut: 'LUT', tv: 'TV', tw: 'TW', th: 'TH', pax: 'PAX', pay: 'PAY', edge: 'EDGE',
+  lut: 'LUT', tv: 'TV', tw: 'TW', ts: 'TS', th: 'TH', pax: 'PAX', pay: 'PAY', edge: 'EDGE',
   ginv: 'GINV', zoff: 'ZOFF', urel: 'UREL', rwl: 'RWL',
   fsp: 'FSP', fcz: 'FCZ', fwl: 'FWL', fchar: 'FCHAR', fzw: 'FZW',
   wv: 'WVA', WV: 'WZC', 'wave:zc': 'WZC', 'wave:zs': 'WZS',
@@ -150,7 +150,7 @@ export const UNI_FLOAT_NAMES = [
   'gLateR', 'gLateG', 'gLateB', 'pad7',
   // BEYOND THE BARK THERE IS NO BOARD, and the surround is what says so rather than clamped bark.
   'surR', 'surG', 'surB', 'pad8',
-  'pad10', 'pad11', 'pad12', 'pad13',
+  'SATD', 'pad11', 'pad12', 'pad13',
   'pad14', 'pad15', 'pad16', 'pad17',
   'pad18', 'pad19', 'pad20', 'pad21',
   'pad22', 'pad23', 'pad24', 'pad25',
@@ -201,7 +201,7 @@ export function packWood(F, extra) {
   const FE = F.FE || [], WV = F.WV || [];
 
   const parts = {
-    LUT: f32(F.lut), TV: f32(F.tv), TW: f32(F.tw), TH: f32(F.th),
+    LUT: f32(F.lut), TV: f32(F.tv), TW: f32(F.tw), TS: f32(F.ts), TH: f32(F.th),
     PAX: f32(F.pax), PAY: f32(F.pay), EDGE: f32(F.edge),
     GINV: f32(F.ginv), ZOFF: f32(F.zoff), UREL: f32(F.urel), RWL: f32(F.rwl),
     FSP: f32(F.fsp), FCZ: f32(F.fcz), FWL: f32(F.fwl), FCHAR: f32(F.fchar), FZW: f32(F.fzw),
@@ -248,7 +248,7 @@ export function packWood(F, extra) {
     // beside it really is a boolean (waveAmp > 0) and stays an int.
     R: F.R, LMAX: F.LMAX, EYES: S.EYES,
     KS: S.KS, ZS: S.ZS, GKS: S.GKS, MINL: S.MINL, MINV: S.MINV, MTHR: S.MTHR,
-    GLOSS: S.GLOSS, LIT: S.LIT,
+    GLOSS: S.GLOSS, LIT: S.LIT, SATD: S.SATD,
     ffx: S.ffx, ffy: S.ffy, fcIn: S.fcIn, fcOut: S.fcOut,
     FSEV: S.FSEV, ECELL: S.ECELL, ERADFT: S.ERADFT, eyeDepth: S.eyeDepth,
     len: extra.len, wid: extra.wid, y0: extra.y0, H: extra.H,
