@@ -53,7 +53,15 @@ if (!DIR || !META) {
 //
 // Listed explicitly rather than widened. A looser rule over a Downloads folder would start harvesting --
 // and deleting -- files this project never wrote. Add a prefix here when a slab earns one.
-const PREFIX = ['stone', 'HERO-MASTER', 'Glass Master Source', 'regression test'];
+//
+// AN ENTRY MUST REACH THE `-<size>-` BOUNDARY, because MASTER concatenates the prefix with SHAPED and
+// SHAPED opens on a hyphen. So a prefix that stops partway through a slab name matches nothing: for
+// `universal master all three materials-1048576-...`, the entry `universal master` is followed by a
+// SPACE where the regex wants `-`. It would be a dead entry, and check-harvest-names cannot see that --
+// it appends a real tail TO THE PREFIX ITSELF, which makes any well-formed prefix match its own
+// synthetic name whether or not a slab by that name has ever rendered. A dead entry is green.
+const PREFIX = ['stone', 'HERO-MASTER', 'Glass Master Source', 'regression test',
+                'universal master all three materials'];
 // ESCAPED, because these are slab names a person typed rather than patterns. A slab called
 // `glass (v2)` would otherwise build an invalid regex and take the tool down at startup - or, worse,
 // a `.` in a name would quietly match any character.
