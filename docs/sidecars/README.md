@@ -46,7 +46,7 @@ compression is pinned here by two measured points rather than one. They are also
 can name their own material, and the only ones carrying a tile address.
 
 These are the data *from* the masters, not the masters: **168.22 GB of masters — 2.370 terapixels —
-carry 34.48 MB of checkable evidence**, one byte of sidecar per 4,878 bytes of master, and this is that
+carry 34.21 MB of checkable evidence**, one byte of sidecar per 4,917 bytes of master, and this is that
 evidence. **Those are a sum over the files in this directory and move whenever one is added.** A master
 records its own build, engine, hardware class, tile plan, per-tile timings and the light it was written
 with — scanned out of the file's JSON block by [`tools/tiff-meta.mjs`](../../tools/tiff-meta.mjs) /

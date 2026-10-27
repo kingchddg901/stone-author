@@ -27,7 +27,7 @@
 // if that ever changes, change it in one place here and the prose will fail until it follows.
 //
 //   node tools/check-sidecar-totals.mjs
-import { readdirSync, statSync, readFileSync } from 'fs';
+import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -41,14 +41,26 @@ const ok = (name, cond, detail) => {
   fails++; console.log('  FAIL  ' + name + (detail ? '   ' + detail : ''));
 };
 
+// BYTES AS THE REPOSITORY STORES THEM, NOT AS THIS CHECKOUT HOLDS THEM. statSync().size was the first
+// try and CI rejected it within the minute: 34.48 MB on a Windows working tree against 34.21 on the
+// Linux runner, because the older sidecars sit CRLF here and LF there. A figure in the prose that moves
+// with a checkout policy is not a figure about the evidence, so a carriage return that precedes a
+// line feed is discounted and both machines get the number the repository actually holds.
+function lfBytes(buf) {
+  let cr = 0;
+  for (let i = 0; i < buf.length - 1; i++) if (buf[i] === 13 && buf[i + 1] === 10) cr++;
+  return buf.length - cr;
+}
+
 // A sum over one directory of sidecars. `skip` keeps index.json out of the archive's count - it is the
 // index, not a master's record of itself, and counting it would make the count disagree with its rows.
 function sum(dir, skip) {
   const files = readdirSync(dir).filter(f => f.endsWith('.json') && f !== skip);
   let json = 0, bytes = 0, px = 0, largest = 0;
   for (const f of files) {
-    json += statSync(join(dir, f)).size;
-    const j = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+    const buf = readFileSync(join(dir, f));
+    json += lfBytes(buf);
+    const j = JSON.parse(buf.toString('utf8'));
     bytes += j.bytes || 0;
     px += (j.w || 0) * (j.h || 0);
     if ((j.bytes || 0) > largest) largest = j.bytes;
