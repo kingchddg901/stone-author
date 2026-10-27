@@ -11,6 +11,18 @@
 // as too bright rather than being sampled past.
 //
 //   node tools/thumb-master.mjs <master.tif> [more.tif ...] [--cell=64] [--out=dir]
+//                                 [--region=x0,y0,x1,y1]
+//
+// `--region` reads only the tiles covering that rectangle, given as FRACTIONS of the whole picture.
+// A full read is the honest default and stays the default; the flag exists because at 1,048,576 a
+// whole master is 2.75 TB of inflate and 71 minutes, and a question about one disc does not need the
+// other 89% of the frame. `--region=0.22,0.11,0.55,0.45` reads about a tenth of that.
+//
+// IT SNAPS OUT TO WHOLE TILES, which is not a rounding convenience. A cell of this thumbnail is the
+// box mean of an ENTIRE tile, so half a tile has nothing to report; the window actually read comes
+// back as `ext` and is printed every time, because a caller who asked for 0.22 and silently got 0.19
+// would line the result up against the wrong rectangle. The output is named for the region too, so a
+// partial read cannot be mistaken on disk for a picture of the whole master.
 //
 // Writes <name>.thumb.png beside each input, or into --out. With two or more inputs it also writes
 // pair-wise difference thumbnails, amplified, because a 9-level shift over a whole picture is invisible
@@ -60,18 +72,25 @@ function tileIndex(path) {
   } catch (e) { return null; } finally { closeSync(fd); }
 }
 
-function thumbOf(path, CELL) {
+function thumbOf(path, CELL, REG) {
   const ix = tileIndex(path);
   if (!ix) return { err: 'cannot read the tile directory - not a little-endian tiled TIFF this app wrote' };
   if (!INFLATE.has(ix.comp)) return { err: 'compression ' + ix.comp + ' is not deflate' };
   const across = Math.ceil(ix.W / ix.tw), down = Math.ceil(ix.H / ix.th);
-  const tw = across * CELL, th = down * CELL;
+  const gx0 = REG ? Math.max(0, Math.floor(REG[0] * ix.W / ix.tw)) : 0;
+  const gy0 = REG ? Math.max(0, Math.floor(REG[1] * ix.H / ix.th)) : 0;
+  const gx1 = REG ? Math.min(across - 1, Math.ceil(REG[2] * ix.W / ix.tw) - 1) : across - 1;
+  const gy1 = REG ? Math.min(down - 1, Math.ceil(REG[3] * ix.H / ix.th) - 1) : down - 1;
+  if (gx1 < gx0 || gy1 < gy0) return { err: 'that region covers no whole tile of this master' };
+  const cols = gx1 - gx0 + 1, rows = gy1 - gy0 + 1;
+  const tw = cols * CELL, th = rows * CELL;
   const out = new Uint8Array(tw * th * 4);
   const fd = openSync(path, 'r');
-  let read = 0, blank = 0;
+  let read = 0, blank = 0, skipped = 0;
   try {
     for (let t = 0; t < ix.offs.length && t < across * down; t++) {
       const gx = t % across, gy = (t / across) | 0;
+      if (gx < gx0 || gx > gx1 || gy < gy0 || gy > gy1) { skipped++; continue; }
       if (!ix.cnts[t]) { blank++; continue; }
       const raw = Buffer.alloc(ix.cnts[t]);
       readSync(fd, raw, 0, ix.cnts[t], ix.offs[t]);
@@ -93,14 +112,16 @@ function thumbOf(path, CELL) {
             }
           }
           if (!n) continue;
-          const o = ((gy * CELL + cy) * tw + gx * CELL + cx) * 4;
+          const o = (((gy - gy0) * CELL + cy) * tw + (gx - gx0) * CELL + cx) * 4;
           out[o] = r / n; out[o + 1] = g / n; out[o + 2] = b / n; out[o + 3] = a / n;
         }
       }
     }
   } finally { closeSync(fd); }
-  return { w: tw, h: th, rgba: out, tiles: ix.offs.length, grid: [across, down],
-           W: ix.W, H: ix.H, tile: ix.tw, read, blank };
+  return { w: tw, h: th, rgba: out, tiles: ix.offs.length - skipped, grid: [cols, rows],
+           W: ix.W, H: ix.H, tile: ix.tw, read, blank, skipped,
+           ext: [gx0 * ix.tw / ix.W, gy0 * ix.th / ix.H,
+                 Math.min(1, (gx1 + 1) * ix.tw / ix.W), Math.min(1, (gy1 + 1) * ix.th / ix.H)] };
 }
 
 const args = process.argv.slice(2);
@@ -108,23 +129,41 @@ const files = args.filter(a => !a.startsWith('--'));
 const num = (k, d) => { const a = args.find(x => x.startsWith('--' + k + '=')); return a ? +a.slice(k.length + 3) : d; };
 const str = (k, d) => { const a = args.find(x => x.startsWith('--' + k + '=')); return a ? a.slice(k.length + 3) : d; };
 const CELL = num('cell', 64), GAIN = num('gain', 8), OUT = str('out', null);
-if (!files.length) { console.error('usage: node tools/thumb-master.mjs <master.tif> [...] [--cell=64] [--gain=8] [--out=dir]'); process.exit(1); }
+// FAILS ON A BAD REGION RATHER THAN FALLING BACK TO THE WHOLE PICTURE. A silent fallback would read
+// 2.75 TB when a tenth was asked for, and - worse - would answer a different question than the one
+// that was put, with nothing on screen to say so.
+const RAWREG = str('region', null);
+let REGION = null;
+if (RAWREG !== null) {
+  const p = RAWREG.split(',').map(Number);
+  if (p.length !== 4 || p.some(v => !isFinite(v)) || p.some(v => v < 0 || v > 1) || p[0] >= p[2] || p[1] >= p[3]) {
+    console.error('--region wants x0,y0,x1,y1 as fractions of the picture, 0..1, with x0<x1 and y0<y1');
+    process.exit(1);
+  }
+  REGION = p;
+}
+if (!files.length) { console.error('usage: node tools/thumb-master.mjs <master.tif> [...] [--cell=64] [--gain=8] [--out=dir] [--region=x0,y0,x1,y1]'); process.exit(1); }
 if (OUT && !existsSync(OUT)) mkdirSync(OUT, { recursive: true });
 
 const made = [];
 for (const f of files) {
   if (!existsSync(f)) { console.error(f + ': not found'); process.exit(1); }
   const name = basename(f).replace(/\.tiff?$/i, '');
-  const t = thumbOf(f, CELL);
+  const t = thumbOf(f, CELL, REGION);
   if (t.err) { console.error(name + ': ' + t.err); process.exit(1); }
-  const dest = join(OUT || dirname(f), name + '.thumb.png');
+  const tag = REGION ? '.r' + t.ext.map(v => v.toFixed(3)).join('_') : '';
+  const dest = join(OUT || dirname(f), name + tag + '.thumb.png');
   writeFileSync(dest, encodePNG(t.w, t.h, t.rgba));
   // A MEAN OVER THE THUMBNAIL, not over the file. It will not equal the master's own light.mean - that
   // one samples every 100th pixel of the full picture - so it is reported as its own number and never
   // compared with the recorded one.
   let s = 0; for (let i = 0; i < t.rgba.length; i += 4) s += Math.max(t.rgba[i], t.rgba[i + 1], t.rgba[i + 2]);
   console.log(`${name}\n  ${t.W}x${t.H} tile ${t.tile} -> ${t.w}x${t.h} (${t.grid[0]}x${t.grid[1]} cells of ${CELL})`
-    + `  tiles read ${t.read}/${t.tiles}${t.blank ? ', ' + t.blank + ' unreadable' : ''}  thumb peak-mean ${(s / (t.rgba.length / 4)).toFixed(2)}\n  -> ${dest}`);
+    + `  tiles read ${t.read}/${t.tiles}${t.blank ? ', ' + t.blank + ' unreadable' : ''}  thumb peak-mean ${(s / (t.rgba.length / 4)).toFixed(2)}`
+    + (REGION ? `\n  REGION x ${t.ext[0].toFixed(3)}-${t.ext[2].toFixed(3)}, y ${t.ext[1].toFixed(3)}-${t.ext[3].toFixed(3)}`
+        + ` (asked ${REGION[0]}-${REGION[2]}, ${REGION[1]}-${REGION[3]}; snapped out to whole tiles)`
+        + `  ${t.skipped} tile(s) not read` : '')
+    + `\n  -> ${dest}`);
   made.push({ name, t, dest });
 }
 
