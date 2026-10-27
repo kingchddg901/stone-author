@@ -314,8 +314,12 @@ figure to compare against stone and wood is 0.0650, not the one in the table. Th
 supersampled master because it is the larger of the two by output; the plain one's number is given here
 so nobody has to choose between them.
 
-**Wood and glass ran on the GPU; stone did not.** Stone has no shader and does not need one — its
-render time *is* its file going out, measured at 1.0× by ablation ([`glass-gpu.md`](../glass-gpu.md)).
+**Wood and glass ran on the GPU; stone did not.** Stone has no shader, and an ablation found that
+giving its paint one buys 1.0× ([`glass-gpu.md`](../glass-gpu.md)) — paint is not where its time goes.
+**That is not the same as saying the write is, and at this size it measurably is not.** Stone's ten
+1,048,576 masters move bytes out at a median 4.89 MB/s against 17.88 at 131,072, so the rate falls 3.7×
+from its own peak as the job grows, which a device write limit would not do. What binds it here is
+unidentified, and calling it the write would be the second guess this file has made about stone.
 Both GPU rows ran a single worker driving the device, against stone's four. The 65,535 wood rung
 predates wood's GPU path, which is why it shows twelve CPU workers and no GPU: it is the same picture
 on the other renderer, not a slower device.
