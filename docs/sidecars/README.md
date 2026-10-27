@@ -44,12 +44,14 @@ evidence that per-tile cost does not grow with the output.
 masters: evidence of what each material costs per pixel at the top of the range. They are also the only
 sidecars here that can name their own material, and the only ones carrying a tile address.
 
-These are the data *from* the masters, not the masters: 13 GB of pixels carry about a third of a megabyte
-of checkable evidence, and this is that evidence. A master records its own build, engine, hardware class,
-tile plan, per-tile timings and the light it was written with — scanned out of the file's JSON block by
-[`tools/tiff-meta.mjs`](../../tools/tiff-meta.mjs) / [`tools/meta-index.mjs`](../../tools/meta-index.mjs)
-without decoding a pixel. The masters themselves are not published (400 MB to **122.29 GB** each,
-**163.2 GB** in all); render the slab yourself and compare — see [`docs/reproduce.md`](../reproduce.md).
+These are the data *from* the masters, not the masters: **163.22 GB of masters — 1.683 terapixels —
+carry 24.90 MB of checkable evidence**, one byte of sidecar per 6,251 bytes of master, and this is that
+evidence. **Those are a sum over the files in this directory and move whenever one is added.** A master
+records its own build, engine, hardware class, tile plan, per-tile timings and the light it was written
+with — scanned out of the file's JSON block by [`tools/tiff-meta.mjs`](../../tools/tiff-meta.mjs) /
+[`tools/meta-index.mjs`](../../tools/meta-index.mjs) without decoding a pixel. The masters themselves
+are not published (400 MB to **122.29 GB** each, **163.22 GB** in all); render the slab yourself and
+compare — see [`docs/reproduce.md`](../reproduce.md).
 
 **Device identity is sealed.** Each sidecar's `dev` field is encrypted (or withheld) under a key derived
 from the slab's own bytes — see [`docs/device-seal.md`](../device-seal.md). What stays in the clear is
@@ -61,7 +63,8 @@ names hardware class and deliberately not a machine.
 **EVERY SIDECAR IN THE FIRST FOUR SETS PREDATES POSITIONAL MARKING**, which went on by default on
 2026-10-16, so none of those twenty-one carries `marked` or `markedCells` and none of the masters behind
 them carries a tile address. **The three in *The largest of each* are the exception** — every one is
-later than that date and carries `marked: 1`, so the paragraph below does not describe them. Re-rendering any of these pictures today produces a file that differs from the one measured
+later than that date and carries `marked: 1`, so the paragraph below does not describe them.
+Re-rendering any of these pictures today produces a file that differs from the one measured
 here — one pixel in 1,821, one level of blue, sharing the same `inputs`. `?mark=0` reproduces the
 unmarked bytes. See [`docs/positional-marks.md`](../positional-marks.md).
 
