@@ -79,6 +79,8 @@ jobs:
         run: node tools/check-scope.mjs
       - name: Every relative link in the docs points at a file
         run: node tools/check-doc-links.mjs
+      - name: The sidecar README still describes the sidecar folder
+        run: node tools/check-sidecar-totals.mjs
       - name: The worker core carries every name it reaches for
         run: node tools/check-worker-core.mjs
       - name: A tile carries its address, and a moved one is caught
