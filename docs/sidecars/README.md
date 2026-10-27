@@ -1,7 +1,7 @@
 # Master sidecars — the fleet, and the size ladder
 
-> **`archive/` is a separate thing.** This file curates twenty-one sidecars chosen as evidence for
-> four specific claims. `archive/` is the bulk harvest instead — every master on the authoring
+> **`archive/` is a separate thing.** This file curates twenty-four sidecars chosen as evidence for
+> five specific claims. `archive/` is the bulk harvest instead — every master on the authoring
 > machine, 90 of them standing for 78.1 GB of pixels in 14.3 MB of JSON, so the masters themselves can
 > be deleted without losing what they measured. Its `index.json` is the only place the **on-disk file
 > size** is recorded (`bytes`); a sidecar carries the master's own block verbatim, and the block's
@@ -29,7 +29,7 @@
 > the two disagree by more than a tail.
 
 The metadata extract (a **sidecar**) from a master: what it was, what made it, and how long each tile
-took. **Twenty-one masters, twenty-one sidecars**, in four sets that are evidence for four different things.
+took. **Twenty-four masters, twenty-four sidecars**, in five sets that are evidence for five different things.
 
 **The fleet** — one **65,535 × 40,959** master (≈2.684 gigapixels) rendered on each device in the
 [fleet](../devices.md), under each browser engine it ran, in **daylight** (spectrum 0) and **UV / black
@@ -39,12 +39,17 @@ engines *agree*.
 **The size ladder** — the same picture at 131,072 and 262,144 px wide, on one desktop. Two masters:
 evidence that per-tile cost does not grow with the output.
 
+**The largest of each** — the biggest master rendered in each material: stone and glass at
+**1,048,576 × 655,360** (687.195 gigapixels, 256× the fleet's picture), wood at **65,535**. Three
+masters: evidence of what each material costs per pixel at the top of the range. They are also the only
+sidecars here that can name their own material, and the only ones carrying a tile address.
+
 These are the data *from* the masters, not the masters: 13 GB of pixels carry about a third of a megabyte
 of checkable evidence, and this is that evidence. A master records its own build, engine, hardware class,
 tile plan, per-tile timings and the light it was written with — scanned out of the file's JSON block by
 [`tools/tiff-meta.mjs`](../../tools/tiff-meta.mjs) / [`tools/meta-index.mjs`](../../tools/meta-index.mjs)
-without decoding a pixel. The masters themselves are not published (400 MB to 4.26 GB each, about 19 GB
-in all); render the slab yourself and compare — see [`docs/reproduce.md`](../reproduce.md).
+without decoding a pixel. The masters themselves are not published (400 MB to **122.29 GB** each,
+**163.2 GB** in all); render the slab yourself and compare — see [`docs/reproduce.md`](../reproduce.md).
 
 **Device identity is sealed.** Each sidecar's `dev` field is encrypted (or withheld) under a key derived
 from the slab's own bytes — see [`docs/device-seal.md`](../device-seal.md). What stays in the clear is
@@ -53,17 +58,20 @@ audit needs and identifies nobody. Every figure in the tables below is read out 
 except the **device** column, which is a label from [`docs/devices.md`](../devices.md), because a sidecar
 names hardware class and deliberately not a machine.
 
-**EVERY SIDECAR BELOW ALSO PREDATES POSITIONAL MARKING**, which went on by default on 2026-10-16, so
-none of them carries `marked` or `markedCells` and none of the masters behind them carries a tile
-address. Re-rendering any of these pictures today produces a file that differs from the one measured
+**EVERY SIDECAR IN THE FIRST FOUR SETS PREDATES POSITIONAL MARKING**, which went on by default on
+2026-10-16, so none of those twenty-one carries `marked` or `markedCells` and none of the masters behind
+them carries a tile address. **The three in *The largest of each* are the exception** — every one is
+later than that date and carries `marked: 1`, so the paragraph below does not describe them. Re-rendering any of these pictures today produces a file that differs from the one measured
 here — one pixel in 1,821, one level of blue, sharing the same `inputs`. `?mark=0` reproduces the
 unmarked bytes. See [`docs/positional-marks.md`](../positional-marks.md).
 
-**EVERY SIDECAR BELOW PREDATES THE MATERIAL KEY, so none of them can say what it is made of.** A slab
+**EVERY SIDECAR IN THE FIRST FOUR SETS PREDATES THE MATERIAL KEY, so none of those twenty-one can say
+what it is made of** — again with *The largest of each* excepted, which is the set that exists to be
+read by material. A slab
 carries stone, wood and glass at once unless one is exported alone, so `family` is the STONE family and
 is present whatever was drawn: a wood master reports `family: "carrara"`, and its `marks` / `lines` /
 `cracks` / `specks` / `drusy` / `seams` counts are the stone vocabulary, describing nothing a viewer of
-that master would see. **Two of the four sets below are wood and read as marble.** Found 2026-10-15 by
+that master would see. **Two of the first four sets below are wood and read as marble.** Found 2026-10-15 by
 downsampling a master whose block said `carrara` and which is unmistakably wood — after the author of
 this file had already drawn the wrong conclusion from the block without looking at the picture.
 
@@ -72,8 +80,8 @@ this file had already drawn the wrong conclusion from the block without looking 
 the export records the answer and never branches on it, which is the only thing the material seam
 forbids. [`tools/tiff-meta.mjs`](../../tools/tiff-meta.mjs) gates the field on the build: a master older
 than `.83` prints *not recorded (build … predates the key)* rather than being read as stone, because
-absence means cannot-say and never marble. It cannot be retrofitted, so the twenty sidecars here stay as
-they are. **Read the pixels, not the family.**
+absence means cannot-say and never marble. It cannot be retrofitted, so the twenty-one sidecars of the
+first four sets stay as they are. **Read the pixels, not the family.**
 
 ## The fleet — one picture, six devices, three engines, two lights
 
@@ -273,3 +281,56 @@ cross-engine pair rendered and the tile size is not theirs either.
   tight and the long beat broad; measured, it is the other way round — CV 0.376 short against 0.223 long.
   So the rhythm is established and its cause is not. What follows regardless is that a per-tile outlier
   count means nothing without checking whether the series alternates, and `tiff-meta` does not check.
+
+## The largest of each — one per material, at the top of what has been rendered
+
+| material | w × h | Gpx | build | light | GPU | tile | tiles | wall | med tile ms | render bytes | B/px | inputs | sidecar |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| wood | 65,535 × 40,959 | 2.684 | `2026.10.25.211` | daylight (0) | — | 2048 | 640 | 1:46 | 24 | 92,158,949 | **0.0343** | `a8e64712` | `universal master all three materials-65535-day-win-chrome-1024-180517.json` |
+| stone | 1,048,576 × 655,360 | 687.195 | `2026.10.22.171` | UV (−1) | — | 4096 | 40,960 | 1:32:35 | 77 | 23,273,826,219 | **0.0339** | `65724e44` | `stone-1048576-uv-win-chrome-1022-202143.json` |
+| glass | 1,048,576 × 655,360 | 687.195 | `2026.10.25.215` | daylight (0) | yes | 2048 | 163,840 | 2:18:30 | 50 | 122,293,505,926 | 0.1780 | `65fbf88f` | `Glass Master Source-1048576-day-win-chrome-1025-030348.json` |
+
+All three on one desktop (12 cores, 16 GB reported, `x86/64`, `win-chrome`), `toDisk` true, each the
+largest its material has reached. **Three builds, not one** — which is the first thing to read off the
+table, because it means this is not a controlled comparison and cannot be made into one by reading it
+harder.
+
+**`render bytes` is what the render wrote, and for two of these the file on disk is much larger.** Nine
+pyramid levels were appended to the glass master on 2026-10-25, adding 63,581,553,098 bytes — so its
+file is 185.88 GB against the 122.29 GB above. The split is deliberate and is explained at the top of
+this file: the append changed the file and changed nothing about the render. **Taking bytes per pixel
+from a file size rather than from this column inflates it 1.52× here**, and 1.9× on the other
+1,048,576 glass master.
+
+**The glass row is supersampled and the other two are not.** `ss: 4`, from the supersample ladder of
+2026-10-24. The plain 1,048,576 glass master on build `2026.10.25.211` wrote 44,688,880,685 bytes —
+**0.0650 B/px**, against 0.1780 here. So glass costs 2.74× more per pixel at 4× supersampling, and the
+figure to compare against stone and wood is 0.0650, not the one in the table. The table carries the
+supersampled master because it is the larger of the two by output; the plain one's number is given here
+so nobody has to choose between them.
+
+**Only glass ran on the GPU.** Stone has no shader and does not need one — its render time *is* its
+file going out, measured at 1.0× by ablation ([`glass-gpu.md`](../glass-gpu.md)). Wood's GPU path
+shipped after build `.211`, so the wood row is the CPU path with 12 workers, while the glass row is one
+worker driving the device.
+
+### What the wood row cannot yet say
+
+65,535 is wood's largest *desktop* render; wood's largest anywhere is the 262,144 Galaxy S23 master in
+*The ceiling*. So wood is the one material with no master at the top of the range, and the obvious move
+— scaling its 65,535 figure up by what stone does over the same climb — does not survive contact with
+the archive:
+
+| | B/px at 65,535 | B/px at 1,048,576 |
+|---|---|---|
+| wood | 0.0343 (n=3, range 0.0343–0.0347) | **unmeasured** |
+| stone | median **0.2662** (n=45, range 0.0605–0.3587) | 0.0339 (n=10, range 0.0289–0.0339) |
+
+**Stone's spread at one size is 5.9×, so stone cannot act as wood's proxy.** Taking medians, stone
+improves 7.85× over those four doublings; taking its cheapest 65,535 master, 1.78×. That is the 30%
+per-doubling spread [`master-size.md`](../master-size.md) measures on matched footing, showing up across
+slabs as something much wider.
+
+**Holding wood's 0.0343 flat predicts 23.6 GB at 1,048,576; applying stone's median improvement predicts
+3.0 GB.** A factor of 7.9, and nothing here decides between them. The first wood master at that size
+does, and this table should be rewritten when it lands.
