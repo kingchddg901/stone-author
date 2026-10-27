@@ -142,7 +142,7 @@ said in pixels.
 - At the slab's real 8 × 5 ft, the 262,144 master is **2,731 DPI**. It stops there by decision rather than
   by limit: opening one costs about 443 GB of working space.
 
-## Cross-engine bit-identity — one picture, two engines, two architectures, two tile sizes
+## Cross-engine bit-identity — one **wood** picture, two engines, two architectures, two tile sizes
 
 | device | engine | cores | workers | tile | toDisk | min | med tile ms | file bytes | sidecar |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -175,10 +175,37 @@ tables Blink-x86 against Blink-ARM as *not* bit-identical — ±1–3 levels, 0.
 paint path before the S23 master existed, and the master then agreed: what goes through `putImageData` is
 exact everywhere, what goes through the rasteriser is not.
 
-**And it says the tile size leaves no trace.** A 512-tiled render and a 1024-tiled render of one picture
-are not merely similar, they are byte-equal — so the bleed and the tile seam are invisible in the output,
-at a different tile size, on a different CPU architecture. The seam work elsewhere in this repo looked for
-a defect; this is the positive result, which is the harder one to get.
+**And it says the tile size leaves no trace — on wood.** A 512-tiled render and a 1024-tiled render of
+this slab are not merely similar, they are byte-equal, so the bleed and the tile seam are invisible in
+the output, at a different tile size and on a different CPU architecture. The seam work elsewhere in
+this repo looked for a defect; this is the positive result, which is the harder one to get.
+
+**IT DOES NOT GENERALISE, AND THE MATERIAL IS WHY.** This file used to state the sentence above without
+the last two words, which made a wood result read as a property of the renderer. The same comparison on
+**stone** — measured 2026-10-27, one slab at 65,535 in UV, `inputs` `95ef95fe`, 512 against 1024:
+
+| | 512 vs 1024 |
+|---|---|
+| wood, the four masters above | **0 differing bytes** over 40,960 tile pairs |
+| stone, same test | **2,404 of 2,560 tiles differ, worst channel delta 130** |
+
+156 stone tiles come out bit-identical, and all four tilings tried — 512, 1024, 2048, 4096 — differ from
+one another. Stored size falls monotonically with the tile (696, 632, 568, 544 MB) while `light.mean`
+holds at 61.47–61.48: the elements move, the total light does not. **The paragraph two above already
+gave the mechanism** — what goes through `putImageData` is exact everywhere, what goes through the
+rasteriser is not. Stone rasterises discrete elements (that slab: 666 marks, 70 veins, 232 cracks, 8,050
+specks, 3 seams), and an element clipped to a 512 tile need not land on the same pixels as the same
+element clipped to 1024. Wood is a field evaluated per pixel, so there is nothing for the tiling to clip.
+
+**[`renderer-determinism.md`](../renderer-determinism.md) held the correct general statement while this
+file contradicted it:** *a master is reproducible on one machine as long as the tile size is*, which is
+why the resume pins `tilePinned` rather than letting a part-finished master be stitched from two
+tilings. It also has the distribution, which the worst-case figure above does not give — at 131,072,
+95% of differing pixels move by exactly one level, and they are **scattered rather than seam-clustered**
+(6.63% within 64 px of a tile join against 6.15% for a uniform scatter, on a flat distance profile).
+**So the seam is not the mechanism**, which is the first thing anyone looking at a tiling difference
+will reach for, this file's author included. Take determinism from that file; take from this one only
+the wood result it actually measured.
 
 - **The files differ by about 13% and none of it is pixels.** 895 MB against 1,012 MB for identical
   image data. Masters are written with `CompressionStream('deflate')`, which exposes no level, so each
