@@ -1,6 +1,6 @@
 # Master sidecars — the fleet, and the size ladder
 
-> **`archive/` is a separate thing.** This file curates twenty-four sidecars chosen as evidence for
+> **`archive/` is a separate thing.** This file curates twenty-five sidecars chosen as evidence for
 > five specific claims. `archive/` is the bulk harvest instead — every master on the authoring
 > machine, 90 of them standing for 78.1 GB of pixels in 14.3 MB of JSON, so the masters themselves can
 > be deleted without losing what they measured. Its `index.json` is the only place the **on-disk file
@@ -29,7 +29,7 @@
 > the two disagree by more than a tail.
 
 The metadata extract (a **sidecar**) from a master: what it was, what made it, and how long each tile
-took. **Twenty-four masters, twenty-four sidecars**, in five sets that are evidence for five different things.
+took. **Twenty-five masters, twenty-five sidecars**, in five sets that are evidence for five different things.
 
 **The fleet** — one **65,535 × 40,959** master (≈2.684 gigapixels) rendered on each device in the
 [fleet](../devices.md), under each browser engine it ran, in **daylight** (spectrum 0) and **UV / black
@@ -39,18 +39,19 @@ engines *agree*.
 **The size ladder** — the same picture at 131,072 and 262,144 px wide, on one desktop. Two masters:
 evidence that per-tile cost does not grow with the output.
 
-**The largest of each** — the biggest master rendered in each material: stone and glass at
-**1,048,576 × 655,360** (687.195 gigapixels, 256× the fleet's picture), wood at **65,535**. Three
-masters: evidence of what each material costs per pixel at the top of the range. They are also the only
-sidecars here that can name their own material, and the only ones carrying a tile address.
+**The largest of each** — the biggest master rendered in each material, now **all three at
+1,048,576 × 655,360** (687.195 gigapixels, 256× the fleet's picture). Four masters: one per material
+at the top of the range, plus wood's 65,535 rung, kept because wood is the only material whose
+compression is pinned here by two measured points rather than one. They are also the only sidecars that
+can name their own material, and the only ones carrying a tile address.
 
-These are the data *from* the masters, not the masters: **163.22 GB of masters — 1.683 terapixels —
-carry 24.90 MB of checkable evidence**, one byte of sidecar per 6,251 bytes of master, and this is that
+These are the data *from* the masters, not the masters: **168.22 GB of masters — 2.370 terapixels —
+carry 32.88 MB of checkable evidence**, one byte of sidecar per 4,878 bytes of master, and this is that
 evidence. **Those are a sum over the files in this directory and move whenever one is added.** A master
 records its own build, engine, hardware class, tile plan, per-tile timings and the light it was written
 with — scanned out of the file's JSON block by [`tools/tiff-meta.mjs`](../../tools/tiff-meta.mjs) /
 [`tools/meta-index.mjs`](../../tools/meta-index.mjs) without decoding a pixel. The masters themselves
-are not published (400 MB to **122.29 GB** each, **163.22 GB** in all); render the slab yourself and
+are not published (400 MB to **122.29 GB** each, **168.22 GB** in all); render the slab yourself and
 compare — see [`docs/reproduce.md`](../reproduce.md).
 
 **Device identity is sealed.** Each sidecar's `dev` field is encrypted (or withheld) under a key derived
@@ -285,18 +286,19 @@ cross-engine pair rendered and the tile size is not theirs either.
   So the rhythm is established and its cause is not. What follows regardless is that a per-tile outlier
   count means nothing without checking whether the series alternates, and `tiff-meta` does not check.
 
-## The largest of each — one per material, at the top of what has been rendered
+## The largest of each — one per material at the top of the range, and wood’s rung below it
 
 | material | w × h | Gpx | build | light | GPU | tile | tiles | wall | med tile ms | render bytes | B/px | inputs | sidecar |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| wood | 65,535 × 40,959 | 2.684 | `2026.10.25.211` | daylight (0) | — | 2048 | 640 | 1:46 | 24 | 92,158,949 | **0.0343** | `a8e64712` | `universal master all three materials-65535-day-win-chrome-1024-180517.json` |
+| wood | 1,048,576 × 655,360 | 687.195 | `2026.10.26.227` | daylight (0) | yes | 2048 | 163,840 | 56:06 | 19 | 4,998,705,088 | **0.00727** | `117e918c` | `universal master all three materials-1048576-day-win-chrome-1026-174226.json` |
+| wood — the 65,535 rung | 65,535 × 40,959 | 2.684 | `2026.10.25.211` | daylight (0) | — | 2048 | 640 | 1:46 | 24 | 92,158,949 | 0.0343 | `a8e64712` | `universal master all three materials-65535-day-win-chrome-1024-180517.json` |
 | stone | 1,048,576 × 655,360 | 687.195 | `2026.10.22.171` | UV (−1) | — | 4096 | 40,960 | 1:32:35 | 77 | 23,273,826,219 | **0.0339** | `65724e44` | `stone-1048576-uv-win-chrome-1022-202143.json` |
 | glass | 1,048,576 × 655,360 | 687.195 | `2026.10.25.215` | daylight (0) | yes | 2048 | 163,840 | 2:18:30 | 50 | 122,293,505,926 | 0.1780 | `65fbf88f` | `Glass Master Source-1048576-day-win-chrome-1025-030348.json` |
 
-All three on one desktop (12 cores, 16 GB reported, `x86/64`, `win-chrome`), `toDisk` true, each the
-largest its material has reached. **Three builds, not one** — which is the first thing to read off the
-table, because it means this is not a controlled comparison and cannot be made into one by reading it
-harder.
+All four on one desktop (12 cores, 16 GB reported, `x86/64`, `win-chrome`), `toDisk` true, the first
+three each the largest its material has reached. **Four builds, not one** — which is the first thing to
+read off the table, because it means this is not a controlled comparison and cannot be made into one by
+reading it harder.
 
 **`render bytes` is what the render wrote, and for two of these the file on disk is much larger.** Nine
 pyramid levels were appended to the glass master on 2026-10-25, adding 63,581,553,098 bytes — so its
@@ -312,28 +314,40 @@ figure to compare against stone and wood is 0.0650, not the one in the table. Th
 supersampled master because it is the larger of the two by output; the plain one's number is given here
 so nobody has to choose between them.
 
-**Only glass ran on the GPU.** Stone has no shader and does not need one — its render time *is* its
-file going out, measured at 1.0× by ablation ([`glass-gpu.md`](../glass-gpu.md)). Wood's GPU path
-shipped after build `.211`, so the wood row is the CPU path with 12 workers, while the glass row is one
-worker driving the device.
+**Wood and glass ran on the GPU; stone did not.** Stone has no shader and does not need one — its
+render time *is* its file going out, measured at 1.0× by ablation ([`glass-gpu.md`](../glass-gpu.md)).
+Both GPU rows ran a single worker driving the device, against stone's four. The 65,535 wood rung
+predates wood's GPU path, which is why it shows twelve CPU workers and no GPU: it is the same picture
+on the other renderer, not a slower device.
 
-### What the wood row cannot yet say
+### Wood's climb, measured — and both predictions were wrong
 
-65,535 is wood's largest *desktop* render; wood's largest anywhere is the 262,144 Galaxy S23 master in
-*The ceiling*. So wood is the one material with no master at the top of the range, and the obvious move
-— scaling its 65,535 figure up by what stone does over the same climb — does not survive contact with
-the archive:
+This section used to end *"the first wood master at that size does, and this table should be rewritten
+when it lands."* It landed on 2026-10-27, build `2026.10.26.227`, the first master on that build. The
+two predictions it carried are kept here because being wrong in both directions is the result:
 
-| | B/px at 65,535 | B/px at 1,048,576 |
-|---|---|---|
-| wood | 0.0343 (n=3, range 0.0343–0.0347) | **unmeasured** |
-| stone | median **0.2662** (n=45, range 0.0605–0.3587) | 0.0339 (n=10, range 0.0289–0.0339) |
+| | B/px at 1,048,576 | GB | miss |
+|---|---|---|---|
+| holding wood's 0.0343 flat | 0.03434 | 23.60 | **4.72× high** |
+| scaling by stone's median improvement | 0.00437 | 3.00 | **1.66× low** |
+| **measured** | **0.00727** | **4.999** | — |
 
-**Stone's spread at one size is 5.9×, so stone cannot act as wood's proxy.** Taking medians, stone
-improves 7.85× over those four doublings; taking its cheapest 65,535 master, 1.78×. That is the 30%
-per-doubling spread [`master-size.md`](../master-size.md) measures on matched footing, showing up across
-slabs as something much wider.
+The bracket contained the answer, which is the only thing it was for. What is worth keeping is *which*
+half of the stone proxy failed. **The ratio was nearly right and the anchor was not.** Wood improves
+**4.720× over those four doublings — 0.6784 per doubling**:
 
-**Holding wood's 0.0343 flat predicts 23.6 GB at 1,048,576; applying stone's median improvement predicts
-3.0 GB.** A factor of 7.9, and nothing here decides between them. The first wood master at that size
-does, and this table should be rewritten when it lands.
+| | ratio per doubling | spread | points |
+|---|---|---|---|
+| glass | 0.7909 | 0.4% | six rungs |
+| **wood** | **0.6784** | — | **two** |
+| stone | 0.6484 | 30% | matched footing, [`master-size.md`](../master-size.md) |
+
+Wood falls between the two and nearer stone, so stone's *rate* was a fair guide. The 3.00 GB miss came
+from the anchor underneath it: stone's 65,535 median of 0.2662 B/px is drawn from a heavier slab
+population than wood's 0.0343, so scaling that ratio off the wrong starting figure overshot. A spread
+of 5.9× across 45 stone masters at one size is the warning that was already on the page.
+
+**Two points are a line, not a law.** Glass earned its exponent over six rungs and then predicted the
+seventh to 0.08%; wood has 65,535 and 1,048,576 and nothing between them. The rungs in between would
+say whether 0.6784 is a constant or the average of a curve, and until they exist this row is a
+measurement, not a model.
