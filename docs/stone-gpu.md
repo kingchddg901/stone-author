@@ -1,10 +1,11 @@
 # A GPU path for stone — the third material, and the first one the preview uses
 
-> **Read "What a real render found" before trusting any fidelity number on this page.** Everything
-> here was measured on tiles and preview frames; the first *masters* were rendered on 2026-10-29 and
-> they disagree with the painter by **light.mean 39.6 against 49.0** on an adjusted-haze slab. The
-> cause is now isolated to one shape, which `stoneWhyNot` refuses — but the per-tile numbers below
-> were taken before that was known, and one of them was taken on a quiet tile.
+> **Read "What a real render found" and the two sections after it before trusting any fidelity
+> number on this page.** Everything here was measured on tiles and preview frames; the first
+> *masters* were rendered on 2026-10-29 and read **light.mean 39.6 against 49.0** on an adjusted-haze
+> slab. That number turned out to be two things stacked — a metric averaged over the tile padding,
+> and the coat — and the shape it was blamed on is no longer refused. One of the per-tile numbers
+> below was also taken on a quiet tile.
 
 `glass-gpu.md` is the long argument: whether a shader is worth it, what a tile is made of, how the
 readback gets off the main thread, and the three instruments that were wrong before the fourth was
@@ -249,10 +250,11 @@ the canvas's own gradient dither, zero-mean and worth about ±20 in bright haze,
 | one **adjusted** plane (saturate 4, brightness 9) | **+5.36** | 5.51 |
 | the whole document | **−8.42** | 14.28 |
 
-The ground is right, the marks are right, plain haze is right. **A haze plane carrying a colour
-adjustment is not**, and `stoneWhyNot` now answers `exp.gpu.stone.fogadj` for one. The
-mechanism is not yet found; the leading guess, unmeasured, is that the canvas rasterises the gradient
-to eight bits before the filter runs, so one last bit becomes six or nine of them.
+The ground is right, the marks are right, plain haze is right, and an adjusted plane read +5.36.
+A clause was shipped for that shape with the mechanism unfound. **It has since been chased down and
+the clause is gone** — see "The adjusted haze plane, and why the clause went" below. The leading
+guess recorded here at the time, that the canvas rasterises the gradient to eight bits before the
+filter, was measured and is not the cause.
 
 ### And the lesson about the 4.91
 
@@ -374,6 +376,50 @@ So: **a mean gap of about 1.5 on a coated slab is this, and it is settled.** Any
 will find the same number and should not go looking for a fog bug — the fog was checked to 0.119 with
 the coat off, one isolated blob matches the canvas's gradient law to 0.315, and the ground and mottle
 agree at 0.00.
+
+## The adjusted haze plane, and why the clause went
+
+`exp.gpu.stone.fogadj` refused any haze plane carrying hue, saturation, brightness or contrast. It
+was shipped on a real measurement — one adjusted plane read **+5.36** where a plain one read −0.63 —
+with the mechanism explicitly unfound. Chased down on 2026-10-29, three steps, each ruling out the
+step before it:
+
+**The filter maths is exact.** At globalAlpha 1 the collapsed matrix, applied once to the faded
+colour, matches the canvas across the whole ramp:
+
+| g | 0.95 | 0.80 | 0.60 | 0.50 | 0.35 | 0.25 | 0.15 | 0.10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| canvas | 243 | 205 | 154 | 128 | 90 | 64 | 39 | 11 |
+| model | 242.9 | 204.6 | 153.6 | 128.1 | 89.9 | 64.4 | 38.9 | 11.9 |
+
+The collapse was also checked value by value against applying each primitive in turn — identical on
+every sample. So neither the composition order nor the single clamp is wrong, and the guess that the
+canvas quantises the gradient before filtering changes nothing when modelled.
+
+**It is not the stack.** Blob count varied from 2 to 770 with the radius held constant, every pixel
+compared, the shader quantised to eight bits as the readback does:
+
+| blobs | 2 | 15 | 60 | 198 | 770 |
+| --- | --- | --- | --- | --- | --- |
+| relative gap | 15.6% | 15.6% | 15.2% | 13.8% | 12.9% |
+
+Flat. A stacking defect cannot be flat in the blob count.
+
+**It is the painter attenuating its own faint edge.** The whole gap lives at g = 0.1 to 0.3 — the
+outer third of a blob — and only at low globalAlpha. At g = 0.25 the arithmetic says 2.5; the shader
+reads 2.51 and the canvas reads 1.27.
+
+So the shader was right and the clause was refusing a document for being drawn correctly. **Ruled by
+the author on 2026-10-29: accept it, the shader is right.** What the canvas does to that faint edge
+is still unnamed — an eight-bit premultiplied layer somewhere in the filter path, or an alpha term in
+the chain — and it is no longer a reason to turn a document away. The key stays in the strings
+because masters written under the clause carry it.
+
+Three instrument failures were met getting here and are worth more than the result: comparing the
+shader's raw f32 against the painter's eight bits read as "+139.7%" where everything below half a
+level is 0 in one and 0.1–0.4 in the other; sub-sampling a dithered image by 2 and by 3 gave means
+of 18.214 and 16.108 **for the same picture**; and a model labelled "collapse to one matrix" had been
+implemented sequentially, so the collapse the app ships was never in the comparison that cleared it.
 
 ## Reachable from
 

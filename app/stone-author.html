@@ -1853,7 +1853,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.29.233';
+  const BUILD = '2026.10.29.234';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5725,39 +5725,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (!layVis(L.key)) continue;
       if (L.field === 'fog') {
         if ((L.haze || 0) > 0 && adjOf(null, L.key, L.bucket, 'blur', 0) > 0) return 'exp.gpu.stone.blur';
-        // A COLOUR ADJUSTMENT ON A HAZE PLANE. MEASURED WRONG, MECHANISM NOT YET FOUND.
+        // A COLOUR ADJUSTMENT ON A HAZE PLANE USED TO BE REFUSED HERE, AND THE SHADER WAS RIGHT
+        // ALL ALONG. The clause was shipped on a measurement - one adjusted plane read +5.36 where a
+        // plain one read -0.63 - with the mechanism never found, and the leading guess written down
+        // was that the canvas rasterises the gradient to eight bits before the filter. It is not
+        // that, and it is not the collapse either:
         //
-        // Found by rendering his own slab on both painters at 8,192 and 4,096 and reading the
-        // masters' own records: light.mean 39.6 against 49.0, a visibly darker and flatter picture
-        // that nothing about a finished render would have shown. Bisected on one shared input -
-        // L.haze, which paintFogLayer and stoneScene both read, so zeroing it removes a plane from
-        // BOTH renderers at once - over a 512 tile of a 4,096 render, shader minus painter, signed
-        // so the canvas's own gradient dither (zero-mean, about +-20 in bright haze) cannot hide in
-        // it:
-        //     marks, no haze at all        +0.05   and 0.19 absolute over 2x2. Exact.
-        //     one PLAIN plane (fog#5)      -0.63   and 1.11 over 2x2. Exact enough.
-        //     one ADJUSTED plane (fog#2,
-        //       saturate 4, brightness 9)  +5.36   and 5.51 over 2x2, peak 177 of 255.
-        //     the whole document           -8.42, which is the master's gap.
-        // So the ground is right, the marks are right, plain haze is right, and an ADJUSTED plane
-        // is not. fog#6 carries contrast 3 as well and pulls the net negative.
+        //   THE FILTER MATHS IS EXACT. At globalAlpha 1 the collapsed matrix applied once to the
+        //   faded colour matches the canvas across the WHOLE ramp - 243 against 242.9 at g 0.95,
+        //   128 against 128.1 at 0.5, 39 against 38.9 at 0.15. The collapse was also checked value
+        //   by value against applying each primitive in turn: identical, his own 156,65,42 included.
         //
-        // TWO EXPLANATIONS WERE CHECKED AND BOTH ARE INNOCENT, which is why this is a refusal and
-        // not a fix. The collapse arithmetic is exact: run against ctx.filter on an opaque fill,
-        // hue 14 / saturate 2 / brightness 6 / contrast 3 agrees to the digit. And the shader does
-        // NOT apply the matrix before the fade - layerAt filters col*g, the already-faded colour,
-        // which is what the canvas filters too. What is left unexamined is that the canvas
-        // rasterises the gradient to EIGHT BITS before the filter runs, so one last bit becomes six
-        // or nine of them, and each filter primitive clamps to its own surface while the collapse
-        // clamps once at the end. That is a guess until somebody measures it.
+        //   IT IS NOT THE STACK. Blob COUNT varied from 2 to 770 with the radius held constant, the
+        //   shader quantised to eight bits, every pixel compared: the relative gap is FLAT at 15.6,
+        //   15.6, 15.2, 13.8, 12.9 per cent. A stacking defect cannot be flat in the count.
         //
-        // NARROW ON PURPOSE. A plane with no adjustment measured exact, so a slab whose haze is
-        // plain keeps the shader; this turns away only the shape that is known to come out wrong.
-        if ((L.haze || 0) > 0
-            && (adjOf(null, L.key, L.bucket, 'hue', 0) !== 0
-                || adjOf(null, L.key, L.bucket, 'sat', 1) !== 1
-                || adjOf(null, L.key, L.bucket, 'bright', 1) !== 1
-                || adjOf(null, L.key, L.bucket, 'contrast', 1) !== 1)) return 'exp.gpu.stone.fogadj';
+        //   IT IS THE PAINTER ATTENUATING ITS OWN FAINT EDGE. The whole gap lives at g = 0.1 to 0.3,
+        //   the outer third of a blob, and only at low globalAlpha. At g = 0.25 the arithmetic says
+        //   2.5; this shader reads 2.51 and the canvas reads 1.27.
+        //
+        // RULED 2026-10-29 by the author, having looked: accept it, the shader is right. What the
+        // canvas does to that faint edge is still unnamed - an eight-bit premultiplied layer in the
+        // filter path, or an alpha term in the chain - and it is no longer a reason to refuse a
+        // document. exp.gpu.stone.fogadj stays in the strings because masters carry it.
         continue;
       }
       if (L.bucket === 'base') continue;
