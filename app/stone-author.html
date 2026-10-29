@@ -1840,7 +1840,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.28.230';
+  const BUILD = '2026.10.28.232';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5189,6 +5189,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // closes exactly, which made it look like the whole answer, and it was not.
     s += `var UV_GROUND=${JSON.stringify(UV_GROUND)};
 `;
+    // FOG_COL, because paintFogLayer reaches it now. It used to hold the grey as a literal, so the
+    // function closed over nothing and a pooled tile painted fog happily; the moment the colour
+    // became a token with a shared fallback, the same function reached a module const the worker
+    // does not have. A main-thread render and every local gate stayed green - the pool is the only
+    // path that would have thrown, and check-worker-core is the only thing that reads for it.
+    s += `var FOG_COL=${JSON.stringify(FOG_COL)};
+`;
     s += glowPreamble();                                     // BLOOM_DRAW, the glow knobs, UV_LIFT
     s += finishPreamble();                                   // the MARK_ constants markStamp reads
     s += windowPreamble();                                   // BLEED_MARGIN and the glow suppressor
@@ -5483,6 +5490,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // that persisted through a save and was discarded at paint time. Unset planes keep FOG_COL, so
     // nothing that does not ask for a colour moves.
     const col = OVR['lay:' + only] || FOG_COL, a = haze * layOp(only);
+    // AND ITS ADJUSTMENTS, the same call every other painter makes. blur/hue/sat/bright/contrast
+    // resolve through adjOf, which reads lay:<key>:<name> - so they were being offered, stored and
+    // saved exactly as the colour was, and discarded here for exactly as long. The two remaining
+    // tokens the editor puts on a layer are deliberately NOT wired: weight multiplies a line WIDTH
+    // and strain is the emission a warped stretch takes on, and a radial-gradient fill has neither.
+    // ONLY TOUCHED WHEN THERE IS ONE. Assigning ctx.filter at all - even the string 'none' - moves
+    // the canvas onto a different rounding path: measured, 16 pixels of an unadjusted slab shifted
+    // by 1 in a single channel, all of them along the far strike's lit edge. Leaving the context
+    // alone when no fog plane asks for an adjustment keeps every existing picture byte-for-byte, and
+    // skips a per-blob filter the common case never wanted.
+    const fogF = filterOf(null, only, 'fog');
+    if (fogF !== 'none') g2d.filter = fogF;
     for (const p of geo.fog) {
       if ((p.layer || 'fog') !== only) continue;
       const grad = g2d.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
@@ -5491,6 +5510,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       g2d.beginPath(); g2d.arc(p.x, p.y, p.r, 0, 6.2832); g2d.fill();
     }
     g2d.globalAlpha = 1;
+    if (fogF !== 'none') g2d.filter = 'none';
   }
   function paintWebLayer(ident, uv, only) {               // fracture web spreads for one web layer
     if (!geo.web.length || !layVis(only)) return;
