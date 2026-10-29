@@ -1840,7 +1840,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.28.229';
+  const BUILD = '2026.10.28.230';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1931,6 +1931,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let kit = null, ed = null;
   let colourKitMat = null;                 // which material the colour editor's groups were built for
   const COL = {}, OVR = {}, perItem = {};
+  // THE HAZE GREY, in one place because two things have to agree about it: paintFogLayer paints it,
+  // and a fog plane's colour swatch defaults to it. They disagreed before - the swatch resolved
+  // through its bucket, nothing gives the fog bucket a colour, so it read #000000 while the render
+  // was grey. That is the same fault the inheriting ground had, and it gets the same answer: the
+  // control shows what is actually being painted.
+  const FOG_COL = '#c9c9c9';
   // BLACK LIGHT: a parallel override store (the UV palette). uvMode flips the render + editor to it; non-fluorescent
   // stuff falls to UV_DARK (invisible on the black ground), UV-coloured artifacts glow (bloom). The palette saves with the slab.
   // HOISTED, not declared beside the code that uses them. Both are read by listeners registered around
@@ -5471,7 +5477,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     only = only || 'fog';
     if (ident || uv || !layVis(only) || !geo.fog.length) return;
     const L = layAt(only), haze = L ? (L.haze || 0) : 0; if (haze <= 0) return;
-    const col = '#c9c9c9', a = haze * layOp(only);        // flat neutral grayscale — never tinted, no colour token
+    // A FOG PLANE TAKES A COLOUR LIKE ANY OTHER LAYER. The token, the swatch, the OVR entry and the
+    // save/load path all existed already - layToken is derived from the layer and never excluded fog
+    // - and this line was the only thing that did not read it, so setting a fog colour wrote a value
+    // that persisted through a save and was discarded at paint time. Unset planes keep FOG_COL, so
+    // nothing that does not ask for a colour moves.
+    const col = OVR['lay:' + only] || FOG_COL, a = haze * layOp(only);
     for (const p of geo.fog) {
       if ((p.layer || 'fog') !== only) continue;
       const grad = g2d.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
@@ -8515,7 +8526,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // bound to colour, and inherit from WHERE it lives (its bucket). Nothing is hand-authored: adding a layer
   // is authoring its colour token. Only the SELECTED layers are registered for the editor, so the token list
   // stays parseable no matter how many layers exist (values persist in OVR either way and the render reads them).
-  const layToken = L => ({ key: 'lay:' + L.key, label: layName(L), type: 'color', inherit: L.bucket });
+  // Still fully derived: a fog plane takes a DEFAULT of the grey it is painted in, where every other
+  // layer inherits its bucket's colour. Nothing gives the fog bucket one, so inheriting left the
+  // swatch on black - see FOG_COL.
+  const layToken = L => ({ key: 'lay:' + L.key, label: layName(L), type: 'color',
+                           ...(L.field === 'fog' ? { default: FOG_COL } : { inherit: L.bucket }) });
   // The render-time adjustment set applied to ANY target (layer or artifact) by token: colour is the bare
   // key; these six are `<key>:<name>` number tokens. Five are canvas filters, weight is a line-width mult.
   const ADJ = [
