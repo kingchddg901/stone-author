@@ -284,7 +284,14 @@
   </div>
   <p class="hint" id="hint" aria-live="polite"></p>
   <div class="sliders" data-mat-only="stone" id="s-vein">
-    <div class="sl"><label for="gauge"><span data-i18n="sl.gauge">Gauge</span> <output id="gaugeV"></output></label><input id="gauge" type="range" min="0.3" max="3" step="0.05"></div>
+    <!-- GAUGE'S FLOOR IS NOT THE SHARED ONE, and tidying it back to 0.3 would be a regression. blen,
+         density, spread, mheight and moonReach are all min 0.3 / max 3 / step 0.05, and gauge
+         inherited that shape rather than being given it: 0.3 is thicker than a distant thing needs.
+         A drawn mark keeps { ...NEXT } as the settings it was drawn with, so the slider's floor is
+         the floor on what can be drawn AT ALL - a far treeline at 0.14 could be written into a slab
+         and never authored by hand. The step is 0.01 because the readout is two decimals, which a
+         0.05 step can only ever land on half of. #gauge2 carries the same floor for the same reason. -->
+    <div class="sl"><label for="gauge"><span data-i18n="sl.gauge">Gauge</span> <output id="gaugeV"></output></label><input id="gauge" type="range" min="0.05" max="3" step="0.01"></div>
     <div class="sl"><label for="rough"><span data-i18n="sl.rough">Roughness</span> <output id="roughV"></output></label><input id="rough" type="range" min="0" max="2.5" step="0.05"></div>
     <div class="sl"><label for="breaks"><span data-i18n="sl.breaks">Breaks</span> <output id="breaksV"></output></label><input id="breaks" type="range" min="0" max="3" step="0.05"></div>
     <div class="sl"><label for="branches"><span data-i18n="sl.branches">Minor veins</span> <output id="branchesV"></output></label><input id="branches" type="range" min="0" max="2.5" step="0.05"></div>
@@ -301,7 +308,7 @@
   </div>
   <div class="sliders" data-mat-only="stone" id="s-branch" hidden>
     <div class="sl"><label for="blen"><span data-i18n="sl.blen">Minor length</span> <output id="blenV"></output></label><input id="blen" type="range" min="0.3" max="3" step="0.05"></div>
-    <div class="sl"><label for="gauge2"><span data-i18n="sl.gauge2">Gauge</span> <output id="gauge2V"></output></label><input id="gauge2" type="range" min="0.3" max="3" step="0.05"></div>
+    <div class="sl"><label for="gauge2"><span data-i18n="sl.gauge2">Gauge</span> <output id="gauge2V"></output></label><input id="gauge2" type="range" min="0.05" max="3" step="0.01"></div>
   </div>
   <div class="sliders" data-mat-only="stone" id="s-web" hidden>
     <div class="sl"><label for="spread"><span data-i18n="sl.spread">Spread</span> <output id="spreadV"></output></label><input id="spread" type="range" min="0.3" max="3" step="0.05"></div>
@@ -1833,7 +1840,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.26.227';
+  const BUILD = '2026.10.28.228';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
