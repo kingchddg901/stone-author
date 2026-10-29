@@ -53,6 +53,9 @@ node tools/check-bleed.mjs         # every blur has bleed behind it; the bloom i
 node tools/check-meta-window.mjs   # a master's own record is found however far back in the file it sits
 node tools/check-fn-refs.mjs       # every line pin in docs/functions.md lands on its function
 node tools/check-material-fork.mjs # the stone/wood/X branch lives at one seam, nowhere else
+node tools/check-gpu-sync.mjs      # the app's copy of the shader and packer matches tools/lib
+node tools/check-preview-face.mjs  # the studio asks once whether the GPU drew this frame
+node tools/check-plan-memory.mjs   # only a render the planner CHOSE may write the remembered tile
 ```
 
 The browser harness (`harness/*.mjs`) needs Playwright and runs in CI; it cannot spawn locally here, so CI

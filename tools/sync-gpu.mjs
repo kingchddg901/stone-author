@@ -54,6 +54,11 @@ export function generate() {
   // two materials, not one namespace, and nothing of wood's is meant to be visible to glass.
   const woodReal = strip('wood-real.mjs', []);
   const woodGpu = strip('wood-gpu.mjs', [/^const WGSL = \{\};\s*$/m]);
+  // AND STONE'S TWO, in a block of their own for the same reason wood's are: all three materials
+  // call their arena parts PART_NAMES, so at the top level the third is a redeclaration and the app
+  // stops parsing.
+  const stoneReal = strip('stone-real.mjs', []);
+  const stoneGpu = strip('stone-gpu.mjs', [/^const WGSL = \{\};\s*$/m]);
 
   const body = [
     OPEN,
@@ -91,6 +96,33 @@ export function generate() {
     '    WOOD_PACK = packWood;',
     '    WOOD_UNI_OFF = uniOffset;',
     '    WOOD_UNI_BYTES = UNI_BYTES;',
+    '  }',
+    '',
+    '  // ---- AND STONE, the third. Its shader owns what paintStoneContent owns and no more: the',
+    '  // base modulators, then every content layer in authored order. renderOneTile still lays the',
+    '  // ground and still applies the coat, which is the only reason ONE dispatch is enough - the',
+    '  // coat is twelve box-blur passes and a per-pixel shader cannot do those in one.',
+    '  //',
+    '  // IN ITS OWN BLOCK, like wood\'s, because all three name their arena parts PART_NAMES. Four',
+    '  // values come out and the pool uses only those.',
+    '  let STONE_SRC = null, STONE_PACK = null, STONE_UNI_OFF = null, STONE_UNI_BYTES = 0;',
+    '  // AND THE FILTER COLLAPSE, which stoneScene needs on ITS side of the line. The filter on a',
+    '  // stroke acts on a colour that is constant across the whole stroke, so the matrix is applied',
+    '  // once when the chunk is built and the shader never sees it. The source under a fog blob is',
+    '  // col * g and varies with the gradient, so a PLANE carries its matrix into the arena instead.',
+    '  let STONE_COLLAPSE = null;',
+    '  {',
+    indent2(stoneReal),
+    '',
+    indent2(stoneGpu),
+    '',
+    '    // LAZY for the same reason wood\'s is: most loads never export stone on the GPU at all,',
+    '    // and gpuModule memoises the compiled module after the first call.',
+    '    STONE_SRC = () => stoneSource(GLASS_WGSL).code;',
+    '    STONE_PACK = packStone;',
+    '    STONE_UNI_OFF = uniOffset;',
+    '    STONE_UNI_BYTES = UNI_BYTES;',
+    '    STONE_COLLAPSE = collapseFilter;',
     '  }',
     CLOSE,
   ].join(NL);

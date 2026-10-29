@@ -3933,6 +3933,58 @@
     "terms": [],
     "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. Everything was in place and it still failed to set up - the browser console carries the detail"
   },
+  "exp.gpu.stone.empty": {
+    "terms": [],
+    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. This slab has neither a ground nor any haze, so the stone shader would have nothing to draw. Not a fault: an empty document."
+  },
+  "exp.gpu.stone.breccia": {
+    "terms": [],
+    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. Breccia is the angular broken-rock texture that sets the stone's ground; it is drawn on the CPU and is not in the shader yet. Unported work, not a risk."
+  },
+  "exp.gpu.stone.bands": {
+    "terms": [],
+    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. Bands are the directional tonal layering of a banded stone such as onyx or travertine; they are drawn on the CPU and are not in the shader yet. Unported work, not a risk."
+  },
+  "exp.gpu.stone.layer": {
+    "terms": [],
+    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. One of the layer kinds the shader does not draw is switched on: the fracture web, the mineral specks, the drusy crystal crust, or the stylolite seams. Unported work, not a risk."
+  },
+  "exp.gpu.stone.blend": {
+    "terms": [],
+    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts and in the row beside the GPU switch. The person turned the switch ON for this slab, so leaving it unsaid would mean the switch reads on while the processor paints. A layer carries a blend mode other than normal - multiply, screen, overlay and so on - which decides how its paint is combined with what is already under it. The shader combines paint one way only, so taking the document would stack that layer wrongly. \"blend mode\" is the drawing term; use whatever word the layer editor uses for it."
+  },
+  "exp.gpu.stone.glow": {
+    "terms": [],
+    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts and in the row beside the GPU switch. The person turned the switch ON for this slab, so leaving it unsaid would mean the switch reads on while the processor paints. A layer carries a glow, which draws a soft coloured spread around everything on that layer. A glow needs the pixels around a pixel and this shader reads only its own, so taking the document would draw the layer with no glow at all."
+  },
+  "exp.gpu.stone.blur": {
+    "terms": [],
+    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. A layer or a single vein carries a blur adjustment. A blur needs the pixels around a pixel and this shader reads only its own, so taking the document would draw it unblurred."
+  },
+  "exp.gpu.stone.halo": {
+    "terms": [],
+    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. A vein carries a halo, the wide pale bleached edge drawn around it. Not in the shader yet."
+  },
+  "exp.gpu.stone.strain": {
+    "terms": [],
+    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts. The person turned the GPU toggle ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. A vein carries strain colouring, which tints it by how far the warp has pulled it from where it was drawn. Not in the shader yet."
+  },
+  "exp.gpu.stone.fogadj": {
+    "terms": [],
+    "where": "why the GPU path was refused, shown in the export panel BEFORE the render starts and in the row beside the GPU switch. The person turned the switch ON for this slab, so leaving it unsaid would mean the switch reads on while the processor paints. A haze plane carries a colour adjustment - hue, saturation, brightness or contrast. The plane is painted as a circle of colour fading to nothing, and the two renderers apply the adjustment at different moments in that fade, so taking the document would draw a visibly different haze. \"haze plane\" is the soft translucent fog layer; keep whatever word the layer list uses for it."
+  },
+  "exp.gpu.prev.ident": {
+    "terms": [],
+    "where": "why the GPU is not drawing, shown in the row beside the GPU switch. The person turned the switch ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. The studio is showing the identity or the angle view, which draw each mark in a colour standing for its own id rather than drawing the stone. The shader paints stone, so it has nothing to say about either view. Not a fault: a different picture."
+  },
+  "exp.gpu.prev.busy": {
+    "terms": [],
+    "where": "why the GPU is not drawing, shown in the row beside the GPU switch. The person turned the switch ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. An export is running and it is using the graphics card, so the studio view is painted on the processor until the render finishes. Nothing is wrong and nothing needs doing. \"card\" here is the graphics card; use whatever a person would say for the hardware rather than a technical term."
+  },
+  "exp.gpu.prev.failed": {
+    "terms": [],
+    "where": "why the GPU is not drawing, shown in the row beside the GPU switch. The person turned the switch ON for this slab, so leaving it unsaid would mean the switch reads on while the CPU paints. The shader was asked for a frame and the attempt failed - a device that went wrong, or one that refused the work. The preview has gone back to the CPU and will not ask again until the switch is turned off and on. \"frame\" here is one repaint of the studio view, not a film frame."
+  },
   "lbl.gpu": {
     "terms": [],
     "where": "label on the export panel toggle that moves the render from the processor to the graphics card, for this slab on this machine"

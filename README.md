@@ -146,8 +146,14 @@ run. See [`docs/gallery.md`](docs/gallery.md).
   Carries the three defects that generating the uniform struct exposed (all of which compile, run and
   paint wood), the refusal that was aimed at a path the pool does not serve and the rule that came
   out of it, and the one thing anyone chasing "why is it not on the GPU" needs: the path is reachable
-  from a TIFF export and nothing else. It also answers the third material: a stone port buys
-  **1.0x**, ablated rather than argued, because stone's render time is its file going out.
+  from a TIFF export and nothing else. It also answers the third material - a stone port buys
+  **1.0x**, ablated rather than argued, because that slab's render time is its file going out -
+  which `stone-gpu.md` then retires on a slab where the file costs nothing at all.
+- **`stone-gpu.md`** - the third material, and the first whose shader the studio PREVIEW runs.
+  47.9x on an export tile and **7.6x on a preview frame** (384 ms becomes 51), the window treated as
+  one tile of a k-wide render, and the grid bug that drew bare ground in 0.38 ms because its inner
+  loops never ran. Also what separates the two pictures: 4.84 after a 2x2 average, against the
+  export's 4.91 - and the canvas's own gradient dither, which is the rest of it.
 - **`master-size.md`** — what a master costs at each resolution, and why that is a property of the
   MATERIAL. Glass is a power law (0.791 per doubling, 0.4% spread, predicted a rung before it was
   rendered); stone is not (30% spread on matched footing) and its mechanism is inverted. Also: tile

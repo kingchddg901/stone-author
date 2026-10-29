@@ -16,7 +16,7 @@ now measured, on the same slab at the same 65,535 and the same 2048 tile:
 
 | material | path | wall | Mpx/s | against its own CPU |
 | --- | --- | --- | --- | --- |
-| stone | CPU, 12 workers | 26.0 s | 103.0 | — no port, and none wanted |
+| stone | CPU, 12 workers | 26.0 s | 103.0 | — none wanted *on this slab*; see `stone-gpu.md` |
 | wood | CPU, 12 workers | 105.8 s | 25.4 | — |
 | wood | **GPU, 8 finishers** | **12.5 s** | **214.7** | **8.5×** |
 | glass | CPU, 12 workers | 222.5 s | 12.1 | — |
@@ -293,7 +293,12 @@ Assembling the module measures 1.24 ms, so it is lazy — most loads never expor
 
 ## Where this leaves the three materials
 
-### What a port would buy stone: measured at 1.0×
+### What a port would buy stone: measured at 1.0× — on this slab
+
+> **Retired as a general answer, 2026-10-29.** Everything in this section is correct for the slab it
+> was measured on and the method is the one that made the correction possible. It does not hold for a
+> slab whose file costs nothing: see [`stone-gpu.md`](stone-gpu.md), where the sink reads 0.0 s at
+> every size, an export tile measures 47.9× and a preview frame 7.6×.
 
 **Stone has nothing to gain, and this is the measurement rather than the argument.** The argument was
 available from worker scaling and was not trusted, because reasoning from the current bottleneck has

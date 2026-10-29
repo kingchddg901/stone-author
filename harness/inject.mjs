@@ -36,6 +36,27 @@ const hook = `
     // composites reality windows. Those three are exactly where a port goes wrong quietly, and
     // without these there is no way to ask.
     gpuPool, gpuWhyNot, gpuCapability, gpuPrefGet, gpuPrefSet, glassScene, packReal, tiffPlan,
+    // AND STONE'S SIDE OF THE SAME QUESTION. stoneScene is the only thing that can read the layer
+    // list, the geometry and the override map, and the shader is useless to a gate without the scene
+    // it was packed from. The differential that matters is renderOneTile against ITSELF - once
+    // painting on the CPU and once handed the shader's face through its own paint callback - because
+    // that way both tiles get the same ground and the same coat, and only the content can differ.
+    stoneScene, stoneWhyNot, stoneChunks,
+    // THE PREVIEW'S OWN PIECES. The export path is reachable through gpuPool and the tiled render;
+    // draw() is not reachable from anywhere, and it is a DIFFERENT renderer - it paints one view of
+    // the slab at the view transform rather than a grid of tiles at a fixed scale. Without these a
+    // claim about what the preview costs, or about whether the shader draws the same view the
+    // painter does, is an inference from the export path's numbers.
+    draw, paintContent, applyCoat, size, redraw,
+    // AND THE PREVIEW'S GPU PATH, which is a DIFFERENT renderer from the export's pool: one rect at
+    // the view transform, on the main thread, rather than a grid of tiles at a fixed scale through a
+    // pipelined pool. prevFill is the one await in the frame - without it a gate can only drive the
+    // path by racing a rAF, and cannot tell a face that is not ready from a face that is wrong.
+    prevFill, prevWhyNot, prevView, prevFace, gpuPrefSet, gpuSyncRow,
+    get cv() { return cv; }, get ctx() { return ctx; }, get V() { return V; },
+    get viewPx() { return { Wc, Hc, dpr, w: cv.width, h: cv.height }; },
+    get STONE_PACK() { return STONE_PACK; }, get STONE_SRC() { return STONE_SRC; },
+    get STONE_UNI_BYTES() { return STONE_UNI_BYTES; }, get STONE_UNI_OFF() { return STONE_UNI_OFF; },
     // drewOnGpu is what renderSig reads to decide whether the renderer belongs in the hash, and
     // exportTiff is the only thing that sets it. A gate has to be able to take BOTH signatures
     // without running a six-minute export, or the claim that an existing master keeps its hash is
@@ -66,7 +87,12 @@ const hook = `
     // came back, that the busy counts move, and that each worker is identified.
     tilePool, corePaintsThis, poolWidthFor,
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
-    render: () => { size(); build(); stoneReady = false; draw(); },
+    // prevGen++ IS THE DOCUMENT CHANGING. In the app every mutation reaches the GPU face
+    // through redraw, which counts a generation; this entry does not go through redraw, so
+    // without the count a gate that mutates and re-renders is handed the face of the document
+    // as it WAS - measured: a haze-removal ablation read mean 54.8 against a face that still
+    // had the haze in it, and the number looked like a finding.
+    render: () => { size(); build(); stoneReady = false; prevGen++; draw(); },
     get G() { return G; }, get OVR_uv() { return OVR_uv; },
     get marks() { return marks; }, set marks(v) { marks = v; },
     get layers() { return layers; },

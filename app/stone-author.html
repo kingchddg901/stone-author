@@ -945,6 +945,19 @@ window.SA_I18N = (() => {
   "exp.gpu.nodevice": "the GPU would not open",
   "exp.gpu.noshader": "the shader would not build here",
   "exp.gpu.notglass": "not a glass slab",
+  "exp.gpu.stone.empty": "nothing to draw",
+  "exp.gpu.stone.breccia": "breccia is not on the shader",
+  "exp.gpu.stone.bands": "tonal bands are not on the shader",
+  "exp.gpu.stone.layer": "a web, speck, drusy or stylolite layer",
+  "exp.gpu.stone.blend": "a layer blend mode is not on the shader",
+  "exp.gpu.stone.glow": "a layer glow — the shader reads one pixel",
+  "exp.gpu.stone.blur": "a blur — the shader reads one pixel",
+  "exp.gpu.stone.halo": "a vein halo is not on the shader",
+  "exp.gpu.stone.strain": "strain colouring is not on the shader",
+  "exp.gpu.stone.fogadj": "a haze plane is colour-adjusted",
+  "exp.gpu.prev.ident": "the identity and angle views",
+  "exp.gpu.prev.busy": "a render has the card",
+  "exp.gpu.prev.failed": "the shader would not draw a frame",
   "exp.gpu.nomaterial": "this material has no shader",
   "exp.gpu.logview": "the log view is not on the shader",
   "exp.gpu.floor": "a tiled floor",
@@ -1840,7 +1853,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.28.232';
+  const BUILD = '2026.10.29.233';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5405,8 +5418,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // and the log view is a view of the material rather than a readout of its ids.
     const F = FAM[fam], ident = view === 'identity' || view === 'angle', angleView = view === 'angle';
     const backlit = !ident && !layTiles && G.backlight > 0;   // back light replaces the daylight body + its front-lit coat passes; it takes precedence over uv so emitters can compose at the current spectrum
+    // THE SHADER'S FACE FOR THIS FRAME, OR NULL. It replaces the backdrop AND the content, not
+    // just the content: the mottle composites with soft-light, and soft-light needs its real
+    // backdrop underneath rather than a ground laid afterwards - which is also why the export's
+    // callback replaces paintContent instead of painting over a ground the CPU laid. So the two
+    // sites below are one question asked twice, and both read this one answer: asked twice they
+    // could disagree inside a single frame, and a face over a CPU backdrop is not either picture.
+    const face = prevFace();
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
-    if (ident) { ctx.fillStyle = '#0c0d11'; ctx.fillRect(0, 0, cv.width, cv.height); }
+    if (face) ctx.putImageData(face, 0, 0);
+    else if (ident) { ctx.fillStyle = '#0c0d11'; ctx.fillRect(0, 0, cv.width, cv.height); }
     else if (backlit) { ctx.fillStyle = '#0b0b0e'; ctx.fillRect(0, 0, cv.width, cv.height); }   // dark surround behind the transilluminated slab
     else if (uvMode) { ctx.fillStyle = UV_GROUND; ctx.fillRect(0, 0, cv.width, cv.height); }   // BLACK LIGHT: the stone body goes dark, only fluorescence glows
     else {                                               // base layer is the ground: neutral behind it, ground on top at its opacity
@@ -5423,7 +5444,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // export's 524, and the drawn glow's deficit is sigma-dependent - so the preview never showed the look
     // a render would produce. It keeps the image-space bloom, which is what it has always shown.
     glowPx = 0;
-    if (backlit) paintBacklit(); else paintContent(ident, angleView);
+    if (!face) { if (backlit) paintBacklit(); else paintContent(ident, angleView); }
     applyCoat(cv, ctx, cv.width / COAT_REF, { ident, uvMode, backlit });   // coat tier: emission bloom · subsurface · specular · lens (shared with renderFull); same reference as the export, so the preview matches
     if (!ident && !layTiles) applyWindowsScreen();                      // reality windows: daylight (or another light) through the islands
     ctx.setTransform(k, 0, 0, k, (Wc / 2 - V.cx * Wc * V.z) * dpr, (Hc / 2 - V.cy * Wc * V.z) * dpr);   // restore the view for guides/live
@@ -5618,6 +5639,367 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!ident && !uv) for (const L of mine) { const bk = L.major ? 'major' : 'minor'; g2d.filter = filterOf(L.id, L.layer, bk); runs(L, () => vcol(L), L.gauge * 2.4 * F.soft, 0.08 * layOp(only), true, weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; }   // shoulder
     for (const L of mine) { const bk = L.major ? 'major' : 'minor'; const _fx = (uv && !BLOOM_DRAW) ? null : fxOn(only, vcol(L), ident); if (!ident && !uv) g2d.filter = filterOf(L.id, L.layer, bk); runs(L, t => (ident ? idColour(L.id, t) : strainColour(L, vcol(L), only, bk, t)), null, (ident ? 1 : (uv ? 0.95 : 0.94 * layOp(only))), false, (ident || uv) ? 1 : weightOf(L.id, L.layer, bk)); g2d.filter = 'none'; if (_fx) fxOff(_fx); }   // main (per-item adjustments)
   }
+
+  // ---- THE STONE SCENE, FOR THE SHADER ---------------------------------------------------------
+  // The twin of glassScene: the one thing that can read this app's closure and hand the packer a
+  // plain description. It lives out here rather than in the generated block for exactly that reason -
+  // tools/lib knows the arena, it does not know `layers`, `geo` or `OVR`.
+  //
+  // IT DESCRIBES WHAT paintStoneContent WOULD HAVE PAINTED, because renderOneTile's `paint` callback
+  // REPLACES paintContent: the base modulators, then every content layer in authored order. The
+  // ground and the coat stay where they are.
+
+  // runs(), transcribed, and it is the whole reason the vein port is small. A chunk is six segments
+  // (24 for halo and shoulder) stroked as ONE path with ONE width, ONE colour and ONE alpha, so width
+  // and colour are STEP functions rather than the per-vertex varying stroke a general polyline
+  // renderer has to solve. The segments are a SET, not a path: lineCap and lineJoin are 'round' on
+  // every vein context, so the union of capsules is indifferent to whether they connect and a
+  // keep=false gap needs no representation at all.
+  function stoneChunks(L, CH, fixedWidth, alpha, shoulder, wmul, colourAt) {
+    const n = L.w.length, out = [];
+    for (let i = 0; i < n; i += CH) {
+      const j = Math.min(n, i + CH);
+      const segs = [];
+      let wsum = 0, c = 0, prev = null;
+      for (let q = i; q < j; q++) {
+        if (!L.keep[q]) { prev = null; continue; }
+        const a = prev || L.pts[q], b = L.pts[q + 1];
+        segs.push([a[0], a[1], b[0], b[1]]);
+        prev = b; wsum += L.w[q]; c++;
+      }
+      if (!c) continue;
+      let lv = 0;
+      if (L.lean) { for (let q = i; q < j; q++) lv += L.lean[q]; lv /= (j - i); }
+      const width = (fixedWidth != null ? fixedWidth * (1 + 2.5 * lv) : (wsum / c) * (1 - 0.35 * lv)) * (wmul || 1);
+      const a = Math.min(1, alpha * (shoulder ? 1 + 1.4 * lv : 1 - 0.3 * lv));
+      if (!(width > 0) || !(a > 0)) continue;
+      out.push({ segs, width, col: colourAt((L.cum[i] + L.cum[j]) / 2 / L.total), alpha: a });
+    }
+    return out;
+  }
+
+  // A STROKE'S FILTER COLLAPSES ON THIS SIDE, and a fog plane's does not. A CSS colour-matrix filter
+  // acts on the UNPREMULTIPLIED source colour; a stroke's is constant across the whole stroke, so the
+  // matrix can be applied once here and the shader never sees it. A fog blob's is col * g and varies
+  // with the gradient, which is why the plane carries its matrix into the arena instead.
+  function stoneFiltered(hex, id, layer, bucket) {
+    const adj = { blur: adjOf(id, layer, bucket, 'blur', 0), hue: adjOf(id, layer, bucket, 'hue', 0),
+                  sat: adjOf(id, layer, bucket, 'sat', 1), bright: adjOf(id, layer, bucket, 'bright', 1),
+                  contrast: adjOf(id, layer, bucket, 'contrast', 1) };
+    const { M, off } = STONE_COLLAPSE(adj);
+    const v = hexRGB(hex);
+    const o = [0, 1, 2].map(r => Math.max(0, Math.min(255,
+      M[r * 3] * v[0] + M[r * 3 + 1] * v[1] + M[r * 3 + 2] * v[2] + off[r])));
+    return rgbHex(Math.round(o[0]), Math.round(o[1]), Math.round(o[2]));
+  }
+
+  // WHICH EFFECTS SLOT A LAYER READS. fxOn is called with a DIFFERENT key per kind - the four field
+  // layers pass a fixed one, a vein pass passes its own layer key - and both the refusal and the
+  // scene have to ask the same question or one of them guards a slot the other never reads.
+  // Returns null for a layer whose painter calls no fxOn at all.
+  function fxKeyOf(L) {
+    if (L.field === 'fog') return null;
+    if (L.key === 'drusy' || L.key === 'styl') return L.key;
+    if (L.bucket === 'web') return 'web';
+    if (L.bucket === 'micro') return 'micro';
+    if (L.bucket === 'minor' || L.bucket === 'major') return L.key;
+    return null;
+  }
+
+  // THE BLUR CLAUSE IS NOW NARROW, and what is left of it is the shapes the closed form does not
+  // cover. A stroke is a union of capsules and the convolution of a half-plane with a Gaussian is
+  // the normal CDF, so a blurred stroke is two CDFs at its two edges and needs no neighbour. A FOG
+  // BLOB is a radial gradient whose colour fades as it thins, a DRUSY crystal is a disc at the
+  // scale of the blur itself, and a SPECK is a star-shaped polygon - none of the three is a slab,
+  // and none has a closed form anybody here has written. They still refuse.
+  //
+  // WHAT THE SHADER CANNOT FOLLOW, named one clause at a time and in the order the scene is walked.
+  // Every one of these is UNPORTED WORK rather than caution, which is the distinction the other two
+  // materials' refusals already draw: a clause here means the CPU painter draws a DIFFERENT picture,
+  // so taking the document would be a wrong render with no throw - the worst shape a defect has here.
+  function stoneWhyNot() {
+    if (!layVis('base') && !layers.some(L => L.field === 'fog' && (L.haze || 0) > 0)) return 'exp.gpu.stone.empty';
+    if (layVis('breccia') && G.brecStrength > 0) return 'exp.gpu.stone.breccia';
+    if (layVis('bands') && G.bandStrength > 0) return 'exp.gpu.stone.bands';
+    for (const L of layers) {
+      if (!layVis(L.key)) continue;
+      if (L.field === 'fog') {
+        if ((L.haze || 0) > 0 && adjOf(null, L.key, L.bucket, 'blur', 0) > 0) return 'exp.gpu.stone.blur';
+        // A COLOUR ADJUSTMENT ON A HAZE PLANE. MEASURED WRONG, MECHANISM NOT YET FOUND.
+        //
+        // Found by rendering his own slab on both painters at 8,192 and 4,096 and reading the
+        // masters' own records: light.mean 39.6 against 49.0, a visibly darker and flatter picture
+        // that nothing about a finished render would have shown. Bisected on one shared input -
+        // L.haze, which paintFogLayer and stoneScene both read, so zeroing it removes a plane from
+        // BOTH renderers at once - over a 512 tile of a 4,096 render, shader minus painter, signed
+        // so the canvas's own gradient dither (zero-mean, about +-20 in bright haze) cannot hide in
+        // it:
+        //     marks, no haze at all        +0.05   and 0.19 absolute over 2x2. Exact.
+        //     one PLAIN plane (fog#5)      -0.63   and 1.11 over 2x2. Exact enough.
+        //     one ADJUSTED plane (fog#2,
+        //       saturate 4, brightness 9)  +5.36   and 5.51 over 2x2, peak 177 of 255.
+        //     the whole document           -8.42, which is the master's gap.
+        // So the ground is right, the marks are right, plain haze is right, and an ADJUSTED plane
+        // is not. fog#6 carries contrast 3 as well and pulls the net negative.
+        //
+        // TWO EXPLANATIONS WERE CHECKED AND BOTH ARE INNOCENT, which is why this is a refusal and
+        // not a fix. The collapse arithmetic is exact: run against ctx.filter on an opaque fill,
+        // hue 14 / saturate 2 / brightness 6 / contrast 3 agrees to the digit. And the shader does
+        // NOT apply the matrix before the fade - layerAt filters col*g, the already-faded colour,
+        // which is what the canvas filters too. What is left unexamined is that the canvas
+        // rasterises the gradient to EIGHT BITS before the filter runs, so one last bit becomes six
+        // or nine of them, and each filter primitive clamps to its own surface while the collapse
+        // clamps once at the end. That is a guess until somebody measures it.
+        //
+        // NARROW ON PURPOSE. A plane with no adjustment measured exact, so a slab whose haze is
+        // plain keeps the shader; this turns away only the shape that is known to come out wrong.
+        if ((L.haze || 0) > 0
+            && (adjOf(null, L.key, L.bucket, 'hue', 0) !== 0
+                || adjOf(null, L.key, L.bucket, 'sat', 1) !== 1
+                || adjOf(null, L.key, L.bucket, 'bright', 1) !== 1
+                || adjOf(null, L.key, L.bucket, 'contrast', 1) !== 1)) return 'exp.gpu.stone.fogadj';
+        continue;
+      }
+      if (L.bucket === 'base') continue;
+      // A PER-LAYER BLEND OR GLOW, AND IT COVERS VEINS TOO. fxOn sets globalCompositeOperation for
+      // the whole pass and wraps it in a canvas shadow; the shader composites source-over and draws
+      // no shadow, so either one is a different picture with no throw. The editor offers both on all
+      // six FX layers, so this was reachable from the day stone landed and nothing named it - the
+      // clause arrived with the four kinds below, which is the shoulder just after the old guard's
+      // window closed.
+      const fxk = fxKeyOf(L);
+      if (fxk) {
+        const bl = COL[fxk + 'Blend'];
+        if (bl && bl !== 'normal') return 'exp.gpu.stone.blend';
+        if ((COL[fxk + 'Glow'] || 0) > 0) return 'exp.gpu.stone.glow';
+      }
+      // DRUSY. A filled disc has no joint, no cap and no per-item adjustment, so its layer filter is
+      // the only thing left that the collapse cannot take.
+      if (L.key === 'drusy') {
+        if (!geo.drusy.length) continue;
+        if (adjOf(null, 'drusy', 'drusy', 'blur', 0) > 0) return 'exp.gpu.stone.blur';
+        continue;
+      }
+      // STYLOLITES.
+      //
+      // THE JOINT IS NOT THE SAME AND IT IS DELIBERATE. paintStylLayer strokes with lineJoin miter
+      // and lineCap butt where every other stroke here is round, and the shader draws a union of
+      // round capsules. A miter reaches width/2 / sin(theta/2) past the corner and a butt cap stops
+      // square at the ends, so a seam disagrees AT ITS TEETH and nowhere else. Taken rather than
+      // refused because the bar for this renderer against the painter is the eye; a seam fat enough
+      // to show its own corners is the thing to go and look at, not a reason to turn the whole
+      // document away.
+      if (L.key === 'styl') continue;
+      if (L.bucket === 'web') continue;
+      if (L.bucket === 'micro') {
+        if (adjOf(null, L.key, 'micro', 'blur', 0) > 0) return 'exp.gpu.stone.blur';
+        continue;
+      }
+      // THE HALO AND THE STRAIN CLAUSES USED TO BE HERE AND THEY WERE REFUSING WORK THE SCENE
+      // ALREADY DID. stoneScene builds the halo pass - the same 24-segment chunks at 0.12 alpha and
+      // gauge * 6 * soft that runs() strokes - and it calls strainColour itself, the painter's own
+      // function, so neither has a second implementation that could drift. Measured on two probes
+      // authored to carry them, 4,096, matched pairs:
+      //     halo, 8 veins on the halo variant   delivered mean 49.19 against 49.26, mean |d| 1.848
+      //     strain 0.8 over warp 0.5            delivered mean 49.22 against 49.29, mean |d| 1.873
+      // which is the same dither-level agreement every other pair of this document shows. Both
+      // probes were checked to bite before the agreement was believed: the halo slab packs a layer
+      // the plain one does not - 184 chunks at alpha 0.12 in COL.halo - and the strained vein layer
+      // carries 246 distinct chunk colours where the plain one carries 1.
+      //
+      // THEY WERE WRITTEN AS CAUTION AND NEVER TESTED AGAINST A DOCUMENT THAT HAD THEM, which is
+      // the shape this file's own header warns about from the other side: a clause here is supposed
+      // to mean the painter draws a DIFFERENT picture. One that cannot name an input where it does
+      // is not a guard, it is a capability quietly withheld.
+      // AND NOTHING ABOUT A VEIN REFUSES ANY MORE. This branch walked geo.lines for three things:
+      // the halo and the strain, which the scene was already building and the clauses were stale
+      // for, and the blur, which is now computed in closed form. Every other property of a line -
+      // its gauge, its lean, its keep gaps, its weight, its per-item colour and the rest of its
+      // filter chain - goes through stoneChunks and the collapsed matrix exactly as it always did.
+      // Left as a named absence rather than deleted: the next person to add a per-vein control
+      // needs to know this walk existed and came back empty, not that nobody looked.
+    }
+    return null;
+  }
+
+  function stoneScene() {
+    const F = FAM[fam];
+    // UNDER A SPECTRUM THE STONE BODY IS NOT PAINTED AT ALL. baseFill lays UV_GROUND instead of the
+    // backdrop and the lit ground, paintStoneContent gates breccia, clouds and bands on !uv, and
+    // paintFogLayer returns on its first line - so the ground, the three modulators and every haze
+    // plane are simply absent and what is left is the artifacts, each in the colour its own stop
+    // list gives at this light. Resolved here, where emit() lives; the shader sees colours.
+    const uv = uvMode;
+    const out = { bg: uv ? UV_GROUND : STONE_BG, ground: groundCol(), groundOp: layOp('base'),
+                  hasGround: !uv && !!layVis('base'), cloud: null, layers: [] };
+
+    // THE MOTTLE'S OWN PIXELS, one float a texel. 200 x 125 is 25,000 floats, so it goes in the arena
+    // and stone needs no texture binding at all - which is what lets it share the pool unchanged.
+    if (!uv && layVis('clouds') && G.cloudStrength > 0) {
+      const cc = ensureClouds(), cw = cc.width, chh = cc.height;
+      const cx2 = cc.getContext('2d', { willReadFrequently: true });
+      const d = cx2.getImageData(0, 0, cw, chh).data;
+      const data = new Float32Array(cw * chh);
+      for (let i = 0; i < cw * chh; i++) data[i] = d[i * 4];   // the map is grey; one channel is all of it
+      out.cloud = { w: cw, h: chh, data, op: layOp('clouds') };
+    }
+
+    const lkOf = ln => ln.layer || (ln.major ? 'major' : 'minor');
+    // A POLYLINE AS ONE CHUNK, WHICH IS THE WHOLE POINT. A web spread and a stylolite are each
+    // stroked by ONE stroke() call over the whole path, where a vein is stroked six segments at a
+    // time - and a chunk is exactly one composite. Splitting these into runs would composite the
+    // overlaps twice, which runs() measured at max 73, mean 9.82 against one composite of the same
+    // path. So the segments of one polyline go into ONE record and the shader takes a single
+    // min-distance over all of them.
+    const segsOf = pts => {
+      const o = [];
+      for (let i = 1; i < pts.length; i++) o.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]]);
+      return o;
+    };
+    for (const L of layers) {
+      if (L.bucket === 'base' && L.field !== 'fog') continue;
+      if (!layVis(L.key)) continue;
+
+      if (L.field === 'fog') {
+        if (uv) continue;                                  // paintFogLayer returns on its first line
+        const haze = L.haze || 0;
+        if (haze <= 0) continue;
+        const blobs = [];
+        for (const q of geo.fog) if ((q.layer || 'fog') === L.key) blobs.push([q.x, q.y, q.r]);
+        if (!blobs.length) continue;
+        out.layers.push({ kind: 'fog', col: OVR['lay:' + L.key] || FOG_COL,
+          alpha: haze * layOp(L.key), blobs,
+          adj: { blur: 0, hue: adjOf(null, L.key, L.bucket, 'hue', 0),
+                 sat: adjOf(null, L.key, L.bucket, 'sat', 1),
+                 bright: adjOf(null, L.key, L.bucket, 'bright', 1),
+                 contrast: adjOf(null, L.key, L.bucket, 'contrast', 1) } });
+        continue;
+      }
+
+      // DRUSY, STYLOLITES AND WEB ARE ALL CHUNK PASSES, and three of the four kinds below needed no
+      // shader at all. A drusy crystal is an arc().fill(), which is a round cap with nothing between
+      // its ends - a capsule of zero length and width 2r - so it goes through the record a vein
+      // stroke already uses. The two stroke kinds are polylines of constant width, which is the
+      // degenerate case of the step-function width runs() produces.
+      if (L.key === 'drusy') {
+        const br = G.drusyBright;
+        const dng = Math.max(1, Math.min(5, Math.round(G.drusyGroups)));
+        const dnv = Math.max(1, Math.min(4, Math.round(G.drusySubs)));
+        const chunks = [];
+        for (const s of geo.drusy) {
+          const a = uv ? Math.min(1, 0.6 + 0.4 * s.lum) : Math.min(1, s.lum * br);
+          if (!(a > 0) || !(s.r > 0)) continue;
+          const dg = Math.floor((s.dgu || 0) * dng), dv = Math.floor((s.dvu || 0) * dnv);
+          const dk = dnv > 1 ? 'drusy:' + dg + '.' + dv : (dng > 1 ? 'drusy:' + dg : null);
+          const dc = uv ? (emit(null, s.layer || 'drusy', s.x, s.y) || UV_DARK)
+                        : (OVR['lay:' + (s.layer || 'drusy')] || (dk && COL[dk] !== undefined ? COL[dk] : COL.drusy));
+          chunks.push({ segs: [[s.x, s.y, s.x, s.y]], width: 2 * s.r,
+                        col: uv ? dc : stoneFiltered(dc, null, 'drusy', 'drusy'), alpha: a });
+        }
+        if (chunks.length) out.layers.push({ kind: 'mark', chunks });
+        continue;
+      }
+      if (L.key === 'styl') {
+        const op = layOp('styl'), chunks = [];
+        for (const s of geo.styl) {
+          if (hidden.has(s.mark) || !s.pts || s.pts.length < 2) continue;
+          const w = s.width * (uv ? 1 : weightOf(s.id, 'styl', 'styl')), a = uv ? 0.9 : 0.85 * op;
+          if (!(w > 0) || !(a > 0)) continue;
+          const sc = uv ? ((beamPts(s.pts) && emit(s.id, 'styl')) || UV_DARK)
+                        : (OVR['id:' + s.id] || OVR['lay:styl'] || COL.styl);
+          chunks.push({ segs: segsOf(s.pts), width: w, blurPx: uv ? 0 : adjOf(s.id, 'styl', 'styl', 'blur', 0),
+                        col: uv ? sc : stoneFiltered(sc, s.id, 'styl', 'styl'), alpha: Math.min(1, a) });
+        }
+        if (chunks.length) out.layers.push({ kind: 'mark', chunks });
+        continue;
+      }
+      if (L.bucket === 'web') {
+        const op = layOp(L.key), chunks = [];
+        for (const e of geo.web) {
+          if ((e.layer || 'web') !== L.key || hidden.has(e.mark)) continue;
+          if (!e.pts || e.pts.length < 2) continue;
+          const wid = 'W' + e.mark;
+          const w = e.width * (uv ? 1 : weightOf(wid, L.key, 'web')), a = uv ? 0.9 : 0.8 * op;
+          if (!(w > 0) || !(a > 0)) continue;
+          const wc = uv ? ((beamPts(e.pts) && emit(wid, L.key)) || UV_DARK)
+                        : (OVR['id:' + wid] || OVR['lay:' + L.key] || COL.web);
+          chunks.push({ segs: segsOf(e.pts), width: w, blurPx: uv ? 0 : adjOf(wid, L.key, 'web', 'blur', 0),
+                        col: uv ? wc : stoneFiltered(wc, wid, L.key, 'web'), alpha: Math.min(1, a) });
+        }
+        if (chunks.length) out.layers.push({ kind: 'mark', chunks });
+        continue;
+      }
+      // SPECKS ARE THE ONE KIND THAT NEEDED A NEW PRIMITIVE. Each is a closed path of s.n vertices at
+      // equally spaced angles, each at its own jittered radius, scaled across by s.el and turned by
+      // s.ang - star-shaped about its centre rather than convex, so a max-of-halfplanes distance is
+      // wrong for it. The vertices are built HERE, in draw space, because every one of those terms is
+      // resolution-independent and the shader would otherwise carry six fields and four trig calls a
+      // speck to arrive at the same eight numbers.
+      if (L.bucket === 'micro') {
+        const ng = Math.max(1, Math.min(5, Math.round(G.speckGroups)));
+        const nv = Math.max(1, Math.min(4, Math.round(G.speckSubs)));
+        const op = layOp(L.key), polys = [];
+        for (const s of geo.specks) {
+          if ((s.layer || 'micro') !== L.key) continue;
+          const a = uv ? Math.min(1, 0.55 + 0.45 * s.lum) : Math.min(1, s.lum * op);
+          if (!(a > 0) || !(s.n > 2) || !(s.rad > 0)) continue;
+          const ca = Math.cos(s.ang), sa = Math.sin(s.ang), verts = [];
+          for (let q = 0; q < s.n; q++) {
+            const ang = s.spin + q * 2 * Math.PI / s.n, rr = s.rad * s.jit[q];
+            const lx = Math.cos(ang) * rr * s.el, ly = Math.sin(ang) * rr;
+            verts.push([s.x + lx * ca - ly * sa, s.y + lx * sa + ly * ca]);
+          }
+          const g_ = Math.floor((s.u || 0) * ng), v_ = Math.floor((s.u2 || 0) * nv);
+          const mkey = nv > 1 ? 'micro:' + g_ + '.' + v_ : (ng > 1 ? 'micro:' + g_ : null);
+          const mc = uv ? (emit(null, L.key, s.x, s.y) || UV_DARK)
+                        : (OVR['lay:' + L.key] || (mkey && COL[mkey] !== undefined ? COL[mkey] : COL.micro));
+          polys.push({ verts, col: uv ? mc : stoneFiltered(mc, null, L.key, 'micro'), alpha: a });
+        }
+        if (polys.length) out.layers.push({ kind: 'poly', polys });
+        continue;
+      }
+      if (L.bucket !== 'minor' && L.bucket !== 'major') continue;
+      const mine = geo.lines.filter(ln => lkOf(ln) === L.key && !hidden.has(ln.mark));
+      if (!mine.length) continue;
+      const bk = L.bucket, op = layOp(L.key);
+      const vcol = ln => uv ? ((beamPts(ln.pts) && emit(ln.id, ln.layer)) || UV_DARK)
+                            : (OVR['id:' + ln.id] || OVR['lay:' + ln.layer] || (ln.major ? COL.major : COL.minor));
+
+      // THREE PASSES, IN paintVeinLayer'S ORDER: halo, then shoulder, then main. Each is its own
+      // layer record, because each is a separate composite at its own width and alpha - and the
+      // order between them is as load-bearing as the order between layers.
+      // THE HALO PASS TAKES NO BLUR, and that is the painter's own shape rather than a shortcut:
+      // paintVeinLayer strokes the halo with no filter set at all, and only the shoulder and the
+      // main pass carry filterOf. A blur stamped here would soften an edge the canvas leaves hard.
+      const blurOf = ln => uv ? 0 : adjOf(ln.id, ln.layer, bk, 'blur', 0);
+      const halo = [];
+      if (!uv) for (const ln of mine) if (ln.halo) {
+        for (const c of stoneChunks(ln, 24, ln.gauge * 6 * F.soft, 0.12 * op, true, 1, () => COL.halo)) halo.push(c);
+      }
+      if (halo.length) out.layers.push({ kind: 'mark', chunks: halo });
+
+      const shoulder = [];
+      if (!uv) for (const ln of mine) {
+        const col = stoneFiltered(vcol(ln), ln.id, ln.layer, bk);
+        const bl = blurOf(ln);
+        for (const c of stoneChunks(ln, 24, ln.gauge * 2.4 * F.soft, 0.08 * op, true,
+                                    weightOf(ln.id, ln.layer, bk), () => col)) { c.blurPx = bl; shoulder.push(c); }
+      }
+      if (shoulder.length) out.layers.push({ kind: 'mark', chunks: shoulder });
+
+      const main = [];
+      for (const ln of mine) {
+        const bl = blurOf(ln);
+        for (const c of stoneChunks(ln, 6, null, uv ? 0.95 : 0.94 * op, false,
+          uv ? 1 : weightOf(ln.id, ln.layer, bk),
+          uv ? (t => strainColour(ln, vcol(ln), L.key, bk, t))
+             : (t => stoneFiltered(strainColour(ln, vcol(ln), L.key, bk, t), ln.id, ln.layer, bk)))) { c.blurPx = bl; main.push(c); }
+      }
+      if (main.length) out.layers.push({ kind: 'mark', chunks: main });
+    }
+    return out;
+  }
+
   // ---- MATERIAL FORK BEGIN ----------------------------------------------------------------------
   // The ONE place that knows which material is being rendered, discriminator included. A material
   // supplies a field and a way to query a 2D face out of it: stone's query is the identity, because the
@@ -8181,14 +8563,47 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   let queued = false;
   function redraw(rebuild) {
     if (rebuild) needBuild = true;
+    // A NEW GENERATION OF THE DOCUMENT, counted BEFORE the early return. Every control in the app
+    // comes through here, so this is the one place that can say "what is on screen is no longer
+    // what this is a picture of" - and a change arriving while a frame is already queued has to
+    // move it too, or that frame would be served a face of the document as it was.
+    prevGen++;
     if (queued) return;
     queued = true;
-    requestAnimationFrame(() => { queued = false; if (needBuild) { build(); stoneReady = false; needBuild = false; } draw(); saveLocal(); });
+    requestAnimationFrame(() => {
+      queued = false;
+      if (needBuild) { build(); stoneReady = false; needBuild = false; }
+      // THE SHADER DRAWS BEFORE THE FRAME DOES, not after it. A preview that painted on the CPU and
+      // then replaced the result when the GPU came back would pay for both and show the slow one
+      // first, so the one await in this path goes here, where the frame has not started. null means
+      // there is nothing to wait for, and that case is left exactly as undeferred as it was.
+      const job = prevFill();
+      if (!job) { draw(); saveLocal(); return; }
+      job.then(() => { draw(); saveLocal(); });
+    });
   }
   let needBuild = false;
   const statEl = document.getElementById('stat');
   function stat() {
     statEl.textContent = `${marks.length} marks · ${geo.lines.length} vein lines · ${geo.web.length} cracks · ${geo.specks.length} specks · 8 × 5 ft · ${V.z.toFixed(1)}×`;
+    prevNote();
+  }
+  // THE ROW BESIDE THE SWITCH SAYS WHY, when the switch is on and the preview is not taking it.
+  // Without this the toggle reads on while the CPU paints and nothing says which clause turned it
+  // away: the export panel explains a refusal only once a render starts, and the frame in front of
+  // you is the thing being looked at. It is the same reason key the export writes into a master's
+  // record, so the two cannot describe one document differently.
+  //
+  // WRITTEN ONLY WHEN IT CHANGES, because this runs once a frame. exp.gpu.off is not a refusal to
+  // report - the switch being off is already visible in the switch - so that one falls through to
+  // the hint the row carries the rest of the time.
+  let prevNoteWas = null;
+  function prevNote() {
+    const el = document.getElementById('gpu-note');
+    if (!el) return;
+    const why = prevWhyNot();
+    const txt = (why && why !== 'exp.gpu.off') ? TR(why) : TR('hint.gpu');
+    if (txt !== prevNoteWas) { prevNoteWas = txt; el.textContent = txt; }
   }
 
   // ---- view
@@ -16065,6 +16480,826 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     WOOD_UNI_OFF = uniOffset;
     WOOD_UNI_BYTES = UNI_BYTES;
   }
+
+  // ---- AND STONE, the third. Its shader owns what paintStoneContent owns and no more: the
+  // base modulators, then every content layer in authored order. renderOneTile still lays the
+  // ground and still applies the coat, which is the only reason ONE dispatch is enough - the
+  // coat is twelve box-blur passes and a per-pixel shader cannot do those in one.
+  //
+  // IN ITS OWN BLOCK, like wood's, because all three name their arena parts PART_NAMES. Four
+  // values come out and the pool uses only those.
+  let STONE_SRC = null, STONE_PACK = null, STONE_UNI_OFF = null, STONE_UNI_BYTES = 0;
+  // AND THE FILTER COLLAPSE, which stoneScene needs on ITS side of the line. The filter on a
+  // stroke acts on a colour that is constant across the whole stroke, so the matrix is applied
+  // once when the chunk is built and the shader never sees it. The source under a fog blob is
+  // col * g and varies with the gradient, so a PLANE carries its matrix into the arena instead.
+  let STONE_COLLAPSE = null;
+  {
+    // PACKING A REAL STONE SCENE FOR THE SHADER.
+    //
+    // WHAT THE SHADER IS RESPONSIBLE FOR, and it is not the whole tile. renderOneTile lays the ground,
+    // calls its `paint` callback, then applies the coat and the reality windows - and the callback
+    // REPLACES paintContent, not just the content layers. So the shader owns exactly what
+    // paintStoneContent owns: the base modulators (breccia, clouds, bands) and then every content layer
+    // in authored order. The coat stays on the CPU, which is what makes one dispatch enough: applyCoat is
+    // twelve box-blur passes and a per-pixel shader cannot do it in one.
+    //
+    // AND THE GROUND IS REPRODUCED, NOT INHERITED. The shader has no sight of the canvas renderOneTile
+    // just filled, and clouds composites with SOFT-LIGHT, which needs its real backdrop - source-over is
+    // associative and soft-light is not, so clouds cannot be floated on transparency and blitted. The
+    // ground is two flat fills (STONE_BG, then groundCol at layOp('base')), so the shader lays it again
+    // from two packed colours and returns an OPAQUE face that replaces the region it covers.
+    //
+    // THE ARENA IS ONE Float32Array WITH NAMED OFFSETS, which is this repo's idiom for both other
+    // materials; the uniform names its own slots so the pool can ask for one by name rather than keeping
+    // a second copy of the layout.
+
+    const H = 0.625;                  // draw space is 1 x H; y = H is the frame bottom
+
+    // the arena's parts, in the order the uniform's offsets name them
+    const PART_NAMES = [
+      'CLOUD',                        // the clouds mottle, one float a texel, bilinear in the shader
+      'LAY',                          // one record per content layer, in AUTHORED order
+      'BLOB', 'FCS', 'FCI',           // fog: discs in draw space, and a grid per plane
+      'SEG', 'CH', 'MCS', 'MCI',      // marks: segments in draw space, chunk records, and a grid per pass
+      'POLY', 'PV',                   // specks: one record a speck, and its vertices in draw space
+    ];
+
+    // WHICH PART CARRIES WHAT - the packer's CLAIM, so a gate holds it to this rather than to a comment.
+    const FIELD_PARTS = {
+      cloud: 'CLOUD', layer: 'LAY',
+      blob: 'BLOB', fogCellStart: 'FCS', fogCellIndex: 'FCI',
+      segment: 'SEG', chunk: 'CH', markCellStart: 'MCS', markCellIndex: 'MCI',
+      poly: 'POLY', polyVertex: 'PV',
+    };
+
+    // A LAYER IS ONE RECORD WHATEVER KIND IT IS, because the shader walks them in authored order and
+    // kinds interleave - minor sits between two fog runs in his own slab. One stride, one loop, a kind
+    // field to branch on. Fog carries its colour and its collapsed filter matrix here; a mark layer's
+    // colour varies per chunk and lives in CH instead.
+    const LAY_STRIDE = 32;
+    const LAY_FIELDS = [
+      'kind',                                                   // 0 = fog plane, 1 = mark pass, 2 = speck pass
+      'alpha', 'colR', 'colG', 'colB',
+      'm0', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8',      // the filter chain, collapsed
+      'offR', 'offG', 'offB',
+      'oPrim', 'nPrim',                                          // into BLOB (fog), CH (marks) or POLY (specks)
+      'oCS', 'oCI', 'pad8', 'pad9', 'pad10',                     // the grid is GLOBAL; see the uniform
+      'pad0', 'pad1', 'pad2', 'pad3', 'pad4', 'pad5', 'pad6', 'pad7',
+    ];
+    if (LAY_FIELDS.length !== LAY_STRIDE) throw new Error('LAY_FIELDS is ' + LAY_FIELDS.length + ', stride is ' + LAY_STRIDE);
+
+    // A CHUNK is runs()'s unit: up to six segments stroked as ONE path, so one width, one colour and one
+    // alpha. Its segments are a SET, not a path - round caps and joins make the union indifferent to
+    // whether they connect, which is why a keep=false gap needs no representation at all.
+    const CH_STRIDE = 8;
+    const CH_FIELDS = ['width', 'colR', 'colG', 'colB', 'alpha', 'oSeg', 'nSeg', 'blurS'];
+    if (CH_FIELDS.length !== CH_STRIDE) throw new Error('CH_FIELDS is ' + CH_FIELDS.length + ', stride is ' + CH_STRIDE);
+
+    // A SPECK IS A CLOSED PATH, not a stroke, and it is the one kind of this material that a capsule
+    // cannot stand in for. paintSpecksLayer walks s.n vertices at equally spaced angles, each at its own
+    // jittered radius, then scales across by s.el and turns the whole thing by s.ang - which is
+    // STAR-SHAPED about the centre rather than convex, so the max-of-halfplanes trick that works for a
+    // convex polygon reports a point outside a notch as inside. The vertices are resolved to draw space
+    // by the scene and land in PV; a record names where its own run starts and how long it is, the same
+    // shape a chunk names its segments.
+    const POLY_STRIDE = 8;
+    const POLY_FIELDS = ['colR', 'colG', 'colB', 'alpha', 'oVert', 'nVert', 'pad0', 'pad1'];
+    if (POLY_FIELDS.length !== POLY_STRIDE) throw new Error('POLY_FIELDS is ' + POLY_FIELDS.length + ', stride is ' + POLY_STRIDE);
+
+    // WHAT ctx.filter's blur ACTUALLY IS, in one number. It is not a Gaussian: the SVG filter spec
+    // prescribes THREE BOX passes, with the box width quantised to a whole number of pixels -
+    // d = floor(sigma * 3 * sqrt(2*PI) / 4 + 0.5), three boxes of d when d is odd and two of d plus one
+    // of d+1 when it is even. So the deviation the canvas really applies is the square root of the sum
+    // of those boxes' variances, (w*w - 1)/12 each, and it STEPS: measured on the canvas itself,
+    // a 0.9 token and a 1.25 token produce byte-identical profiles, because both land on d = 2.
+    //
+    // MEASURED AGAINST THE CANVAS, a single stroke's cross-section at four widths and five radii: this
+    // sigma fed to the closed form below scores rms 0.80 to 1.11 levels of 255 with a worst sample of
+    // 2.3 to 3.0, against a least-squares CEILING of 0.61 to 0.77 for any single-sigma formula. Half a
+    // level from the best possible, with nothing to calibrate - and the same order as the error the
+    // unblurred stroke already carries, which is the per-stroke 8-bit compositing rounding.
+    const boxSigma = N => {
+      const d = Math.floor(N * 3 * Math.sqrt(2 * Math.PI) / 4 + 0.5);
+      if (!(d >= 1)) return 0;                                  // below one box there is nothing to blur
+      const v = w => (w * w - 1) / 12;
+      return Math.sqrt((d % 2) ? 3 * v(d) : 2 * v(d) + v(d + 1));
+    };
+
+    // tileX, tileY and tileH ARE INTEGERS because the pool patches them with setInt32 per band, and
+    // tileW/tileH are named exactly that because the borrowed readback entries read E.tileW and E.tileH.
+    const UNI_FLOAT_NAMES = [
+      'fullW', 'bgR', 'bgG', 'bgB',
+      'gndR', 'gndG', 'gndB', 'gndOp',
+      'cloudOp', 'cloudW', 'cloudH', 'padf0',
+    ];
+    const UNI_INT_NAMES = [
+      'tileW', 'tileH', 'tileX', 'tileY',
+      'nLay', 'hasGround', 'hasCloud', 'gx',
+      'gy', 'padi0', 'padi4', 'padi5',
+      ...PART_NAMES.map(n => 'o' + n),
+      'padi1', 'padi2', 'padi3',
+    ];
+    const UNI_BYTES = 256;
+    const UNI_FLOATS = UNI_FLOAT_NAMES.length;
+    const UNI_INTS = UNI_INT_NAMES.length;
+    if ((UNI_FLOATS + UNI_INTS) * 4 > UNI_BYTES) throw new Error('stone uniform needs ' + (UNI_FLOATS + UNI_INTS) * 4 + ' bytes');
+
+    // WHERE ONE FIELD LIVES, BY NAME. The pool patches three of these per band and asks here rather than
+    // carrying byte offsets of its own - which is what the glass pool does, and what made its OFF_TX a
+    // third copy of the layout.
+    function uniOffset(n) {
+      const f = UNI_FLOAT_NAMES.indexOf(n);
+      if (f >= 0) return f * 4;
+      const i = UNI_INT_NAMES.indexOf(n);
+      if (i >= 0) return UNI_FLOATS * 4 + i * 4;
+      throw new Error('stone uniform has no field ' + n);
+    }
+
+    const hexRGB = h => {
+      const s = String(h == null ? '' : h).replace('#', '');
+      const n = s.length === 3 ? s.split('').map(c => c + c).join('') : s;
+      const v = [parseInt(n.slice(0, 2), 16), parseInt(n.slice(2, 4), 16), parseInt(n.slice(4, 6), 16)];
+      return v.some(x => !(x >= 0)) ? [0, 0, 0] : v;
+    };
+
+    // ---------------------------------------------------------------- the filter chain, collapsed
+    //
+    // FOUR OF THE FIVE FILTERS COLLAPSE INTO TWELVE NUMBERS, and it is a derivation with a measurement
+    // behind it. A canvas gradient and a stroke both present the filter with an UNPREMULTIPLIED colour,
+    // and a CSS colour-matrix filter leaves alpha alone - so hue-rotate, saturate and brightness fold
+    // into a 3x3 and contrast adds an offset (v' = c*v + (0.5 - 0.5c)). Composed in the order filterOf
+    // prints them, a layer needs a matrix and a vector and the shader needs no filter code.
+    //
+    // MEASURED on his own values - fog#2 is saturate 4 then brightness 9, fog#6 adds contrast 3 - against
+    // a single blob over black at eight radii: unclamped is off by up to 180 levels, CLAMPED is exact at
+    // every sample but the faintest. Clamping is required; the two clamp models (once at the end, or
+    // between every stage) agree to the level on everything tried, so the shader clamps once because it
+    // is the cheaper of two models the data cannot separate.
+    const I3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+    const mul3 = (A, B) => {
+      const o = new Array(9).fill(0);
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) for (let k = 0; k < 3; k++)
+        o[r * 3 + c] += A[r * 3 + k] * B[k * 3 + c];
+      return o;
+    };
+    const apply3 = (M, v) => [
+      M[0] * v[0] + M[1] * v[1] + M[2] * v[2],
+      M[3] * v[0] + M[4] * v[1] + M[5] * v[2],
+      M[6] * v[0] + M[7] * v[1] + M[8] * v[2]];
+    const satM = s => [
+      0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s,
+      0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s,
+      0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s];
+    const hueM = deg => {                                       // the SVG hueRotate matrix, verbatim
+      const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+      return [
+        0.213 + c * 0.787 - s * 0.213, 0.715 - c * 0.715 - s * 0.715, 0.072 - c * 0.072 + s * 0.928,
+        0.213 - c * 0.213 + s * 0.143, 0.715 + c * 0.285 + s * 0.140, 0.072 - c * 0.072 - s * 0.283,
+        0.213 - c * 0.213 - s * 0.787, 0.715 - c * 0.715 + s * 0.715, 0.072 + c * 0.928 + s * 0.072];
+    };
+
+    function collapseFilter(adj) {
+      const hue = adj.hue || 0, sat = adj.sat === undefined ? 1 : adj.sat;
+      const br = adj.bright === undefined ? 1 : adj.bright;
+      const ct = adj.contrast === undefined ? 1 : adj.contrast;
+      let M = I3, off = [0, 0, 0];
+      const stage = (L, o) => { M = mul3(M, L); off = apply3(L, off).map((v, i) => v + o[i]); };
+      if (hue) stage(hueM(hue), [0, 0, 0]);
+      if (sat !== 1) stage(satM(sat), [0, 0, 0]);
+      if (br !== 1) stage([br, 0, 0, 0, br, 0, 0, 0, br], [0, 0, 0]);
+      if (ct !== 1) stage([ct, 0, 0, 0, ct, 0, 0, 0, ct], [0.5 - 0.5 * ct, 0.5 - 0.5 * ct, 0.5 - 0.5 * ct]);
+      return { M, off: off.map(v => v * 255) };
+    }
+
+    // ---------------------------------------------------------------- the grid
+    //
+    // COUNTING SORT, AND THE SECOND SWEEP GOES IN PRIMITIVE ORDER. Each cell's slots therefore fill in
+    // ascending primitive index, so a cell's list is the paint order restricted to that cell - which is
+    // required, not incidental, because a fading source makes source-over order-dependent. A grid that
+    // scrambled the order would be wrong in a way no radius tuning would fix.
+    //
+    // PRIMITIVES ARE BINNED BY A BOUNDING DISC, a superset of the shape: a few wasted distance tests, and
+    // never a lit pixel dropped. The pad is the stroke's or blob's own reach plus one pixel for the
+    // coverage ramp - bin a centreline and the stroke's edge falls out of its cell and vanishes.
+    function binDiscs(discs, gx, gy) {
+      const cw = 1 / gx, ch = H / gy, nc = gx * gy;
+      const span = discs.map(([x, y, r]) => [
+        Math.max(0, Math.floor((x - r) / cw)), Math.min(gx - 1, Math.floor((x + r) / cw)),
+        Math.max(0, Math.floor((y - r) / ch)), Math.min(gy - 1, Math.floor((y + r) / ch))]);
+      const cnt = new Uint32Array(nc);
+      for (const [i0, i1, j0, j1] of span)
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) cnt[j * gx + i]++;
+      const cs = new Uint32Array(nc + 1);
+      for (let k = 0; k < nc; k++) cs[k + 1] = cs[k] + cnt[k];
+      const ci = new Uint32Array(cs[nc]);
+      const fill = cs.slice(0, nc);
+      span.forEach(([i0, i1, j0, j1], b) => {
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) ci[fill[j * gx + i]++] = b;
+      });
+      let mx = 0;
+      for (let k = 0; k < nc; k++) if (cnt[k] > mx) mx = cnt[k];
+      return { gx, gy, cs, ci, cells: nc, mean: nc ? ci.length / nc : 0, max: mx };
+    }
+
+    // THE GRID IS GLOBAL AND LIVES IN DRAW SPACE, which is not a preference - it is what the framework
+    // forces. gpuPool calls pack(ew, W) ONCE per render and then patches only tileX, tileY and tileH per
+    // band, so anything built in tile-local pixels is per-tile data that cannot survive the patch. The
+    // first spelling of this binned in tile pixels at tileX = 0: every grid came back with ZERO non-empty
+    // cells for every tile but the top-left one, the shader drew bare ground, and it did it in 0.38 ms
+    // because the inner loops never ran. A grid over 0..1 x 0..H is packed once and read by every tile.
+    //
+    // ITS RESOLUTION FOLLOWS THE RENDER so the cell stays in the range the sweep liked. For a fog plane,
+    // cells of 8/16/32/64/128 px measured 0.076/0.085/0.106/0.152/0.266 ms on a preview-sized surface and
+    // 0.111/0.112/0.120/0.134/0.177 ms on a 512 tile of a 4096 render - flat to within 1.6x across the
+    // whole range on a tile, which is what makes a scale-following grid safe. Capped at 512 across so the
+    // cell tables stay small at 32768 (512 x 320 cells is 164k slots a layer).
+    const gridFor = W => {
+      const gx = Math.max(64, Math.min(512, Math.round(W / 24)));
+      return { gx, gy: Math.max(1, Math.round(gx * H)) };
+    };
+
+    // ---------------------------------------------------------------- the packer
+    //
+    // `scene` is assembled by the app, which is the only thing that can read its own closure:
+    //   bg, ground, groundOp, hasGround        the two flat fills renderOneTile laid
+    //   cloud { w, h, data, op } | null        ensureClouds()'s pixels, one float a texel
+    //   layers [...]                           content layers in AUTHORED order, already filtered to
+    //                                          the ones that paint, each either
+    //     { kind:'fog',  col, alpha, adj, blobs:[[x,y,r],...] }            draw space
+    //     { kind:'mark', chunks:[{segs:[[ax,ay,bx,by],...], width, col, alpha, blurPx}] }  draw space,
+    //                                          blurPx in OUTPUT pixels - ctx.filter ignores the CTM
+    //     { kind:'poly', polys:[{verts:[[x,y],...], col, alpha}] }                  draw space, closed
+    function packStone(scene, view) {
+      const { tileW, tileH, tileX, tileY, fullW } = view;
+      const { gx, gy } = gridFor(fullW);
+      const parts = { CLOUD: [], LAY: [], BLOB: [], FCS: [], FCI: [], SEG: [], CH: [], MCS: [], MCI: [],
+                      POLY: [], PV: [] };
+
+      const cloud = scene.cloud || null;
+      if (cloud) for (let i = 0; i < cloud.data.length; i++) parts.CLOUD.push(cloud.data[i]);
+
+      for (const L of scene.layers) {
+        const V = {};
+        for (const n of LAY_FIELDS) V[n] = 0;
+
+        if (L.kind === 'fog') {
+          if (!(L.alpha > 0)) throw new Error('packStone: fog layer with alpha ' + L.alpha + ' should not be packed');
+          if (!Array.isArray(L.blobs) || !L.blobs.length) throw new Error('packStone: fog layer, no blobs');
+          const oPrim = parts.BLOB.length / 3;
+          const discs = [];
+          for (const [x, y, r] of L.blobs) {
+            parts.BLOB.push(x, y, r);                           // draw space, resolution-independent
+            discs.push([x, y, r + 1 / fullW]);                  // and binned there too, plus the ramp
+          }
+          const g = binDiscs(discs, gx, gy);
+          const col = hexRGB(L.col);
+          const { M, off } = collapseFilter(L.adj || {});
+          V.kind = 0; V.alpha = L.alpha;
+          V.colR = col[0]; V.colG = col[1]; V.colB = col[2];
+          for (let k = 0; k < 9; k++) V['m' + k] = M[k];
+          V.offR = off[0]; V.offG = off[1]; V.offB = off[2];
+          V.oPrim = oPrim; V.nPrim = L.blobs.length;
+          V.oCS = parts.FCS.length; V.oCI = parts.FCI.length;
+          for (const v of g.cs) parts.FCS.push(v);
+          for (const v of g.ci) parts.FCI.push(v);
+        } else if (L.kind === 'mark') {
+          if (!Array.isArray(L.chunks) || !L.chunks.length) throw new Error('packStone: mark layer, no chunks');
+          const oPrim = parts.CH.length / CH_STRIDE;
+          const discs = [];
+          for (const C of L.chunks) {
+            if (!(C.width > 0)) throw new Error('packStone: chunk with width ' + C.width);
+            if (!(C.alpha > 0)) throw new Error('packStone: chunk with alpha ' + C.alpha);
+            if (!Array.isArray(C.segs) || !C.segs.length) throw new Error('packStone: chunk carries no segments');
+            const oSeg = parts.SEG.length / 4;
+            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+            for (const [ax, ay, bx, by] of C.segs) {
+              parts.SEG.push(ax, ay, bx, by);
+              x0 = Math.min(x0, ax, bx); x1 = Math.max(x1, ax, bx);
+              y0 = Math.min(y0, ay, by); y1 = Math.max(y1, ay, by);
+            }
+            const col = hexRGB(C.col);
+            // THE BLUR IS AN OUTPUT-PIXEL QUANTITY AND STAYS ONE. ctx.filter is applied in device space
+            // and is not scaled by the transform, so a blur token is the same number of pixels at every
+            // render width - which is exactly what makes a closed form possible: sigma is a constant
+            // per chunk rather than something the shader has to derive from the scale.
+            const blurS = C.blurPx > 0 ? boxSigma(C.blurPx) : 0;
+            const R = { width: C.width, colR: col[0], colG: col[1], colB: col[2],
+                        alpha: C.alpha, oSeg, nSeg: C.segs.length, blurS };
+            const miss = CH_FIELDS.filter(n => !(n in R));
+            if (miss.length) throw new Error('packStone: nothing supplies chunk ' + miss.join(', '));
+            for (const n of CH_FIELDS) parts.CH.push(R[n]);
+            // THE STROKE'S BOX, NOT THE CENTRELINE'S: a capsule reaches half a width past its ends in
+            // every direction, plus one pixel for the coverage ramp. Bin the centreline and the stroke's
+            // own edge falls out of its cell and vanishes.
+            // AND THE BIN PAD GROWS WITH IT. A blurred stroke reaches three deviations past its own
+            // edge; bin it at the hard edge and the soft tail falls out of its cell and is cut off
+            // square, which is a visible straight line along a cell boundary.
+            const pad = C.width / 2 + (1 + 3 * blurS) / fullW;
+            discs.push([(x0 + x1) / 2, (y0 + y1) / 2, Math.hypot(x1 - x0, y1 - y0) / 2 + pad]);
+          }
+          const g = binDiscs(discs, gx, gy);
+          V.kind = 1;
+          V.oPrim = oPrim; V.nPrim = L.chunks.length;
+          V.oCS = parts.MCS.length; V.oCI = parts.MCI.length;
+          for (const v of g.cs) parts.MCS.push(v);
+          for (const v of g.ci) parts.MCI.push(v);
+        } else if (L.kind === 'poly') {
+          if (!Array.isArray(L.polys) || !L.polys.length) throw new Error('packStone: poly layer, no polys');
+          const oPrim = parts.POLY.length / POLY_STRIDE;
+          const discs = [];
+          for (const P of L.polys) {
+            if (!(P.alpha > 0)) throw new Error('packStone: poly with alpha ' + P.alpha);
+            if (!Array.isArray(P.verts) || P.verts.length < 3) throw new Error('packStone: poly needs three vertices');
+            const oVert = parts.PV.length / 2;
+            let cx = 0, cy = 0;
+            for (const [x, y] of P.verts) { parts.PV.push(x, y); cx += x; cy += y; }
+            cx /= P.verts.length; cy /= P.verts.length;
+            const col = hexRGB(P.col);
+            const R = { colR: col[0], colG: col[1], colB: col[2], alpha: P.alpha,
+                        oVert, nVert: P.verts.length, pad0: 0, pad1: 0 };
+            const miss = POLY_FIELDS.filter(n => !(n in R));
+            if (miss.length) throw new Error('packStone: nothing supplies poly ' + miss.join(', '));
+            for (const n of POLY_FIELDS) parts.POLY.push(R[n]);
+            // THE BINNING DISC IS THE CIRCUMCIRCLE OF THE VERTICES, not the speck radius: s.el stretches
+            // one axis and the jitter pushes single vertices out, so a disc of s.rad drops the corner
+            // that reaches furthest - and a dropped corner is a speck with a bite out of it in exactly
+            // one cell. Plus a pixel for the coverage ramp, like every other primitive here.
+            let rr = 0;
+            for (const [x, y] of P.verts) rr = Math.max(rr, Math.hypot(x - cx, y - cy));
+            discs.push([cx, cy, rr + 1 / fullW]);
+          }
+          const g = binDiscs(discs, gx, gy);
+          V.kind = 2;
+          V.oPrim = oPrim; V.nPrim = L.polys.length;
+          // THE SPECK GRID SHARES THE MARK TABLES on purpose. A cell list is a run of primitive indices
+          // and nothing in it knows what kind it indexes - the layer record already says that - so a
+          // third pair of tables would be two more offsets in the uniform for no new information.
+          V.oCS = parts.MCS.length; V.oCI = parts.MCI.length;
+          for (const v of g.cs) parts.MCS.push(v);
+          for (const v of g.ci) parts.MCI.push(v);
+        } else {
+          throw new Error('packStone: unknown layer kind ' + L.kind);
+        }
+
+        // A DECLARED FIELD NOTHING SUPPLIES is the defect from the packer side: the record names it, the
+        // shader reads it, and it is quietly zero for the life of the port.
+        const miss = LAY_FIELDS.filter(n => !(n in V));
+        if (miss.length) throw new Error('packStone: nothing supplies layer ' + miss.join(', '));
+        for (const n of LAY_FIELDS) parts.LAY.push(V[n]);
+      }
+
+      const offs = {}; let at = 0;
+      for (const n of PART_NAMES) { offs[n] = at; at += Math.max(parts[n].length, 1); }
+      const arena = new Float32Array(at);
+      for (const n of PART_NAMES) if (parts[n].length) arena.set(parts[n], offs[n]);
+
+      const bg = hexRGB(scene.bg), gnd = hexRGB(scene.ground);
+      const V = {
+        fullW, bgR: bg[0], bgG: bg[1], bgB: bg[2],
+        gndR: gnd[0], gndG: gnd[1], gndB: gnd[2],
+        gndOp: scene.hasGround ? (scene.groundOp === undefined ? 1 : scene.groundOp) : 0,
+        cloudOp: cloud ? (cloud.op === undefined ? 1 : cloud.op) : 0,
+        cloudW: cloud ? cloud.w : 0, cloudH: cloud ? cloud.h : 0, padf0: 0,
+        tileW, tileH, tileX, tileY,
+        nLay: scene.layers.length, hasGround: scene.hasGround ? 1 : 0, hasCloud: cloud ? 1 : 0,
+        gx, gy, padi0: 0, padi1: 0, padi2: 0, padi3: 0, padi4: 0, padi5: 0,
+      };
+      for (const n of PART_NAMES) V['o' + n] = offs[n];
+      const absent = [...UNI_FLOAT_NAMES, ...UNI_INT_NAMES]
+        .filter(n => !n.startsWith('pad') && !(n in V));
+      if (absent.length) throw new Error('packStone: nothing supplies ' + absent.join(', '));
+
+      const b = new ArrayBuffer(UNI_BYTES), d = new DataView(b);
+      const num = v => (typeof v === 'number' && isFinite(v) ? v : 0);
+      UNI_FLOAT_NAMES.forEach((n, i) => d.setFloat32(i * 4, num(V[n]), true));
+      UNI_INT_NAMES.forEach((n, i) => d.setInt32(UNI_FLOATS * 4 + i * 4, num(V[n]) | 0, true));
+
+      return { uni: b, arena, offs, parts,
+        summary: {
+          layers: scene.layers.length,
+          fog: scene.layers.filter(L => L.kind === 'fog').length,
+          marks: scene.layers.filter(L => L.kind === 'mark').length,
+          specks: scene.layers.filter(L => L.kind === 'poly').length,
+          polys: parts.POLY.length / POLY_STRIDE,
+          polyVerts: parts.PV.length / 2,
+          blobs: parts.BLOB.length / 3,
+          chunks: parts.CH.length / CH_STRIDE,
+          segments: parts.SEG.length / 4,
+          cloud: cloud ? cloud.w + 'x' + cloud.h : 'none',
+          grid: gx + 'x' + gy, cellPx: +(fullW / gx).toFixed(1), arenaFloats: at,
+        } };
+    }
+
+    // STONE AS A COMPUTE SHADER — the third material through the same path.
+    //
+    // WHAT IT OWNS. renderOneTile lays the ground, calls its `paint` callback, then applies the coat and
+    // the reality windows. The callback REPLACES paintContent, so this shader owns what paintStoneContent
+    // owns and nothing more: the base modulators, then every content layer in authored order. The coat
+    // stays on the CPU, which is the only reason one dispatch is enough - applyCoat is twelve box-blur
+    // passes and a per-pixel shader cannot do those in one.
+    //
+    // WHY EACH PIECE LOOKS THE WAY IT DOES, every line of it measured against the CPU painter first:
+    //
+    //   THE GROUND IS LAID AGAIN HERE. clouds composites with soft-light, which needs its real backdrop;
+    //   source-over is associative and soft-light is not, so clouds cannot be floated on transparency and
+    //   blitted over the ground afterwards. Two flat fills are cheap to repeat and the face comes out
+    //   opaque.
+    //
+    //   SOFT-LIGHT IS THE W3C FORMULA, including the D(Cb) branch at Cb = 0.25. Measured over all 4,096
+    //   (Cb, Cs) pairs of a ramp cross: max 1, mean 0.244, no sample off by more than a level. The
+    //   Photoshop formula - the one that gets written from memory - is max 17 on the same grid.
+    //
+    //   CLOUDS IS BILINEAR OUT OF THE ARENA, not a texture, so stone needs no texture binding and the
+    //   pool needs no change: 200 x 125 is 25,000 floats. Canvas's own upscale is NOT bilinear - max 27,
+    //   mean 3.33 against it on a pure-noise source, and the same at 2.6x as at 20.5x, so it is a
+    //   different filter rather than a phase error. THROUGH THE REAL GROUND STACK it does not matter:
+    //   soft-light at layOp over a filled ground comes out at max 1, mean 0.011 with bilinear, where
+    //   Catmull-Rom - the obvious "better" filter - is max 3, mean 0.444. A source near 0.5 barely moves
+    //   its backdrop and the alpha scales it again, so chasing the intermediate number would have made
+    //   the picture forty times worse.
+    //
+    //   A FOG BLOB'S COLOUR FADES AS IT THINS. The gradient's far stop is `transparent`, rgba(0,0,0,0),
+    //   and canvas interpolates it UNPREMULTIPLIED - so the colour darkens toward black rather than
+    //   merely fading, repeated source-over stops being order-independent, and no product collapses a
+    //   plane. A closed form that assumed constant colour read ~50 levels light at mid-radius.
+    //
+    //   A VEIN STROKE IS A UNION OF CAPSULES. Every context that draws veins sets lineCap and lineJoin
+    //   to 'round', so coverage is min-distance-to-segment against half the width. Confirmed: interior
+    //   error against canvas is at most 3 levels, which is the per-stroke 8-bit compositing rounding.
+    //
+    //   AND THE COVERAGE RAMP IS A PIXEL/BAND OVERLAP, not clamp(hw - d + 0.5). That form gives 0.5
+    //   coverage for a zero-width stroke and his thinnest segments are sub-pixel - 0.00002 draw units is
+    //   0.08 px at 4096. Supersampling the union does NOT converge to canvas (ss 2/4/8/16/32 gives
+    //   boundary max 65/46/41/41/40, a plateau at 1024 samples a pixel, because Skia fills its own
+    //   flattened outline); this ramp sits at that same floor for one distance evaluation.
+    //
+    //   CHUNKS COMPOSITE ONE AT A TIME, IN ORDER. runs() strokes six segments per stroke() at alpha well
+    //   under 1, and consecutive chunks share a vertex, so their round caps overlap by a half-disc that
+    //   composites TWICE - a bead at every sixth segment. Four chunk composites against one composite of
+    //   the same path differ by max 73, mean 9.82. One distance field per line would be cleaner than
+    //   canvas and wrong by that much.
+
+    // THE PACKER'S OWN LISTS, so the struct below is generated rather than written twice. sync-gpu's
+    // strip() takes this statement off when it inlines the file, where both halves share one scope.
+
+
+    // EXPORTED AT THE DECLARATION, AND THAT IS NOT A STYLE CHOICE. sync-gpu's strip() runs its drop
+    // regexes BEFORE it takes the export keyword off, so a bare `const WGSL = {}` is removed and a
+    // `export const WGSL = {}` survives - which is the difference between this block having its own
+    // registry and writing into GLASS's. The first spelling here was bare: stoneSource then saw
+    // glass's nineteen blocks as unplaced, and glass's own code() would have carried stone's.
+    const WGSL = {};
+    const LF = String.fromCharCode(10);
+
+    // THE ENV, GENERATED FROM THE PACKER'S OWN LISTS, so the struct and the packer cannot drift. Four to
+    // a line only to keep it readable; WGSL does not care.
+    //
+    // AND THE FIELD INDICES ARE GENERATED TOO, which is not tidiness. The first spelling of stoneLayer
+    // indexed the layer record by hand-written numbers - cell at 25, cx at 23 - against a record whose
+    // cell is at 23 and cx at 21, so every layer would have read its grid out of its own padding and
+    // drawn nothing. The packer's own list is the only thing that knows where a field is.
+    const chunk4 = (names, ty) => {
+      const out = [];
+      for (let i = 0; i < names.length; i += 4)
+        out.push('  ' + names.slice(i, i + 4).map(n => n + ': ' + ty).join(', ') + ',');
+      return out.join(LF);
+    };
+
+    const idxOf = (list, n) => {
+      const i = list.indexOf(n);
+      if (i < 0) throw new Error('stone-gpu: no field named ' + n);
+      return i;
+    };
+    const idxBlock = [
+      ...['kind', 'alpha', 'colR', 'm0', 'offR', 'oPrim', 'nPrim', 'oCS', 'oCI']
+        .map(n => 'const L_' + n.toUpperCase() + ': i32 = ' + idxOf(LAY_FIELDS, n) + ';'),
+      ...['width', 'colR', 'alpha', 'oSeg', 'nSeg', 'blurS']
+        .map(n => 'const C_' + n.toUpperCase() + ': i32 = ' + idxOf(CH_FIELDS, n) + ';'),
+      ...['colR', 'alpha', 'oVert', 'nVert']
+        .map(n => 'const P_' + n.toUpperCase() + ': i32 = ' + idxOf(POLY_FIELDS, n) + ';'),
+    ].join(LF);
+
+    WGSL.env = `
+struct Env {
+${chunk4(UNI_FLOAT_NAMES, 'f32')}
+${chunk4(UNI_INT_NAMES, 'i32')}
+};
+@group(0) @binding(0) var<storage, read_write> PX: array<f32>;
+@group(0) @binding(2) var<uniform> E: Env;
+@group(0) @binding(3) var<storage, read> ARR: array<f32>;
+
+const LAY: i32 = ${LAY_STRIDE};
+const CHS: i32 = ${CH_STRIDE};
+const PYS: i32 = ${POLY_STRIDE};
+fn aLay(i: i32, f: i32) -> f32 { return ARR[E.oLAY + i * LAY + f]; }
+fn aCh(i: i32, f: i32) -> f32 { return ARR[E.oCH + i * CHS + f]; }
+fn aPy(i: i32, f: i32) -> f32 { return ARR[E.oPOLY + i * PYS + f]; }
+
+${idxBlock}`;
+
+    // THE W3C SOFT-LIGHT, per channel. D(Cb)'s branch at 0.25 is load-bearing: drop it and the dark half
+    // of every mottle is wrong, which reads as a flat picture rather than as a blend bug.
+    WGSL.stoneSoftLight = `
+fn softLight1(cb: f32, cs: f32) -> f32 {
+  var d = sqrt(cb);
+  if (cb <= 0.25) { d = ((16.0 * cb - 12.0) * cb + 4.0) * cb; }
+  if (cs <= 0.5) { return cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb); }
+  return cb + (2.0 * cs - 1.0) * (d - cb);
+}
+fn softLight(cb: vec3<f32>, cs: f32) -> vec3<f32> {
+  return vec3<f32>(softLight1(cb.x, cs), softLight1(cb.y, cs), softLight1(cb.z, cs));
+}`;
+
+    // THE CLOUDS MOTTLE, bilinear out of the arena. Clamp-to-edge, and the sample is taken at the
+    // destination pixel's own centre mapped into texel space - the half-texel offset is exactly the kind
+    // of thing that reads as a faint overall shift rather than as a bug.
+    WGSL.stoneCloud = `
+fn cloudAt(u: f32, v: f32) -> f32 {
+  let cw = i32(E.cloudW); let ch = i32(E.cloudH);
+  if (cw <= 0 || ch <= 0) { return 0.5; }
+  let x = u * E.cloudW - 0.5; let y = v * E.cloudH - 0.5;
+  let x0 = i32(floor(x)); let y0 = i32(floor(y));
+  let tx = x - floor(x); let ty = y - floor(y);
+  let xa = clamp(x0, 0, cw - 1); let xb = clamp(x0 + 1, 0, cw - 1);
+  let ya = clamp(y0, 0, ch - 1); let yb = clamp(y0 + 1, 0, ch - 1);
+  let o = E.oCLOUD;
+  let p00 = ARR[o + ya * cw + xa]; let p10 = ARR[o + ya * cw + xb];
+  let p01 = ARR[o + yb * cw + xa]; let p11 = ARR[o + yb * cw + xb];
+  return mix(mix(p00, p10, tx), mix(p01, p11, tx), ty);
+}`;
+
+    WGSL.stoneSeg = `
+fn segDist(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
+  let v = b - a; let w = p - a;
+  let vv = dot(v, v);
+  var t = 0.0;
+  if (vv > 0.0) { t = clamp(dot(w, v) / vv, 0.0, 1.0); }
+  return length(w - v * t);
+}`;
+
+    // A SPECK, WHICH IS A FILLED CLOSED PATH AND NOT A STROKE.
+    //
+    // TWO ANSWERS OUT OF ONE WALK: the crossing test says which side of the outline the pixel is on, and
+    // the min distance to the edges says how far. Together they are the signed distance, and coverage is
+    // the same pixel-band overlap the strokes use - for a shape wider than a pixel that expression
+    // reduces to clamp(0.5 - sd), so the two kinds ramp alike and a speck does not read sharper or
+    // softer than a vein of the same size.
+    //
+    // THE CROSSING TEST, NOT A HALFPLANE MAX, because a speck is star-shaped rather than convex: its
+    // vertices sit at equal angles with independent radii, so a deep notch between two long spikes is
+    // OUTSIDE the shape and inside every edge halfplane. The ray goes in +x from the pixel; the
+    // straddle guard is what makes the divide safe, since two vertices on the same side of p.y never
+    // reach it.
+    WGSL.stonePoly = `
+fn polySD(p: vec2<f32>, o: i32, n: i32) -> f32 {
+  var d = 1e30;
+  var inside = false;
+  var pj = vec2<f32>(ARR[o + (n - 1) * 2] * E.fullW - f32(E.tileX),
+                     ARR[o + (n - 1) * 2 + 1] * E.fullW - f32(E.tileY));
+  for (var i = 0; i < n; i = i + 1) {
+    let pi = vec2<f32>(ARR[o + i * 2] * E.fullW - f32(E.tileX),
+                       ARR[o + i * 2 + 1] * E.fullW - f32(E.tileY));
+    d = min(d, segDist(p, pj, pi));
+    if ((pi.y > p.y) != (pj.y > p.y)) {
+      let t = (p.y - pi.y) / (pj.y - pi.y);
+      if (p.x < pi.x + t * (pj.x - pi.x)) { inside = !inside; }
+    }
+    pj = pi;
+  }
+  if (inside) { return -d; }
+  return d;
+}`;
+
+    // A BLURRED STROKE, WITHOUT READING A NEIGHBOUR.
+    //
+    // This is the whole reason a blur can be on this path at all. A vein stroke is a union of
+    // round-capped capsules, and the convolution of a half-plane with a Gaussian is the normal CDF - so
+    // across a capsule, whose cross-section is a slab of width 2*hw, blurred coverage is the difference
+    // of two CDFs at the two edges. Nothing around the pixel is needed: the distance field already says
+    // where the edges are.
+    //
+    // EXACT ALONG THE STROKE, APPROXIMATE WITHIN SIGMA OF A CAP, where the local shape is a disc rather
+    // than a slab. At the radii this material uses - sigma about 1.1 output pixels against strokes tens
+    // of pixels wide - that is a fraction of one cap.
+    //
+    // phi IS THE TANH FORM, 0.5*(1 + tanh(0.7978845608*(x + 0.044715*x^3))), which is the Gaussian CDF
+    // to about 1e-4 - two orders inside the 8-bit quantisation it is feeding.
+    WGSL.stonePhi = `
+fn phi(x: f32) -> f32 {
+  return 0.5 * (1.0 + tanh(0.7978845608 * (x + 0.044715 * x * x * x)));
+}`;
+
+    // ONE CONTENT LAYER AT ONE PIXEL. Fog and marks share the loop because kinds INTERLEAVE in authored
+    // order - a vein layer sits between two fog runs in his own slab - so one list, one stride and a kind
+    // field to branch on. Each layer carries its own grid, which is why the matrix can be hoisted out of
+    // the primitive loop: a shared grid would need the layer decoded and its twelve numbers re-read per
+    // TEST, about 1800 reads against 72 for a six-plane run.
+    WGSL.stoneLayer = `
+fn layerAt(li: i32, q: vec2<f32>, c: i32, acc0: vec3<f32>) -> vec3<f32> {
+  var acc = acc0;
+  let kind = i32(aLay(li, L_KIND));
+  let oCS = i32(aLay(li, L_OCS));
+  let oCI = i32(aLay(li, L_OCI));
+  let oPrim = i32(aLay(li, L_OPRIM));
+
+  if (kind == 0) {
+    let lo = i32(ARR[E.oFCS + oCS + c]); let hi = i32(ARR[E.oFCS + oCS + c + 1]);
+    let a = aLay(li, L_ALPHA);
+    let col = vec3<f32>(aLay(li, L_COLR), aLay(li, L_COLR + 1), aLay(li, L_COLR + 2));
+    let r0 = vec3<f32>(aLay(li, L_M0), aLay(li, L_M0 + 1), aLay(li, L_M0 + 2));
+    let r1 = vec3<f32>(aLay(li, L_M0 + 3), aLay(li, L_M0 + 4), aLay(li, L_M0 + 5));
+    let r2 = vec3<f32>(aLay(li, L_M0 + 6), aLay(li, L_M0 + 7), aLay(li, L_M0 + 8));
+    let off = vec3<f32>(aLay(li, L_OFFR), aLay(li, L_OFFR + 1), aLay(li, L_OFFR + 2));
+    for (var k = lo; k < hi; k = k + 1) {
+      let b = E.oBLOB + (oPrim + i32(ARR[E.oFCI + oCI + k])) * 3;
+      let bx = ARR[b] * E.fullW - f32(E.tileX);
+      let by = ARR[b + 1] * E.fullW - f32(E.tileY);
+      let br = ARR[b + 2] * E.fullW;
+      let d = distance(q, vec2<f32>(bx, by));
+      if (d < br) {
+        let g = 1.0 - d / br;                  // the gradient parameter, 1 at the centre
+        let sa = a * g;
+        let src = col * g;                     // unpremultiplied: the colour fades too
+        var cs = vec3<f32>(dot(r0, src), dot(r1, src), dot(r2, src)) + off;
+        cs = clamp(cs, vec3<f32>(0.0), vec3<f32>(255.0));
+        acc = cs * sa + acc * (1.0 - sa);
+      }
+    }
+    return acc;
+  }
+
+  let lo = i32(ARR[E.oMCS + oCS + c]); let hi = i32(ARR[E.oMCS + oCS + c + 1]);
+
+  // SPECKS SHARE THE MARK GRID, so the cell run is read before the kinds part: a cell list is a run
+  // of primitive indices and only the layer record knows what they index.
+  if (kind == 2) {
+    for (var k = lo; k < hi; k = k + 1) {
+      let pi = oPrim + i32(ARR[E.oMCI + oCI + k]);
+      let o = E.oPV + i32(aPy(pi, P_OVERT)) * 2;
+      let nv = i32(aPy(pi, P_NVERT));
+      let sd = polySD(q, o, nv);
+      let cov = clamp(0.5 - sd, 0.0, 1.0);
+      if (cov > 0.0) {
+        let col = vec3<f32>(aPy(pi, P_COLR), aPy(pi, P_COLR + 1), aPy(pi, P_COLR + 2));
+        let sa = aPy(pi, P_ALPHA) * cov;
+        acc = col * sa + acc * (1.0 - sa);
+      }
+    }
+    return acc;
+  }
+
+  for (var k = lo; k < hi; k = k + 1) {
+    let ci = oPrim + i32(ARR[E.oMCI + oCI + k]);
+    let hw = aCh(ci, C_WIDTH) * E.fullW * 0.5;
+    let col = vec3<f32>(aCh(ci, C_COLR), aCh(ci, C_COLR + 1), aCh(ci, C_COLR + 2));
+    let a = aCh(ci, C_ALPHA);
+    let os = E.oSEG + i32(aCh(ci, C_OSEG)) * 4;
+    let ns = i32(aCh(ci, C_NSEG));
+    var d = 1e30;
+    for (var s = 0; s < ns; s = s + 1) {
+      let j = os + s * 4;
+      let p0 = vec2<f32>(ARR[j] * E.fullW - f32(E.tileX), ARR[j + 1] * E.fullW - f32(E.tileY));
+      let p1 = vec2<f32>(ARR[j + 2] * E.fullW - f32(E.tileX), ARR[j + 3] * E.fullW - f32(E.tileY));
+      d = min(d, segDist(q, p0, p1));
+    }
+    // THE UNBLURRED RAMP IS UNTOUCHED, and that matters: it is a pixel/band overlap rather than a
+    // clamp, because a zero-width stroke would otherwise read 0.5 coverage and this material's
+    // thinnest segments are sub-pixel. The blurred branch only runs where a blur was asked for, so
+    // every existing picture comes out byte for byte as it did.
+    let sg = aCh(ci, C_BLURS);
+    var cov = clamp(min(0.5, d + hw) - max(-0.5, d - hw), 0.0, 1.0);
+    if (sg > 0.0) { cov = clamp(phi((hw - d) / sg) - phi((-hw - d) / sg), 0.0, 1.0); }
+    if (cov > 0.0) {
+      let sa = a * cov;
+      acc = col * sa + acc * (1.0 - sa);
+    }
+  }
+  return acc;
+}`;
+
+    // THE LAST BIT, SPENT THE WAY THE CANVAS SPENDS IT.
+    //
+    // A 2D context DITHERS a gradient - it has to, because eight bits across a slow ramp bands - and
+    // measured on one haze transition the painter never repeats a value along a scanline (51 levels,
+    // longest run 1, 99.9% of neighbours differ) while this shader, quantising the true value once,
+    // runs 62 to 157 identical pixels at a time. Both are smooth from a distance and both are an
+    // artefact up close: the painter's is a cross-hatch, this one's is a contour.
+    //
+    // AND IT IS NOT ONLY A LOOK. applyCoat's subsurface pass is a feature HIGH-PASS, so it amplifies
+    // whatever high-frequency content it is handed. Given the painter's dither it lifts it into a
+    // visible screen; given a banded ramp it has almost nothing to lift. That is the whole of the mean
+    // gap between the two renderers on a coated slab - measured against coat strength, 0.125 of 255 at
+    // subsurface 0 rising to 1.454 at 0.9, with the painter's standard deviation climbing 26.73 to
+    // 28.02 while this shader's sat flat at 25.6.
+    //
+    // SO THE SHADER DITHERS TOO. A 4x4 ordered matrix, the canonical Bayer, built arithmetically rather
+    // than from a table - verified against the published matrix, sixteen distinct values, mean offset
+    // exactly zero over the cell. Added before the readback quantises, it turns the quantisation error
+    // into a pattern instead of a step: no banding, and the coat is handed the texture it expects.
+    //
+    // ONE OFFSET FOR ALL THREE CHANNELS, deliberately. Dithering each channel independently is what
+    // gives the painter its colour cast in the haze - measured, R 16.217 against B 15.554 where this
+    // shader is neutral to three decimals. A common offset moves the luminance and leaves the hue.
+    //
+    // INDEXED BY ABSOLUTE POSITION, never by the position within a tile, or the pattern would restart
+    // at every tile edge and the seams would be the one thing a 43-gigapixel master cannot have. The
+    // mask with 3 is correct for a negative coordinate too, which the bleed produces at the first tile:
+    // two's complement AND takes the low two bits, which is the periodic answer.
+    WGSL.stoneDither = `
+fn dither4(px: i32, py: i32) -> f32 {
+  let x = px & 3; let y = py & 3;
+  let xa = x & 1; let ya = y & 1;
+  let xb = (x >> 1) & 1; let yb = (y >> 1) & 1;
+  let fine = 2 * xa + 3 * ya - 4 * xa * ya;
+  let coarse = 2 * xb + 3 * yb - 4 * xb * yb;
+  return (f32(4 * fine + coarse) + 0.5) / 16.0 - 0.5;
+}`;
+
+    // THE TILE. One invocation a pixel, the ground laid, the modulators over it, then every content layer
+    // in authored order. PX is three floats a pixel, which is what the borrowed readback entries read.
+    //
+    // TWO DIMENSIONS WHEN NEEDED, the same shape glass's main uses: a band of a 4096 tile is more
+    // invocations than one dimension of workgroups can address on every device.
+    WGSL.stoneTile = `
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let n = u32(E.tileW * E.tileH);
+  let gi = g.x + g.y * nw.x * 64u;
+  if (gi >= n) { return; }
+  let p = i32(gi);
+  let ix = p % E.tileW; let iy = p / E.tileW;
+  let q = vec2<f32>(f32(ix) + 0.5, f32(iy) + 0.5);
+
+  // SLAB COORDINATES, used by the mottle and by the grid lookup below.
+  let cu = (f32(E.tileX) + q.x) / E.fullW;
+  let cv = (f32(E.tileY) + q.y) / E.fullW;
+
+  // THE GROUND, exactly as renderOneTile lays it: the backdrop, then groundCol at layOp('base').
+  var acc = vec3<f32>(E.bgR, E.bgG, E.bgB);
+  if (E.hasGround == 1) {
+    let gnd = vec3<f32>(E.gndR, E.gndG, E.gndB);
+    acc = gnd * E.gndOp + acc * (1.0 - E.gndOp);
+  }
+
+  // THE MOTTLE. Slab coordinates, so the sample is where the CPU's drawImage(0, 0, 1, H) puts it:
+  // u over the slab width, v over its height.
+  if (E.hasCloud == 1 && E.cloudOp > 0.0) {
+    let cs = clamp(cloudAt(cu, cv / 0.625) / 255.0, 0.0, 1.0);
+    let b = softLight(acc / 255.0, cs) * 255.0;
+    acc = b * E.cloudOp + acc * (1.0 - E.cloudOp);
+  }
+
+  // THE CELL IS GLOBAL, so it is found ONCE per pixel in draw space rather than per layer in tile
+  // pixels - which is also what lets one packed grid serve every tile of a render.
+  let cxi = clamp(i32(floor(cu * f32(E.gx))), 0, E.gx - 1);
+  let cyi = clamp(i32(floor(cv / 0.625 * f32(E.gy))), 0, E.gy - 1);
+  let c = cyi * E.gx + cxi;
+
+  for (var li = 0; li < E.nLay; li = li + 1) {
+    acc = layerAt(li, q, c, acc);
+  }
+
+  // The dither goes on LAST, after every layer, because it is about the write rather than the
+  // arithmetic: it decides which way this pixel rounds when the readback takes it to eight bits.
+  let dz = dither4(E.tileX + ix, E.tileY + iy);
+  let out = clamp(acc + vec3<f32>(dz), vec3<f32>(0.0), vec3<f32>(255.0));
+  let o = p * 3;
+  PX[o] = out.x; PX[o + 1] = out.y; PX[o + 2] = out.z;
+}`;
+
+    // DECLARATION ORDER, because WGSL wants a function declared before it is used and a wrong order here
+    // is a compile error that only a real device reports.
+    const STONE_ORDER = ['env', 'stoneSoftLight', 'stoneCloud', 'stoneSeg', 'stonePhi', 'stonePoly',
+                         'stoneLayer', 'stoneDither', 'stoneTile'];
+
+    function stoneSource(GW) {
+      const unplaced = Object.keys(WGSL).filter(k => STONE_ORDER.indexOf(k) < 0);
+      if (unplaced.length) throw new Error('stoneSource: unplaced block(s) ' + unplaced.join(', '));
+      const mine = STONE_ORDER.map(k => WGSL[k]).join(LF);
+
+      // AND THE READBACK, WHICH NO CLOSURE CAN FIND. pack, packTex, vfull and fblit are ENTRY POINTS:
+      // the pool names them to createPipeline and no shader function calls them, so walking call sites
+      // reaches none of the four. They need nothing of glass - all four read PX, E.tileW, E.tileH and the
+      // Band uniform, every one of which this Env also declares by those names, so the three materials
+      // share one readback rather than stone getting a third copy of the rounding argument.
+      const ENTRY = ['pack', 'tex'];
+      const entry = ENTRY.filter(k => GW && typeof GW[k] === 'string');
+      if (entry.length !== ENTRY.length) {
+        throw new Error('stoneSource: the readback block(s) ' +
+          ENTRY.filter(k => entry.indexOf(k) < 0).join(', ') + ' are not in the glass WGSL');
+      }
+      return { code: entry.map(k => GW[k]).join(LF) + LF + mine, borrowed: entry };
+    }
+
+    // LAZY for the same reason wood's is: most loads never export stone on the GPU at all,
+    // and gpuModule memoises the compiled module after the first call.
+    STONE_SRC = () => stoneSource(GLASS_WGSL).code;
+    STONE_PACK = packStone;
+    STONE_UNI_OFF = uniOffset;
+    STONE_UNI_BYTES = UNI_BYTES;
+    STONE_COLLAPSE = collapseFilter;
+  }
   // GPU-SYNC>>>
 
   // ---- THE TOGGLE'S MEMORY: per slab, on this machine ------------------------------------------
@@ -16104,6 +17339,19 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
   // from the glass blocks, plus the readback entry points, which is why the two materials share one
   // definition of each instead of two unverified copies.
   const GPU_MAT = {
+    // STONE, THE THIRD, and the one whose shader owns the LEAST. renderOneTile lays the ground and
+    // applies the coat; the callback it hands out replaces paintContent, so this shader owns the base
+    // modulators and the content layers and nothing else. That is what makes one dispatch enough -
+    // applyCoat is twelve box-blur passes, and a per-pixel shader cannot do those in one.
+    stone: {
+      code: () => STONE_SRC(),
+      uni: STONE_UNI_BYTES,
+      off: () => ({ x: STONE_UNI_OFF('tileX'), y: STONE_UNI_OFF('tileY'), h: STONE_UNI_OFF('tileH') }),
+      why: () => stoneWhyNot(),
+      // TILE AND BAND ORIGIN ZERO HERE, as glass does: the pool patches tileX, tileY and tileH per
+      // band through off() above, and packing them would be a second answer to the same question.
+      pack: (ew, W) => STONE_PACK(stoneScene(), { tileW: ew, tileH: ew, tileX: 0, tileY: 0, fullW: W }),
+    },
     glass: {
       code: () => Object.values(WGSL).join(String.fromCharCode(10)),
       uni: 304,
@@ -16283,11 +17531,40 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // written before wood was ported carry it in their record and a reader of those files still has
     // to be able to name it. `nomaterial` is what a material with no shader says now - stone among
     // them, which measured at 101.4 Mpx/s on the CPU because it issues canvas commands the browser
-    // already runs on the GPU, so there is nothing there to port.
+    // already runs on the GPU.
+    //
+    // "SO THERE IS NOTHING THERE TO PORT" STOOD HERE AND IS MEASURED FALSE, 2026-10-29. That canvas
+    // 2D rasterises on the GPU says where the WORK happens, not that the work is well shaped: eight
+    // pool workers are eight queues into one card, and a tile's cost is the command stream, not the
+    // fill rate. Measured against the CPU painter on his own slab, same tile, same geometry:
+    //   VEINS  5,565 chunk strokes a tile become one dispatch - 2.5 ms of canvas against 0.1595 ms,
+    //          15.7x, and the output differs from canvas by mean 2.88 where the engine gate already
+    //          accepts 7.919 between Blink and Gecko.
+    //   FOG    a plane's 770 blobs binned - 13.8x, and bit-identical to the brute-force shader.
+    // The premise is retired rather than deleted because it is the reason this clause reads the way
+    // it does, and a reader who finds `nomaterial` on a stone master needs to know which of the two
+    // answers that master was written under.
     const mat = currentMaterial(), M = GPU_MAT[mat];
     if (!M) return 'exp.gpu.nomaterial';
     if (layTiles) return 'exp.gpu.floor';
-    if (uvMode) return 'exp.gpu.uv';
+    // SPECTRUM IS A COLOUR DIFFERENCE - UNTIL THE HALO IS DRAWN, AND BY DEFAULT IT IS.
+    //
+    // Under a spectrum the body goes dark, the ground is UV_GROUND, the modulators and every haze
+    // plane drop out, and each artifact paints the colour its own stop list gives at this light.
+    // Every one of those is a value the scene resolves before packing, so the shader needs no new
+    // code for any of it - which is why this clause is no longer a flat refusal.
+    //
+    // WHAT IT STILL CANNOT DO is the halo. fxOn sets shadowBlur = glowPx around every pass while a
+    // spectrum is on, and glowPx is 16 * W / 1000 - at 8,192 that is a 131 px shadow, sigma 65.5,
+    // drawn per element in the element's own lifted colour. Under black light that halo IS the
+    // picture: applyCoat skips its own two-pass bloom precisely because the elements already carry
+    // one. A shadow is a blur, this shader reads one pixel, so a document rendered without it comes
+    // out as bare cores on black.
+    //
+    // BLOOM_DRAW is the switch, and it is ON unless ?bloom=blur or ?bloom=off says otherwise. With
+    // ?bloom=blur the halo moves into applyCoat, which runs on the CPU after the shader hands its
+    // face back - so the spectrum really is only a colour difference there, and the shader takes it.
+    if (uvMode && BLOOM_DRAW) return 'exp.gpu.uv';
     if (G.backlight > 0) return 'exp.gpu.backlight';
     const own = M.why();
     if (own) return own;
@@ -16832,6 +18109,208 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     return api;
   }
 
+  // ---- THE PREVIEW ON THE SHADER ---------------------------------------------------------------
+  //
+  // THE WINDOW IS ONE TILE, and that is the whole idea. draw() puts slab point (u, v) at canvas
+  // pixel (k*u + ox, k*v + oy), so a preview frame is a tile of a k-wide render whose origin is
+  // (-ox, -oy) - the same four numbers gpuPool patches per band. Nothing in the shader, the packer
+  // or GPU_MAT has to learn that it is being asked for a preview.
+  //
+  // MEASURED ON HIS OWN SLAB at 1209 x 756, the two vein blurs lifted so the path accepts it:
+  //   CPU       382 ms a frame. Remove the veins and it is 280; remove the haze planes as well and
+  //             it is 16, which is vsync - so the coat, the reality windows and the overlay are a
+  //             rounding error and THE CONTENT IS THE FRAME. 6,608 radial gradients, 361 veins.
+  //   AS AUTHORED  678 ms, because minor#1 and major#1 carry a blur and ctx.filter is then set per
+  //             vein. That is 296 ms a frame for the one thing this path refuses.
+  //   SHADER    6.3 ms on the device; 9.6 ms to dispatch and read the pixels back.
+  //   PACKING   stoneScene 19.6 ms, packStone 26.6 - which makes the packing the expensive half now.
+  // So a frame is about 57 ms against 382.
+  //
+  // THE PACKING IS PER FRAME ON PURPOSE. Keeping the arena would make a view move a 10 ms frame,
+  // because the arena is slab-space and only fullW, tileX and tileY change - but reusing it needs a
+  // cheap answer to "is this still the same document", and the only one this app has is renderSig
+  // at 20.7 ms measured, which would spend half the saving on the question. A dirty flag set by the
+  // view handlers would be cheaper, and a stale face the first time a mutation is routed through
+  // one. Named, not built; the seam is prevRender, which owns the pack and the dispatch together.
+  //
+  // AND IT IS NOT THE EXPORT'S POOL. gpuPool is two buffer sets, a lookahead and a fault gate at
+  // the handoff, for a six-minute render of hundreds of tiles written to disk; this is one rect,
+  // now, on the main thread, thrown away next frame. What they share is the only thing worth
+  // sharing - GPU_MAT, the capability and the compiled module - so a material that teaches the
+  // export something teaches the preview the same thing.
+  let prevGen = 0;            // bumped by redraw(): a face from an earlier generation is not this document
+  let prevWant = '';          // the key THIS frame asks for, set by prevFill one line before it renders
+  let prevHave = null;        // { key, img } the face on hand
+  let prevOut = null;         // a reason key once this path has refused itself: asked once, never per frame
+  let prevD = null;           // the device objects, kept across frames and grown when they are too small
+  let prevChain = Promise.resolve();   // one GPU, one render at a time, sharing one set of buffers
+
+  // WHY THE PREVIEW CANNOT TAKE IT, which is NOT the question gpuWhyNot answers. That one asks
+  // whether the shader can draw this DOCUMENT; this asks whether it can draw this FRAME. The
+  // identity and angle views are readouts of the marks' own ids rather than pictures of the stone,
+  // and they live here rather than in gpuWhyNot because an export never asks for one - putting them
+  // there would refuse a glass master for a reason only a preview can have.
+  // THE DOCUMENT'S LADDER FIRST, then this frame's own two clauses. That order is what makes the
+  // row beside the switch read correctly when more than one thing is true: a switch that is off
+  // trumps a view the shader could not have drawn anyway.
+  function prevWhyNot() {
+    if (prevOut) return prevOut;
+    const own = gpuWhyNot();
+    if (own) return own;
+    if (view === 'identity' || view === 'angle') return 'exp.gpu.prev.ident';
+    // A RENDER HAS THE CARD, and a preview frame would take it back. The export loop does not call
+    // redraw, so this is not about the progress bar - it is about every OTHER control, which stays
+    // live while a render runs. One slider moved mid-export and this path would upload a hundred
+    // megabytes of arena and submit a dispatch into the queue the pool is pipelining through, on a
+    // machine the export has already been measured to leave memory-tight. The frame is cheap to
+    // give up and the render is not.
+    if (exporting) return 'exp.gpu.prev.busy';
+    return null;
+  }
+
+  // THE FOUR NUMBERS THAT MAKE A FRAME, written from exactly the expressions draw() uses so the two
+  // cannot drift apart. tileX and tileY are integers because the uniform's are, which rounds the
+  // view by up to half a pixel against the CPU's fractional origin - and at the default view both
+  // offsets are exactly 0, so the rounding contributes nothing there and can be measured apart from
+  // the renderer difference by comparing the two views.
+  function prevView() {
+    const k = Wc * V.z * dpr;
+    const ox = (Wc / 2 - V.cx * Wc * V.z) * dpr, oy = (Hc / 2 - V.cy * Wc * V.z) * dpr;
+    return { fullW: k, tx: Math.round(-ox), ty: Math.round(-oy), w: cv.width, h: cv.height };
+  }
+  const prevKey = (g, v) => g + '|' + v.fullW.toFixed(3) + '|' + v.tx + '|' + v.ty + '|' + v.w + '|' + v.h;
+
+  // WHAT draw() IS ALLOWED TO BLIT: the face for the frame it is painting, and nothing else. Same
+  // document generation, same view, same window. The two size checks are not belt and braces - the
+  // ResizeObserver calls size() and draw() directly, so a face from before the resize would
+  // otherwise be putImageData'd at its own size into a canvas that is no longer that size.
+  function prevFace() {
+    if (!prevHave || prevHave.key !== prevWant) return null;
+    if (prevHave.img.width !== cv.width || prevHave.img.height !== cv.height) return null;
+    return prevHave.img;
+  }
+
+  // THE ONE AWAIT IN THE PREVIEW PATH, handed back to redraw so the frame can wait for it. null
+  // means there is nothing to wait for: either this path is not drawing, or the face is already on
+  // hand. It never rejects - a refusal is a CPU frame, which is what the whole toggle promises.
+  function prevFill() {
+    if (prevWhyNot()) { prevWant = ''; prevHave = null; return null; }
+    const v = prevView();
+    prevWant = prevKey(prevGen, v);
+    const want = prevWant;
+    if (prevHave && prevHave.key === want) return null;
+    const p = prevChain.then(() => (prevHave && prevHave.key === want) ? null : prevRender(want, v));
+    prevChain = p.catch(() => {});
+    return p.catch(e => {
+      // REFUSED ONCE, NOT EVERY FRAME. A device that has gone wrong will go wrong again, and a
+      // preview that retried per frame would pay a whole dispatch to be told so sixty times a
+      // second. The reason is kept so the row beside the switch can name the clause.
+      prevOut = 'exp.gpu.prev.failed';
+      prevWant = ''; prevHave = null;
+      console.warn('gpu: the preview would not draw', e);
+    });
+  }
+
+  async function prevRender(want, v) {
+    const cap = gpuCap;
+    if (!cap || !cap.ok) throw new Error('no device');
+    const dev = cap.dev, mat = currentMaterial(), M = GPU_MAT[mat];
+    const mod = (cap.mods.get(mat) || {}).mod;
+    if (!M || !mod || !M.uni) throw new Error('no module for ' + mat);
+
+    // THE DEVICE OBJECTS, KEPT. Pipelines are compiled once per device and material; the buffers
+    // are grown when a bigger window or a bigger document needs them and otherwise reused, because
+    // a 3.3 MB arena and an 11 MB intermediate allocated per frame is an allocator at sixty hertz.
+    if (!prevD || prevD.dev !== dev || prevD.mat !== mat) {
+      dev.pushErrorScope('validation');
+      const pipe = await dev.createComputePipelineAsync({
+        layout: 'auto', compute: { module: mod, entryPoint: 'main' } });
+      const pipeP = await dev.createComputePipelineAsync({
+        layout: 'auto', compute: { module: mod, entryPoint: 'pack' } });
+      const e = await dev.popErrorScope();
+      if (e) throw new Error(e.message.split(String.fromCharCode(10))[0]);
+      prevD = { dev, mat, pipe, pipeP, n: 0, arBytes: 0, uniBytes: 0, scoped: new Set() };
+    }
+    const D = prevD;
+
+    // ASKED FOR A SQUARE TILE AND THEN TOLD THE TRUTH, because pack() is the material's answer for
+    // an EXPORT tile and takes one edge length. tileH is patched here through the same offsets the
+    // pool patches per band, which is what keeps this from being a second answer to the question.
+    const packed = M.pack(v.w, v.fullW);
+    const uni = packed.uni.slice(0), uv = new DataView(uni);
+    const O = M.off();
+    uv.setInt32(O.x, v.tx, true);
+
+    // BANDS, SIZED TO WHAT THIS DEVICE WILL BIND, for the reason the pool has them: the f32
+    // intermediate is twelve bytes a pixel, and a 5K display at dpr 2 is 42 Mpx, which is 503 MB
+    // against a 128 MiB storage binding limit. A laptop window is one band and never meets this.
+    const BIND = Math.min(dev.limits.maxStorageBufferBindingSize || (128 << 20),
+                          dev.limits.maxBufferSize || Infinity);
+    const rowsMax = Math.max(1, Math.min(v.h, Math.floor(BIND / Math.max(1, v.w * 12))));
+    const n = v.w * rowsMax;
+    const ST = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
+    if (D.n < n) {
+      for (const b of [D.px, D.pk, D.rb]) { try { if (b) b.destroy(); } catch (_) {} }
+      D.px = dev.createBuffer({ size: n * 3 * 4, usage: ST | CS });
+      D.pk = dev.createBuffer({ size: n * 4, usage: ST | CS });
+      D.rb = dev.createBuffer({ size: n * 4, usage: CD | GPUBufferUsage.MAP_READ });
+      D.n = n; D.grp = null;
+    }
+    if (D.uniBytes !== M.uni) {
+      try { if (D.ub) D.ub.destroy(); } catch (_) {}
+      D.ub = dev.createBuffer({ size: M.uni, usage: GPUBufferUsage.UNIFORM | CD });
+      D.uniBytes = M.uni; D.grp = null;
+    }
+    const arWant = Math.max(4, packed.arena.byteLength);
+    if (D.arBytes < arWant) {
+      try { if (D.ar) D.ar.destroy(); } catch (_) {}
+      D.ar = dev.createBuffer({ size: arWant, usage: ST | CD });
+      D.arBytes = arWant; D.grp = null;
+    }
+    if (!D.grp) {
+      D.grp = dev.createBindGroup({ layout: D.pipe.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: D.px } }, { binding: 2, resource: { buffer: D.ub } },
+        { binding: 3, resource: { buffer: D.ar } }] });
+      D.grpP = dev.createBindGroup({ layout: D.pipeP.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: D.px } }, { binding: 1, resource: { buffer: D.pk } },
+        { binding: 2, resource: { buffer: D.ub } }] });
+      D.scoped.clear();                      // new bind groups are a new encoding: check one of each shape
+    }
+    dev.queue.writeBuffer(D.ar, 0, packed.arena);
+
+    const DIM = Math.min(65535, dev.limits.maxComputeWorkgroupsPerDimension || 65535);
+    const split = g => { const x = Math.min(g, DIM); return [x, Math.ceil(g / x)]; };
+    const img = new ImageData(v.w, v.h);
+    for (let y0 = 0; y0 < v.h; y0 += rowsMax) {
+      const rows = Math.min(rowsMax, v.h - y0), cells = v.w * rows;
+      uv.setInt32(O.y, v.ty + y0, true);     // the band's own origin in the k-wide render
+      uv.setInt32(O.h, rows, true);          // and its own height: the last one is short
+      dev.queue.writeBuffer(D.ub, 0, uni);
+      const [dX, dY] = split(Math.ceil(cells / 64));
+      const check = !D.scoped.has(rows);
+      if (check) { D.scoped.add(rows); dev.pushErrorScope('validation'); }
+      const enc = dev.createCommandEncoder();
+      const a = enc.beginComputePass();
+      a.setPipeline(D.pipe); a.setBindGroup(0, D.grp); a.dispatchWorkgroups(dX, dY); a.end();
+      const b = enc.beginComputePass();      // a pass boundary is the ordering the pack needs
+      b.setPipeline(D.pipeP); b.setBindGroup(0, D.grpP); b.dispatchWorkgroups(dX, dY); b.end();
+      enc.copyBufferToBuffer(D.pk, 0, D.rb, 0, cells * 4);
+      dev.queue.submit([enc.finish()]);
+      await D.rb.mapAsync(GPUMapMode.READ, 0, cells * 4);
+      // ONE set(), NOT A PER-PIXEL LOOP. The shader writes RGBA in the order ImageData wants, so
+      // this is a memcpy - the thing the pool learned at 14.6 ms of a 32.5 ms tile.
+      img.data.set(new Uint8Array(D.rb.getMappedRange(0, cells * 4)), y0 * v.w * 4);
+      D.rb.unmap();
+      const e = check ? await dev.popErrorScope() : null;
+      // AND THE UNSCOPED BANDS ARE NOT UNCHECKED: onuncapturederror records the first fault on the
+      // capability, and this is where a frame stops because of it.
+      if (!e && cap.fault) throw new Error(cap.fault);
+      if (e) throw new Error(e.message.split(String.fromCharCode(10))[0]);
+    }
+    prevHave = { key: want, img };
+    return img;
+  }
+
   // ---- THE GPU TOGGLE -------------------------------------------------------------------------
   // DOWN HERE, BELOW THE DECLARATIONS, and that is the whole reason for its position. This block
   // first sat up with the tier checkboxes, where the start-up call to gpuSyncRow ran before the
@@ -16857,6 +18336,14 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
   }
   document.getElementById('gpu-on').addEventListener('change', () => {
     gpuPrefSet(document.getElementById('gpu-on').checked);
+    // AND THE PREVIEW TAKES IT NOW. One switch governs both renderers, so leaving the frame alone
+    // would mean the preview kept whichever painter it already had until some unrelated edit came
+    // along - with the switch in plain sight beside it saying otherwise. Turning it OFF has to
+    // repaint for the same reason: the last shader face is still on the canvas until something
+    // paints over it.
+    prevOut = null;                            // a fresh ask: an earlier refusal was about an earlier try
+    prevHave = null; prevWant = '';
+    redraw(false);
   });
   gpuSyncRow();
 
@@ -17596,7 +19083,24 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
                                fins: pool.finishers || 0, tex: !!pool.texReadback,
                                gpu: !!pool.gpu, own: pool.own ? pool.own : undefined } : null;
       if (pool) { pool.close(); pool = null; }
-      proveTile(p.ts, W);                                  // settled: every render after this one matches it
+      // A FORCED RENDER RAN NO RACE, SO IT HAS NOTHING TO PROVE. `ok` means this size was weighed
+      // against the others and finished; forcedTile() skips the remembered plan AND the ladder walk
+      // below it, so a forced tile was never measured against anything. Writing it here recorded an
+      // unraced size as the winner, and the next unforced render at that width took it back out of
+      // the store and used it - one diagnostic run deciding the plan from then on.
+      //
+      // THE OTHER HALF OF THIS PAIR WAS ALREADY GUARDED and that is what gives the shape away:
+      // markAttempt is skipped for a forced render, so forcing could never teach the planner that a
+      // size is DANGEROUS while it still taught it that a size is RIGHT. One direction had been
+      // thought about. Now both ask the same question, which is also the question the planner asks
+      // everywhere else - `const proven = forcedTile() ? 0 : provenTile(W)`.
+      //
+      // IT COVERS THE RESUME TOO, and deliberately: a resumed job pins tilePick from the record
+      // rather than from a person, so it does not promote either. Nothing is lost - the size it is
+      // running was already proven when the first attempt chose it, and if that attempt died before
+      // promoting, the next render simply races again. markAttempt is skipped on that path for the
+      // same reason, so the two stay a pair.
+      if (!forcedTile()) proveTile(p.ts, W);                // settled: every render after this one matches it
       const msRender = Date.now() - tR;
       expStat(TR('exp.saving'), 0.96); await breathe();
       await sealing;                                        // the device block, ready before the metadata is built
