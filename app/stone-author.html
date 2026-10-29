@@ -1840,7 +1840,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.28.228';
+  const BUILD = '2026.10.28.229';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -8757,7 +8757,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // switched off" both move the hash.
   const LAYER_PANELS = [
     { id: 'fog-panel', slot: 'fog', tokens: [
-      { key: 'haze', def: 0, min: 0, max: 0.06, step: 0.005, labelKey: 'sl.fogHaze', pct: true },
+      // THE HAZE CAP CLAMPS ON SAVE, so it was never only a limit on the slider: the adapter below
+      // writes Math.max(t.min, Math.min(t.max, n)), and a plane loaded from a file above the cap
+      // loses its value the moment this panel is touched. It sat at 0.06, which is about where ONE
+      // undisturbed plane is worth: measured by ablation, +32 at the frame edge over a black ground,
+      // decaying to +0.3 a quarter of the way down. Raising it buys less than it looks - the same
+      // plane at 0.18 contributes +51.3, so three times the haze is 1.60x, not three times, because
+      // the alpha accumulates and saturates. Worth having anyway; none of it was reachable before.
+      { key: 'haze', def: 0, min: 0, max: 0.25, step: 0.005, labelKey: 'sl.fogHaze', pct: true },
       { key: 'size', def: 1, min: 0.3, max: 2.5, step: 0.05, labelKey: 'sl.fogSize' },
       { key: 'density', def: 1, min: 0.2, max: 2.5, step: 0.05, labelKey: 'sl.fogDensity' },
     ] },
@@ -8822,7 +8829,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const host = document.getElementById(id); if (!host) return;
     host.textContent = '';
     const el = document.createElement('theme-kit-editor');
-    const fmt = (k, v) => (e.byKey.get(k) || {}).pct ? Math.round(v * 100) + '%' : (+v).toFixed(2) + '\u00d7';
+    // ONE DECIMAL, because the step is half a percent. Whole-percent rounding made every pair of
+    // adjacent positions print the same number - 0.005 and 0.01 both read 1% - so the readout could
+    // not say which of two steps you were on. Raising the cap multiplies the positions, and would
+    // have multiplied that with them.
+    const fmt = (k, v) => (e.byKey.get(k) || {}).pct ? (v * 100).toFixed(1) + '%' : (+v).toFixed(2) + '\u00d7';
     el.registerWidget('slNum', sliderBox(fmt));
     el.labels = tkLabels();
     host.appendChild(el);
