@@ -1853,7 +1853,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.29.236';
+  const BUILD = '2026.10.29.237';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4460,8 +4460,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; drawLayerArtifacts(L, '#fff');
     g2d = prev; return c;
   }
-  function paintBacklit(tcv, bs) {                          // tcv/bs default to the live canvas; renderFull passes an offscreen target + its blur scale
-    tcv = tcv || cv; bs = bs || (tcv.width / COAT_REF);     // the same reference the export uses, so the glow is not a window measurement
+  // THE BACK LIGHT, IN TWO HALVES, BECAUSE ONLY ONE OF THEM IS ABOUT A TILE.
+  //
+  // backlitMaps builds the whole-slab half: a 512-wide picture of the light that gets through the
+  // slab (workC) and one of what glows through it (emitC). Nothing in there knows about a tile - it
+  // is the same two images wherever they are sampled - and until 2026-10-29 it was rebuilt on EVERY
+  // call, which is why renderTiled gave up and returned renderFull with the note that tiling the
+  // fold was a separate step. This is that step: build these once and every tile can sample them.
+  //
+  // THE COST IS NOT SMALL, which is the whole point of lifting it out. expBaseMask paints the base
+  // composite over the slab, every visible layer draws its coverage twice more through layerMask and
+  // layerCov, and the emission is the entire content painted again under uvMode.
+  function backlitMaps() {
     const W = 512, body = expBaseMask(W);                  // the base bucket = the translucent matrix that GLOWS
     const gw = body.width, gh = body.height;
     if (backC.width !== gw || backC.height !== gh) { backC.width = gw; backC.height = gh; }
@@ -4490,9 +4500,6 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const mask = layerMask(L, W, t);
       wx.globalCompositeOperation = 'multiply'; wx.drawImage(mask, 0, 0); wx.globalCompositeOperation = 'source-over';   // occlude by its coverage toward its transmittance
     }
-    g2d.imageSmoothingEnabled = true; g2d.drawImage(workC, 0, 0, gw, gh, 0, 0, 1, H);   // place under the current view transform (respects pan/zoom)
-    // EMISSION-COMPOSE: self-luminous inclusions glow THROUGH the backlight (direction-independent), reusing the
-    // uv emit path. At daylight spectrum nothing emits, so this is a no-op; set the dial to an authored value to light them.
     if (emitC.width !== gw || emitC.height !== gh) { emitC.width = gw; emitC.height = gh; }
     const ex = emitC.getContext('2d');
     ex.setTransform(1, 0, 0, 1, 0, 0); ex.globalAlpha = 1; ex.filter = 'none'; ex.globalCompositeOperation = 'source-over';
@@ -4502,8 +4509,19 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const ed = ex.getImageData(0, 0, gw, gh), da = ed.data;                              // clip the near-black UV_DARK floor so ONLY real emission is added
     for (let i = 0; i < da.length; i += 4) if (da[i] + da[i + 1] + da[i + 2] < 60) { da[i] = da[i + 1] = da[i + 2] = 0; }
     ex.putImageData(ed, 0, 0);
+    return { gw, gh };
+  }
+  // AND THE PER-TILE HALF. Both maps go down under whatever transform the caller has already set:
+  // the view for a preview, the tile's own slab transform for an export.
+  function backlitPlace(gw, gh) {
+    g2d.imageSmoothingEnabled = true; g2d.drawImage(workC, 0, 0, gw, gh, 0, 0, 1, H);   // place under the current view transform (respects pan/zoom)
     const prevOp = g2d.globalCompositeOperation; g2d.globalCompositeOperation = 'lighter';
     g2d.drawImage(emitC, 0, 0, gw, gh, 0, 0, 1, H); g2d.globalCompositeOperation = prevOp;
+  }
+  // THE SPREAD A BACK LIGHT NEEDS, per tile because it blurs the tile's OWN pixels. It reads tcv, so
+  // it cannot run until the content is down - which in a tiled render is applyCoat's moment, not
+  // this one.
+  function backlitBloom(tcv, bs) {
     // SCATTER / BLOOM: a real backlight bleeds — soft additive bloom of the whole lit result so it reads as light, not tint
     g2d.save(); g2d.setTransform(1, 0, 0, 1, 0, 0); g2d.globalCompositeOperation = 'lighter';
     // THROUGH blurDraw, like the emission bloom. These two are additive under 'lighter', so where the
@@ -4514,6 +4532,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     g2d.globalAlpha = 0.3; blurDraw(g2d, tcv, 5 * bs, tcv.width, tcv.height);
     g2d.globalAlpha = 0.18; blurDraw(g2d, tcv, 11 * bs, tcv.width, tcv.height);
     g2d.filter = 'none'; g2d.globalAlpha = 1; g2d.globalCompositeOperation = 'source-over'; g2d.restore();
+  }
+  // THE MAPS FOR THE RENDER IN PROGRESS, or null. A tiled render builds them ONCE and every tile
+  // places the same two images; renderFull and the preview build their own and clear it again. The
+  // lifetime is explicit rather than a cache with an invalidation question, because the fold depends
+  // on the geometry, the layer stack, the light and three modulator strengths, and a key over all of
+  // that is either expensive or wrong.
+  let backlitFor = null;
+  function paintBacklit(tcv, bs) {                          // tcv/bs default to the live canvas; renderFull passes an offscreen target + its blur scale
+    tcv = tcv || cv; bs = bs || (tcv.width / COAT_REF);     // the same reference the export uses, so the glow is not a window measurement
+    const m = backlitMaps();
+    backlitPlace(m.gw, m.gh);
+    backlitBloom(tcv, bs);
   }
   // COAT PASSES — factored so live draw() and the offline renderFull share one implementation (no drift).
   // tcv = the finished-so-far canvas (read from), tx = its context (drawn to), bs = blur scale (dpr live / W·ref offline).
@@ -4710,6 +4740,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // ±16, every one sits on lit content and they are scattered, not clustered on tile joins - 6.63%
     // fall within 64 px of a seam against 6.15% for a uniform scatter. It is ±1 on gradient contours,
     // invisible at any viewing distance, and docs/renderer-determinism.md carries the numbers.
+    // THE BACK LIGHT'S OWN SPREAD, which is image-space like the emission bloom above and therefore
+    // needs the same thing: a tile blurred at 11 * bs reads 11 * bs of its neighbours. Outside the
+    // branch because it is independent of the light - backlitBloom runs whatever the spectrum.
+    // Costs nothing that exists today: until this change a backlit slab never tiled at all.
+    if (!layTiles && G.backlight > 0) r = Math.max(r, 11 * bs, 5 * bs);
     if (uv && !BLOOM_DRAW) r = Math.max(r, 8 * bs, 3 * bs);                      // emission bloom
     else {
       if (G.subsurface > 0) r = Math.max(r, (2 + 3 * G.subsurface) * bs, (1 + 2 * G.subsurface) * bs);
@@ -4871,7 +4906,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, bleed = bleedPx != null ? bleedPx : coatReach(bs); glowPx = BLOOM_DRAW ? 16 * bs : 0;
     const fc = document.createElement('canvas'); fc.width = finalW; fc.height = finalH;
     const fx = fc.getContext('2d'), prevG = g2d;
-    const baseFill = cx2 => { cx2.setTransform(1, 0, 0, 1, 0, 0); if (uvMode) { cx2.fillStyle = UV_GROUND; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else { cx2.fillStyle = STONE_BG; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); if (layVis('base')) { cx2.globalAlpha = layOp('base'); cx2.fillStyle = groundCol(); cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); cx2.globalAlpha = 1; } } };
+    // SECOND COPY OF THE SAME DECISION. renderOneTile lays its own ground and tiledPlan lays this
+    // one; a backlit tile needs renderFull's near-black backdrop in BOTH, and fixing only the first
+    // left this path reading +14.017 brighter with the numbers unchanged to three decimals.
+    const backlit = !layTiles && G.backlight > 0;
+    const baseFill = cx2 => { cx2.setTransform(1, 0, 0, 1, 0, 0); if (backlit) { cx2.fillStyle = '#0b0b0e'; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else if (uvMode) { cx2.fillStyle = UV_GROUND; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); } else { cx2.fillStyle = STONE_BG; cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); if (layVis('base')) { cx2.globalAlpha = layOp('base'); cx2.fillStyle = groundCol(); cx2.fillRect(0, 0, cx2.canvas.width, cx2.canvas.height); cx2.globalAlpha = 1; } } };
     baseFill(fx);                                          // fill the assembly canvas so any sub-pixel gaps read as base, not transparent
     const tc = document.createElement('canvas'), tcx = tc.getContext('2d');
     const jobs = [];
@@ -4884,8 +4923,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
           if (tc.width !== ew || tc.height !== eh) { tc.width = ew; tc.height = eh; }
           baseFill(tcx);
           tcx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); tcx.lineCap = 'round'; tcx.lineJoin = 'round'; g2d = tcx;   // slab 0..1 → final px, offset so this tile's expanded region fills tc
-          paintContent(false, false);
-          applyCoat(tc, tcx, bs, { ident: false, uvMode, backlit: false, tiled: true }, { ox: ex0, oy: ey0, fw: finalW, fh: finalH });
+          if (backlit && backlitFor) { backlitPlace(backlitFor.gw, backlitFor.gh); backlitBloom(tc, bs); }
+          else paintContent(false, false);
+          applyCoat(tc, tcx, bs, { ident: false, uvMode, backlit, tiled: true }, { ox: ex0, oy: ey0, fw: finalW, fh: finalH });
           g2d = prevG;
           fx.setTransform(1, 0, 0, 1, 0, 0); fx.drawImage(tc, bleed, bleed, tileW, tileH, tx0, ty0, tileW, tileH);   // crop the bleed
         });
@@ -4899,11 +4939,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return { jobs, finish };
   }
   function renderTiled(W, tilePx, bleedPx) {
+    // THE FOLD IS BUILT ONCE FOR THE WHOLE RENDER AND EVERY TILE SAMPLES IT. This returned
+    // renderFull until 2026-10-29, with the note that tiling the fold was a separate step; the step
+    // was lifting the whole-slab half out of paintBacklit so it stops being rebuilt per tile.
     const backlit = !layTiles && G.backlight > 0;
-    if (backlit) return renderFull(W);                     // back-light fold is whole-slab; tiling it is a separate step
-    const p = tiledPlan(W, tilePx, bleedPx);
-    for (const j of p.jobs) j();
-    return p.finish();
+    if (backlit) backlitFor = backlitMaps();
+    // CLEARED WHATEVER HAPPENS. backlitFor is read by every renderOneTile, so leaving it set would
+    // hand a LATER render - a calibration tile, a window, the next export - the fold of this one.
+    try {
+      const p = tiledPlan(W, tilePx, bleedPx);
+      for (const j of p.jobs) j();
+      return p.finish();
+    } finally { backlitFor = null; }
   }
 
   // ---- STRIPS: the slab in full-width bands, for a render too large to hold ---------------------------
@@ -5027,7 +5074,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (c.width !== ew || c.height !== eh) throw new Error('tile canvas clamped to ' + c.width + 'x' + c.height);
     const cx = c.getContext('2d');
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;
-    if (uvMode) { cx.fillStyle = UV_GROUND; cx.fillRect(0, 0, ew, eh); }
+    // A BACKLIT TILE LAYS WHAT renderFull LAYS, which is not the stone ground. The fold REPLACES the
+    // content, so the backdrop under it is a near-black room rather than a lit slab - put the ground
+    // there instead and it shows through everywhere the fold is dark. Measured before this line
+    // existed: a tiled backlit render read +14.017 brighter than the whole-canvas one, uniformly,
+    // with the tile joins no worse than anywhere else - which is what a wrong backdrop looks like
+    // and a short bleed does not.
+    const backlit = !layTiles && G.backlight > 0 && !!backlitFor;
+    if (backlit) { cx.fillStyle = '#0b0b0e'; cx.fillRect(0, 0, ew, eh); }
+    else if (uvMode) { cx.fillStyle = UV_GROUND; cx.fillRect(0, 0, ew, eh); }
     else {
       cx.fillStyle = STONE_BG; cx.fillRect(0, 0, ew, eh);
       if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = groundCol(); cx.fillRect(0, 0, ew, eh); cx.globalAlpha = 1; }
@@ -5038,10 +5093,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // transform. Resetting it here cost a round - the GPU painter blitted its whole tile over the
     // ground, including the part of the tile the picture does not reach, and the bottom row of a
     // 4096 export came back 78% wrong.
+    // A BACKLIT TILE PAINTS THE FOLD, NOT THE CONTENT, exactly as paintBacklit does for a whole
+    // picture: the two whole-slab maps go down under this tile's own transform and then the spread
+    // blurs this tile's pixels. backlitFor is set by the caller for the length of the render, so the
+    // maps are built once rather than once per tile - which is what made tiling this impractical.
     if (paint) paint(cx, ew, eh, ex0, ey0);
+    else if (backlit) { backlitPlace(backlitFor.gw, backlitFor.gh); backlitBloom(c, bs); }
     else paintContent(false, false);
     const vp = { ox: ex0, oy: ey0, fw: finalW, fh: finalH };
-    applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true }, vp);
+    // backlit TRAVELS INTO THE COAT, where it was hardcoded false. applyCoat skips the subsurface
+    // high-pass and the emission bloom for a backlit picture, so a tile that lied about it ran both.
+    applyCoat(c, cx, bs, { ident: false, uvMode, backlit, tiled: true }, vp);
     // REALITY WINDOWS ARE NOT A WHOLE-PICTURE STEP HERE, because this path never assembles a picture.
     // renderFull, the strip path and the worker path all composite them onto an assembled canvas; this one
     // writes each tile straight to disk, so they were simply dropped — every tiled master ever written is
@@ -5136,6 +5198,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // blurDraw and pyramidBlur are function declarations above this point, so they can be named
       // here; the glow trio cannot, and arrives through glowFns() below.
       blurDraw, pyramidBlur,
+      // AND THE BACK LIGHT'S TWO HALVES. backlitPlace draws workC and emitC BY NAME, so the
+      // preamble binds those names to the bitmaps the init message carries and the serialised
+      // body needs no edit - the same trick the three modulator stubs use.
+      backlitPlace, backlitBloom,
       // compileOps turns the op list into records the per-pixel walk can read without a string
       // compare or a coercion. OPK is the kind table it reads; both travel or the core throws on
       // its first glass pixel.
@@ -5185,7 +5251,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `var woodBandY=0,WOOD0=${JSON.stringify(WOOD0)};\n`;
     s += `var GLASS=${JSON.stringify(GLASS)},IN=${IN},SLAB_FT=${SLAB_FT};\n`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
-    s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,view,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br,coatBloomDone;\n`;
+    s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,view,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br,coatBloomDone,layTiles,workC,emitC,__bkW,__bkH,__backlit;\n`;
     // MATERIAL is what paintContent forks on, and it was never declared here at all - a free
     // variable in a worker throws on read, so this core could paint NO material, not just not
     // glass. marks and _wmask travel for the same reason: the glass painter reads the mark list
@@ -5275,7 +5341,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // still runs synchronously to completion exactly as before - an async function only yields at its
     // first await, and that path never reaches one.
     s += `self.onmessage=async function(e){var d=e.data;\n`;
-    s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;self.postMessage({type:'ready'});return;}\n`;
+    s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;layTiles=!!d.layTiles;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;workC=d.bk||null;emitC=d.em||null;__bkW=d.bkW|0;__bkH=d.bkH|0;__backlit=!layTiles&&G.backlight>0&&!!workC;self.postMessage({type:'ready'});return;}\n`;
     // THE ACK IS THE ONLY WAY TO TELL A QUEUE FROM A STALL. A bitmap arriving late can mean the
     // worker painted for a minute or that it sat holding a message it had not been scheduled to
     // read, and the completion time cannot distinguish them. Posted from the top of the handler,
@@ -5304,7 +5370,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // same storedTilePixels, the same deflate, the same reply. A worker that paints and a worker
     // that finishes differ by which side of this branch they took.
     s += `if(d.bmp){tcx.drawImage(d.bmp,0,0);d.bmp.close();}else{\n`;
-    s += `tcx.setTransform(1,0,0,1,0,0);if(uvMode){tcx.fillStyle=UV_GROUND;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
+    s += `tcx.setTransform(1,0,0,1,0,0);if(__backlit){tcx.fillStyle='#0b0b0e';tcx.fillRect(0,0,d.ew,d.eh);}else if(uvMode){tcx.fillStyle=UV_GROUND;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
     // CONTENT FROM SOMEBODY ELSE, GROUND AND COAT STILL OURS. d.bmp above is a tile that is already
     // finished; d.glass is only the picture, and everything renderOneTile wraps around it still has
@@ -5325,8 +5391,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `if(d.glass){var pg=g2d;g2d=tcx;var WB=null;try{WB=woodRect();}finally{g2d=pg;}` + NL;
     s += `if(WB){tcx.save();tcx.setTransform(1,0,0,1,0,0);` + NL;
     s += `tcx.drawImage(d.glass,WB.x0,WB.y0,WB.bw,WB.bh,WB.x0,WB.y0,WB.bw,WB.bh);tcx.restore();}` + NL;
-    s += `d.glass.close();}else{paintContent(false,false);}` + NL;
-    s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:false,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
+    s += `d.glass.close();}else if(__backlit){backlitPlace(__bkW,__bkH);backlitBloom(tc,d.bs);}else{paintContent(false,false);}` + NL;
+    s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:__backlit,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
     // THE WINDOWS, after the coat and only for tiles a disc actually reaches - the same order and
     // the same skip test renderOneTile uses, because a window composites over a FINISHED tile and a
     // tile the disc misses must not pay for one. Line for line the main thread's block; any
@@ -5397,7 +5463,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       modBitmap(layVis('bands') && G.bandStrength > 0, ensureBands),
       modBitmap(layVis('breccia') && G.brecStrength > 0, ensureBreccia),
     ]);
-    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, spotOn, hidden: [...hidden],
+    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, spotOn, layTiles, hidden: [...hidden],
                     material: currentMaterial(), marks };
     const url = URL.createObjectURL(new Blob([renderCoreSrc()], { type: 'application/javascript' }));
     const pool = [];
@@ -14574,7 +14640,7 @@ self.onmessage = async (e) => {
   // It was expensive while it lasted: every slab carrying an island with Show through rendered
   // single-threaded, and on a 131,072 that is four and a half minutes against fifty-one seconds.
   // harness/window-pool.mjs holds the proof that both paths write the same bytes.
-  const corePaintsThis = () => !layTiles && !(WOOD.graft > 0) && !(!layTiles && G.backlight > 0) &&
+  const corePaintsThis = () => !layTiles && !(WOOD.graft > 0) &&
     typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
   // WHICH CLAUSE SAID NO, in the same order corePaintsThis evaluates them. A predicate that answers
   // only true or false is fine for the code and useless to a person: a render that silently never
@@ -14592,7 +14658,9 @@ self.onmessage = async (e) => {
     if (EXP_FORCE_SEQ) return 'exp.pool.forced';
     if (layTiles) return 'exp.pool.floor';
     if (WOOD.graft > 0) return 'exp.pool.graft';
-    if (G.backlight > 0) return 'exp.pool.backlight';
+    // THE BACK LIGHT CAME OFF THIS LIST on 2026-10-29. It refused because the fold was whole-slab
+    // and rebuilt per call; it is built once now and travels to each worker as two bitmaps. The
+    // key stays in the strings because masters written while it refused still carry it.
     if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return 'exp.pool.noworkers';
     return null;
   }
@@ -18933,23 +19001,31 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const n = poolWidthFor(p.budgetMB, p.tileMB);
     if (!n) return null;
     const bs = W / COAT_REF, finalW = W, finalH = p.FH;
-    const [clB, bdB, brB] = await Promise.all([
+    // THE FOLD IS ALREADY BUILT - exportTiff does it once before the pool exists - so this only
+    // copies it. backlitMaps leaves the two pictures in workC and emitC; a worker cannot share a
+    // canvas, so each gets its own bitmap, exactly as the three modulators do.
+    const bkOn = !!backlitFor;
+    const [clB, bdB, brB, bkB, emB] = await Promise.all([
       layVis('clouds') && G.cloudStrength > 0 ? createImageBitmap(ensureClouds()) : null,
       layVis('bands') && G.bandStrength > 0 ? createImageBitmap(ensureBands()) : null,
       layVis('breccia') && G.brecStrength > 0 ? createImageBitmap(ensureBreccia()) : null,
+      bkOn ? createImageBitmap(workC) : null,
+      bkOn ? createImageBitmap(emitC) : null,
     ]);
-    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum,
-                    spotOn, hidden: [...hidden], material: currentMaterial(), marks };
+    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, layTiles,
+                    spotOn, hidden: [...hidden], material: currentMaterial(), marks,
+                    bkW: bkOn ? backlitFor.gw : 0, bkH: bkOn ? backlitFor.gh : 0 };
     const url = URL.createObjectURL(new Blob([renderCoreSrc()], { type: 'application/javascript' }));
     const pool = [];
     try {
       for (let i = 0; i < n; i++) {
         const w = new Worker(url);
-        const [cl, bd, br] = await Promise.all([clB ? createImageBitmap(clB) : null, bdB ? createImageBitmap(bdB) : null, brB ? createImageBitmap(brB) : null]);
+        const [cl, bd, br, bk, em] = await Promise.all([clB ? createImageBitmap(clB) : null, bdB ? createImageBitmap(bdB) : null, brB ? createImageBitmap(brB) : null,
+                                                        bkB ? createImageBitmap(bkB) : null, emB ? createImageBitmap(emB) : null]);
         await new Promise((res, rej) => {
           w.onmessage = e => { if (e.data.type === 'ready') res(); };
           w.onerror = e => rej(new Error('render worker: ' + (e.message || 'failed to start')));
-          w.postMessage({ type: 'init', ...state, cl, bd, br }, [cl, bd, br].filter(Boolean));
+          w.postMessage({ type: 'init', ...state, cl, bd, br, bk, em }, [cl, bd, br, bk, em].filter(Boolean));
         });
         // AN IDENTITY THAT OUTLIVES THE ARRAY. Shedding splices this array, so a worker's position
         // in it is not a name - index 3 before a shed and index 3 after are different workers. The
@@ -19434,6 +19510,9 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // every pass and neither may be re-derived at the far end: the signature is taken once for the
     // whole render, and whether the worker finishes decides the shape of what it sends back.
     p.markSig = markSig; p.fin = FINISH_WORKER;
+    // THE BACK LIGHT'S WHOLE-SLAB HALF, ONCE FOR THE RENDER. Every tile samples it - the pool's
+    // workers get it as two bitmaps at init, and the main-thread retry path reads it from here.
+    if (!layTiles && G.backlight > 0) backlitFor = backlitMaps();
     // THE POOL BECOMES THE FINISHER when the GPU is painting. It cannot be built any earlier: it
     // needs p.markSig, and that is taken after the painter is chosen because renderSig now records
     // which painter it was. finishOnly keeps it full width from the first pass - a finish is not a
@@ -19913,7 +19992,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       if (pool) { pool.close(); pool = null; }             // idempotent: the success path closes it too
       // CLEARED, or every signature taken after a GPU export would claim the GPU drew it - including
       // the one the NEXT export takes before it has decided anything.
-      drewOnGpu = false; bloomOnGpu = false;
+      drewOnGpu = false; bloomOnGpu = false; backlitFor = null;
       btn.disabled = selW.disabled = selF.disabled = false; exporting = false; wakeOff(); expFreeze();
       resumeOffer();   // whatever this render left behind - finished, refused or killed - say so now
     }

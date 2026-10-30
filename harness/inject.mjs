@@ -21,6 +21,10 @@ const hook = `
     // the export's own builders, so the harness can time them against each other. renderTiled paints the
     // whole slab's content once PER TILE; renderFull paints it once but needs the entire canvas at once.
     renderTiled, expBaseMask, expCoverage, expIdT,
+    // THE BACK LIGHT'S WHOLE-SLAB MAPS AND THE RENDER-SCOPED HANDLE TO THEM. exportTiff and
+    // renderTiled set this for the length of a render and clear it after; a probe comparing ONE
+    // pooled tile against one sequential tile is not inside either, so it has to say so itself.
+    backlitMaps, setBacklitFor: m => { backlitFor = m; },
     // the strip path: a render larger than a canvas can be, assembled as a PNG stream
     renderStreamedPNG, stripPlan, renderStrip,
     // the grid path: an arbitrary rectangle of the picture, and the tiled container it is written into
@@ -104,7 +108,7 @@ const hook = `
     // whether they POPULATE is to run a 14 minute render and look - which is a slow way to discover
     // a typo. With this a gate can drive eight workers over a small picture and assert that an ack
     // came back, that the busy counts move, and that each worker is identified.
-    tilePool, corePaintsThis, poolWidthFor,
+    tilePool, corePaintsThis, poolWhyNot, poolWidthFor,
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
     // prevGen++ IS THE DOCUMENT CHANGING. In the app every mutation reaches the GPU face
     // through redraw, which counts a generation; this entry does not go through redraw, so

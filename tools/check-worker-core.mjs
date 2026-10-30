@@ -51,7 +51,15 @@ const SELF = process.argv.includes('--self-test');
 // ---- what the worker is given ------------------------------------------------------------------
 const fnsAt = SRC.indexOf('const fns = {');
 if (fnsAt < 0) { console.error('could not find the worker core function list'); process.exit(2); }
-const listed = [...new Set(SRC.slice(fnsAt + 13, SRC.indexOf('};', fnsAt))
+// COMMENTS FIRST, because this splits the literal on whitespace and takes every word that LOOKS
+// like an identifier - so a name merely MENTIONED in a comment inside the list was carried into the
+// seed and walked as if the core had it. On 2026-10-29 the word `ensureClouds` in a note about how
+// the preamble stubs it reported three of its internals as unresolved, in a core that has never
+// been able to reach them. This file's own bodyOf carries the same warning about a gate that
+// manufactures names: it teaches the reader to skim the output.
+// INLINE, because `strip` is a const declared further down and this runs before it.
+const noComments = t => t.replace(/[/][*][^]*?[*][/]/g, ' ').replace(/[/][/].*/g, ' ');
+const listed = [...new Set(noComments(SRC.slice(fnsAt + 13, SRC.indexOf('};', fnsAt)))
   .split(/[,\s]+/).map(s => s.trim()).filter(s => /^[A-Za-z_$][\w$]*$/.test(s)))];
 // A SECOND WAY IN, and it is not a loophole. A name declared BELOW renderCoreSrc cannot be written
 // into the literal above without opening a temporal dead zone, which check-bleed refuses by name -
@@ -139,6 +147,14 @@ for (const m of preamble.matchAll(/([A-Za-z_$][\w$]*)\s*=\s*\(\)\s*=>/g)) overri
 // which guard. `unreviewed` means exactly that: nobody has walked the path, so it may throw when the
 // path runs. The list is meant to SHRINK, and anything not on it fails the build.
 const DECLARED = {
+  // THESE TWO WERE EXCUSED BY PROSE until the fns scrape started stripping comments on 2026-10-29.
+  // Both are artifacts of how this file reads the app, not names the core is missing, and both were
+  // invisible for as long as the words 'MATERIAL' and 'a' happened to appear in a comment inside the
+  // function list - which is the shape of excuse this gate exists to refuse.
+  MATERIAL: 'carried - the core declares it through MATERIAL_DECL, a constant holding the text that '
+          + 'declares it, so the core SOURCE never spells the name and this scan cannot see it',
+  a: 'a matcher floor, not a reach - the app has a one-letter name at IIFE indentation and uses() '
+   + 'finds the token `a` in very nearly every body, so this says nothing about the worker',
   sectionList: 'gated - only a graft reaches it, and corePaintsThis refuses the pool when one is set',
   blurDraw:    'gated - applyCoat reaches it only under `f.uvMode`, and corePaintsThis refuses the pool in uvMode. Verified at the call site, not assumed',
   serialize:   'unreviewed - wrap; lifting it would carry the whole app state, so it has to stay gated instead',

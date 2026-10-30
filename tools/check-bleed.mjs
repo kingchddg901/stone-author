@@ -106,7 +106,11 @@ for (const m of app.matchAll(/bleed\s*=\s*[^;\n]*/g))
 // composite with `lighter`, so unblurred they added two SHARP copies of the whole image at 0.30 and 0.18
 // alpha - the picture at 1.48x brightness with every edge intact. blurDraw is the only path with a
 // fallback, so an additive pass has to use it.
-const backlit = app.slice(app.indexOf('function paintBacklit'), app.indexOf('function applyCoat'));
+// THE WINDOW IS THE WHOLE FAMILY, not paintBacklit alone. On 2026-10-29 that function was split into
+// backlitMaps, backlitPlace, backlitBloom and a paintBacklit that calls the three - and the two
+// additive passes this checks moved into backlitBloom, which sits ABOVE paintBacklit. The gate went
+// red on a refactor that had changed no pixel, which is the right failure but the wrong window.
+const backlit = app.slice(app.indexOf('function backlitMaps'), app.indexOf('function applyCoat'));
 for (const m of backlit.matchAll(/filter\s*=\s*.blur\(/g))
   fail.push(`the back light blurs with a raw canvas filter (${m[0]}): where ctx.filter is absent that pass adds a SHARP copy of the picture, because it composites with lighter`);
 if ((backlit.match(/blurDraw\(/g) || []).length < 2)
