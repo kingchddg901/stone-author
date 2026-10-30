@@ -261,8 +261,27 @@ if (!app.includes("get('dim')"))
 // for. The two have to move together, and with the flag off nothing may change at all.
 if (!app.includes('if (uv && !BLOOM_DRAW) r = Math.max(r, 8 * bs, 3 * bs);'))
   fail.push('coatRadius no longer collapses the bleed under ?bloom=draw, or collapses it unconditionally: the bleed and the blur it feeds must switch together');
-if (!app.includes('if (!(BLOOM_DRAW && glowPx > 0)) {'))
+if (!app.includes('!(BLOOM_DRAW && glowPx > 0)'))
   fail.push('applyCoat runs the image-space bloom regardless of ?bloom=draw, so the drawn glow would be added ON TOP of the blurred one');
+
+// AND THE SHADER'S BLOOM MUST NOT BE DOUBLED. Since 2026-10-29 the GPU path draws the two emission
+// passes itself and hands over a picture that already carries them. If applyCoat then ran its own,
+// the master would come back BRIGHTER with nothing else wrong - the same shape of silent defect as
+// the collapsed bleed above, and invisible to a renderer-versus-renderer mean that is already
+// expected to differ. Four links, and a break in any one of them is a second bloom:
+if (!app.includes('&& !coatBloomDone'))
+  fail.push('applyCoat does not skip its emission bloom for a tile the shader already bloomed: the GPU path would carry two');
+if (!app.includes('coatBloomDone = bloomReady'))
+  fail.push('the GPU pool never tells this thread the picture arrives bloomed, so renderOneTile would bloom it a second time');
+// THE CLEAR, NAMED WITH ITS finally. The first spelling of this looked for 'coatBloomDone = false'
+// and the DECLARATION says that too, so deleting the clear left the gate green - it passed on a
+// thing it was not testing. Ablated: with the clear removed this now goes red.
+if (!app.includes('coatBloomDone = false; }'))
+  fail.push('coatBloomDone is never cleared in the finally, so a CPU render after a GPU one would silently LOSE its bloom');
+if (!app.includes('coatBloomDone=!!d.blDone'))
+  fail.push('the worker core never reads blDone, so a pooled finish would bloom the picture the shader already bloomed');
+if (!app.includes('blDone: !!blDone'))
+  fail.push('the per-tile message does not carry blDone, so the worker cannot know the picture is already bloomed');
 
 // ANCHORED ON THE VARIABLE, NOT THE NAME. The scratch master is called master-<material>-<light>.tif
 // since 2026-10-16 - one slot per material and light, so stone, wood and glass can render at once -

@@ -96,6 +96,13 @@ ${chunk4(UNI_INT_NAMES, 'i32')}
 @group(0) @binding(0) var<storage, read_write> PX: array<f32>;
 @group(0) @binding(2) var<uniform> E: Env;
 @group(0) @binding(3) var<storage, read> ARR: array<f32>;
+// SEVEN, EIGHT AND NINE, because 4, 5 and 6 are ALREADY TAKEN by the readback this shader borrows
+// from glass: packTex declares 4 as its storage texture and 6 as its band uniform, and the blit takes
+// 5. All of it is one module, where a binding may be declared once and with one type, so 4 here was a
+// compile error - and the error a device reports for it names neither of the two declarations.
+@group(0) @binding(7) var<storage, read> BSRC: array<f32>;
+@group(0) @binding(8) var<storage, read_write> BDST: array<f32>;
+@group(0) @binding(9) var<storage, read_write> BACC: array<f32>;
 
 const LAY: i32 = ${LAY_STRIDE};
 const CHS: i32 = ${CH_STRIDE};
@@ -122,20 +129,48 @@ fn softLight(cb: vec3<f32>, cs: f32) -> vec3<f32> {
 // THE CLOUDS MOTTLE, bilinear out of the arena. Clamp-to-edge, and the sample is taken at the
 // destination pixel's own centre mapped into texel space - the half-texel offset is exactly the kind
 // of thing that reads as a faint overall shift rather than as a bug.
+// THE THREE MODULATOR MAPS, bilinear out of the arena. Clamp-to-edge, and the sample is taken at the
+// destination pixel's own centre mapped into texel space - the half-texel offset is exactly the kind
+// of thing that reads as a faint overall shift rather than as a bug.
+//
+// ONE SAMPLER, THREE CALLERS. The clouds, the bands and the breccia are the same question asked of
+// different maps - a small canvas built once over the whole slab and stretched across it - so the
+// weights are worked out once here. bilin takes a STRIDE because breccia carries colour: it is a base
+// SETTER rather than a modulator, so it is three floats a texel where the other two are one.
 WGSL.stoneCloud = `
-fn cloudAt(u: f32, v: f32) -> f32 {
-  let cw = i32(E.cloudW); let ch = i32(E.cloudH);
+fn bilinW(w: f32, h: f32, u: f32, v: f32) -> vec4<f32> {
+  let x = u * w - 0.5; let y = v * h - 0.5;
+  return vec4<f32>(floor(x), floor(y), x - floor(x), y - floor(y));
+}
+fn bilin1(o: i32, w: f32, h: f32, u: f32, v: f32) -> f32 {
+  let cw = i32(w); let ch = i32(h);
   if (cw <= 0 || ch <= 0) { return 0.5; }
-  let x = u * E.cloudW - 0.5; let y = v * E.cloudH - 0.5;
-  let x0 = i32(floor(x)); let y0 = i32(floor(y));
-  let tx = x - floor(x); let ty = y - floor(y);
+  let q = bilinW(w, h, u, v);
+  let x0 = i32(q.x); let y0 = i32(q.y); let tx = q.z; let ty = q.w;
   let xa = clamp(x0, 0, cw - 1); let xb = clamp(x0 + 1, 0, cw - 1);
   let ya = clamp(y0, 0, ch - 1); let yb = clamp(y0 + 1, 0, ch - 1);
-  let o = E.oCLOUD;
   let p00 = ARR[o + ya * cw + xa]; let p10 = ARR[o + ya * cw + xb];
   let p01 = ARR[o + yb * cw + xa]; let p11 = ARR[o + yb * cw + xb];
   return mix(mix(p00, p10, tx), mix(p01, p11, tx), ty);
-}`;
+}
+fn bilin3(o: i32, w: f32, h: f32, u: f32, v: f32) -> vec3<f32> {
+  let cw = i32(w); let ch = i32(h);
+  if (cw <= 0 || ch <= 0) { return vec3<f32>(0.0); }
+  let q = bilinW(w, h, u, v);
+  let x0 = i32(q.x); let y0 = i32(q.y); let tx = q.z; let ty = q.w;
+  let xa = clamp(x0, 0, cw - 1); let xb = clamp(x0 + 1, 0, cw - 1);
+  let ya = clamp(y0, 0, ch - 1); let yb = clamp(y0 + 1, 0, ch - 1);
+  let a = o + (ya * cw + xa) * 3; let b = o + (ya * cw + xb) * 3;
+  let c = o + (yb * cw + xa) * 3; let d = o + (yb * cw + xb) * 3;
+  let p00 = vec3<f32>(ARR[a], ARR[a + 1], ARR[a + 2]);
+  let p10 = vec3<f32>(ARR[b], ARR[b + 1], ARR[b + 2]);
+  let p01 = vec3<f32>(ARR[c], ARR[c + 1], ARR[c + 2]);
+  let p11 = vec3<f32>(ARR[d], ARR[d + 1], ARR[d + 2]);
+  return mix(mix(p00, p10, tx), mix(p01, p11, tx), ty);
+}
+fn cloudAt(u: f32, v: f32) -> f32 { return bilin1(E.oCLOUD, E.cloudW, E.cloudH, u, v); }
+fn bandAt(u: f32, v: f32) -> f32 { return bilin1(E.oBAND, E.bandW, E.bandH, u, v); }
+fn brecAt(u: f32, v: f32) -> vec3<f32> { return bilin3(E.oBREC, E.brecW, E.brecH, u, v); }`;
 
 WGSL.stoneSeg = `
 fn segDist(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
@@ -329,6 +364,144 @@ fn dither4(px: i32, py: i32) -> f32 {
 //
 // TWO DIMENSIONS WHEN NEEDED, the same shape glass's main uses: a band of a 4096 tile is more
 // invocations than one dimension of workgroups can address on every device.
+WGSL.stoneBloom = `
+// THE EMISSION BLOOM, ON THE SHADER. applyCoat draws it with two ctx.filter passes - 0.55 at a 3*bs
+// token and 0.35 at 8*bs, composited 'lighter' over the tile's own content - and measured inside the
+// pool that is 204.1 ms of a 680.4 ms worker tile, of which about half is the drawing. This is that
+// drawing.
+//
+// WHAT IT MATCHES IS THREE BOX BLURS, NOT A GAUSSIAN. ctx.filter blur is the SVG feGaussianBlur
+// approximation: d = floor(s * 3 * sqrt(2*PI) / 4 + 0.5), then three boxes - three of width d when d
+// is odd, and when d is even one biased left, one biased right and one of d+1 centred. That is the
+// target, and it is the cheap one: a box blur is O(1) a pixel with a running sum however wide it is,
+// where a true Gaussian at this sigma would be 247 taps an axis. At 16,384 the two tokens are 49.15
+// and 131.07, so d is 92 and 246 - both even, so both take the biased pair plus the odd one.
+//
+// ONE INVOCATION PER LINE, not per pixel, because the running sum has to walk the line in order. A
+// 2844 square tile is 2844 threads an axis, which is poor occupancy and still far less total work
+// than any parallel-per-pixel form of the same filter.
+//
+// OUTSIDE THE BUFFER READS ZERO, which is what the canvas does with the transparent black beyond its
+// own edge - and it never shows, because the bleed is wider than the filter reaches: three boxes of
+// 246 reach 369 px and coatReach lays 398. check-bleed is the gate on that.
+//
+// THE CONTENT IS KEPT IN BACC rather than PX, because PX is both the blur's source and the sum it is
+// added back into. Two blurs of the SAME content, so the pristine copy has to outlive the first.
+fn blSpan(mode: i32, d: i32) -> vec2<i32> {
+  let m = mode % 3;
+  if (m == 0) { let h = (d - 1) / 2; return vec2<i32>(-h, h); }   // centred; d is odd here
+  if (m == 1) { return vec2<i32>(-(d / 2), d / 2 - 1); }          // the pixel boundary to the left
+  return vec2<i32>(-(d / 2) + 1, d / 2);                          // and to the right
+}
+fn blAt(line: i32, t: i32, vert: bool) -> vec3<f32> {
+  let len = select(E.tileW, E.tileH, vert);
+  if (t < 0 || t >= len) { return vec3<f32>(0.0); }
+  let q = select(line * E.tileW + t, t * E.tileW + line, vert);
+  let o = q * 3;
+  return vec3<f32>(BSRC[o], BSRC[o + 1], BSRC[o + 2]);
+}
+// A TILED TRANSPOSE, WHICH IS WHAT MAKES THE HORIZONTAL BLUR COALESCED.
+//
+// blbox walks a line with one thread, and which axis that is decides everything. Walking DOWN (vert)
+// indexes threads along x, the unit stride, so a warp's 32 loads fall in one or two cache lines.
+// Walking ACROSS indexes threads along y, so at 2844 wide the neighbouring threads of a warp are
+// 34 KB apart and every lane is its own memory transaction. Measured: the bloom cost 80 ms a tile
+// with three of its six passes an axis in that state.
+//
+// So nothing walks across any more. Transpose, do the vertical walk - which in transposed space IS
+// the horizontal blur - transpose back, and do the vertical walk again. Both stages take the good
+// path and blSpan's horizontal modes are now unreachable; they stay because the span arithmetic is
+// shared and a mode is cheaper to keep than a second span function.
+//
+// COALESCED ON BOTH SIDES, which a naive transpose is not: reading DST[y][x] = SRC[x][y] directly
+// makes one of the two strided. A 32-square block goes through workgroup memory so that both the
+// read and the write run along x. The 33 stride is the usual padding against bank conflicts, and
+// three separate f32 planes rather than one vec3 array because a workgroup vec3 pads to 16 bytes
+// and 32*33*16 would not fit the 16 KB a workgroup gets.
+var<workgroup> TR0: array<f32, 1056>;
+var<workgroup> TR1: array<f32, 1056>;
+var<workgroup> TR2: array<f32, 1056>;
+@compute @workgroup_size(32, 8)
+fn bltrans(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) l: vec3<u32>) {
+  let n = u32(E.tileW);                   // square: the bloom only runs where the band IS the tile
+  let bx = wg.x * 32u; let by = wg.y * 32u;
+  for (var r = 0u; r < 4u; r = r + 1u) {
+    let ly = l.y + r * 8u;
+    let x = bx + l.x; let y = by + ly;
+    if (x < n && y < n) {
+      let o = (y * n + x) * 3u; let q = ly * 33u + l.x;
+      TR0[q] = BSRC[o]; TR1[q] = BSRC[o + 1u]; TR2[q] = BSRC[o + 2u];
+    }
+  }
+  workgroupBarrier();
+  for (var r = 0u; r < 4u; r = r + 1u) {
+    let ly = l.y + r * 8u;
+    let x = by + l.x; let y = bx + ly;     // the swapped block, so the write runs along x too
+    if (x < n && y < n) {
+      let o = (y * n + x) * 3u; let q = l.x * 33u + ly;
+      BDST[o] = TR0[q]; BDST[o + 1u] = TR1[q]; BDST[o + 2u] = TR2[q];
+    }
+  }
+}
+@compute @workgroup_size(64)
+fn blsave(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let i = i32(g.x + g.y * nw.x * 64u);
+  if (i >= E.tileW * E.tileH * 3) { return; }
+  BACC[i] = PX[i];
+}
+@compute @workgroup_size(64)
+fn blbox(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let gi = i32(g.x + g.y * nw.x * 64u);
+  let vert = E.blMode >= 3;
+  let lines = select(E.tileH, E.tileW, vert);
+  if (gi >= lines) { return; }
+  let len = select(E.tileW, E.tileH, vert);
+  let sp = blSpan(E.blMode, E.blD);
+  let w = f32(sp.y - sp.x + 1);
+  var sum = vec3<f32>(0.0);
+  for (var k = sp.x; k <= sp.y; k = k + 1) { sum = sum + blAt(gi, k, vert); }
+  // RESEEDING, WHICH IS AN EXPERIMENT AND NOT A FEATURE. blRS = 0 is the plain running sum; blRS = n
+  // recomputes the window from scratch every n steps; blRS = 1 recomputes it at EVERY pixel, which
+  // is the exact box blur with no accumulated drift at all and therefore the ground truth this is
+  // measured against. If the shader's two-level deficit survives blRS = 1, f32 drift is not the
+  // cause and the error is in the arithmetic.
+  let rs = max(E.blRS, 1);
+  for (var t = 0; t < len; t = t + 1) {
+    if (E.blRS > 0 && t > 0 && (t % rs) == 0) {
+      sum = vec3<f32>(0.0);
+      for (var k = sp.x; k <= sp.y; k = k + 1) { sum = sum + blAt(gi, t + k, vert); }
+    }
+    let q = select(gi * E.tileW + t, t * E.tileW + gi, vert);
+    let o = q * 3;
+    let v = sum / w;
+    BDST[o] = v.x; BDST[o + 1] = v.y; BDST[o + 2] = v.z;
+    sum = sum + blAt(gi, t + 1 + sp.y, vert) - blAt(gi, t + sp.x, vert);
+  }
+}
+// CLAMPED HERE AND NOT ONLY AT THE END, because 'lighter' clamps at every one of its own draws and
+// a blown highlight is where that shows.
+@compute @workgroup_size(64)
+fn bladd(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let i = i32(g.x + g.y * nw.x * 64u);
+  if (i >= E.tileW * E.tileH * 3) { return; }
+  PX[i] = min(PX[i] + E.blGain * BSRC[i], 255.0);
+}
+// AND THE DITHER GOES ON HERE INSTEAD OF IN main. It is about the WRITE - which way a pixel rounds
+// when the pack takes it to eight bits - so blurring it would spend it on nothing and leave the
+// bloom to band. main skips it whenever blOn is set; this is the other half of that.
+@compute @workgroup_size(64)
+fn blmix(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let gi = i32(g.x + g.y * nw.x * 64u);
+  let n = E.tileW * E.tileH;
+  if (gi >= n) { return; }
+  let ix = gi % E.tileW; let iy = gi / E.tileW;
+  let dz = dither4(E.tileX + ix, E.tileY + iy);
+  let o = gi * 3;
+  PX[o] = clamp(PX[o] + dz, 0.0, 255.0);
+  PX[o + 1] = clamp(PX[o + 1] + dz, 0.0, 255.0);
+  PX[o + 2] = clamp(PX[o + 2] + dz, 0.0, 255.0);
+}`;
+
 WGSL.stoneTile = `
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
@@ -350,12 +523,23 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     acc = gnd * E.gndOp + acc * (1.0 - E.gndOp);
   }
 
-  // THE MOTTLE. Slab coordinates, so the sample is where the CPU's drawImage(0, 0, 1, H) puts it:
-  // u over the slab width, v over its height.
+  // THE THREE MODULATORS, IN paintStoneContent's ORDER AND ITS BLENDS. Slab coordinates, so each
+  // sample lands where the CPU's drawImage(0, 0, 1, H) puts it: u over the slab width, v over its
+  // height. Breccia is first and is a base SETTER - plain source-over at its own opacity, carrying
+  // colour - then the mottle and the bands modulate whatever base that left, both soft-light.
+  if (E.hasBrec == 1 && E.brecOp > 0.0) {
+    let bc = brecAt(cu, cv / 0.625);
+    acc = bc * E.brecOp + acc * (1.0 - E.brecOp);
+  }
   if (E.hasCloud == 1 && E.cloudOp > 0.0) {
     let cs = clamp(cloudAt(cu, cv / 0.625) / 255.0, 0.0, 1.0);
     let b = softLight(acc / 255.0, cs) * 255.0;
     acc = b * E.cloudOp + acc * (1.0 - E.cloudOp);
+  }
+  if (E.hasBand == 1 && E.bandOp > 0.0) {
+    let bs = clamp(bandAt(cu, cv / 0.625) / 255.0, 0.0, 1.0);
+    let b = softLight(acc / 255.0, bs) * 255.0;
+    acc = b * E.bandOp + acc * (1.0 - E.bandOp);
   }
 
   // THE CELL IS GLOBAL, so it is found ONCE per pixel in draw space rather than per layer in tile
@@ -370,7 +554,8 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
 
   // The dither goes on LAST, after every layer, because it is about the write rather than the
   // arithmetic: it decides which way this pixel rounds when the readback takes it to eight bits.
-  let dz = dither4(E.tileX + ix, E.tileY + iy);
+  // SKIPPED WHEN THE BLOOM RUNS, which applies it after the blur instead - see WGSL.stoneBloom.
+  let dz = select(dither4(E.tileX + ix, E.tileY + iy), 0.0, E.blOn == 1);
   let out = clamp(acc + vec3<f32>(dz), vec3<f32>(0.0), vec3<f32>(255.0));
   let o = p * 3;
   PX[o] = out.x; PX[o + 1] = out.y; PX[o + 2] = out.z;
@@ -379,7 +564,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
 // DECLARATION ORDER, because WGSL wants a function declared before it is used and a wrong order here
 // is a compile error that only a real device reports.
 const STONE_ORDER = ['env', 'stoneSoftLight', 'stoneCloud', 'stoneSeg', 'stonePhi', 'stonePoly',
-                     'stoneLayer', 'stoneDither', 'stoneTile'];
+                     'stoneLayer', 'stoneDither', 'stoneBloom', 'stoneTile'];
 
 function stoneSource(GW) {
   const unplaced = Object.keys(WGSL).filter(k => STONE_ORDER.indexOf(k) < 0);

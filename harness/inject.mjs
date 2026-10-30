@@ -14,6 +14,10 @@ let s = readFileSync(src, 'utf8');
 const hook = `
   window.__sa = {
     deserialize, renderFull, setSpectrum,
+    // THE COLOUR RESOLVE. deserialize calls this itself since 2026-10-29 - it did not, and a
+    // programmatic load then painted from a stale COL - so a probe needs it only to force a
+    // re-resolve after poking OVR directly.
+    recolour,
     // the export's own builders, so the harness can time them against each other. renderTiled paints the
     // whole slab's content once PER TILE; renderFull paints it once but needs the entire canvas at once.
     renderTiled, expBaseMask, expCoverage, expIdT,
@@ -24,6 +28,12 @@ const hook = `
     // channels now and the harness has to build the same bytes the export does; writing the
     // loop again in the test would be testing the test.
     renderOneTile, tiffPlan, tiffTiled, deflateBytes, rgbFromRGBA,
+    // THE WHOLE EXPORT, because the question the per-tile probes cannot answer is what a REAL render
+    // costs: the pool, the finishers, the sink and the in-order consumer together. It writes the
+    // per-tile timings and the pool trace into the master's own metadata, which is the instrument
+    // that settled where a 3,949 ms wall went. Nothing else reaches it - exportTiff is reached from
+    // a click and from nowhere a gate can call.
+    exportTiff,
     // THE FLOOR, both ways. Without these the harness could not reach the floor at all - it has only
     // ever rendered the tiled SLAB - and a defect that put every output tile's material under one
     // piece went green through CI for as long as it existed. renderFloor builds the whole picture on
@@ -42,6 +52,15 @@ const hook = `
     // painting on the CPU and once handed the shader's face through its own paint callback - because
     // that way both tiles get the same ground and the same coat, and only the content can differ.
     stoneScene, stoneWhyNot, stoneChunks,
+    // AND THE PACKER ITSELF, which takes a scene rather than building one - so a probe can pack the
+    // SAME scene twice and diff the result. That is the only way to price a binning change without
+    // writing the shader first: parts.MCI is literally the list of (primitive, cell) pairs every
+    // pixel's cell walk is drawn from, so its length IS the cost.
+    // STONE_PACK, NOT packStone: the packer lives inside the stone block - it has to, because all
+    // three materials name their arena parts PART_NAMES - and this hook is injected at the END of
+    // the app's IIFE, where that block's names are not in scope. STONE_PACK is the handle the block
+    // hoists out for exactly this reason, and GPU_MAT's own stone entry reaches it the same way.
+    packStone: (scene, view) => STONE_PACK(scene, view),
     // THE PREVIEW'S OWN PIECES. The export path is reachable through gpuPool and the tiled render;
     // draw() is not reachable from anywhere, and it is a DIFFERENT renderer - it paints one view of
     // the slab at the view transform rather than a grid of tiles at a fixed scale. Without these a
@@ -104,9 +123,44 @@ const hook = `
     get light() { return { uvMode, lightSpectrum, spotOn, crossOn, spotR: G.spotR, lightX: G.lightX, lightY: G.lightY }; },
   };
 `;
+// THE BLOOM ABLATION, injected rather than edited into the app, so app/stone-author.html stays clean
+// and there is nothing to revert or to commit by accident. It prices one question: how much of a UV
+// tile is applyCoat's emission bloom - the two blurDraw passes at 3*bs and 8*bs, which at 16,384 are
+// 49 and 131 px. That is the CEILING on what moving the bloom to the shader could buy.
+//
+// READ OFF `self`, NOT A DECLARED NAME. The pooled path paints in a WORKER whose core is serialised
+// with fn.toString(), so it keeps the TEXT and loses the SCOPE - a free name would have to be
+// declared in the worker preamble too (the lesson make-probe-builds.mjs carries for __ablPaint).
+// `self` exists in both scopes and is undefined-safe in the worker, so an un-set flag simply leaves
+// the bloom running, which is the right default on the side that is not being measured.
+const BLOOM_SRC = `if (!(BLOOM_DRAW && glowPx > 0) && !coatBloomDone) {`;
+const BLOOM_ABL = `if (!(BLOOM_DRAW && glowPx > 0) && !coatBloomDone && !self.__ABL_BLOOM) {`;
+if (s.indexOf(BLOOM_SRC) < 0) { console.error('the emission-bloom branch has moved - the ablation would be silent'); process.exit(1); }
+s = s.replace(BLOOM_SRC, BLOOM_ABL);
+
+// --abl-bloom WRITES A SECOND BUILD WITH THE EMISSION BLOOM GONE, for the question the flag above
+// cannot answer: what the bloom costs INSIDE THE POOL, where eight workers contend for one GPU-backed
+// canvas and a tile measured alone at 242 ms really costs 652. A flag cannot reach there - the worker
+// core is serialised with fn.toString(), so it keeps the TEXT and loses the SCOPE, and self.__ABL_BLOOM
+// is simply undefined on that side. Deleting the two calls from the SOURCE removes them from both
+// scopes at once, because applyCoat travels as its own text.
+const ABL = process.argv.includes('--abl-bloom');
+if (ABL) {
+  // ONE LINE AT A TIME. This file is CRLF throughout and node's readFileSync does NOT normalise it,
+  // so a multi-line pattern written with bare newlines matches nothing and the ablation would be
+  // SILENT - it failed exactly that way once. Python hides the difference (read_text translates on
+  // the way in and back out), which is why a patch script sees no problem where this does. Each call
+  // is replaced on its own, so neither the newline nor the line count matters.
+  const CALLS = ['blurDraw(tx, tcv, 3 * bs, w, h);', 'blurDraw(tx, tcv, 8 * bs, w, h);'];
+  for (const c of CALLS) {
+    if (s.indexOf(c) < 0) { console.error('emission-bloom pass missing, the ablation would be silent: ' + c); process.exit(1); }
+    s = s.replace(c, 'void 0;   /* HARNESS: emission bloom ablated */');
+  }
+}
+
 const idx = s.lastIndexOf('})();');
 if (idx < 0) { console.error('could not find the app IIFE end (})();)'); process.exit(1); }
 s = s.slice(0, idx) + hook + s.slice(idx);
-const out = join(outDir, 'stone-author.hooked.html');
+const out = join(outDir, ABL ? 'stone-author.ablbloom.html' : 'stone-author.hooked.html');
 writeFileSync(out, s, 'utf8');
 console.log('injected __sa hook ->', out, '(' + s.length + ' bytes)');

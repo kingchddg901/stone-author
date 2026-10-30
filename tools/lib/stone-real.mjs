@@ -22,6 +22,8 @@ const H = 0.625;                  // draw space is 1 x H; y = H is the frame bot
 // the arena's parts, in the order the uniform's offsets name them
 const PART_NAMES = [
   'CLOUD',                        // the clouds mottle, one float a texel, bilinear in the shader
+  'BREC',                         // breccia: a base SETTER, so THREE floats a texel - it carries colour
+  'BAND',                         // the directional bands, grey like the clouds and soft-lit like them
   'LAY',                          // one record per content layer, in AUTHORED order
   'BLOB', 'FCS', 'FCI',           // fog: discs in draw space, and a grid per plane
   'SEG', 'CH', 'MCS', 'MCI',      // marks: segments in draw space, chunk records, and a grid per pass
@@ -30,7 +32,7 @@ const PART_NAMES = [
 
 // WHICH PART CARRIES WHAT - the packer's CLAIM, so a gate holds it to this rather than to a comment.
 const FIELD_PARTS = {
-  cloud: 'CLOUD', layer: 'LAY',
+  cloud: 'CLOUD', brec: 'BREC', band: 'BAND', layer: 'LAY',
   blob: 'BLOB', fogCellStart: 'FCS', fogCellIndex: 'FCI',
   segment: 'SEG', chunk: 'CH', markCellStart: 'MCS', markCellIndex: 'MCI',
   poly: 'POLY', polyVertex: 'PV',
@@ -94,14 +96,17 @@ const boxSigma = N => {
 const UNI_FLOAT_NAMES = [
   'fullW', 'bgR', 'bgG', 'bgB',
   'gndR', 'gndG', 'gndB', 'gndOp',
-  'cloudOp', 'cloudW', 'cloudH', 'padf0',
+  'cloudOp', 'cloudW', 'cloudH', 'blGain',
+  'brecOp', 'brecW', 'brecH', 'bandOp',
+  'bandW', 'bandH',
 ];
 const UNI_INT_NAMES = [
   'tileW', 'tileH', 'tileX', 'tileY',
   'nLay', 'hasGround', 'hasCloud', 'gx',
-  'gy', 'padi0', 'padi4', 'padi5',
+  'hasBrec', 'hasBand',
+  'gy', 'blOn', 'blD', 'blMode',
   ...PART_NAMES.map(n => 'o' + n),
-  'padi1', 'padi2', 'padi3',
+  'blRS', 'padi2', 'padi3',
 ];
 const UNI_BYTES = 256;
 const UNI_FLOATS = UNI_FLOAT_NAMES.length;
@@ -236,11 +241,18 @@ const gridFor = W => {
 function packStone(scene, view) {
   const { tileW, tileH, tileX, tileY, fullW } = view;
   const { gx, gy } = gridFor(fullW);
-  const parts = { CLOUD: [], LAY: [], BLOB: [], FCS: [], FCI: [], SEG: [], CH: [], MCS: [], MCI: [],
-                  POLY: [], PV: [] };
+  const parts = { CLOUD: [], BREC: [], BAND: [], LAY: [], BLOB: [], FCS: [], FCI: [], SEG: [],
+                  CH: [], MCS: [], MCI: [], POLY: [], PV: [] };
 
   const cloud = scene.cloud || null;
   if (cloud) for (let i = 0; i < cloud.data.length; i++) parts.CLOUD.push(cloud.data[i]);
+  // THE SAME SHAPE FOR THE OTHER TWO MODULATORS, because they are the same thing: a small map built
+  // once over the whole slab and stretched across it. Breccia is three floats a texel rather than
+  // one - it SETS the ground rather than modulating it, so it carries colour and not a lightness.
+  const brec = scene.brec || null;
+  if (brec) for (let i = 0; i < brec.data.length; i++) parts.BREC.push(brec.data[i]);
+  const band = scene.band || null;
+  if (band) for (let i = 0; i < band.data.length; i++) parts.BAND.push(band.data[i]);
 
   for (const L of scene.layers) {
     const V = {};
@@ -363,10 +375,20 @@ function packStone(scene, view) {
     gndR: gnd[0], gndG: gnd[1], gndB: gnd[2],
     gndOp: scene.hasGround ? (scene.groundOp === undefined ? 1 : scene.groundOp) : 0,
     cloudOp: cloud ? (cloud.op === undefined ? 1 : cloud.op) : 0,
-    cloudW: cloud ? cloud.w : 0, cloudH: cloud ? cloud.h : 0, padf0: 0,
+    cloudW: cloud ? cloud.w : 0, cloudH: cloud ? cloud.h : 0,
+    brecOp: brec ? (brec.op === undefined ? 1 : brec.op) : 0,
+    brecW: brec ? brec.w : 0, brecH: brec ? brec.h : 0,
+    bandOp: band ? (band.op === undefined ? 1 : band.op) : 0,
+    bandW: band ? band.w : 0, bandH: band ? band.h : 0,
     tileW, tileH, tileX, tileY,
     nLay: scene.layers.length, hasGround: scene.hasGround ? 1 : 0, hasCloud: cloud ? 1 : 0,
-    gx, gy, padi0: 0, padi1: 0, padi2: 0, padi3: 0, padi4: 0, padi5: 0,
+    hasBrec: brec ? 1 : 0, hasBand: band ? 1 : 0,
+    gx, gy, padi2: 0, padi3: 0,
+    // THE BLOOM'S FOUR, PATCHED PER PASS AND NOT PACKED FROM THE SCENE. blOn is the only one the
+    // scene could answer and it is still written by the pool, because the pool is what knows whether
+    // it got the buffers - a document that wants the bloom and a device that will run it are two
+    // different facts. Zero here means main dithers as it always did.
+    blGain: 0, blOn: 0, blD: 0, blMode: 0, blRS: 0,
   };
   for (const n of PART_NAMES) V['o' + n] = offs[n];
   const absent = [...UNI_FLOAT_NAMES, ...UNI_INT_NAMES]

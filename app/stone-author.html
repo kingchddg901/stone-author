@@ -1853,7 +1853,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.29.234';
+  const BUILD = '2026.10.29.235';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2066,7 +2066,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function recolour() {                                    // OVR -> resolved COL (fills defaults + inherit); effects/ids resolve too
     const res = (window.TTK && kit) ? TTK.resolveValues(kit.tokens, OVR, kit.controlTypes) : { ...OVR };
     for (const k in COL) delete COL[k];
-    Object.assign(COL, res);
+    // OVR IS THE FLOOR, THE RESOLVER GOES OVER IT. This used to assign `res` alone, which is correct
+    // only once the kit has its tokens - and the kit mounts asynchronously, so anything that
+    // recoloured before that WIPED every authored colour instead of resolving it. A load is exactly
+    // that moment: deserialize replaces OVR wholesale and then paints.
+    //
+    // Measured 2026-10-29: a programmatic load left COL.ground undefined on a slab whose OVR.ground
+    // is #08080b, and the renderers then disagreed about the ground itself - black on the shader,
+    // because the packer's hexRGB yields black for an undefined, and whatever was set last on the
+    // painter, because a canvas silently ignores fillStyle = undefined. Tile means read -25 to -2.5
+    // where they should read -0.02. An override can only be IMPROVED on by the resolver, never lost.
+    Object.assign(COL, OVR, res);
   }
   recolour();
   // Settings for the NEXT line. Each mark takes a copy when it is made and keeps it, so a
@@ -2299,7 +2309,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // base texture (VA reads it as `base`). Grids are fixed and cloudScale zooms the SAMPLING, so the scale
   // knob morphs the field continuously instead of re-rolling it; seed is per-family, so each stone has its
   // own cloud. Built low-res and upscaled soft, cached until fam/scale/strength change.
-  function hexRGB(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  // UNSET IS BLACK, NOT A THROW - the same contract the packer's own copy of this has always had.
+  // buildBreccia reads hexRGB(COL.ground) and a slab whose ground had not resolved took the whole
+  // render down with "Cannot read properties of undefined (reading 'replace')", which names neither
+  // the colour nor the caller. The two copies disagreeing was the real defect: one guarded, one did
+  // not, so the same missing colour was black on the shader and an exception on the painter.
+  function hexRGB(h) {
+    h = String(h == null ? '' : h).replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    return isFinite(n) ? [(n >> 16) & 255, (n >> 8) & 255, n & 255] : [0, 0, 0];
+  }
   // fBm value noise = the cloud's own character, reused as a domain-WARP field: the cloud structure
   // displaces the veins / specks so the whole slab flows along one field ("cloud as a warp").
   function nz(xi, yi, s) { let h = (Math.imul(xi, 374761393) ^ Math.imul(yi, 668265263) ^ Math.imul(s, 2246822519)) >>> 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -4396,6 +4416,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return out;
   }
   // Blur `src` and draw it into `tx` under whatever alpha and composite the caller has already set.
+  // SET ONLY WHILE A TILE THE SHADER BLOOMED IS BEING WRAPPED - by the GPU pool on this thread, and
+  // by the per-tile message inside a worker. False everywhere else, so every CPU render is as it was.
+  let coatBloomDone = false;
   function blurDraw(tx, src, r, w, h) {
     if (CAN_FILTER) { tx.filter = `blur(${r}px)`; tx.drawImage(src, 0, 0); tx.filter = 'none'; return; }
     const b = pyramidBlur(src, r, w, h);
@@ -4507,7 +4530,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'lighter';
       // With BLOOM_DRAW the halo was already drawn by each element, so there is nothing left to derive
       // from the pixels - and nothing to need neighbours for, which is the entire point.
-      if (!(BLOOM_DRAW && glowPx > 0)) {              // no drawn halo here, so the blur still has to run
+      // coatBloomDone IS THE SHADER SAYING IT ALREADY DID THIS. The GPU path hands over a picture
+      // with both passes already in it, and without this the coat would lay a SECOND bloom over the
+      // first - which looks like a correct render, only brighter, and is the quietest way to be wrong.
+      if (!(BLOOM_DRAW && glowPx > 0) && !coatBloomDone) {   // no drawn halo here, so the blur still has to run
         tx.globalAlpha = 0.55; blurDraw(tx, tcv, 3 * bs, w, h);
         tx.globalAlpha = 0.35; blurDraw(tx, tcv, 8 * bs, w, h);
       }
@@ -5159,7 +5185,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `var woodBandY=0,WOOD0=${JSON.stringify(WOOD0)};\n`;
     s += `var GLASS=${JSON.stringify(GLASS)},IN=${IN},SLAB_FT=${SLAB_FT};\n`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
-    s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,view,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br;\n`;
+    s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,view,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br,coatBloomDone;\n`;
     // MATERIAL is what paintContent forks on, and it was never declared here at all - a free
     // variable in a worker throws on read, so this core could paint NO material, not just not
     // glass. marks and _wmask travel for the same reason: the glass painter reads the mark list
@@ -5257,6 +5283,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // one empty message per tile - no transfer, no copy - and BOTH consumers of this core must
     // ignore it or they will treat it as the tile.
     s += `if(d.i!==undefined)self.postMessage({type:'ack',i:d.i});\n`;
+    // AND WHETHER THE PICTURE ARRIVED ALREADY BLOOMED - per tile, not per init, because only the
+    // passes the shader drew carry one and a worker outlives many of them.
     // THE GLOW RADIUS, which every main-thread render path sets on entry and this one did not.
     // glowPx is declared 0 in the preamble above and was never written, so the worker took the
     // other side of two branches at once: paintVeinLayer's `glowPx > 0` refused to draw the halo,
@@ -5264,7 +5292,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // for an engine with no drawn halo. Daylight never noticed - both branches sit inside uvMode -
     // so a pooled UV tile differed from the sequential one across 95% of its pixels, by up to 159
     // levels, while every daylight tile stayed bit-exact. Same expression, same bs, as line 4810.
-    s += `glowPx=BLOOM_DRAW?16*d.bs:0;\n`;
+    s += `glowPx=BLOOM_DRAW?16*d.bs:0;coatBloomDone=!!d.blDone;\n`;
     s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
     // A TILE THAT ARRIVES ALREADY DRAWN. The GPU path paints on the main thread - shader, readback,
     // then renderOneTile's ground, coat and windows - and what is left is the expensive half: the
@@ -5719,8 +5747,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // so taking the document would be a wrong render with no throw - the worst shape a defect has here.
   function stoneWhyNot() {
     if (!layVis('base') && !layers.some(L => L.field === 'fog' && (L.haze || 0) > 0)) return 'exp.gpu.stone.empty';
-    if (layVis('breccia') && G.brecStrength > 0) return 'exp.gpu.stone.breccia';
-    if (layVis('bands') && G.bandStrength > 0) return 'exp.gpu.stone.bands';
+    // BRECCIA AND BANDS CAME OFF THIS LIST on 2026-10-29. Both are a small map built once over the
+    // whole slab and stretched across it, which is exactly what the clouds mottle already was on the
+    // shader - so they are two more entries in the arena and two more samplers, not new machinery.
+    // Breccia is 300 x 188 and three floats a texel because it SETS the ground and carries colour;
+    // the bands are 200 x 125 and one, grey and soft-lit like the clouds. Their keys stay in the
+    // strings because masters written while they refused still carry them.
+    //
+    // MEASURED AGAINST THE PAINTER THE WAY THE BLOOM SHOULD HAVE BEEN: twice, once with both at
+    // strength zero - the path as it already worked - and once with them on, so the difference is
+    // what the new code owns rather than the standing coat gap.
+    //
+    //     tile        0       9      18      27      36
+    //     baseline  -0.022  -0.081  -0.124  -0.097  +0.113
+    //     with them -0.046  -0.109  -0.139  -0.295  +0.087
+    //     delta     -0.024  -0.027  -0.015  -0.198  -0.026
+    //
+    // Worst 0.198 of a level, and byte-reproducible in both arms. The baseline matters as much as
+    // the delta: it reads near zero, where an earlier run of the same probe read -25 to -2.5 purely
+    // because deserialize does not call recolour() and the two renderers then disagreed about the
+    // GROUND - the packer's hexRGB guards undefined and yields black, the canvas ignores an
+    // undefined fillStyle and keeps the last colour. The harness calls recolour now.
     for (const L of layers) {
       if (!layVis(L.key)) continue;
       if (L.field === 'fog') {
@@ -5821,7 +5868,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // list gives at this light. Resolved here, where emit() lives; the shader sees colours.
     const uv = uvMode;
     const out = { bg: uv ? UV_GROUND : STONE_BG, ground: groundCol(), groundOp: layOp('base'),
-                  hasGround: !uv && !!layVis('base'), cloud: null, layers: [] };
+                  hasGround: !uv && !!layVis('base'), cloud: null, brec: null, band: null, layers: [] };
 
     // THE MOTTLE'S OWN PIXELS, one float a texel. 200 x 125 is 25,000 floats, so it goes in the arena
     // and stone needs no texture binding at all - which is what lets it share the pool unchanged.
@@ -5832,6 +5879,30 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const data = new Float32Array(cw * chh);
       for (let i = 0; i < cw * chh; i++) data[i] = d[i * 4];   // the map is grey; one channel is all of it
       out.cloud = { w: cw, h: chh, data, op: layOp('clouds') };
+    }
+    // THE OTHER TWO MODULATORS, the same way and under the same conditions paintStoneContent uses.
+    // Breccia is 300 x 187 and bands 200 x 125, so all three together are well under a tenth of a
+    // megabyte of arena - which is why none of them needs a texture binding.
+    //
+    // THREE FLOATS A TEXEL FOR BRECCIA, one for the bands. Breccia is a base SETTER: buildBreccia
+    // writes the ground colour shifted per clast, so a lightness alone would lose the stone. The
+    // bands are grey by construction - buildBands writes d[i] = d[i+1] = d[i+2] - and soft-lit, so
+    // one channel is all of it, exactly as for the clouds.
+    if (!uv && layVis('breccia') && G.brecStrength > 0) {
+      const bc = ensureBreccia(), bw = bc.width, bh = bc.height;
+      const d = bc.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, bw, bh).data;
+      const data = new Float32Array(bw * bh * 3);
+      for (let i = 0; i < bw * bh; i++) {
+        data[i * 3] = d[i * 4]; data[i * 3 + 1] = d[i * 4 + 1]; data[i * 3 + 2] = d[i * 4 + 2];
+      }
+      out.brec = { w: bw, h: bh, data, op: layOp('breccia') };
+    }
+    if (!uv && layVis('bands') && G.bandStrength > 0) {
+      const nc = ensureBands(), nw = nc.width, nh = nc.height;
+      const d = nc.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, nw, nh).data;
+      const data = new Float32Array(nw * nh);
+      for (let i = 0; i < nw * nh; i++) data[i] = d[i * 4];
+      out.band = { w: nw, h: nh, data, op: layOp('bands') };
     }
 
     const lkOf = ln => ln.layer || (ln.major ? 'major' : 'minor');
@@ -9727,7 +9798,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const so = document.getElementById('spot-toggle'); if (so) so.setAttribute('aria-pressed', 'false');
     }
     applySlabState(o);                                    // everything that IS the slab; no DOM in it
-    stoneReady = false; buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
+    // RECOLOUR, BECAUSE A LOAD RESTORES OVR AND NOTHING ELSE RESOLVES IT. OVR is what the editor
+    // edits; COL is what the renderer paints from, and recolour() is the only thing that runs one
+    // into the other. Every other path that replaces OVR wholesale already calls it - the new-slab
+    // reset does, the kit's save adapter does - and this one did not, so it leaned on the editor
+    // mounting afterwards and happening to do it.
+    //
+    // WHAT THAT COST: a load with no editor - the harness, or any programmatic deserialize - painted
+    // from a STALE COL. Measured 2026-10-29: scene.ground came back undefined on a slab whose
+    // OVR.ground is #08080b, and the two renderers then disagreed about the ground ITSELF, because
+    // the packer's hexRGB yields black for an undefined while a canvas silently ignores an undefined
+    // fillStyle and keeps the last colour. Tile means read -25 to -2.5 where they should read -0.02.
+    stoneReady = false; recolour(); buildLayerUI(); syncUI(); redraw(true); return true;   // rebuild rows so restored user layers appear
   }
   // EVERYTHING THAT IS THE SLAB, and nothing that is the screen. Split out of deserialize so that
   // something other than a LOAD can put a slab into the engine - which is what baking a section
@@ -10550,6 +10632,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // which is the failure that actually misleads.
   //
   // stateSig is kept alongside, unchanged, so every master already on disk still reads.
+  // AND WHETHER THE SHADER OWNS THE BLOOM. Set by the pool when it has the buffers, cleared with
+  // drewOnGpu, and read by renderSig for the same reason the renderer is: it reaches the pixels.
+  let bloomOnGpu = false;
   // WHICH RENDERER IS ABOUT TO DRAW, as a signature input. Set by exportTiff once the painter is
   // actually in hand, cleared when it finishes - never read from the toggle, because a toggle that
   // is ON and a predicate that refuses means the CPU draws it, and a signature claiming otherwise
@@ -10616,6 +10701,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // so. Now the records simply do not match and the render starts over, which is the right
         // answer and costs only time.
         ...(drewOnGpu ? { renderer: 'gpu' } : {}),
+        // AND WHETHER THE SHADER DREW THE BLOOM, which is a different picture from the coat drawing
+        // it - not by much, 0.07 to 0.19 of a level on the tiles where the bloom owns the whole
+        // difference, but a different one. Caught the hard way on 2026-10-29: two exports of this
+        // slab minutes apart, one with ?gbloom=1 and one without, shared a signature, and the second
+        // offered to RESUME the first. Nothing was lost, because resuming re-renders a tile the file
+        // already holds and compares it byte for byte - tile 0 was 1,454,647 bytes on disk against
+        // 1,983,049 re-rendered - but that guard is the last line, not the first.
+        //
+        // UNCHANGED WHEN OFF, the same shape light, wood, glass and the renderer use above. The flag
+        // is off by default, so every master already on disk keeps its signature byte for byte.
+        ...(bloomOnGpu ? { bloom: 'gpu' } : {}),
         // Glass the same way: unchanged when off, so no stone or wood master re-dates.
         ...(s.material === 'glass' ? { material: s.material, glass: s.glass } : {}),
       }))).toString(16);
@@ -11535,14 +11631,42 @@ self.onmessage = async (e) => {
   // Two pictures that share a material and a light collide on the name. Concurrently the handle lock
   // refuses the second; sequentially the job's own sig refuses it, and since 43ed749 a refusal stops
   // instead of truncating, so a collision costs a message rather than a render.
-  const masterBase = () => 'master-' + currentMaterial() + '-' + lightTag();
+  // THE SCRATCH BELONGS TO A PICTURE, not to a material and a light.
+  //
+  // It used to be `master-<material>-<light>`, which every daylight stone slab in the gallery shares.
+  // One unfinished render per combination, so starting a render of picture B TRUNCATED picture A's
+  // half-finished master - tiffSink's own comment says so: without a verified prior the file is
+  // truncated and the render starts from nothing. Hours of a 65,535 lost to opening another slab.
+  // The signature is what makes two pictures different, so the signature is in the name.
+  //
+  // THE SIGNATURE IS PASSED IN, NOT CACHED. renderSig() measures 20.9 ms on the desktop, so the first
+  // spelling of this cached the name against a key - and built that key from stateSig(), which costs
+  // 20.45 ms, so the cache paid the price it existed to avoid and could go stale besides. masterFiles
+  // takes it ONCE and hands it to everything below, which is one call where there would have been
+  // three and no state to rot.
+  const masterBase = sig => 'master-' + currentMaterial() + '-' + lightTag() + '-' + sig;
+  const masterShared = () => 'master-' + currentMaterial() + '-' + lightTag();   // the scheme before it
   const MASTER_WAS = 'stone-master';          // everything written before 2026-10-16 lives under this
   // THE MIGRATION IS A FALLBACK, NOT A RENAME. Renaming three files - one of them gigabytes - to adopt
   // a partial would be a long copy at the worst moment. Reading the old names when the new ones are not
   // there costs one failed getFileHandle and leaves the bytes where they are.
+  //
+  // AND A LEGACY NAME IS ONLY ADOPTED FOR THE PICTURE THAT WROTE IT. Both older schemes are shared
+  // across pictures, so handing one to whichever slab happens to be open is the very contention the
+  // new key exists to end - it would let picture B truncate picture A through the fallback instead of
+  // through the name. The job file carries the signature it was written for; it is read and checked,
+  // and a record belonging to another picture is left exactly where it lies.
+  async function masterAdoptable(dir, base, sig) {
+    try {
+      const txt = await (await (await dir.getFileHandle(base + '.json')).getFile()).text();
+      const job = JSON.parse(txt);
+      return !!(job && job.sig && String(job.sig).split(String.fromCharCode(124))[0] === sig);
+    } catch (_) { return false; }             // absent, or unreadable by this build: not adoptable
+  }
   async function masterFiles() {
     const of = b => ({ tif: b + '.tif', rec: b + '.rec', job: b + '.json' });
-    const base = masterBase();
+    const sig = renderSig();                  // once, for the name AND for every adoption test below
+    const base = masterBase(sig);
     try {
       const dir = await navigator.storage.getDirectory();
       await dir.getFileHandle(base + '.json');
@@ -11550,9 +11674,9 @@ self.onmessage = async (e) => {
     } catch (_) { /* nothing under the current scheme */ }
     try {
       const dir = await navigator.storage.getDirectory();
-      await dir.getFileHandle(MASTER_WAS + '.json');
-      return of(MASTER_WAS);                  // a partial from before the rename, adopted where it lies
-    } catch (_) { /* nor an old one */ }
+      for (const old of [masterShared(), MASTER_WAS])
+        if (await masterAdoptable(dir, old, sig)) return of(old);   // this picture's partial, where it lies
+    } catch (_) { /* no private store at all */ }
     return of(base);                          // nothing yet: this is where a new render will write
   }
   async function resumeMaster() {
@@ -16509,6 +16633,8 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // the arena's parts, in the order the uniform's offsets name them
     const PART_NAMES = [
       'CLOUD',                        // the clouds mottle, one float a texel, bilinear in the shader
+      'BREC',                         // breccia: a base SETTER, so THREE floats a texel - it carries colour
+      'BAND',                         // the directional bands, grey like the clouds and soft-lit like them
       'LAY',                          // one record per content layer, in AUTHORED order
       'BLOB', 'FCS', 'FCI',           // fog: discs in draw space, and a grid per plane
       'SEG', 'CH', 'MCS', 'MCI',      // marks: segments in draw space, chunk records, and a grid per pass
@@ -16517,7 +16643,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
 
     // WHICH PART CARRIES WHAT - the packer's CLAIM, so a gate holds it to this rather than to a comment.
     const FIELD_PARTS = {
-      cloud: 'CLOUD', layer: 'LAY',
+      cloud: 'CLOUD', brec: 'BREC', band: 'BAND', layer: 'LAY',
       blob: 'BLOB', fogCellStart: 'FCS', fogCellIndex: 'FCI',
       segment: 'SEG', chunk: 'CH', markCellStart: 'MCS', markCellIndex: 'MCI',
       poly: 'POLY', polyVertex: 'PV',
@@ -16581,14 +16707,17 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const UNI_FLOAT_NAMES = [
       'fullW', 'bgR', 'bgG', 'bgB',
       'gndR', 'gndG', 'gndB', 'gndOp',
-      'cloudOp', 'cloudW', 'cloudH', 'padf0',
+      'cloudOp', 'cloudW', 'cloudH', 'blGain',
+      'brecOp', 'brecW', 'brecH', 'bandOp',
+      'bandW', 'bandH',
     ];
     const UNI_INT_NAMES = [
       'tileW', 'tileH', 'tileX', 'tileY',
       'nLay', 'hasGround', 'hasCloud', 'gx',
-      'gy', 'padi0', 'padi4', 'padi5',
+      'hasBrec', 'hasBand',
+      'gy', 'blOn', 'blD', 'blMode',
       ...PART_NAMES.map(n => 'o' + n),
-      'padi1', 'padi2', 'padi3',
+      'blRS', 'padi2', 'padi3',
     ];
     const UNI_BYTES = 256;
     const UNI_FLOATS = UNI_FLOAT_NAMES.length;
@@ -16723,11 +16852,18 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     function packStone(scene, view) {
       const { tileW, tileH, tileX, tileY, fullW } = view;
       const { gx, gy } = gridFor(fullW);
-      const parts = { CLOUD: [], LAY: [], BLOB: [], FCS: [], FCI: [], SEG: [], CH: [], MCS: [], MCI: [],
-                      POLY: [], PV: [] };
+      const parts = { CLOUD: [], BREC: [], BAND: [], LAY: [], BLOB: [], FCS: [], FCI: [], SEG: [],
+                      CH: [], MCS: [], MCI: [], POLY: [], PV: [] };
 
       const cloud = scene.cloud || null;
       if (cloud) for (let i = 0; i < cloud.data.length; i++) parts.CLOUD.push(cloud.data[i]);
+      // THE SAME SHAPE FOR THE OTHER TWO MODULATORS, because they are the same thing: a small map built
+      // once over the whole slab and stretched across it. Breccia is three floats a texel rather than
+      // one - it SETS the ground rather than modulating it, so it carries colour and not a lightness.
+      const brec = scene.brec || null;
+      if (brec) for (let i = 0; i < brec.data.length; i++) parts.BREC.push(brec.data[i]);
+      const band = scene.band || null;
+      if (band) for (let i = 0; i < band.data.length; i++) parts.BAND.push(band.data[i]);
 
       for (const L of scene.layers) {
         const V = {};
@@ -16850,10 +16986,20 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         gndR: gnd[0], gndG: gnd[1], gndB: gnd[2],
         gndOp: scene.hasGround ? (scene.groundOp === undefined ? 1 : scene.groundOp) : 0,
         cloudOp: cloud ? (cloud.op === undefined ? 1 : cloud.op) : 0,
-        cloudW: cloud ? cloud.w : 0, cloudH: cloud ? cloud.h : 0, padf0: 0,
+        cloudW: cloud ? cloud.w : 0, cloudH: cloud ? cloud.h : 0,
+        brecOp: brec ? (brec.op === undefined ? 1 : brec.op) : 0,
+        brecW: brec ? brec.w : 0, brecH: brec ? brec.h : 0,
+        bandOp: band ? (band.op === undefined ? 1 : band.op) : 0,
+        bandW: band ? band.w : 0, bandH: band ? band.h : 0,
         tileW, tileH, tileX, tileY,
         nLay: scene.layers.length, hasGround: scene.hasGround ? 1 : 0, hasCloud: cloud ? 1 : 0,
-        gx, gy, padi0: 0, padi1: 0, padi2: 0, padi3: 0, padi4: 0, padi5: 0,
+        hasBrec: brec ? 1 : 0, hasBand: band ? 1 : 0,
+        gx, gy, padi2: 0, padi3: 0,
+        // THE BLOOM'S FOUR, PATCHED PER PASS AND NOT PACKED FROM THE SCENE. blOn is the only one the
+        // scene could answer and it is still written by the pool, because the pool is what knows whether
+        // it got the buffers - a document that wants the bloom and a device that will run it are two
+        // different facts. Zero here means main dithers as it always did.
+        blGain: 0, blOn: 0, blD: 0, blMode: 0, blRS: 0,
       };
       for (const n of PART_NAMES) V['o' + n] = offs[n];
       const absent = [...UNI_FLOAT_NAMES, ...UNI_INT_NAMES]
@@ -16978,6 +17124,13 @@ ${chunk4(UNI_INT_NAMES, 'i32')}
 @group(0) @binding(0) var<storage, read_write> PX: array<f32>;
 @group(0) @binding(2) var<uniform> E: Env;
 @group(0) @binding(3) var<storage, read> ARR: array<f32>;
+// SEVEN, EIGHT AND NINE, because 4, 5 and 6 are ALREADY TAKEN by the readback this shader borrows
+// from glass: packTex declares 4 as its storage texture and 6 as its band uniform, and the blit takes
+// 5. All of it is one module, where a binding may be declared once and with one type, so 4 here was a
+// compile error - and the error a device reports for it names neither of the two declarations.
+@group(0) @binding(7) var<storage, read> BSRC: array<f32>;
+@group(0) @binding(8) var<storage, read_write> BDST: array<f32>;
+@group(0) @binding(9) var<storage, read_write> BACC: array<f32>;
 
 const LAY: i32 = ${LAY_STRIDE};
 const CHS: i32 = ${CH_STRIDE};
@@ -17004,20 +17157,48 @@ fn softLight(cb: vec3<f32>, cs: f32) -> vec3<f32> {
     // THE CLOUDS MOTTLE, bilinear out of the arena. Clamp-to-edge, and the sample is taken at the
     // destination pixel's own centre mapped into texel space - the half-texel offset is exactly the kind
     // of thing that reads as a faint overall shift rather than as a bug.
+    // THE THREE MODULATOR MAPS, bilinear out of the arena. Clamp-to-edge, and the sample is taken at the
+    // destination pixel's own centre mapped into texel space - the half-texel offset is exactly the kind
+    // of thing that reads as a faint overall shift rather than as a bug.
+    //
+    // ONE SAMPLER, THREE CALLERS. The clouds, the bands and the breccia are the same question asked of
+    // different maps - a small canvas built once over the whole slab and stretched across it - so the
+    // weights are worked out once here. bilin takes a STRIDE because breccia carries colour: it is a base
+    // SETTER rather than a modulator, so it is three floats a texel where the other two are one.
     WGSL.stoneCloud = `
-fn cloudAt(u: f32, v: f32) -> f32 {
-  let cw = i32(E.cloudW); let ch = i32(E.cloudH);
+fn bilinW(w: f32, h: f32, u: f32, v: f32) -> vec4<f32> {
+  let x = u * w - 0.5; let y = v * h - 0.5;
+  return vec4<f32>(floor(x), floor(y), x - floor(x), y - floor(y));
+}
+fn bilin1(o: i32, w: f32, h: f32, u: f32, v: f32) -> f32 {
+  let cw = i32(w); let ch = i32(h);
   if (cw <= 0 || ch <= 0) { return 0.5; }
-  let x = u * E.cloudW - 0.5; let y = v * E.cloudH - 0.5;
-  let x0 = i32(floor(x)); let y0 = i32(floor(y));
-  let tx = x - floor(x); let ty = y - floor(y);
+  let q = bilinW(w, h, u, v);
+  let x0 = i32(q.x); let y0 = i32(q.y); let tx = q.z; let ty = q.w;
   let xa = clamp(x0, 0, cw - 1); let xb = clamp(x0 + 1, 0, cw - 1);
   let ya = clamp(y0, 0, ch - 1); let yb = clamp(y0 + 1, 0, ch - 1);
-  let o = E.oCLOUD;
   let p00 = ARR[o + ya * cw + xa]; let p10 = ARR[o + ya * cw + xb];
   let p01 = ARR[o + yb * cw + xa]; let p11 = ARR[o + yb * cw + xb];
   return mix(mix(p00, p10, tx), mix(p01, p11, tx), ty);
-}`;
+}
+fn bilin3(o: i32, w: f32, h: f32, u: f32, v: f32) -> vec3<f32> {
+  let cw = i32(w); let ch = i32(h);
+  if (cw <= 0 || ch <= 0) { return vec3<f32>(0.0); }
+  let q = bilinW(w, h, u, v);
+  let x0 = i32(q.x); let y0 = i32(q.y); let tx = q.z; let ty = q.w;
+  let xa = clamp(x0, 0, cw - 1); let xb = clamp(x0 + 1, 0, cw - 1);
+  let ya = clamp(y0, 0, ch - 1); let yb = clamp(y0 + 1, 0, ch - 1);
+  let a = o + (ya * cw + xa) * 3; let b = o + (ya * cw + xb) * 3;
+  let c = o + (yb * cw + xa) * 3; let d = o + (yb * cw + xb) * 3;
+  let p00 = vec3<f32>(ARR[a], ARR[a + 1], ARR[a + 2]);
+  let p10 = vec3<f32>(ARR[b], ARR[b + 1], ARR[b + 2]);
+  let p01 = vec3<f32>(ARR[c], ARR[c + 1], ARR[c + 2]);
+  let p11 = vec3<f32>(ARR[d], ARR[d + 1], ARR[d + 2]);
+  return mix(mix(p00, p10, tx), mix(p01, p11, tx), ty);
+}
+fn cloudAt(u: f32, v: f32) -> f32 { return bilin1(E.oCLOUD, E.cloudW, E.cloudH, u, v); }
+fn bandAt(u: f32, v: f32) -> f32 { return bilin1(E.oBAND, E.bandW, E.bandH, u, v); }
+fn brecAt(u: f32, v: f32) -> vec3<f32> { return bilin3(E.oBREC, E.brecW, E.brecH, u, v); }`;
 
     WGSL.stoneSeg = `
 fn segDist(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
@@ -17211,6 +17392,144 @@ fn dither4(px: i32, py: i32) -> f32 {
     //
     // TWO DIMENSIONS WHEN NEEDED, the same shape glass's main uses: a band of a 4096 tile is more
     // invocations than one dimension of workgroups can address on every device.
+    WGSL.stoneBloom = `
+// THE EMISSION BLOOM, ON THE SHADER. applyCoat draws it with two ctx.filter passes - 0.55 at a 3*bs
+// token and 0.35 at 8*bs, composited 'lighter' over the tile's own content - and measured inside the
+// pool that is 204.1 ms of a 680.4 ms worker tile, of which about half is the drawing. This is that
+// drawing.
+//
+// WHAT IT MATCHES IS THREE BOX BLURS, NOT A GAUSSIAN. ctx.filter blur is the SVG feGaussianBlur
+// approximation: d = floor(s * 3 * sqrt(2*PI) / 4 + 0.5), then three boxes - three of width d when d
+// is odd, and when d is even one biased left, one biased right and one of d+1 centred. That is the
+// target, and it is the cheap one: a box blur is O(1) a pixel with a running sum however wide it is,
+// where a true Gaussian at this sigma would be 247 taps an axis. At 16,384 the two tokens are 49.15
+// and 131.07, so d is 92 and 246 - both even, so both take the biased pair plus the odd one.
+//
+// ONE INVOCATION PER LINE, not per pixel, because the running sum has to walk the line in order. A
+// 2844 square tile is 2844 threads an axis, which is poor occupancy and still far less total work
+// than any parallel-per-pixel form of the same filter.
+//
+// OUTSIDE THE BUFFER READS ZERO, which is what the canvas does with the transparent black beyond its
+// own edge - and it never shows, because the bleed is wider than the filter reaches: three boxes of
+// 246 reach 369 px and coatReach lays 398. check-bleed is the gate on that.
+//
+// THE CONTENT IS KEPT IN BACC rather than PX, because PX is both the blur's source and the sum it is
+// added back into. Two blurs of the SAME content, so the pristine copy has to outlive the first.
+fn blSpan(mode: i32, d: i32) -> vec2<i32> {
+  let m = mode % 3;
+  if (m == 0) { let h = (d - 1) / 2; return vec2<i32>(-h, h); }   // centred; d is odd here
+  if (m == 1) { return vec2<i32>(-(d / 2), d / 2 - 1); }          // the pixel boundary to the left
+  return vec2<i32>(-(d / 2) + 1, d / 2);                          // and to the right
+}
+fn blAt(line: i32, t: i32, vert: bool) -> vec3<f32> {
+  let len = select(E.tileW, E.tileH, vert);
+  if (t < 0 || t >= len) { return vec3<f32>(0.0); }
+  let q = select(line * E.tileW + t, t * E.tileW + line, vert);
+  let o = q * 3;
+  return vec3<f32>(BSRC[o], BSRC[o + 1], BSRC[o + 2]);
+}
+// A TILED TRANSPOSE, WHICH IS WHAT MAKES THE HORIZONTAL BLUR COALESCED.
+//
+// blbox walks a line with one thread, and which axis that is decides everything. Walking DOWN (vert)
+// indexes threads along x, the unit stride, so a warp's 32 loads fall in one or two cache lines.
+// Walking ACROSS indexes threads along y, so at 2844 wide the neighbouring threads of a warp are
+// 34 KB apart and every lane is its own memory transaction. Measured: the bloom cost 80 ms a tile
+// with three of its six passes an axis in that state.
+//
+// So nothing walks across any more. Transpose, do the vertical walk - which in transposed space IS
+// the horizontal blur - transpose back, and do the vertical walk again. Both stages take the good
+// path and blSpan's horizontal modes are now unreachable; they stay because the span arithmetic is
+// shared and a mode is cheaper to keep than a second span function.
+//
+// COALESCED ON BOTH SIDES, which a naive transpose is not: reading DST[y][x] = SRC[x][y] directly
+// makes one of the two strided. A 32-square block goes through workgroup memory so that both the
+// read and the write run along x. The 33 stride is the usual padding against bank conflicts, and
+// three separate f32 planes rather than one vec3 array because a workgroup vec3 pads to 16 bytes
+// and 32*33*16 would not fit the 16 KB a workgroup gets.
+var<workgroup> TR0: array<f32, 1056>;
+var<workgroup> TR1: array<f32, 1056>;
+var<workgroup> TR2: array<f32, 1056>;
+@compute @workgroup_size(32, 8)
+fn bltrans(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) l: vec3<u32>) {
+  let n = u32(E.tileW);                   // square: the bloom only runs where the band IS the tile
+  let bx = wg.x * 32u; let by = wg.y * 32u;
+  for (var r = 0u; r < 4u; r = r + 1u) {
+    let ly = l.y + r * 8u;
+    let x = bx + l.x; let y = by + ly;
+    if (x < n && y < n) {
+      let o = (y * n + x) * 3u; let q = ly * 33u + l.x;
+      TR0[q] = BSRC[o]; TR1[q] = BSRC[o + 1u]; TR2[q] = BSRC[o + 2u];
+    }
+  }
+  workgroupBarrier();
+  for (var r = 0u; r < 4u; r = r + 1u) {
+    let ly = l.y + r * 8u;
+    let x = by + l.x; let y = bx + ly;     // the swapped block, so the write runs along x too
+    if (x < n && y < n) {
+      let o = (y * n + x) * 3u; let q = l.x * 33u + ly;
+      BDST[o] = TR0[q]; BDST[o + 1u] = TR1[q]; BDST[o + 2u] = TR2[q];
+    }
+  }
+}
+@compute @workgroup_size(64)
+fn blsave(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let i = i32(g.x + g.y * nw.x * 64u);
+  if (i >= E.tileW * E.tileH * 3) { return; }
+  BACC[i] = PX[i];
+}
+@compute @workgroup_size(64)
+fn blbox(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let gi = i32(g.x + g.y * nw.x * 64u);
+  let vert = E.blMode >= 3;
+  let lines = select(E.tileH, E.tileW, vert);
+  if (gi >= lines) { return; }
+  let len = select(E.tileW, E.tileH, vert);
+  let sp = blSpan(E.blMode, E.blD);
+  let w = f32(sp.y - sp.x + 1);
+  var sum = vec3<f32>(0.0);
+  for (var k = sp.x; k <= sp.y; k = k + 1) { sum = sum + blAt(gi, k, vert); }
+  // RESEEDING, WHICH IS AN EXPERIMENT AND NOT A FEATURE. blRS = 0 is the plain running sum; blRS = n
+  // recomputes the window from scratch every n steps; blRS = 1 recomputes it at EVERY pixel, which
+  // is the exact box blur with no accumulated drift at all and therefore the ground truth this is
+  // measured against. If the shader's two-level deficit survives blRS = 1, f32 drift is not the
+  // cause and the error is in the arithmetic.
+  let rs = max(E.blRS, 1);
+  for (var t = 0; t < len; t = t + 1) {
+    if (E.blRS > 0 && t > 0 && (t % rs) == 0) {
+      sum = vec3<f32>(0.0);
+      for (var k = sp.x; k <= sp.y; k = k + 1) { sum = sum + blAt(gi, t + k, vert); }
+    }
+    let q = select(gi * E.tileW + t, t * E.tileW + gi, vert);
+    let o = q * 3;
+    let v = sum / w;
+    BDST[o] = v.x; BDST[o + 1] = v.y; BDST[o + 2] = v.z;
+    sum = sum + blAt(gi, t + 1 + sp.y, vert) - blAt(gi, t + sp.x, vert);
+  }
+}
+// CLAMPED HERE AND NOT ONLY AT THE END, because 'lighter' clamps at every one of its own draws and
+// a blown highlight is where that shows.
+@compute @workgroup_size(64)
+fn bladd(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let i = i32(g.x + g.y * nw.x * 64u);
+  if (i >= E.tileW * E.tileH * 3) { return; }
+  PX[i] = min(PX[i] + E.blGain * BSRC[i], 255.0);
+}
+// AND THE DITHER GOES ON HERE INSTEAD OF IN main. It is about the WRITE - which way a pixel rounds
+// when the pack takes it to eight bits - so blurring it would spend it on nothing and leave the
+// bloom to band. main skips it whenever blOn is set; this is the other half of that.
+@compute @workgroup_size(64)
+fn blmix(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let gi = i32(g.x + g.y * nw.x * 64u);
+  let n = E.tileW * E.tileH;
+  if (gi >= n) { return; }
+  let ix = gi % E.tileW; let iy = gi / E.tileW;
+  let dz = dither4(E.tileX + ix, E.tileY + iy);
+  let o = gi * 3;
+  PX[o] = clamp(PX[o] + dz, 0.0, 255.0);
+  PX[o + 1] = clamp(PX[o + 1] + dz, 0.0, 255.0);
+  PX[o + 2] = clamp(PX[o + 2] + dz, 0.0, 255.0);
+}`;
+
     WGSL.stoneTile = `
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
@@ -17232,12 +17551,23 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     acc = gnd * E.gndOp + acc * (1.0 - E.gndOp);
   }
 
-  // THE MOTTLE. Slab coordinates, so the sample is where the CPU's drawImage(0, 0, 1, H) puts it:
-  // u over the slab width, v over its height.
+  // THE THREE MODULATORS, IN paintStoneContent's ORDER AND ITS BLENDS. Slab coordinates, so each
+  // sample lands where the CPU's drawImage(0, 0, 1, H) puts it: u over the slab width, v over its
+  // height. Breccia is first and is a base SETTER - plain source-over at its own opacity, carrying
+  // colour - then the mottle and the bands modulate whatever base that left, both soft-light.
+  if (E.hasBrec == 1 && E.brecOp > 0.0) {
+    let bc = brecAt(cu, cv / 0.625);
+    acc = bc * E.brecOp + acc * (1.0 - E.brecOp);
+  }
   if (E.hasCloud == 1 && E.cloudOp > 0.0) {
     let cs = clamp(cloudAt(cu, cv / 0.625) / 255.0, 0.0, 1.0);
     let b = softLight(acc / 255.0, cs) * 255.0;
     acc = b * E.cloudOp + acc * (1.0 - E.cloudOp);
+  }
+  if (E.hasBand == 1 && E.bandOp > 0.0) {
+    let bs = clamp(bandAt(cu, cv / 0.625) / 255.0, 0.0, 1.0);
+    let b = softLight(acc / 255.0, bs) * 255.0;
+    acc = b * E.bandOp + acc * (1.0 - E.bandOp);
   }
 
   // THE CELL IS GLOBAL, so it is found ONCE per pixel in draw space rather than per layer in tile
@@ -17252,7 +17582,8 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
 
   // The dither goes on LAST, after every layer, because it is about the write rather than the
   // arithmetic: it decides which way this pixel rounds when the readback takes it to eight bits.
-  let dz = dither4(E.tileX + ix, E.tileY + iy);
+  // SKIPPED WHEN THE BLOOM RUNS, which applies it after the blur instead - see WGSL.stoneBloom.
+  let dz = select(dither4(E.tileX + ix, E.tileY + iy), 0.0, E.blOn == 1);
   let out = clamp(acc + vec3<f32>(dz), vec3<f32>(0.0), vec3<f32>(255.0));
   let o = p * 3;
   PX[o] = out.x; PX[o + 1] = out.y; PX[o + 2] = out.z;
@@ -17261,7 +17592,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // DECLARATION ORDER, because WGSL wants a function declared before it is used and a wrong order here
     // is a compile error that only a real device reports.
     const STONE_ORDER = ['env', 'stoneSoftLight', 'stoneCloud', 'stoneSeg', 'stonePhi', 'stonePoly',
-                         'stoneLayer', 'stoneDither', 'stoneTile'];
+                         'stoneLayer', 'stoneDither', 'stoneBloom', 'stoneTile'];
 
     function stoneSource(GW) {
       const unplaced = Object.keys(WGSL).filter(k => STONE_ORDER.indexOf(k) < 0);
@@ -17336,7 +17667,10 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     stone: {
       code: () => STONE_SRC(),
       uni: STONE_UNI_BYTES,
-      off: () => ({ x: STONE_UNI_OFF('tileX'), y: STONE_UNI_OFF('tileY'), h: STONE_UNI_OFF('tileH') }),
+      off: () => ({ x: STONE_UNI_OFF('tileX'), y: STONE_UNI_OFF('tileY'), h: STONE_UNI_OFF('tileH'),
+                    blOn: STONE_UNI_OFF('blOn'), blD: STONE_UNI_OFF('blD'),
+                    blMode: STONE_UNI_OFF('blMode'), blGain: STONE_UNI_OFF('blGain'),
+                    blRS: STONE_UNI_OFF('blRS') }),
       why: () => stoneWhyNot(),
       // TILE AND BAND ORIGIN ZERO HERE, as glass does: the pool patches tileX, tileY and tileH per
       // band through off() above, and packing them would be a second answer to the same question.
@@ -17554,6 +17888,31 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // BLOOM_DRAW is the switch, and it is ON unless ?bloom=blur or ?bloom=off says otherwise. With
     // ?bloom=blur the halo moves into applyCoat, which runs on the CPU after the shader hands its
     // face back - so the spectrum really is only a colour difference there, and the shader takes it.
+    // WHAT IT WOULD COST TO LIFT THIS, MEASURED 2026-10-29 WITHOUT WRITING THE SHADER. The halo is
+    // per-element blurred coverage, which is the SAME object as the layer glow and the three blur
+    // clauses, and the closed form for it already ships - stonePhi took the vein blur from 1.7 min
+    // to 3.1 s. The open question was never the maths, it was binDiscs: a halo of sigma = 8*bs adds
+    // 3*sigma of reach to every primitive's disc, so every speck and mark lands in more cells.
+    //
+    // Packed the real UV scene twice through the real packer - 3,526 chunks and 8,050 polys, the
+    // chunks grown through blurPx and the polys by pushing their verts out until the circumcircle
+    // had grown by the same reach, because polys bin by circumcircle and carry no blur term:
+    //
+    //     width    MCI slots plain -> halo      per non-empty cell     worst cell
+    //      4,096      141,879 -> 1,043,596       2.5 -> 8.6             31 -> 95
+    //     16,384    1,003,426 -> 8,053,761       2.5 -> 7.6             30 -> 94
+    //     65,535      998,216 -> 8,042,322       2.5 -> 7.6             30 -> 94
+    //
+    // SO: 8x the average per-pixel primitive walk, and 3.1x the worst cell. Scale-invariant, because
+    // the reach is 2.26% of the width at every size. Bounded and knowable rather than a wall - and
+    // the grid is a lever on it, since gridFor decides how fine the cells are and a finer grid trades
+    // arena bytes against the per-cell walk.
+    //
+    // WHETHER IT WOULD PAY IS A DIFFERENT QUESTION, and 2026-10-29 answered the neighbouring one the
+    // other way: moving the emission bloom onto the shader made a real export SLOWER, 6.5 s against
+    // 4.5, because in an export the GPU is the feeder eight workers wait on. Lifting THIS clause is
+    // not that trade - it moves a UV slab from CPU-only to the shader at all, which was 39x on v21 -
+    // but 8x more feeder work is exactly the cost that trade has to clear.
     if (uvMode && BLOOM_DRAW) return 'exp.gpu.uv';
     if (G.backlight > 0) return 'exp.gpu.backlight';
     const own = M.why();
@@ -17649,6 +18008,30 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // more things a device can decline, and the answer to "this machine cannot do the fast
     // readback" is the slow one rather than no GPU at all. Its own try, its own scope, and a
     // refusal here leaves every buffer below exactly as it was.
+    // THE BLOOM'S FOUR, IN A TRY OF THEIR OWN. A bloom that will not build must cost the shader its
+    // bloom and not its tile: the coat then does it on the CPU exactly as it did before, and the
+    // render is slower rather than absent. bloomWhy carries the reason so a probe can print it.
+    let pipeBlSave = null, pipeBlBox = null, pipeBlAdd = null, pipeBlMix = null,
+        pipeBlTr = null, bloomWhy = null;
+    try {
+      dev.pushErrorScope('validation');
+      pipeBlSave = await dev.createComputePipelineAsync({
+        layout: 'auto', compute: { module: mod, entryPoint: 'blsave' } });
+      pipeBlBox = await dev.createComputePipelineAsync({
+        layout: 'auto', compute: { module: mod, entryPoint: 'blbox' } });
+      pipeBlAdd = await dev.createComputePipelineAsync({
+        layout: 'auto', compute: { module: mod, entryPoint: 'bladd' } });
+      pipeBlMix = await dev.createComputePipelineAsync({
+        layout: 'auto', compute: { module: mod, entryPoint: 'blmix' } });
+      pipeBlTr = await dev.createComputePipelineAsync({
+        layout: 'auto', compute: { module: mod, entryPoint: 'bltrans' } });
+      const e = await dev.popErrorScope();
+      if (e) throw new Error(e.message.split(String.fromCharCode(10))[0]);
+    } catch (e) {
+      bloomWhy = (e && e.message) || String(e);
+      pipeBlSave = pipeBlBox = pipeBlAdd = pipeBlMix = pipeBlTr = null;
+    }
+
     let pipeT = null, pipeBlit = null, cvFmt = null;
     try {
       dev.pushErrorScope('validation');
@@ -17736,6 +18119,112 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       }
     }
 
+    // THE BLOOM'S BUFFERS, ALLOCATED ONCE AND SHARED BY BOTH SETS. Three, because PX is both the
+    // blur's source and the sum it is added back into, and there are TWO blurs of the same content -
+    // so a pristine copy has to outlive the first. Sharing them serialises the bloom between the two
+    // sets, which costs nothing that matters: the overlap this pool exists for is GPU against the
+    // caller's deflate, and that still holds.
+    //
+    // ONE BAND ONLY, AND THAT IS A REAL RESTRICTION. PX holds a BAND - rowsMax rows, not the tile -
+    // and a vertical blur needs the whole column. At a 2048 tile ew is 2844 and rowsMax is 2844, so
+    // the band IS the tile; at 4096 it is not, and there the coat keeps doing it. Declared here
+    // rather than hidden, because a bloom that silently blurred one band would tile-seam the glow.
+    // ?gbloom=1 - PUT THE EMISSION BLOOM ON THE SHADER. OFF BY DEFAULT, AND MEASURED THAT WAY.
+    //
+    // CORRECT AND NO LONGER THE SLOW HALF. On the three tiles where the bloom owns the whole
+    // difference - they agreed with the painter to +0.002, +0.001 and -0.006 with the bloom left on
+    // the CPU - the shader reads -0.069, -0.193 and -0.151. Its cost on the GPU, measured against
+    // the same pool with the bloom off at 80.4 ms a tile:
+    //
+    //     one thread a ROW for the horizontal passes      160.7 ms a tile, so the bloom was 80.3
+    //     transposed, so every pass is the vertical walk  113.1 ms a tile, so the bloom is   32.7
+    //
+    // Byte-identical across that change, which is what a pure data movement should be: the same
+    // self-consistency hash and the same six means to three decimals.
+    //
+    // AND IN A REAL EXPORT IT LOSES, WHICH IS WHY IT IS OFF. Two 16,384 UV masters of this slab,
+    // minutes apart, same build, the only difference this flag:
+    //
+    //     coat draws the bloom    4.5 s   78,852,408 bytes   light.mean 61.66   median tile  1.0 ms
+    //     shader draws it         6.5 s   98,976,848 bytes   light.mean 62.00   median tile 18.5 ms
+    //
+    // 44% slower and 25% larger. The main-thread probes said the opposite - the GPU tile went 160.7
+    // to 113.1 ms with the transpose - and they were measuring the wrong arrangement. In an export
+    // the coat's bloom runs in EIGHT finisher workers, in parallel, off the critical path, while the
+    // shader's runs on ONE device that is already the thing those eight workers wait for. Moving
+    // work off eight parallel CPUs onto one serial GPU is a loss however fast the kernel gets.
+    //
+    // THE 25% OF BYTES IS THE DITHER, unmeasured but the arithmetic fits: with the bloom on the
+    // shader, main skips the dither and blmix lays it down AFTER the blur, so the glow carries
+    // full-amplitude dither instead of a blurred one. clamp(x + dz, 0, 255) at x = 0 also biases a
+    // black field up by about 0.25, and this picture is mostly black - the mean moved 0.34.
+    //
+    // WHAT WOULD CHANGE THE VERDICT: a render where the GPU is not the feeder - fewer workers, a
+    // bigger tile, or a picture whose finish is cheap enough that the device has slack.
+    //
+    // WHAT WAS WRONG BEFORE, AND IT WAS NOT PRECISION. The first spelling blurred ONE pristine copy
+    // twice and read about two levels too dark. f32 running-sum drift was the suspicion and it was
+    // measured and ruled out - see ?blrs below. The cause was in the painter all along: applyCoat is
+    // handed the tile canvas as both tcv and tx, so blurDraw composites into the very image the next
+    // blurDraw reads, and its second pass blurs content + 0.55*B3(content). bloomRun re-saves
+    // between the two passes to match.
+    //
+    // Kept rather than reverted because the whole arrangement is the expensive part to rediscover:
+    // the bindings, the one-band precondition, the pass order against the dither, and the four links
+    // that stop the coat blooming a picture twice. check-bleed gates all four.
+    const GBLOOM = (() => {
+      try { return /^(1|on|yes)$/i.test(new URLSearchParams(location.search).get('gbloom') || ''); }
+      catch (_) { return false; }
+    })();
+    const bloomWanted = uvMode && !BLOOM_DRAW && GBLOOM;
+    let blA = null, blB = null, blACC = null, bloomReady = false;
+    if (bloomWanted && !pipeBlBox) bloomWhy = bloomWhy || 'pipelines absent';
+    else if (bloomWanted && rowsMax < ew) bloomWhy = 'banded: rowsMax ' + rowsMax + ' of ' + ew;
+    else if (bloomWanted) {
+      try {
+        dev.pushErrorScope('out-of-memory');
+        const sz = ew * ew * 3 * 4;
+        blA = dev.createBuffer({ size: sz, usage: GPUBufferUsage.STORAGE });
+        blB = dev.createBuffer({ size: sz, usage: GPUBufferUsage.STORAGE });
+        blACC = dev.createBuffer({ size: sz, usage: GPUBufferUsage.STORAGE });
+        const e = await dev.popErrorScope();
+        if (e) throw new Error('buffers: ' + e.message.split(String.fromCharCode(10))[0]);
+        for (const s2 of set) {
+          s2.grpBlSave = dev.createBindGroup({ layout: pipeBlSave.getBindGroupLayout(0), entries: [
+            { binding: 0, resource: { buffer: s2.px } }, { binding: 2, resource: { buffer: s2.ub } },
+            { binding: 9, resource: { buffer: blACC } }] });
+          const box = (src, dst) => dev.createBindGroup({
+            layout: pipeBlBox.getBindGroupLayout(0), entries: [
+              { binding: 2, resource: { buffer: s2.ub } },
+              { binding: 7, resource: { buffer: src } }, { binding: 8, resource: { buffer: dst } }] });
+          s2.grpBoxSeed = box(blACC, blA);                 // the first pass reads the pristine copy
+          s2.grpBoxAB = box(blA, blB);
+          s2.grpBoxBA = box(blB, blA);
+          s2.grpBlAdd = dev.createBindGroup({ layout: pipeBlAdd.getBindGroupLayout(0), entries: [
+            { binding: 0, resource: { buffer: s2.px } }, { binding: 2, resource: { buffer: s2.ub } },
+            { binding: 7, resource: { buffer: blB } }] });  // six passes land in B; see bloomRun
+          s2.grpBlMix = dev.createBindGroup({ layout: pipeBlMix.getBindGroupLayout(0), entries: [
+            { binding: 0, resource: { buffer: s2.px } }, { binding: 2, resource: { buffer: s2.ub } }] });
+          // THE TRANSPOSE NEEDS ITS OWN, though it binds exactly what blbox binds: with layout
+          // 'auto' each pipeline owns its layout object and they are not interchangeable.
+          const tr = (src, dst) => dev.createBindGroup({
+            layout: pipeBlTr.getBindGroupLayout(0), entries: [
+              { binding: 2, resource: { buffer: s2.ub } },
+              { binding: 7, resource: { buffer: src } }, { binding: 8, resource: { buffer: dst } }] });
+          s2.grpTrSeed = tr(blACC, blA);
+          s2.grpTrBA = tr(blB, blA);
+        }
+        bloomReady = true;
+        // TOLD TO THE SIGNATURE HERE, because exportTiff takes markSig AFTER the painter is chosen
+        // and this is inside that choice. A pool that got the buffers draws a different picture.
+        bloomOnGpu = true;
+      } catch (e) {
+        bloomWhy = (e && e.message) || String(e);
+        for (const b of [blA, blB, blACC]) { try { if (b) b.destroy(); } catch (_) {} }
+        blA = blB = blACC = null;
+      }
+    }
+
     // THE PACKER WRITES tileX, tileY AND tileH as int32s and the material says where; patching
     // those three keeps every other field provably identical from tile to tile. Glass answers with
     // the offsets written beside its own positional layout, wood by asking its layout by name.
@@ -17745,7 +18234,8 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // and could not have met this; the first real export tile did, immediately.
     const DIM = Math.min(65535, dev.limits.maxComputeWorkgroupsPerDimension || 65535);
     const split = g => { const x = Math.min(g, DIM); return [x, Math.ceil(g / x)]; };
-    const { x: OFF_TX, y: OFF_TY, h: OFF_TH } = M.off();
+    const { x: OFF_TX, y: OFF_TY, h: OFF_TH, blOn: OFF_BLON, blD: OFF_BLD,
+            blMode: OFF_BLM, blGain: OFF_BLG, blRS: OFF_BLRS } = M.off();
     const TOTAL = p.rAcross * p.rDown;
     let closed = false, busyN = 0, held = 0;
     // THE MAIN THREAD'S OWN SHARE, which no timer in the export loop can see. Measured at 192:
@@ -17800,6 +18290,87 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // copyBufferToBuffer, no mapAsync, no memcpy, no await on a pixel. The bands write into one
     // full-tile texture and a single render pass puts it on the slot's canvas.
     //
+    // THE TOKEN THE COAT WOULD HAVE USED, and the box widths ctx.filter turns it into. applyCoat's
+    // two passes are 3*bs and 8*bs with bs = W/COAT_REF, and the SVG rule is
+    // d = floor(token * 3 * sqrt(2*PI) / 4 + 0.5), then three boxes: three of width d when d is odd,
+    // and when d is even one biased to the boundary on the left, one to the right, and one of d + 1
+    // centred. At 16,384 the tokens are 49.15 and 131.07, so d is 92 and 246 - both even. The odd
+    // branch is written anyway because a small enough slab reaches it.
+    // ?blrs=n - RESEED THE BOX BLUR'S RUNNING SUM EVERY n PIXELS. AN ANSWERED QUESTION, KEPT SO IT
+    // IS NOT ASKED TWICE: f32 drift is NOT why the bloom was dark. At n = 0, 256, 64 and 16 the
+    // deficit was bit-identical on every tile (-2.788, -2.654, -2.223 each time) while n = 16 cost a
+    // measurable 136 ms more - so the reseed demonstrably ran and demonstrably changed nothing.
+    //
+    // The prediction that sent me here was also wrong on its own arithmetic: the running sum is over
+    // the WINDOW, 246 values near 15,000, where one ulp is 0.008 - not over the line, near 725,000.
+    // That is 50x out, and it predicted 2.1 levels where the true bound is under 0.5.
+    const BLRS = (() => {
+      try { const v = +new URLSearchParams(location.search).get('blrs'); return v >= 0 ? (v | 0) : 0; }
+      catch (_) { return 0; }
+    })();
+    const bsCoat = W / COAT_REF;
+    const blDOf = N => Math.floor(N * 3 * Math.sqrt(2 * Math.PI) / 4 + 0.5);
+    const blBoxes = d => (d % 2) ? [[d, 0], [d, 0], [d, 0]] : [[d, 1], [d, 2], [d + 1, 0]];
+    // ONE SUBMIT A PASS, for the reason the band loop below has one a band: writeBuffer is ordered
+    // against SUBMITS, so batching the passes into one encoder would apply the LAST pass's width and
+    // mode to all of them. Measured submit overhead is 0.06 ms and there are fourteen of them.
+    //
+    // THE PING-PONG: pass 0 reads the pristine copy into A, then A->B, B->A, A->B, B->A, A->B, so
+    // six passes end in B - which is the buffer grpBlAdd reads. Changing the pass count moves that.
+    function bloomRun(s) {
+      const uni = s.uni, v = s.view, nPx = ew * ew, n3 = nPx * 3;
+      const sub = (pipeline, grp, threads, d, mode, gain) => {
+        v.setInt32(OFF_BLD, d, true); v.setInt32(OFF_BLM, mode, true);
+        v.setInt32(OFF_BLRS, BLRS, true);
+        v.setFloat32(OFF_BLG, gain, true);
+        dev.queue.writeBuffer(s.ub, 0, uni);
+        const [dX, dY] = split(Math.ceil(threads / 64));
+        const enc = dev.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setPipeline(pipeline); pass.setBindGroup(0, grp);
+        pass.dispatchWorkgroups(dX, dY); pass.end();
+        dev.queue.submit([enc.finish()]);
+      };
+      // THE TRANSPOSE DISPATCHES BY BLOCK, not by line: ceil(ew/32) squared workgroups of 32x8.
+      const trans = grp => {
+        dev.queue.writeBuffer(s.ub, 0, uni);
+        const b = Math.ceil(ew / 32);
+        const enc = dev.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setPipeline(pipeBlTr); pass.setBindGroup(0, grp);
+        pass.dispatchWorkgroups(b, b); pass.end();
+        dev.queue.submit([enc.finish()]);
+      };
+      for (const [token, gain] of [[3 * bsCoat, 0.55], [8 * bsCoat, 0.35]]) {
+        // RE-SAVED EACH TIME, BECAUSE THE PAINTER'S SECOND PASS READS ITS OWN FIRST ONE. applyCoat is
+        // handed the tile canvas as BOTH tcv and tx - the same surface - so blurDraw composites into
+        // the very image the next blurDraw reads. Its second pass therefore blurs
+        // content + 0.55*B3(content), and carries an extra 0.1925 * B8(B3(content)) that a shader
+        // blurring one pristine copy twice does not. Measured as about two levels too DARK, which is
+        // the right sign for a missing additive term.
+        sub(pipeBlSave, s.grpBlSave, n3, 0, 0, 0);         // BACC = PX as it stands RIGHT NOW
+        const d = blDOf(token);
+        if (!(d >= 1)) continue;                           // below one box there is nothing to blur
+        const boxes = blBoxes(d);
+        // TRANSPOSE, BLUR DOWN, TRANSPOSE BACK, BLUR DOWN. Every box pass is now the vertical walk,
+        // which is the coalesced one, and the horizontal walk is never used at all. The chain has to
+        // land in blB because that is what grpBlAdd reads, and it does:
+        //   tr ACC->A   A->B   B->A   A->B   tr B->A   A->B   B->A   A->B
+        trans(s.grpTrSeed);
+        let step = 0;
+        for (const [w, bias] of boxes) {
+          sub(pipeBlBox, step % 2 ? s.grpBoxBA : s.grpBoxAB, ew, w, bias + 3, 0); step++;
+        }
+        trans(s.grpTrBA);                                  // B back to A, original orientation
+        step = 0;
+        for (const [w, bias] of boxes) {
+          sub(pipeBlBox, step % 2 ? s.grpBoxBA : s.grpBoxAB, ew, w, bias + 3, 0); step++;
+        }
+        sub(pipeBlAdd, s.grpBlAdd, n3, 0, 0, gain);
+      }
+      sub(pipeBlMix, s.grpBlMix, nPx, 0, 0, 0);            // and the dither main skipped
+    }
+
     // ONE SUBMIT PER BAND, not one for the tile. writeBuffer is ordered against SUBMITS rather than
     // interleaved with the commands inside an encoder, so batching every band into one encoder
     // would apply the LAST band's uniform to all of them and paint the same rows N times. Submit
@@ -17812,6 +18383,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         uniView.setInt32(OFF_TX, ex0, true);
         uniView.setInt32(OFF_TY, ey0 + y0, true);
         uniView.setInt32(OFF_TH, rows, true);
+        uniView.setInt32(OFF_BLON, bloomReady ? 1 : 0, true);   // main skips its dither; blmix does it
         dev.queue.writeBuffer(s.ub, 0, uni);
         bnd[0] = y0;
         dev.queue.writeBuffer(s.bnd, 0, bnd);
@@ -17819,10 +18391,14 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         if (check) { scoped.add(rows); dev.pushErrorScope('validation'); }
         const tS = performance.now();
         const [dX, dY] = split(Math.ceil(ew * rows / 64));
-        const enc = dev.createCommandEncoder();
+        let enc = dev.createCommandEncoder();
         const a = enc.beginComputePass();
         a.setPipeline(pipe); a.setBindGroup(0, s.grp);
         a.dispatchWorkgroups(dX, dY); a.end();
+        // THE BLOOM GOES BETWEEN THE PAINT AND THE PACK, and it has to break the encoder: its widths
+        // travel in the uniform and writeBuffer is ordered against submits. bloomReady implies one
+        // band, so this runs once and sees the whole tile.
+        if (bloomReady) { dev.queue.submit([enc.finish()]); bloomRun(s); enc = dev.createCommandEncoder(); }
         const b = enc.beginComputePass();
         b.setPipeline(pipeT); b.setBindGroup(0, s.grpT);
         b.dispatchWorkgroups(Math.ceil(ew / 8), Math.ceil(rows / 8)); b.end();
@@ -17866,15 +18442,19 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         uniView.setInt32(OFF_TX, ex0, true);
         uniView.setInt32(OFF_TY, ey0 + y0, true);     // the band's own origin on the sheet
         uniView.setInt32(OFF_TH, rows, true);         // and its own height: the last one is short
+        uniView.setInt32(OFF_BLON, bloomReady ? 1 : 0, true);   // main skips its dither; blmix does it
         dev.queue.writeBuffer(s.ub, 0, uni);
         const [dX, dY] = split(Math.ceil(cells / 64));
         const [pX, pY] = split(Math.ceil(cells / 64));   // one thread a pixel now, not one per four
         const check = !scoped.has(rows);
         if (check) { scoped.add(rows); dev.pushErrorScope('validation'); }
-        const enc = dev.createCommandEncoder();
+        let enc = dev.createCommandEncoder();
         const a = enc.beginComputePass();
         a.setPipeline(pipe); a.setBindGroup(0, s.grp);
         a.dispatchWorkgroups(dX, dY); a.end();
+        // See the note in paintTex: the bloom breaks the encoder because its widths travel in the
+        // uniform, and bloomReady implies a single band.
+        if (bloomReady) { dev.queue.submit([enc.finish()]); bloomRun(s); enc = dev.createCommandEncoder(); }
         // TWO PASSES. A pass boundary is the ordering guarantee that needs no looking up, and the
         // pack reads exactly what the paint wrote.
         const b = enc.beginComputePass();
@@ -17938,12 +18518,15 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         const tB = performance.now();
         const bmp = api.glassFrom(slot);
         own.bitmap += performance.now() - tB;
-        return fin.finishBitmap(i, bmp, true);
+        return fin.finishBitmap(i, bmp, true, bloomReady);
       }));
       jobs.get(i).catch(() => {});        // parked; rethrown by the await in finish()
     }
 
     const api = {
+      // WHETHER THE SHADER OWNS THE BLOOM, and the reason when it does not - read by the probes and
+      // by the plan trail, because 'the GPU is on' and 'the GPU is doing the bloom' are two facts.
+      bloom: bloomReady, bloomWhy, bloomRS: BLRS,
       // EVERY FIELD THE EXPORT READS OFF A POOL, not just the ones the tile loop touches. The
       // metadata block does `{ n: pool.workers, planned: pool.planned, strain: pool.strain }` at
       // the END of a render, six minutes in, and a stub missing two of those does not throw - it
@@ -18058,6 +18641,10 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
           // compares 67,108,864 bytes through it at 0 apart - so the two spellings agree.
           const img = texOn ? this.glassFrom(slot) : set[slot].img;
           const tA = performance.now();
+          // THE COAT MUST NOT BLOOM A PICTURE THAT ARRIVES BLOOMED. This is the main thread's half of
+          // it; the worker's is the per-tile blDone. Cleared in the finally, because a throw between
+          // here and there would leave every later CPU render on this page missing its bloom.
+          coatBloomDone = bloomReady;
           try {
           return renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed, cx => {
             // ONLY WHERE THE SLAB IS. paintGlassContent writes through
@@ -18076,7 +18663,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
             else cx.putImageData(img, 0, 0, B.x0, B.y0, B.bw, B.bh);
             cx.restore();
           });
-          } finally { own.asm += performance.now() - tA; }
+          } finally { own.asm += performance.now() - tA; coatBloomDone = false; }
       },
       useFinishers(f) { fin = f; api.finishers = (f && f.planned) || 0; },
       close() {
@@ -18481,7 +19068,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // idle. Only the busy count during the gap separates them, and nothing was recording it.
     const trace = new Map();                               // idx -> {d,s,f}; the consumer adds w
     const TRACE_KEEP = 512;                                // a consumer that never reads must not leak
-    const start = (idx, bmp, asGlass) => {
+    const start = (idx, bmp, asGlass, blDone) => {
       if (idx >= p.renders || inflight.has(idx)) return;
       if (busyCount() >= target) return;
       const q = pool.find(x => !x.busy);
@@ -18545,6 +19132,9 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
                           // composite and d.glass runs it, so a message carrying both would take
                           // the first branch and silently drop the ground, coat and windows.
                           bmp: asGlass ? undefined : (bmp || undefined),
+                          // THE PICTURE ALREADY CARRIES ITS BLOOM, so this worker's applyCoat must
+                          // not lay a second one. Only the shader sets it, and only per tile.
+                          blDone: !!blDone,
                           glass: asGlass ? (bmp || undefined) : undefined }, bmp ? [bmp] : []);
       }));
     };
@@ -18592,7 +19182,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // asGlass SAYS WHICH OF THE TWO THINGS THIS IS: a finished tile, or the picture with the
       // ground, coat and windows still to put round it. It travels all the way to the worker's
       // branch, so the caller decides and nothing here has to guess from the bitmap's size.
-      async finishBitmap(idx, bmp, asGlass) {
+      async finishBitmap(idx, bmp, asGlass, blDone) {
         if (!p.fin) throw new Error('finishBitmap without p.fin');
         // START REFUSES WHEN EVERY WORKER IS BUSY - silently, by design, because its caller is a
         // scheduler that will offer the same index again a moment later. This caller is not: it
@@ -18604,7 +19194,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         // So it waits for a slot instead of being dropped. Waiting on the passes already in flight
         // rather than on a timer, because a worker going free is exactly what unblocks this.
         while (!inflight.has(idx)) {
-          start(idx, bmp, asGlass);
+          start(idx, bmp, asGlass, blDone);
           if (inflight.has(idx)) break;
           const pend = [...inflight.values()];
           if (!pend.length) { await new Promise(r => setTimeout(r, 1)); continue; }
@@ -19319,7 +19909,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       if (pool) { pool.close(); pool = null; }             // idempotent: the success path closes it too
       // CLEARED, or every signature taken after a GPU export would claim the GPU drew it - including
       // the one the NEXT export takes before it has decided anything.
-      drewOnGpu = false;
+      drewOnGpu = false; bloomOnGpu = false;
       btn.disabled = selW.disabled = selF.disabled = false; exporting = false; wakeOff(); expFreeze();
       resumeOffer();   // whatever this render left behind - finished, refused or killed - say so now
     }
