@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Stone Author — Gallery</title>
-<meta name="description" content="One authored marble slab, shown four ways — pristine, subtly wrong, screaming, and turned inside out — plus the 2.68-gigapixel masters it comes off. Rendered from a deterministic vector recipe by Stone Author.">
+<title>Material Author — Gallery</title>
+<meta name="description" content="One authored marble slab shown four ways, three materials cut from one slab file, and what a coat blur costs at 2.68 gigapixels. Rendered from a deterministic vector recipe by Material Author.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -43,6 +43,10 @@
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
   .pair .cap h2 { font-size: 18px; }
   @media (max-width: 760px) { .pair { grid-template-columns: 1fr; gap: 40px; } }
+  .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .trio .cap h2 { font-size: 17px; }
+  .trio .cap p { font-size: 14px; }
+  @media (max-width: 980px) { .trio { grid-template-columns: 1fr; gap: 40px; } }
   .badge { display: inline-block; font: 500 11px "IBM Plex Mono", ui-monospace, monospace; letter-spacing: .12em;
            text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; color: var(--dim); }
   .badge.post { color: var(--gold); border-color: #4a3620; }
@@ -60,7 +64,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="kicker">Stone Author · sample slab</p>
+    <p class="kicker">Material Author · sample slab</p>
     <h1>African St Laurent, Warped</h1>
     <p class="lede">One authored marble slab, shown four ways — pristine, subtly wrong, screaming, and turned
       inside out.</p>
@@ -100,7 +104,7 @@
 
     <hr class="rule">
 
-    <p class="note">Stone Author draws stone as <b>vector geometry</b>, not pixels: veins, specks, fog and warp are a
+    <p class="note">Material Author draws stone as <b>vector geometry</b>, not pixels: veins, specks, fog and warp are a
       few thousand simple shapes driven by a small recipe. The recipe — a <code>.json</code> slab — is the master,
       and the render is a deterministic function of it: within one browser build the same slab renders
       <b>byte-identical every time</b> — the gallery harness gates exactly that, twice from a fresh load — and the same
@@ -223,11 +227,179 @@
     </div>
   </section>
 
+  <section class="sect" id="materials">
+    <h2>One slab, three materials</h2>
+    <p class="note"><span class="badge pure">pure render</span> &nbsp;Material Author forks at <b>one seam</b>: a
+      material is a field, a two-dimensional query against that field, and its own control surface. The six plates
+      below come off <b>one slab file</b> carrying one set of geometry — <b>666 marks, 70 lines, 232 cracks and
+      8,050 specks</b>, identical in all six of their metadata blocks — cut at <b>16,384 × 10,240</b> and
+      downsampled to 1600 px. What that geometry becomes is the material's to decide — and on this slab two of the
+      three show none of it.</p>
+
+    <h3 style="margin:36px 0 2px;font-size:19px;font-weight:600">Stone <span style="color:var(--dim);font-weight:400">— the geometry, drawn</span></h3>
+    <p class="note" style="margin-bottom:18px">Stone is the material that paints the marks: every vein, crack and
+      speck in the slab is a shape it strokes. Under the psyker spectrum the same geometry answers in emission —
+      all but one vein, which still reads gold.</p>
+    <div class="pair">
+      <figure>
+        <img src="img/mat-stone-daylight.png" alt="Gold and white veins branching over near-black granite, with coloured mineral specks scattered across it and soft grey fog blooms behind." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap">
+          <span class="idx">stone · daylight</span>
+          <h2>Daylight <span class="light">— 2.6 s, 45 MB</span></h2>
+          <p>Gold and white over near-black granite, the speck field in oxide reds and greys, fog banks behind.</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/mat-stone-psyker.png" alt="The same vein network under a psyker spectrum: the veins blaze electric cyan and the mineral specks scatter in neon orange, magenta and green, while one gold vein at the centre still reads warm." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap">
+          <span class="idx">stone · psyker</span>
+          <h2>The other spectrum <span class="light">— 4.5 s, 74 MB</span></h2>
+          <p>The same shapes, in emission. The specks that were oxide red are neon, the veins run electric cyan —
+            and one still reads gold.</p>
+        </figcaption>
+      </figure>
+    </div>
+
+    <h3 style="margin:48px 0 2px;font-size:19px;font-weight:600">Glass <span style="color:var(--dim);font-weight:400">— a label, not a colour</span></h3>
+    <p class="note" style="margin-bottom:18px">Glass holds a <b>label</b> where stone holds a colour, so a fold
+      finer than the pixel grid cannot be filtered where it is sampled — it resolves as speckle rather than as a
+      soft edge. Cutting at 16,384 and box-filtering down to 1600 averages <b>105 samples into every published
+      pixel</b>, which is the same remedy as supersampling and costs one plain render instead of sixteen. It is also
+      the smallest file on this page by a wide margin — <b>4 MB against stone's 45</b> at the same size, because
+      smooth bands compress and a speck field does not.</p>
+    <figure>
+      <img src="img/mat-glass.png" alt="Swirled bands of teal, ochre, rust and mauve folded into one another like marbled paper, drawn out into fine parallel striations across the lower half." loading="lazy" width="1600" height="1000">
+      <figcaption class="cap">
+        <span class="idx">glass &nbsp;<span class="badge pure">pure render</span></span>
+        <h2>Folded cane <span class="light">— 1.1 s, 4 MB</span></h2>
+        <p>The same slab the stone above came from, queried as glass. None of the 666 marks appear: the face is the
+          field's own level set, and the geometry is simply not what this material asks.</p>
+      </figcaption>
+    </figure>
+
+    <h3 style="margin:48px 0 2px;font-size:19px;font-weight:600">Wood <span style="color:var(--dim);font-weight:400">— three cuts of one log</span></h3>
+    <p class="note" style="margin-bottom:18px">Wood's model is a three-dimensional growth-ring field about a
+      wandering pith. <b>Nothing stores a board</b> — a board is a plane handed to that field, and the cut is
+      decided by where the plane stands: <code>cos θ = plane / r</code>, where <code>r</code> is the radius from the
+      pith at that point. The three below are <b>one log</b>, and they cannot be anything else: the log's seed and
+      scale are deliberately not exposed as controls, so moving the saw plane is the only thing an author can do
+      here. Each is 16,384 × 10,240 in 40 passes of 2048.</p>
+    <div class="trio">
+      <figure>
+        <img src="img/mat-wood-quarter.png" alt="Quartersawn timber: dead-straight parallel grain lines running edge to edge with no arching anywhere, in warm mid-brown." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap">
+          <span class="idx">quartersawn</span>
+          <h2>Quarter <span class="light">— 8.0 s</span></h2>
+          <p>The rings meet the face near-perpendicular, so they cross it as parallel lines. Straight edge to edge.</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/mat-wood-rift.png" alt="Rift-sawn timber: largely straight grain with a slow sweep across it and two broad dark latewood bands running the width of the board." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap">
+          <span class="idx">rift</span>
+          <h2>Rift <span class="light">— 8.2 s</span></h2>
+          <p>The same plane, further round. Straight at a glance, but it sweeps — and the character drifts across
+            the board's own width, because <code>r</code> does.</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/mat-wood-cathedral.png" alt="Plainsawn timber: nested cathedral arches sweeping across the board, with two pointed centres where the saw plane runs closest to the pith." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap">
+          <span class="idx">plainsawn</span>
+          <h2>Cathedral <span class="light">— 7.7 s</span></h2>
+          <p>The plane stands tangent to the rings, so they open into arches. The pointed centres are where it runs
+            closest to the pith.</p>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="sect" id="coat">
+    <h2>What a blur costs</h2>
+    <p class="note"><span class="badge pure">pure render</span> &nbsp;A master renders as a grid of tiles, and
+      <b>a tile cannot blur what it cannot see</b>. So every blur in the coat makes each tile paint a margin of its
+      neighbours and then throw that margin away. The margin is set by the blur radius, and the coat's radius is a
+      fixed <i>fraction</i> of the picture — at <code>subsurface 2</code> it is 0.8% of the width — so the bleed
+      grows with every render size while the tile does not.</p>
+    <p class="note" style="margin-bottom:28px">The pair below is the same picture under the two coat paths, at
+      <b>65,535 × 40,959 — 2.68 gigapixels</b>, 640 passes of 2048. Only the coat path differs: both carry the same
+      recorded <code>state</code>, and the signature moves only because the renderer is part of it.</p>
+    <div class="pair">
+      <figure>
+        <img src="img/coat-65535-subsurface.png" alt="A storm picture: a bright ringed moon top left, white lightning branching down the centre, rust-orange bare treeline rising from the foot, and grey fog banks behind it all." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap">
+          <span class="idx">subsurface high-pass &nbsp;· &nbsp;bleed 1577, sigma 524</span>
+          <h2>The blur <span class="light">— 13.4 min, 303 MB</span></h2>
+          <p>Paints <b>17.32 Gpx to deliver 2.68</b>: 6.45× over, 85% of every painted pixel discarded. The fog
+            banks stay grey and behind, and the picture keeps its depth.</p>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/coat-65535-boost.png" alt="The same storm picture with the fog banks lit to pale cream and brought forward, flattening the depth, with the moon, lightning and treeline unchanged." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap">
+          <span class="idx">drawn boost &nbsp;· &nbsp;bleed 8, sigma 0</span>
+          <h2>The geometry <span class="light">— 24.9 s, 206 MB</span></h2>
+          <p>Paints <b>2.73 Gpx to deliver 2.68</b>: 2% discarded. It lights features by re-drawing each layer's own
+            geometry, so it reads no neighbours at all.</p>
+        </figcaption>
+      </figure>
+    </div>
+
+    <p class="note" style="margin-top:28px;max-width:72ch"><b>32.3× — and it decomposes.</b> 6.3× of it is the extra
+      pixels painted; the remaining 5.1× is that each painted pixel is slower, because the blur runs through
+      <code>ctx.filter</code> and saturates the GPU. <b>It is not a cheaper version of the same thing.</b> The
+      subsurface weights by local contrast; the boost weights by coverage, so it reaches neither soft edges nor the
+      painter's own dither. That is why the fog comes forward and the light mean goes 69.60 → 102.08. Different
+      tool, not a discount — the slower one is kept because it is the one that can do this.</p>
+
+    <h3 style="margin:48px 0 2px;font-size:19px;font-weight:600">The same comparison, four settings<span style="color:var(--dim);font-weight:400"> — at 16,384</span></h3>
+    <p class="note" style="margin-bottom:18px">Four coat settings, each rendered both ways. <b>The first pair is the
+      pair above</b>, cut at a quarter of the width: same recorded signature, and the light means agree to
+      <b>0.1 across a 4× change of size</b> — 69.70 against 69.60, 102.18 against 102.08. The coat is scaled by the
+      picture rather than by the window, so a smaller render is the same picture, not a crop. At this size the blur
+      costs only 10–15% of the render time, because a 398 px bleed is cheap; the cost lives at size, which is what
+      the 65,535 pair is for.</p>
+    <div class="pair">
+      <figure>
+        <img src="img/coat-1-subsurface.png" alt="The storm picture under the first coat setting with the subsurface high-pass: fog grey and receding." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap"><span class="idx">01 · subsurface</span><h2>light 69.70 <span class="light">— 3.1 s</span></h2></figcaption>
+      </figure>
+      <figure>
+        <img src="img/coat-1-boost.png" alt="The same storm picture and setting with the drawn boost: fog lit forward and the picture flattened toward light." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap"><span class="idx">01 · boost</span><h2>light 102.18 <span class="light">— 3.0 s</span></h2></figcaption>
+      </figure>
+      <figure>
+        <img src="img/coat-2-subsurface.png" alt="The storm picture under the second coat setting with the subsurface high-pass." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap"><span class="idx">02 · subsurface</span><h2>light 63.10 <span class="light">— 3.0 s</span></h2></figcaption>
+      </figure>
+      <figure>
+        <img src="img/coat-2-boost.png" alt="The same storm picture and second setting with the drawn boost." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap"><span class="idx">02 · boost</span><h2>light 77.17 <span class="light">— 2.6 s</span></h2></figcaption>
+      </figure>
+      <figure>
+        <img src="img/coat-3-subsurface.png" alt="The storm picture under the third coat setting with the subsurface high-pass." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap"><span class="idx">03 · subsurface</span><h2>light 64.11 <span class="light">— 2.9 s</span></h2></figcaption>
+      </figure>
+      <figure>
+        <img src="img/coat-3-boost.png" alt="The same storm picture and third setting with the drawn boost." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap"><span class="idx">03 · boost</span><h2>light 77.50 <span class="light">— 2.4 s</span></h2></figcaption>
+      </figure>
+      <figure>
+        <img src="img/coat-4-subsurface.png" alt="The storm picture under the fourth coat setting with the subsurface high-pass." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap"><span class="idx">04 · subsurface</span><h2>light 62.91 <span class="light">— 2.9 s</span></h2></figcaption>
+      </figure>
+      <figure>
+        <img src="img/coat-4-boost.png" alt="The same storm picture and fourth setting with the drawn boost." loading="lazy" width="1600" height="1000">
+        <figcaption class="cap"><span class="idx">04 · boost</span><h2>light 75.45 <span class="light">— 2.8 s</span></h2></figcaption>
+      </figure>
+    </div>
+  </section>
+
   <footer>
     <p class="cc0">Dedicated to the public domain under CC0 1.0 — <a href="https://creativecommons.org/publicdomain/zero/1.0/">No Rights Reserved</a>.</p>
-    <p>Authored by Chris King in <a href="https://github.com/kingchddg901/stone-author">Stone Author</a>, built with Claude Code.
+    <p>Authored by Chris King in <a href="https://github.com/kingchddg901/stone-author">Material Author</a>, built with Claude Code.
       Open the studio: <a href="https://claude.ai/artifact/QNnjrqE2Zv4KY7mChVyaaP">claude.ai/artifact</a>.</p>
-    <p>Each slab above re-loads into Stone Author (Load → the <code>.json</code>) and re-renders at any size. What
+    <p>Each slab above re-loads into Material Author (Load → the <code>.json</code>) and re-renders at any size. What
       <code>before.json</code> and <code>warped.json</code> will <i>not</i> reproduce are the steps the harness adds on
       top of them — the burn, the emission palette and the mask — which
       <a href="reference.json">reference.json</a> records in full. The masters at the foot of this page come from a

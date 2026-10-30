@@ -76,12 +76,20 @@ Neither carries a device seal, so neither says anything about the machine that a
 [`filament-floor.md`](filament-floor.md) for why glass does this at all and
 [`stir-fields.md`](stir-fields.md) for why narrowing a stir is free.
 
-### The four master downsamples — in `img/`, but not harness output
+### The master downsamples — in `img/`, but not harness output
 
-`gallery/img/` also carries four images the harness does **not** render and `reference.json` does **not**
-list, because they are not 1600 × 1000 renders at all. They are **65,535 × 40,959 masters — 2.68
-gigapixels — downsampled to 1600 px** with `vips thumbnail`. The page opens on the burned pair, which
-states the fiction, and closes on the same pair with nothing added.
+**Six here, and sixteen more added 2026-10-30** — `gallery/img/` holds 26 images of which only the four
+heroes are harness output. The rest the harness does **not** render and `reference.json` does **not**
+list, because they are not 1600 × 1000 renders at all: they are **masters downsampled to 1600 px** with
+`vips thumbnail`. The six in this table come off **65,535 × 40,959 masters — 2.68 gigapixels**; the
+sixteen below come off 16,384 and 65,535. The page opens on the burned pair, which states the fiction,
+and closes on the same pair with nothing added.
+
+**A downsampled master is the SMALLER file, which is the opposite of the intuition.** Measured on what
+is committed: the four native 1600 harness renders mean **3,008 KB**, the four `raw-*` downsamples mean
+**2,103 KB** — 30% less. A 41:1 box filter averages away the per-pixel dither and the sub-pixel
+aliasing that PNG cannot compress. So rendering larger and downsampling costs the repository less than
+rendering at the published size, as well as looking better.
 
 | image | from | slab | light | what it is |
 |---|---|---|---|---|
@@ -189,6 +197,77 @@ Permutation-tested against 4,000 random same-size column subsets, the S23 master
 p ≤ 0.1% in three bands of four. Every other master tested, including both `HERO-65535-uv.png` and the four
 here, is **not distinguishable from chance** — which is a statement about the test's power, not a clean bill
 of health. Read the master's recorded bloom path instead; that is what it is for.
+
+### `#materials` — one slab, three materials (added 2026-10-30)
+
+Six plates off **one slab file**, `universal master all three materials`, cut at 16,384 × 10,240 in 40
+passes of 2048 and downsampled to 1600. The claim the section makes is checkable in the records rather
+than asserted: **all six blocks carry the same geometry — 666 marks, 70 lines, 232 cracks, 8,050
+specks** — and the material decides what, if anything, that geometry becomes. Stone strokes every mark;
+on this slab neither the glass nor the wood plates show any of them. Stated as an observation about
+these six, not as a general property of either material — nothing here measured what glass does with a
+mark on a slab authored for it.
+
+| image | material | `state` | light.mean | render | master |
+|---|---|---|---|---|---|
+| `mat-stone-daylight.png` | stone | `e22d238d` | 47.25 | 2.6 s | 45 MB |
+| `mat-stone-psyker.png` | stone, −1 | `e22d238d` | 61.35 | 4.5 s | 74 MB |
+| `mat-glass.png` | glass | `126e742e` | 122.29 | 1.1 s | **4 MB** |
+| `mat-wood-quarter.png` | wood | `6a437a9f` | 58.06 | 8.0 s | 15 MB |
+| `mat-wood-rift.png` | wood | `58b0e27b` | 54.90 | 8.2 s | 30 MB |
+| `mat-wood-cathedral.png` | wood | `aa5552d1` | 54.44 | 7.7 s | 13 MB |
+
+**The three wood cuts cannot be three trees**, and that is a property of the control surface rather than
+of care: `seed` and `trunk` are deliberately not exposed ("shape of the log, not art direction"), so
+moving the saw plane is the only thing available. `plane` is the whole quarter↔cathedral axis, since
+`cos θ = plane / r` — see [`wood.md`](wood.md).
+
+**`mat-wood-rift.png` comes from the TIFF, not the PNG of the same `inputs`.** Both exist; the PNG
+exported through a different path and records `tile: null, bleed: null, 160 tiles, 39.1 s` against the
+other two cuts' `tile 2048, 40 tiles, 8 s`. Taking it would have put a figure in the table that is not
+comparable with the ones beside it.
+
+### `#coat` — what a blur costs (added 2026-10-30)
+
+Ten plates, all `storm treeline v21` at `subsurface 2`. The headline is one picture under the two coat
+paths at **65,535 × 40,959**, 640 passes of 2048, and only the coat path differs — both carry `state`
+`d84e3fb7`.
+
+| | bleed | sigma | render | master | light.mean | painted |
+|---|---|---|---|---|---|---|
+| `coat-65535-subsurface.png` | 1577 | 524 | **13.4 min** | 303 MB | 69.60 | 17.32 Gpx for 2.68 — 85% discarded |
+| `coat-65535-boost.png` | 8 | 0 | **24.9 s** | 206 MB | 102.08 | 2.73 Gpx for 2.68 — 2% discarded |
+
+**32.3×, and it decomposes: 6.3× more painted pixels × 5.1× slower per painted pixel.** The second
+factor is `ctx.filter` saturating the GPU — [`stone-gpu.md`](stone-gpu.md) — and the structure
+reproduces an independent measurement at `subsurface 0.9`, where it was 27.0× = 6.86× × 3.93×.
+
+Two caveats that must travel with the 13.4 min. It was rendered at **tile 2048, not 4096**: at bleed
+1577 a 4096 tile paints 3.13× over rather than 6.45×, so 4096 is roughly twice as fast and the figure
+here is conservative, bought with a tile size chosen so the machine survived. And the boost is **not a
+cheaper version of the same thing** — it weights by coverage where the subsurface weights by local
+contrast, which is why the fog comes forward and the light mean moves 69.60 → 102.08. The page says so
+explicitly, because a reader seeing a brighter picture beside "32× faster" will otherwise conclude the
+fast one is degraded.
+
+The remaining eight are four settings at 16,384, each rendered both ways. **`coat-1` is the 65,535 pair
+at a quarter of the width** — same `inputs` (`d22cd3d4` / `c0e7e390`), and the light means agree to
+**0.1 across a 4× change of size**: 69.70/69.60 and 102.18/102.08. That is the coat being scaled by the
+picture rather than by the window, measured rather than argued.
+
+**AND ONE THING THE SECTION DOES NOT SAY, deliberately.** The subsurface arm lifts the picture's own
+outer rim, because the wide blur has no neighbours beyond the frame edge. Measured on the published
+plates, rim minus interior: **+7.47** at 65,535 and **+8.56** at 16,384 for the subsurface arms, against
+**−8.34** and **−8.42** for the boost arms, which sit darker at the edge as the picture itself does. It
+flips sign with the coat path and is scale-invariant. Whether that belongs on the page is a call that
+has not been made; it is recorded here so it is not re-discovered as a surprise.
+
+### The page's name
+
+The page said **Stone Author** in six places until 2026-10-30, while the app's `<title>` and the README
+had said **Material Author** since the wood fork landed on 2026-10-25. Adding wood and glass to it made
+that untenable, so all six were changed. The repository URL in the footer is unchanged — it is the real
+URL.
 
 The page is dedicated to the public domain under **CC0 1.0** — as is the whole repo, studio included;
 see [`architecture.md`](architecture.md#licensing).
