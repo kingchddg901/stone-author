@@ -950,6 +950,13 @@
     ],
     "where": "label in the generated colour editor / layers panel"
   },
+  "lay.inner-colour": {
+    "terms": [
+      "subsurface",
+      "light"
+    ],
+    "where": "swatch label in the generated Colour editor, in the per-material colour group beside Base / ground. It is the colour the SUBSURFACE pass tints its lift with - the hue light takes on travelling through the stone and coming back out, warm cream by default. It is NOT the back light, which is a separate control and a separate render pass: avoid any phrasing meaning 'lit from within', which belongs to that one."
+  },
   "lay.breccia-clasts": {
     "terms": [
       "breccia"

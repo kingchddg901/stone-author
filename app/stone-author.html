@@ -1060,6 +1060,7 @@ window.SA_I18N = (() => {
   "hint.window-into-chaos-the-next-island": "Window into chaos: the next island INVERTS the mask — once one exists the warp acts only inside these discs and the rest of the slab holds still. A Protects island dropped inside one is a calm eye in the storm.",
   "lay.banding": "Banding",
   "lay.base-ground": "Base / ground",
+  "lay.inner-colour": "Inner colour",
   "lay.breccia-clasts": "Breccia clasts",
   "lay.clouds-mottling": "Clouds / mottling",
   "lay.colour-per-layer": "Colour (per layer)",
@@ -1853,7 +1854,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.29.238';
+  const BUILD = '2026.10.29.240';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1910,6 +1911,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { key: 'ground', labelKey: 'lay.base-ground', label: TR('lay.base-ground'), mat: 'stone' },
     { key: 'woodGround', labelKey: 'lay.base-ground', label: TR('lay.base-ground'), mat: 'wood', inheritGround: true },
     { key: 'glassGround', labelKey: 'lay.base-ground', label: TR('lay.base-ground'), mat: 'glass', inheritGround: true },
+    // THE COLOUR LIGHT COMES BACK OUT AS. applyCoat's subsurface stage multiplies its high-pass by a
+    // warm cream before adding it back under 'lighter', which is what makes a lifted feature read as
+    // lit from inside rather than merely brighter. That cream was the literal '#ffcf8f' until now, so
+    // it was the one colour in the coat an author could not reach.
+    //
+    // NOT NAMED FOR THE SUBSURFACE, deliberately. The stage is this token's first consumer, not its
+    // meaning - a tinted feature boost wants the same colour, and a key named for one of them locks
+    // the other out or forces a twin. Labels rename freely; keys need a migration.
+    //
+    // NOT NAMED 'inner light' EITHER, and _glossary.json is why: its `subsurface` entry warns that a
+    // translator reaching for "lit from within" collides with the BACK LIGHT, which is a separate
+    // control and a separate render pass. 'Colour' keeps the two apart in every language.
+    //
+    // NOT A '...Glow' KEY, because maxGlow() scans COL for /Glow$/ and feeds whatever it finds into
+    // shadowReach() - a colour there coerces to NaN, reads as 0, and would sit in the bleed path
+    // looking deliberate.
+    //
+    // THE DEFAULT IS THE OLD LITERAL, so an unset token paints exactly what every slab on disk already
+    // paints, and renderSig hashes OVR rather than COL - no key until one is authored, so no master
+    // re-dates. The same 'unchanged when off' shape light, wood, glass, the renderer and the bloom use.
+    { key: 'innerColour', labelKey: 'lay.inner-colour', label: TR('lay.inner-colour'), mat: 'stone', def: '#ffcf8f' },
     { key: 'major', mat: 'stone', label: TR('lay.major-veins') }, { key: 'minor', mat: 'stone', label: TR('lay.minor-veins') },
     { key: 'web', mat: 'stone', labelKey: 'lay.fracture-web', label: TR('lay.fracture-web') }, { key: 'micro', mat: 'stone', label: TR('lay.micro-specks') }, { key: 'styl', mat: 'stone', label: TR('lay.stylolite-seam') },
     { key: 'drusy', mat: 'stone', labelKey: 'lay.drusy-sparkle', label: TR('lay.drusy-sparkle') }, { key: 'halo', mat: 'stone', label: TR('lay.vein-halo') },
@@ -4445,7 +4467,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // Silent either way, and the layer that declares scatter is asking for light to spread.
     t.globalAlpha = 1; blurDraw(t, src, px, src.width, src.height); return blurC;
   }
-  function drawLayerArtifacts(L, col) {                    // draw just THIS layer's geometry into the current g2d, in `col` (shared by mask + coverage)
+  function drawLayerArtifacts(L, col, withFog) {           // draw just THIS layer's geometry into the current g2d, in `col` (shared by mask + coverage)
     const key = L.key, b = L.bucket, cx = g2d; cx.strokeStyle = cx.fillStyle = col;
     if (b === 'major') { for (const ln of geo.lines) if (ln.major && (ln.layer || 'major') === key) runs(ln, () => col, null, 1, false); }
     else if (b === 'minor') {
@@ -4457,6 +4479,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (key === 'drusy') for (const s of geo.drusy) { cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, 6.2832); cx.fill(); }
     }
     else if (b === 'web') { for (const e of geo.web) if ((e.layer || 'web') === key) { polyPath(cx, e.pts); cx.lineWidth = e.width; cx.stroke(); } }
+    // FOG, AND ONLY WHEN THE CALLER ASKS. geo.fog has carried these circles since the fog layer
+    // existed; what was missing was a branch to draw them. Adding one unconditionally would have
+    // reached layerMask - the back light's occluder - and switched on BL_T.fog = 0.6, dimming the
+    // blobs the author was shown and ruled on 2026-10-29: "let it be i like it as is". So fog is
+    // opt-in. layerMask and layerCov pass nothing and are byte-identical to what they were; only the
+    // targeted boost asks for it. BL_T's own comment states the other side of this ruling.
+    else if (b === 'fog' && withFog) { for (const q of geo.fog) if ((q.layer || 'fog') === key) { cx.beginPath(); cx.arc(q.x, q.y, q.r, 0, 6.2832); cx.fill(); } }
   }
   function layerMask(L, W, t) {                            // white where clear, grey(t) where this layer covers → 'multiply' drops the light toward t
     const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
@@ -4470,6 +4499,54 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, c.width, c.height);
     cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; drawLayerArtifacts(L, '#fff');
     g2d = prev; return c;
+  }
+
+  // THE TARGETED BOOST, and what it is FOR is the bleed. The subsurface stage in applyCoat lifts
+  // light in proportion to LOCAL CONTRAST, so it blurs the composite - which is why coatRadius asks
+  // for (2 + 3*ss) * bs and a tile has to paint its neighbours. At subsurface 0.9 and 65,535 that is
+  // sigma 308 and 929 px of bleed per side: a 2048 tile paints a 3906 square to deliver 2048, and 73%
+  // of every painted pixel is discarded. Measured on this slab 2026-10-29 - 4x the output pixels cost
+  // 6.86x the painted work and 27x the wall.
+  //
+  // SO LIFT THE SAME PLACES FROM THE GEOMETRY INSTEAD. drawLayerArtifacts re-draws a layer's own
+  // features under the transform the content was painted with - exactly what the metal mask in
+  // applyCoat already does, and granted no bleed there either, because everything is drawn under the
+  // full-image CTM and the canvas clips what falls outside. No blur, no neighbours, bleed 4.
+  //
+  // IT IS NOT THE SAME EFFECT AND DOES NOT TRY TO BE. Contrast-weighting lifts a hair-thin branch
+  // harder than a fat vein, because the thin one carries more local contrast; coverage-weighting lifts
+  // both the same. Two operators, because which one reads right is a look and not an arithmetic
+  // answer - the same reason ?glow= is a dial rather than a fitted constant:
+  //
+  //   gain    out = in * (1 + a)           straight exposure; the brightest features clip to white first
+  //   screen  out = in + a * in * (1 - in) black and white preserved, midtones lift hardest
+  //
+  // WHAT IT CANNOT REACH, stated because the gap is structural rather than an oversight: the ground,
+  // clouds, bands and breccia are FILLS and have no geometry to re-draw, so they take no boost at all.
+  // Fog does have geometry and is included. CTM is a LOCAL of applyCoat, so it is passed rather than
+  // read - a version of this that closed over it would have thrown in every worker.
+  function boostFeatures(tcv, tx, w, h, ss, CTM) {
+    if (!CTM) return;                                      // no transform to re-draw against; the lift would land in the wrong place
+    const a = Math.min(0.95, 0.9 * ss);                    // the blur stage's own amount curve, so the slider reads the same
+    if (!(a > 0)) return;
+    const vis = layers.filter(L => L.on !== false);        // the metal mask's own test, kept identical rather than guessed at
+    if (!vis.length) return;
+    if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
+    const sc = ssC.getContext('2d');                       // the subsurface scratch, free because that stage is what this replaces
+    sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none';
+    sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, w, h);
+    sc.setTransform(CTM.a, CTM.b, CTM.c, CTM.d, CTM.e, CTM.f);
+    sc.lineCap = 'round'; sc.lineJoin = 'round';
+    const prevG = g2d; g2d = sc;
+    for (const L of vis) drawLayerArtifacts(L, '#fff', true);
+    g2d = prevG;
+    sc.setTransform(1, 0, 0, 1, 0, 0);
+    sc.globalCompositeOperation = 'source-in'; sc.drawImage(tcv, 0, 0);   // the picture, kept only where features cover
+    sc.globalCompositeOperation = 'source-over';
+    tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0);
+    tx.globalCompositeOperation = BOOST === 'screen' ? 'screen' : 'lighter';
+    tx.globalAlpha = a; tx.drawImage(ssC, 0, 0);
+    tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
   }
   // THE BACK LIGHT, IN TWO HALVES, BECAUSE ONLY ONE OF THEM IS ABOUT A TILE.
   //
@@ -4581,14 +4658,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       tx.globalAlpha = 1; tx.fillStyle = UV_LIFT; tx.fillRect(0, 0, w, h);   // the ground, exact at every edge
       tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.restore();
     }
-    if (!f.ident && !f.uvMode && !f.backlit && G.subsurface > 0) {   // SUBSURFACE: feature high-pass, warmed, added back as internal glow
+    // ?boost= REPLACES THE BLOCK BELOW, and coatRadius drops the subsurface clause in the same
+    // breath, which is the only reason the bleed actually falls. Off by default: with no flag this
+    // branch is unreachable and the stage below runs byte for byte as it always has.
+    if (!f.ident && !f.uvMode && !f.backlit && G.subsurface > 0 && BOOST) boostFeatures(tcv, tx, w, h, G.subsurface, CTM);
+    else if (!f.ident && !f.uvMode && !f.backlit && G.subsurface > 0) {   // SUBSURFACE: feature high-pass, warmed, added back as internal glow
       const ss = G.subsurface;
       if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
       const sc = ssC.getContext('2d');
       sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none'; sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, w, h);
       sc.drawImage(tcv, 0, 0);
       sc.globalCompositeOperation = 'difference'; sc.filter = `blur(${(2 + 3 * ss) * bs}px)`; sc.drawImage(tcv, 0, 0);
-      sc.filter = 'none'; sc.globalCompositeOperation = 'multiply'; sc.fillStyle = '#ffcf8f'; sc.fillRect(0, 0, w, h); sc.globalCompositeOperation = 'source-over';
+      sc.filter = 'none'; sc.globalCompositeOperation = 'multiply'; sc.fillStyle = COL.innerColour || '#ffcf8f'; sc.fillRect(0, 0, w, h); sc.globalCompositeOperation = 'source-over';
       tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.globalCompositeOperation = 'lighter'; tx.filter = `blur(${(1 + 2 * ss) * bs}px)`;
       for (let g = 0.9 * ss; g > 0.001; g -= 0.95) { tx.globalAlpha = Math.min(0.95, g); tx.drawImage(ssC, 0, 0); }
       tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
@@ -4758,7 +4839,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!layTiles && G.backlight > 0) r = Math.max(r, 11 * bs, 5 * bs);
     if (uv && !BLOOM_DRAW) r = Math.max(r, 8 * bs, 3 * bs);                      // emission bloom
     else {
-      if (G.subsurface > 0) r = Math.max(r, (2 + 3 * G.subsurface) * bs, (1 + 2 * G.subsurface) * bs);
+      // THE BOOST ASKS FOR NO NEIGHBOURS, so it must not be charged for them. boostFeatures draws
+      // geometry under the full-image CTM and lets the canvas clip, exactly as the metal mask does -
+      // and the metal mask has never had a clause here either. Dropping this is what takes the bleed
+      // from 929 to 4 at 65,535; leaving it would have kept the whole cost and changed only the look.
+      if (G.subsurface > 0 && !BOOST) r = Math.max(r, (2 + 3 * G.subsurface) * bs, (1 + 2 * G.subsurface) * bs);
       // the glaze raises the sheen, so the BLEED has to reach for it too or tiles seam at the joins
       if (Math.max(G.specular, surfaceGloss()) > 0) r = Math.max(r, 2 * bs, 0.6 * bs);
     }
@@ -5246,7 +5331,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // zero - which surfaceGloss makes true for any glazed wood, so this was the next one to throw.
       // drawLayerArtifacts draws a metal layer's own veins and specks into the metal mask. Any slab
       // with a metal layer reached it, and nothing gated that. It carries nothing new behind it.
-      fbm2, woodAtan2, groundCol, surfaceGloss, woodEye, woodStain, specRGB, drawLayerArtifacts,
+      fbm2, woodAtan2, groundCol, surfaceGloss, woodEye, woodStain, specRGB, drawLayerArtifacts, boostFeatures,
       resample, smoothPath, handRoute, pathLen, segD, tangent, roughen, lineGeom, curvature, sinuate,
       vnoise, vnoiseG, fbm2G, vnoiseC, vnoiseCfill, fbm2C, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
     // THE GLOW TRIO ARRIVES SEPARATELY, and not for tidiness. liftCol is a function declaration and
@@ -10804,6 +10889,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // UNCHANGED WHEN OFF, the same shape light, wood, glass and the renderer use above. The flag
         // is off by default, so every master already on disk keeps its signature byte for byte.
         ...(bloomOnGpu ? { bloom: 'gpu' } : {}),
+        // AND WHETHER THE COAT'S INTERNAL GLOW CAME FROM THE PIXELS OR THE GEOMETRY. These are not
+        // the same picture - the blur weights by local contrast and the boost by coverage, so a thin
+        // branch and a fat vein lift differently under each - and they do not even carry the same
+        // BLEED, so the tile plan differs too. Without this key a boosted master and a blurred one of
+        // the same slab would claim the same `inputs`, and the second would offer to resume the first:
+        // the exact failure ?gbloom= caused on 2026-10-29 and that the key above was added for.
+        //
+        // UNCHANGED WHEN OFF, the same shape light, wood, glass and the renderer use. The flag is off
+        // by default, so every master already on disk keeps its signature byte for byte.
+        ...(BOOST ? { boost: BOOST } : {}),
         // Glass the same way: unchanged when off, so no stone or wood master re-dates.
         ...(s.material === 'glass' ? { material: s.material, glass: s.glass } : {}),
       }))).toString(16);
@@ -14057,6 +14152,23 @@ self.onmessage = async (e) => {
     try { return !/^(blur|off|0)$/i.test(new URLSearchParams(location.search).get('bloom') || ''); }
     catch (_) { return true; }
   })();
+  // ?boost=gain | ?boost=screen - THE TARGETED BOOST, OFF BY DEFAULT, and it is here because it is
+  // the same kind of switch as BLOOM_DRAW above: both replace an image-space blur with something
+  // drawn, and both exist because the blur's BLEED is what costs. BLOOM_DRAW took the emission
+  // bloom's reach from 1,577 px to 4 at 65,535; this does the same for the subsurface's 929.
+  //
+  // TWO VALUES, NOT A NUMBER, because the amount already has a control - the SUBSURFACE slider, read
+  // by boostFeatures through the same min(0.95, 0.9 * ss) curve the blur stage uses. What the flag
+  // picks is the OPERATOR, and which operator reads right is a look: gain is exposure and clips the
+  // brightest features to white first, screen preserves black and white and lifts midtones hardest.
+  //
+  // ANYTHING ELSE IS OFF. An unrecognised value is not an error and not a default-on - it reads as
+  // absent, so a typo gives the shipped picture rather than a silently different one.
+  const BOOST = (() => {
+    try { const v = (new URLSearchParams(location.search).get('boost') || '').trim().toLowerCase();
+          return v === 'gain' || v === 'screen' ? v : ''; }
+    catch (_) { return ''; }
+  })();
   // ?glow=N - LIFT THE HALO TOWARD WHITE, 0 to 1. Drawn glow gives each element a halo in the element's
   // OWN colour. The image-space bloom does not: it blurs the composite, where overlapping light sums under
   // 'lighter' and climbs toward white, so a bright vein's halo reads far lighter than the vein. That is why
@@ -14160,7 +14272,8 @@ self.onmessage = async (e) => {
   function glowPreamble() {
     return 'var BLOOM_DRAW=' + BLOOM_DRAW + ',GLOW_AUTO=' + GLOW_AUTO + ',GLOW_SET=' + GLOW_SET +
            ',IS_GECKO=' + IS_GECKO + ',WEBKIT_LIFT=' + WEBKIT_LIFT + ';' + String.fromCharCode(10) +
-           'var GLOW_RAW=' + JSON.stringify(GLOW_RAW) + ',UV_LIFT=' + JSON.stringify(UV_LIFT) + ';' + String.fromCharCode(10);
+           'var GLOW_RAW=' + JSON.stringify(GLOW_RAW) + ',UV_LIFT=' + JSON.stringify(UV_LIFT) +
+           ',BOOST=' + JSON.stringify(BOOST) + ';' + String.fromCharCode(10);
   }
   /* THE PNG PATHS' METADATA, BUILT WHERE THE GLOW IS LEGAL TO READ.
      The lift is a const arrow declared just above, so anything textually earlier than it is a temporal
@@ -19862,6 +19975,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         workerFinish: FINISH_WORKER || undefined,
         dimOverride: DIM_OK || undefined,            // the light veto was withheld: read the light below against a good master
         bloomDraw: BLOOM_DRAW || undefined,           // emitter-space glow: the bleed collapses, so this is not comparable to an image-space master by tile plan
+        boost: BOOST || undefined,                    // geometry-space internal glow: same collapse, same incomparability - and `sigma` reads 0 because coatRadius drops the clause
         // A LIFT OF EXACTLY ZERO IS A CHOICE, NOT AN ABSENCE. `|| undefined` dropped it, so every WebKit
         // master written before this carried no glowLift field at all - indistinguishable from a build
         // that never recorded one, when in fact it had run at the single value that was wrong. Present
