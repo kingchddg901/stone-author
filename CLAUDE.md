@@ -61,17 +61,26 @@ node tools/check-plan-memory.mjs   # only a render the planner CHOSE may write t
 The browser harness (`harness/*.mjs`) needs Playwright and runs in CI; it cannot spawn locally here, so CI
 is its first run.
 
-**That list is not the CI set.** There are **39** `tools/check-*.mjs` and the block above names 12. The i18n
-workflow runs `tools/**`, so the other 27 — `wood-shader`, `worker-core`, `writer-worker`, `scope`, `seam`
-and the rest — gate a push whether or not they were run here. Running the twelve and pushing is how a red
-CI happens. Run all of them:
+**That list is not the CI set, and CI is not `tools/**`.** There are **39** `tools/check-*.mjs` and the
+block above names 12. `tools/**` in `i18n.yml` is the **trigger** — it decides *when* the workflow runs,
+not *what* it runs. The workflow then executes an **explicit list of named `run:` steps**, so a check that
+is not in that list gates nothing, however green it is locally. Corrected 2026-10-30: this used to say the
+other checks "gate a push whether or not they were run here", which is how two gates written that same day
+were left out of CI by the person who wrote them. **A new `check-*.mjs` is not wired until it is a step in
+`.github/workflows/i18n.yml`.** Run all of them before pushing anyway:
 
 ```
 for f in tools/check-*.mjs; do node "$f" >/dev/null 2>&1 || echo "RED: $f"; done
 ```
 
-Four are **red on a clean tree** and were before this note: `geometry`, `placement`, `same-image`, `seam`.
-They are not run by CI. Expect them, and do not go chasing them as something a change just broke.
+**Four come back RED from that sweep and are not failures — they are tools with no argument.**
+`geometry`, `placement`, `same-image` and `seam` each take a `master.tif` and analyse it (*is there
+actually a stone in this file?*, *does every tile sit where it says it does?*, and so on). This repo
+deliberately does not commit masters, so run bare they print a usage line and exit 1 or 2. Do not go
+chasing them as something a change just broke. One of the four is not like the others: **`same-image` has
+a working `--selftest` that CI already runs**, so it is green in CI and red in the sweep only because the
+sweep does not pass the flag. `seam`'s `--self-test` is a mode applied to a master, not a substitute for
+one, and `geometry` and `placement` have no self-test at all.
 
 **`check-build` cannot see your working tree, so it can only go red AFTER you commit.** It diffs
 `HEAD~1..HEAD` — the last two COMMITS — and asks whether `app/stone-author.html` moved while `BUILD` did

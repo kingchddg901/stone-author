@@ -164,3 +164,15 @@ jobs:
         run: node tools/probe-pen-calibration.mjs
       - name: The spin table holds its accuracy whatever the spin, which indexing by radius would not
         run: node tools/probe-spin-table-ab.mjs
+      # A GATE THAT IS NOT NAMED HERE DOES NOT GATE ANYTHING. `tools/**` above is the TRIGGER - it
+      # decides when this workflow runs, not what it runs - and the four below were written, run by
+      # hand, and left out of this list, so they passed locally and could not have stopped a push.
+      # Two of them were written the same day as the defects they catch.
+      - name: Only a render the planner chose may write the remembered tile
+        run: node tools/check-plan-memory.mjs
+      - name: The studio asks once whether the GPU drew this frame
+        run: node tools/check-preview-face.mjs
+      - name: A master that painted one flat colour is kept, not recorded as good and deleted
+        run: node tools/check-harvest-aside.mjs
+      - name: An offset a material does not declare is never written, because undefined means byte zero
+        run: node tools/check-gpu-uniform-patch.mjs
