@@ -289,6 +289,43 @@ And in `check-gpu-refusal`, the rule from §4: a refusal must be about the path 
 
 Assembling the module measures 1.24 ms, so it is lazy — most loads never export wood at all.
 
+### 8.1 `check-gpu-uniform-patch` — an absent offset is a write to byte zero
+
+Added 2026-10-30, after the defect below. `gpuPool` patches a few uniform fields per band and asks
+the material where they live: `const { x: OFF_TX, …, blOn: OFF_BLON, … } = M.off();`. **Only stone
+declares the bloom's five.** Wood's `off()` and glass's return `{x, y, h}`, so on those two
+`OFF_BLON` is `undefined` — and `DataView.setInt32(undefined, 0)` neither throws nor skips. It
+coerces the offset to **0** and lays a 32-bit zero over the first field of that material's uniform.
+
+**Wood's first field is `R`**, the log radius, first in `UNI_FLOAT_NAMES`. With `R = 0` the test in
+`woodShadeBody` — `if (rad > E.R)` — held for every pixel, so it returned `w = 0`, `main` took the
+`select(surround, …)` arm, and a 16,384 master came back as one flat `#15161b`:
+
+| | |
+|---|---|
+| `packWood` wrote | `[0.9586, 2, 0, 0, 8191.5, …]` |
+| the device received | `[0, 2, 0, 0, 8191.5, …]` — that one float, nothing else |
+| read out of the shader | `E.R` 0.00, `rad` 0.33, the gate rejecting 100% of pixels |
+| the master | `light.mean` 23.33, `lit40` **0**, 0.62 MB, every geometry count perfect |
+| after the fix | `light.mean` 55.32, `lit40` **100**, 14.65 MB, 404 ms against the CPU's ~8,200 |
+
+**It was a regression, not a limitation.** At `3e3e174` the destructure read `{x, y, h}` and the
+token `OFF_BLON` did not appear in the file at all; GPU wood had rendered correctly at builds `.224`
+and `.227`, twice at 1,048,576. The offsets arrived with the stone shader and nothing asked whether
+the other two materials supplied them. The write is not even guarded by the bloom being *on* —
+`bloomWanted` needs `?gbloom=1`, so every ordinary render was paying it for nothing.
+
+The fix routes the five optional writes through `blInt`/`blF32`, which skip an undefined offset. The
+tile's three stay **direct on purpose**: they are required of every material, and one going missing
+should break loudly rather than quietly paint the wrong band. The gate holds exactly that split —
+every name the pool destructures is either supplied by every material or never written directly —
+and ablating either guard, or restoring one direct write, turns it red.
+
+**Three masters were written this way before anything said so**, and the harvester would have
+recorded all three as good and deleted them: its black-frame test was `light.mean === 0`, and this
+reads 23.33. That is what `lit40 === 0` was added to `watch-harvest` for the same day — see
+[`check-harvest-aside`](../tools/check-harvest-aside.mjs).
+
 ---
 
 ## Where this leaves the three materials

@@ -1856,7 +1856,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.29.247';
+  const BUILD = '2026.10.30.248';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -18551,6 +18551,29 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const split = g => { const x = Math.min(g, DIM); return [x, Math.ceil(g / x)]; };
     const { x: OFF_TX, y: OFF_TY, h: OFF_TH, blOn: OFF_BLON, blD: OFF_BLD,
             blMode: OFF_BLM, blGain: OFF_BLG, blRS: OFF_BLRS } = M.off();
+    // AN ABSENT OFFSET IS NOT A NO-OP. IT IS A WRITE TO BYTE ZERO.
+    //
+    // Only STONE declares the bloom's five; wood's off() and glass's both return {x, y, h}. So on
+    // those two `OFF_BLON` is undefined - and `DataView.setInt32(undefined, 0)` does not throw and
+    // does not skip. It coerces the offset to 0 and lays a 32-bit zero over the FIRST field of that
+    // material's uniform, on every band of every tile.
+    //
+    // WOOD'S FIRST FIELD IS `R`, the log radius, first in UNI_FLOAT_NAMES. With R = 0 the test in
+    // woodShadeBody - `if (rad > E.R)` - was true for every pixel, so it returned w = 0, main took
+    // the `select(surround, ...)` arm, and the whole face came back one flat colour: #15161b, the
+    // surround, mean 23.33. Every geometry count in the master was perfect and the export reported
+    // success. Three 16,384 wood masters were written that way on 2026-10-30 before anything said so.
+    //
+    // MEASURED, not reasoned: packWood put [0.9586, 2, 0, 0, 8191.5, ...] in the uniform and the
+    // device received [0, 2, 0, 0, 8191.5, ...] - differing in that one float and nothing else.
+    // Reading R out of the shader confirmed it at 0.00 while rad read 0.33 and E.R should be 0.9586.
+    //
+    // THE BLOOM'S WRITES ARE OPTIONAL BY MATERIAL, so they go through these. The tile's three are
+    // required of every material and stay DIRECT on purpose: a material that failed to declare one
+    // should break loudly rather than quietly paint the wrong band. check-gpu-uniform-patch.mjs
+    // holds both halves of that split, and ablating either of these helpers turns it red.
+    const blInt = (view, off, v) => { if (off !== undefined) view.setInt32(off, v, true); };
+    const blF32 = (view, off, v) => { if (off !== undefined) view.setFloat32(off, v, true); };
     const TOTAL = p.rAcross * p.rDown;
     let closed = false, busyN = 0, held = 0;
     // THE MAIN THREAD'S OWN SHARE, which no timer in the export loop can see. Measured at 192:
@@ -18635,9 +18658,9 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     function bloomRun(s) {
       const uni = s.uni, v = s.view, nPx = ew * ew, n3 = nPx * 3;
       const sub = (pipeline, grp, threads, d, mode, gain) => {
-        v.setInt32(OFF_BLD, d, true); v.setInt32(OFF_BLM, mode, true);
-        v.setInt32(OFF_BLRS, BLRS, true);
-        v.setFloat32(OFF_BLG, gain, true);
+        blInt(v, OFF_BLD, d); blInt(v, OFF_BLM, mode);
+        blInt(v, OFF_BLRS, BLRS);
+        blF32(v, OFF_BLG, gain);
         dev.queue.writeBuffer(s.ub, 0, uni);
         const [dX, dY] = split(Math.ceil(threads / 64));
         const enc = dev.createCommandEncoder();
@@ -18698,7 +18721,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         uniView.setInt32(OFF_TX, ex0, true);
         uniView.setInt32(OFF_TY, ey0 + y0, true);
         uniView.setInt32(OFF_TH, rows, true);
-        uniView.setInt32(OFF_BLON, bloomReady ? 1 : 0, true);   // main skips its dither; blmix does it
+        blInt(uniView, OFF_BLON, bloomReady ? 1 : 0);   // main skips its dither; blmix does it
         dev.queue.writeBuffer(s.ub, 0, uni);
         bnd[0] = y0;
         dev.queue.writeBuffer(s.bnd, 0, bnd);
@@ -18757,7 +18780,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
         uniView.setInt32(OFF_TX, ex0, true);
         uniView.setInt32(OFF_TY, ey0 + y0, true);     // the band's own origin on the sheet
         uniView.setInt32(OFF_TH, rows, true);         // and its own height: the last one is short
-        uniView.setInt32(OFF_BLON, bloomReady ? 1 : 0, true);   // main skips its dither; blmix does it
+        blInt(uniView, OFF_BLON, bloomReady ? 1 : 0);   // main skips its dither; blmix does it
         dev.queue.writeBuffer(s.ub, 0, uni);
         const [dX, dY] = split(Math.ceil(cells / 64));
         const [pX, pY] = split(Math.ceil(cells / 64));   // one thread a pixel now, not one per four
