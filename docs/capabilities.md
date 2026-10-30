@@ -129,6 +129,10 @@ Full table with defaults/ranges is in [`final-render.md`] and the source; key gr
 
 - **Coat/light:** `subsurface` (0–2), `specular` (0–1), `lightAngle` (±180), `lightTemp` (±1), `lightX/lightY` (Light-tool only), `spotR` (0.05–0.6), `backlight` (0–2), `lens` (0–1), `lensPitch` (2–40), `lensType` (fresnel/reeded/water).
 - **Body:** `cloudStrength`/`cloudScale`/`cloudX`/`cloudY`, `warp`/`warpDepth`, `warpMask` (the programmatic protected-island list, `[]` by default), `bandStrength`/`bandFreq`/`bandAngle`/`bandWave`, `brecStrength`/`brecClasts`/`brecSeam`, `drusyDensity`/`drusySize`/`drusyBright`/`drusyGroups`/`drusySubs`, `speckGroups`/`speckSubs`.
+- Two coat controls are **not** `G` either, and deliberately: `lightSpectrum` and the **Drawn boost** toggle are
+  session state, reset on load. `serialize()` spreads `G` wholesale and `renderSig` hashes it, so one new `G`
+  key would move the signature of every slab on disk; both reach `renderSig` separately and **absent when
+  off**, so nothing re-dates. See [`coat-bleed.md`](coat-bleed.md).
 - Granite `gspecks`/`gsize`/reseed **and** the fog `fogHaze`(0–0.06)/`fogSize`/`fogDensity` are **not** `G` — they write the active micro / fog **plane** (`density`/`size`/`seed`, `haze`/`size`/`density`). Old saves that stored them on `G` migrate onto the plane on load, then the `G` keys are deleted.
 
 ## 7. Colour / tokens / adjustment set
@@ -139,9 +143,10 @@ Full table with defaults/ranges is in [`final-render.md`] and the source; key gr
 
 ## 8. Coat / lighting / spectrum / back light / lens
 
-Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat` (uv bloom → subsurface → specular → **lens, the last coat pass**) → **reality windows** (`applyWindowsScreen`) → guides. `applyCoat` is shared with `renderFull`, so exports run the same coat.
+Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat` (uv bloom → subsurface **xor** drawn boost → specular → **lens, the last coat pass**) → **reality windows** (`applyWindowsScreen`) → guides. `applyCoat` is shared with `renderFull`, so exports run the same coat.
 
-- **Subsurface** — feature high-pass, warm-tinted (`#ffcf8f`), added `lighter`; >1 adds passes.
+- **Subsurface** — feature high-pass, tinted by the `innerColour` token (default `#ffcf8f`), added `lighter`; >1 adds passes. The wide blur inside the `difference` is what sets the coat's **bleed**, and it is a fixed 0.47% of picture width — 929 px at 65,535. It is paying for SELECTION: `|orig − blur(orig)|` is ~0 across smooth cloud, so a tint through it colours structure and leaves the field alone.
+- **Drawn boost** (`boostFeatures`, `?boost=1` or the Coat & light toggle) — **replaces** the subsurface stage rather than adding to it. Lights features by re-drawing each layer's own geometry under the content's transform, as the metal mask does, so it reads no neighbours: `coatRadius` drops the subsurface clause and the bleed falls to **8 at every width**. Weights by coverage where the subsurface weights by local contrast, so it reaches neither soft edges nor the painter's dither — a different tool, not a cheaper one. Session state, off by default. [`coat-bleed.md`](coat-bleed.md).
 - **Specular** — radial `screen` hotspot toward `lightAngle` + masked feature glint, tinted `lightRGB()`.
 - **One light** — `lightRGB()` warm↔cool from `lightTemp`; `setLight()` positions it; feeds specular, tile edges (`edgeFinish`), back light.
 - **Spectrum engine** — `lightSpectrum` scalar; `emit(id,layer,x,y)` returns `c` when `|lightSpectrum−v| ≤ SPX_TOL` (0.12) and (if `spotOn`) inside `spotR`; else `UV_DARK`. `beamPts` gates whole strokes. Black light = preset −1. Folders = spectrum workspaces.

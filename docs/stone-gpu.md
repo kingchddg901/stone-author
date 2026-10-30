@@ -421,6 +421,37 @@ level is 0 in one and 0.1–0.4 in the other; sub-sampling a dithered image by 2
 of 18.214 and 16.108 **for the same picture**; and a model labelled "collapse to one matrix" had been
 implemented sequentially, so the collapse the app ships was never in the comparison that cleared it.
 
+## The COAT's blur is not on the shader, and it is what saturates the GPU
+
+The section above is about a **vein** blur, which is on the shader. The coat's is not, and the two are
+easy to run together because both are blurs on a stone render. `applyCoat` runs on the CPU in both
+renderers — that is what makes one dispatch enough — so its subsurface high-pass is drawn with
+`ctx.filter`, which Chrome executes on the GPU through Skia.
+
+**That makes `gpuOwn` a measurement of the shader, not of the GPU.** Measured 2026-10-30 on a
+fog-heavy slab at 65,535, tile 2048, over a 254-second render:
+
+```
+gpuOwn total (copy+bitmap+draw+wait+asm+sub+map)   0.3 s        0.1% of the render
+GPU utilisation, read on the box                   87% mean     >=80% in 101 of 128 samples
+CPU total / effective clock                        31% / 1,418 MHz
+DRAM read                                          4.3 Gbps     0.54 GB/s, on a bus with tens
+```
+
+The shader did 0.3 s and every one of its stages scaled linearly with the pixels; the GPU was pegged
+for four minutes anyway, and the workers sat waiting at a low clock. The busy GPU is Skia blurring
+the coat, and the one thing that had changed was that blur's sigma — it is a fixed 0.47% of picture
+width, so it doubles when the render does.
+
+**Two readings this retires, both of which were made here first.** That the memory bus is the
+constraint — it is at a few percent of capacity, and the sweep that concluded otherwise ran at
+65,535 **UV**, where sigma is 0 and there is no coat blur at all. And that a low `gpuOwn` means the
+GPU has room: it means the shader has room, which is a different claim.
+
+Removing the coat blur entirely — the drawn boost — takes the same render from 4.2 min to 24.0 s and
+the machine's free-memory floor from 63 MB to 6,130 MB. [`coat-bleed.md`](coat-bleed.md) carries
+that measurement, the tile crossover it inverts, and why the blur is kept anyway.
+
 ## Reachable from
 
 - the **TIFF export**, through `gpuPool`, when the per-slab switch is on and the ladder is clear;
