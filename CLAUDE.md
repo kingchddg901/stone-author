@@ -56,13 +56,14 @@ node tools/check-material-fork.mjs # the stone/wood/X branch lives at one seam, 
 node tools/check-gpu-sync.mjs      # the app's copy of the shader and packer matches tools/lib
 node tools/check-preview-face.mjs  # the studio asks once whether the GPU drew this frame
 node tools/check-plan-memory.mjs   # only a render the planner CHOSE may write the remembered tile
+node tools/check-coat-field.mjs    # one predicate decides both the subsurface field and the bleed it drops
 ```
 
 The browser harness (`harness/*.mjs`) needs Playwright and runs in CI; it cannot spawn locally here, so CI
 is its first run.
 
-**That list is not the CI set, and CI is not `tools/**`.** There are **39** `tools/check-*.mjs` and the
-block above names 12. `tools/**` in `i18n.yml` is the **trigger** — it decides *when* the workflow runs,
+**That list is not the CI set, and CI is not `tools/**`.** There are **40** `tools/check-*.mjs` and the
+block above names 13. `tools/**` in `i18n.yml` is the **trigger** — it decides *when* the workflow runs,
 not *what* it runs. The workflow then executes an **explicit list of named `run:` steps**, so a check that
 is not in that list gates nothing, however green it is locally. Corrected 2026-10-30: this used to say the
 other checks "gate a push whether or not they were run here", which is how two gates written that same day

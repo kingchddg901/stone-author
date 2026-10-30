@@ -24,11 +24,20 @@ const fail = [];
 // excluded - cannot happen in a tile: the back light renders whole-image, the lens runs once on the
 //            assembled picture, and the scratch helper is only reached from the back light
 // output   - in output pixels, does not scale with the render; covered via maxAdjBlur / maxGlow
+// prelude  - buildCoatField's own, run ONCE over the whole picture at FIELD_W to make the subsurface
+//            field. Not a tile blur and not covered by coatRadius BY DESIGN: the field exists so that
+//            the per-tile stage stops blurring, and charging the tile bleed for the prelude's radii
+//            would reinstate exactly the 25,170px the field removes. The exclusion rests on these
+//            radii appearing NOWHERE BUT buildCoatField, which is checked below rather than asserted -
+//            move one into applyCoat and the tile would blur with no bleed behind it, which seams at
+//            every join and is the quietest way for this to go wrong.
 const DECLARED = {
   '3 * bs': 'covered',
   '8 * bs': 'covered',
   '(2 + 3 * ss) * bs': 'covered',
   '(1 + 2 * ss) * bs': 'covered',
+  '(2 + 3 * ss) * bsF': 'prelude',
+  '(1 + 2 * ss) * bsF': 'prelude',
   '2 * bs': 'covered',
   '0.6 * bs': 'covered',
   '5 * bs': 'excluded',
@@ -62,6 +71,39 @@ for (const [r, why] of Object.entries(DECLARED)) {
   if (why !== 'covered') continue;
   const needle = r.replace(/\bss\b/, 'G.subsurface');
   if (!radius.includes(needle)) fail.push(`\`${r}\` is declared covered but coatRadius does not include \`${needle}\``);
+}
+// A `prelude` radius is excused the tile bleed on ONE premise: it runs only in buildCoatField, over the
+// whole picture, where there are no neighbours to be missing. So hold it to that premise instead of
+// taking it on trust — every occurrence must fall inside that function's own text.
+{
+  const fs = app.indexOf('function buildCoatField');
+  const fe = app.indexOf('function fieldCanvas');
+  if (fs < 0) fail.push('a blur is declared `prelude` but buildCoatField is not in the app — the exclusion rests on a function that is gone');
+  else if (!(fe > fs)) fail.push('buildCoatField has no end marker to bound it, so the prelude exclusion cannot be checked');
+  else for (const [r, why] of Object.entries(DECLARED)) {
+    if (why !== 'prelude') continue;
+    const needle = 'blur(${' + r + '}px)';
+    let n = 0, out = 0;
+    for (let at = app.indexOf(needle); at >= 0; at = app.indexOf(needle, at + 1)) { n++; if (at < fs || at > fe) out++; }
+    // blurDraw is the other way a radius reaches a filter, and the prelude uses it rather than
+    // assigning ctx.filter - so count that spelling too or this check would pass over its own subject.
+    // TO THE END OF THE LINE, not to the first `)`. The radius is a parenthesised expression, so the
+    // first `)` lands INSIDE it - `blurDraw(ax, P, (2 + 3 * ss) * bsF,` cut there yields
+    // `(2 + 3 * ss` and the radius is never found. That is the same mangling the comment above the
+    // `found` matcher records, repeated here on the first writing of this check, and it read as a
+    // finding about the app rather than about the gate.
+    const bd = 'blurDraw(';
+    const NL = String.fromCharCode(10);
+    for (let at = app.indexOf(bd); at >= 0; at = app.indexOf(bd, at + 1)) {
+      const eol = app.indexOf(NL, at);
+      const seg = app.slice(at, eol < 0 ? app.length : eol);
+      if (!seg.includes(r)) continue;
+      n++; if (at < fs || at > fe) out++;
+    }
+    if (!n) fail.push('`' + r + '` is declared `prelude` but appears in no filter or blurDraw call — the inventory describes code that is gone');
+    if (out) fail.push('`' + r + '` is declared `prelude` (excused the tile bleed) but occurs ' + out +
+                       ' time(s) OUTSIDE buildCoatField — if a tile can reach it, the bleed does not cover it');
+  }
 }
 if (!/shadowBlur\s*=\s*gl \* 6/.test(app)) fail.push('the artifact glow no longer sets shadowBlur = gl * 6 — the reach for it is wrong');
 if (!/shadowReach\(6 \* maxGlow\(\)\)/.test(app)) fail.push('coatReach stopped accounting for the artifact glow');

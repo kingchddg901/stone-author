@@ -61,6 +61,10 @@ jobs:
         run: node tools/ablate-state-sig.mjs
       - name: Every blur a tile can meet has bleed behind it, and the bloom is probed
         run: node tools/check-bleed.mjs
+      - name: One predicate decides both the subsurface field and the bleed it drops
+        run: node tools/check-coat-field.mjs
+      - name: ...and every claim that gate makes can go red
+        run: node tools/check-coat-field.mjs --ablate
       - name: PNG metadata
         run: node tools/check-png-meta.mjs
       - name: A master's own record is found however far back it sits

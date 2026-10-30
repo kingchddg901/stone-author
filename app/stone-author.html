@@ -1856,7 +1856,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.30.248';
+  const BUILD = '2026.10.30.252';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1865,6 +1865,67 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // of the slab". 1000 keeps a 1024px export almost exactly at the authored radii, so a quick small
   // render previews a giant one proportionally.
   const COAT_REF = 1000;
+
+  // ?field=1 - THE SUBSURFACE'S BLURS, TAKEN FROM THE WHOLE PICTURE INSTEAD OF FROM NEIGHBOURS.
+  //
+  // WHAT THE STAGE ACTUALLY IS. applyCoat's subsurface is |orig - blur(orig, (2+3ss)*bs)|, tinted and
+  // added back through a second blur at (1+2ss)*bs. The difference is an ABSOLUTE VALUE, so what
+  // survives the second blur is not a band of the picture: it is the LOCAL-CONTRAST ENVELOPE of the
+  // fine detail, smoothed. Both radii are a fixed fraction of picture width - 0.80% and 0.50% at
+  // subsurface 2 - so the stage is relatively identical at every size, and the bleed it charges for is
+  // 2.40% of W at EVERY width. That is what makes a large render impossible rather than slow: at
+  // 1,048,576 the bleed is 25,170 each side, so a tile canvas is at least 50,340px however small the
+  // tile, against an 8,192 texture limit and a 2^28 canvas area cap. No tile size reaches past it.
+  //
+  // MEASURED 2026-10-30, four regions of storm treeline v21 in picture-relative coordinates, from the
+  // masters on disk rather than from a bench. The envelope at 4,096 against the SAME PICTURE at 32,768
+  // - three octaves - reads gain x0.997 to x1.002, signed under 0.35%, rms 1.3-1.4%. A second picture
+  // at 16,384 against 65,535 reads x1.005 to x1.034. The floor: one picture rendered twice at one width
+  // and tile size is 0.00% EXACTLY, and one picture under two different tile sizes moves 0.5-1.5% in
+  // the bright regions and up to 10.54% in the dim ones. So three octaves of width moves this field
+  // LESS THAN CHANGING THE TILE SIZE DOES, and it can therefore be built once, small, and sampled.
+  //
+  // AND WHERE IT STOPS, because that sets FIELD_W and is not a guess. The busiest region climbs
+  // 4.951 -> 5.979 -> 7.432 from 1,024 to 2,048 to 16,384 and is then flat to 65,535. It converges,
+  // and it has converged by 4,096; 2,048 is measured INSUFFICIENT (+24% over its last octave, well
+  // above floor). Below that the content is not resolved - 361 veins across 1,024px are near a pixel
+  // wide, and the rectified high-pass of a 1px line is not the field a 16px line with dither in it
+  // gives. 4,096 is the floor with evidence behind it, not a round number.
+  //
+  // WHAT IS NOT MEASURED, said plainly. 4,096 -> 65,535 is 16x; 4,096 -> 1,048,576 is 256x, and the
+  // last four octaves cannot be measured because nothing renders there to compare against. The
+  // convergence is monotonic and the mechanism that broke it below 4,096 only resolves further with
+  // width, but that is reasoning and not a measurement, and this comment is not going to pretend
+  // otherwise. The probes are in the session scratchpad, not the repo: they read masters that this
+  // repo deliberately does not commit.
+  const FIELD_ON = (() => {
+    try { const v = (new URLSearchParams(location.search).get('field') || '').trim().toLowerCase();
+          return (v === '1' || v === 'on' || v === 'true'); }
+    catch (_) { return false; }
+  })();
+  // The prelude's width, and the field's stored width. FIELD_W is the measured convergence floor above.
+  // FIELD_PX is a knob rather than a constant for one reason: agreement was VALIDATED at W/256 cells,
+  // and 512 resolves the field's own smoothness (sigma_narrow = 0.50% of W is 2.56 cells at 512, and
+  // only 1.28 at 256). Storing finer than the validation carries more of the true field and cannot add
+  // error, but the agreement of that finer content is untested - so the value is reachable from the URL
+  // and both can be measured rather than argued about.
+  const FIELD_W = (() => {
+    try { const v = +new URLSearchParams(location.search).get('fieldw'); return v >= 1024 ? (v | 0) : 4096; }
+    catch (_) { return 4096; }
+  })();
+  const FIELD_PX = (() => {
+    try { const v = +new URLSearchParams(location.search).get('fieldpx'); return v >= 64 ? (v | 0) : 512; }
+    catch (_) { return 512; }
+  })();
+  // THE FIELD ITSELF: {w, h, K, px} where px is 8-bit RGB already tinted by innerColour and already
+  // blurred, and K is the gain it was scaled by so an 8-bit store holds a field whose values live in
+  // the bottom few levels. Null everywhere the field is not in play, which is every path that is not a
+  // large tiled export - so a preview, a small render and every existing master are untouched.
+  //
+  // coatFieldBuilding IS THE PRELUDE SAYING "give me the picture the stage would have READ". The stage
+  // reads tcv before the subsurface and before the specular, so the prelude has to stop there too, or
+  // the field would be the envelope of a picture that already has an envelope in it.
+  let coatField = null, coatFieldBuilding = false;
 
   const SLAB_FT = 8, FT_MM = 304.8;                    // frame width in feet; feet to mm
   const FAM = {
@@ -4700,6 +4761,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // tcv = the finished-so-far canvas (read from), tx = its context (drawn to), bs = blur scale (dpr live / W·ref offline).
   function applyCoat(tcv, tx, bs, f, vp) {                  // vp = {ox,oy,fw,fh}: this tile's top-left in full-image px + full dims, so global-position effects place correctly per tile
     const w = tcv.width, h = tcv.height;
+    // THE PRELUDE WANTS THE PICTURE THIS FUNCTION READS, not the one it returns. buildCoatField needs
+    // the subsurface's INPUT - ground and content, nothing else - because the stage reads tcv before
+    // the subsurface and before the specular, and an envelope derived from a picture that already has
+    // an envelope in it is a different field. Returning here is the whole of it: for a non-spectrum
+    // render every stage below is a coat pass, so skipping all of them leaves exactly the input.
+    //
+    // NOT A BRANCH PER STAGE, which was the first spelling and was wrong twice over - it had to list
+    // every stage (so a stage added later would silently leak into the field) and it still ran the
+    // emission bloom. One return, one claim, and check-coat-field ablates it.
+    if (coatFieldBuilding) return;
     // THE TRANSFORM THE CONTENT WAS PAINTED WITH, taken off the context before any block touches it.
     // The per-layer metal mask has to land on exactly the pixels its layer painted, and that mapping
     // is different on every path - the preview is panned and zoomed by the view, an export tile is
@@ -4725,6 +4796,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // breath, which is the only reason the bleed actually falls. Off by default: with no flag this
     // branch is unreachable and the stage below runs byte for byte as it always has.
     if (!f.ident && !f.uvMode && !f.backlit && G.subsurface > 0 && BOOST) boostFeatures(tcv, tx, w, h, G.subsurface, CTM);
+    // THE FIELD ROUTE. Same stage, same look, both blurs already in the field - so this branch reads
+    // no neighbours at all and coatRadius has already dropped its clause to match. It needs `vp` as
+    // well as the field because the field is the WHOLE PICTURE and a tile has to find its own
+    // rectangle in it; a call with no vp is a whole-image render, which has no bleed problem and takes
+    // the original branch below.
+    else if (!f.ident && !f.uvMode && !f.backlit && G.subsurface > 0 && coatField && vp && coatFieldUsable(bs, f.uvMode)) fieldSubsurface(tx, w, h, vp);
     else if (!f.ident && !f.uvMode && !f.backlit && G.subsurface > 0) {   // SUBSURFACE: feature high-pass, warmed, added back as internal glow
       const ss = G.subsurface;
       if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
@@ -4835,6 +4912,195 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }
     if (!f.ident && !f.tiled && G.lens > 0) applyLens(tcv, tx);   // tiled path runs the lens once on the assembled image instead (it downscales to ≤640, so it's global + cheap)
   }
+  // ---- the subsurface, from a field instead of from neighbours -------------------------------------
+  // ADD THIS TILE'S PIECE OF THE WHOLE-PICTURE ENVELOPE. No blur, no difference, no scratch canvas:
+  // both blurs and the tint are already in the field, so this is a scaled drawImage and the gain loop.
+  // That is the only reason the bleed can fall - a stage that reads no neighbours is owed no margin.
+  function fieldSubsurface(tx, w, h, vp) {
+    const F = coatField;
+    if (!F || !(F.K > 0)) return;
+    // THIS TILE'S RECTANGLE, CLIPPED TO THE PICTURE. vp.ox/oy are the BLED origin, so they go negative
+    // on the first tile of a row and past fw on the last. drawImage with a source rect that hangs off
+    // the source does NOT pad - it draws the intersection scaled into the whole destination, which
+    // shifts and stretches the field by the overhang. So the intersection is computed here and the
+    // destination narrowed to match; the bleed outside the picture gets no subsurface, which is right,
+    // because those columns are cropped before anything reads them.
+    const dx = Math.max(0, -vp.ox), dy = Math.max(0, -vp.oy);
+    const dw = Math.min(w, vp.fw - vp.ox) - dx, dh = Math.min(h, vp.fh - vp.oy) - dy;
+    if (!(dw > 0 && dh > 0)) return;
+    const kx = F.w / vp.fw, ky = F.h / vp.fh;
+    tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0); tx.filter = 'none';
+    tx.imageSmoothingEnabled = true; tx.imageSmoothingQuality = 'high';
+    tx.globalCompositeOperation = 'lighter';
+    // THE GAIN LOOP IS KEPT, not collapsed into one draw at the summed alpha. `lighter` clamps per
+    // channel at every step, so two draws at 0.95 and 0.85 differ from one at 1.8 wherever the sum
+    // reaches 255 - and the subsurface's whole job is to brighten what is already bright.
+    //
+    // ALPHA CARRIES THE FIELD'S GAIN. The store is 8-bit and the field's values live in the bottom
+    // handful of levels, so it is held scaled by K and divided back out here. That keeps the stored
+    // resolution at max/255 of a level instead of a whole one, which is what stops the field reading
+    // as faint blocks at the cell size.
+    for (let g = 0.9 * G.subsurface; g > 0.001; g -= 0.95) {
+      tx.globalAlpha = Math.min(0.95, g) / F.K;
+      tx.drawImage(F.cv, (vp.ox + dx) * kx, (vp.oy + dy) * ky, dw * kx, dh * ky, dx, dy, dw, dh);
+    }
+    tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
+  }
+  // BUILD IT ONCE FOR THE RENDER, from a prelude at FIELD_W. Returns the field and leaves it in
+  // coatField, or null when this render is not taking the field route - in which case nothing has been
+  // allocated and every path below behaves as it always did.
+  //
+  // THE PRELUDE IS A REAL RENDER, not a resampling of anything: renderSlabTo paints the same geometry
+  // at a smaller width, which is the whole claim the measurement rests on. It costs seconds (a 4,096
+  // master on this box renders in about two) against a render that otherwise cannot start.
+  // THE PRELUDE MUST BE DRAWN BY THE PAINTER THAT DRAWS THE TILES, and this is the whole reason the
+  // function takes `viaGpu` rather than deciding for itself.
+  //
+  // MEASURED 2026-10-30, and it was a real defect in the first version of this route. The subsurface is
+  // a high-pass, and docs/stone-gpu.md already prices the two painters for exactly that: 7.029 RMS of
+  // local contrast from the CPU painter against 0.341 from the shader, twentyfold, which is the
+  // painter's accumulated per-fill dither over 770 overlapping gradients. The first prelude went
+  // through renderSlabTo - the CPU painter - while the tiles it fed were drawn by the shader, so the
+  // field came back FOUR TIMES too strong: 8.737 against 2.213 for the same quantity measured off a
+  // GPU master, and the picture rendered +4.97% brighter over 71.9M channels.
+  //
+  // The 2026-10-29 ruling accepted that gap BETWEEN two renders. This put it INSIDE one, which the
+  // ruling does not cover. Matching the painter is the fix, and it is not "always use the shader": a
+  // CPU render's CPU prelude was already right, and forcing the shader on it would break the match in
+  // the other direction.
+  async function buildCoatField(W, viaGpu) {
+    coatField = null;
+    if (!coatFieldUsable(W / COAT_REF)) return null;
+    const ss = G.subsurface;
+    const fw = Math.max(64, Math.min(W, FIELD_W)), fh = Math.max(1, Math.round(fw * H)), bsF = fw / COAT_REF;
+    // 1. THE SUBSURFACE'S INPUT at the prelude's width. coatFieldBuilding makes applyCoat a no-op, so
+    //    what comes back is ground + content and nothing else - exactly what the stage reads from tcv.
+    //
+    //    THROUGH THE SHADER WHEN THE SHADER IS PAINTING. One tile, one dispatch: the pool wants only
+    //    {ts, bleed, rAcross, rDown} and 4,096 is a single tile well inside every device limit this
+    //    export already cleared. bleed 0 because the coat is suppressed, so there are no neighbours to
+    //    read. The pool is closed before the finishers are built, so two pools are alive only for the
+    //    length of one dispatch. A refusal here is not fatal - it falls through to the CPU prelude and
+    //    SAYS SO in the trail, because a field whose painter is unknown is worse than a slow one.
+    let P = null, painter = 'painter';
+    if (viaGpu) {
+      let gp = null;
+      try {
+        gp = await gpuPool(fw, { ts: fw, bleed: 0, rAcross: 1, rDown: 1, markSig: 0 });
+        if (gp && gp.gpu) {
+          coatFieldBuilding = true;
+          try { P = await gp.tile(0); painter = 'shader'; }
+          finally { coatFieldBuilding = false; }
+        }
+      } catch (e) { console.warn('coat field: shader prelude refused', e); P = null; }
+      finally { if (gp) { try { gp.close(); } catch (_) {} } }
+      // THE POOL'S TILE IS SQUARE - it paints p.ts by p.ts - and the picture is 1 by H, so crop to the
+      // picture before anything reads it. Both painter paths then hand step 2 the same shape, which is
+      // what keeps the two arms comparable rather than merely both present.
+      if (P && (P.width !== fw || P.height !== fh)) {
+        const pc = newSurface(fw, fh), px0 = pc.getContext('2d');
+        px0.setTransform(1, 0, 0, 1, 0, 0);
+        px0.drawImage(P, 0, 0);
+        P.width = 1; P.height = 1;
+        P = pc;
+      }
+    }
+    if (!P) {
+      coatFieldBuilding = true;
+      try { P = renderSlabTo(fw, fh, [fw, 0, 0, fw, 0, 0], bsF, lightSpectrum, null); }
+      finally { coatFieldBuilding = false; }
+    }
+    // 2. THE STAGE'S OWN THREE OPERATIONS, on the canvas, at the prelude's own bs. The canvas does both
+    //    blurs, which matters: the browser's blur is the operator the per-tile stage uses, so the field
+    //    is not an approximation of that stage - it is that stage, run over the whole picture at once.
+    //    A hand-rolled Gaussian here would have been a second thing to validate for no gain.
+    const A = newSurface(fw, fh), ax = A.getContext('2d');
+    ax.setTransform(1, 0, 0, 1, 0, 0); ax.globalAlpha = 1; ax.filter = 'none';
+    ax.globalCompositeOperation = 'source-over'; ax.clearRect(0, 0, fw, fh);
+    ax.drawImage(P, 0, 0);
+    ax.globalCompositeOperation = 'difference';
+    blurDraw(ax, P, (2 + 3 * ss) * bsF, fw, fh);               // |P - blur_wide(P)|
+    ax.filter = 'none'; ax.globalCompositeOperation = 'multiply';
+    ax.fillStyle = COL.innerColour || '#ffcf8f'; ax.fillRect(0, 0, fw, fh);
+    ax.globalCompositeOperation = 'source-over';
+    // 3. THE NARROW BLUR, which the stage applies during the composite. It commutes with the tint
+    //    above - a multiply by a constant colour is per-channel and linear - so doing it here instead
+    //    of per tile is the same arithmetic in a different order, and it is the half that costs the
+    //    bleed. Separate surface because a canvas cannot blur into itself.
+    const B = newSurface(fw, fh), bxc = B.getContext('2d');
+    bxc.setTransform(1, 0, 0, 1, 0, 0); bxc.globalAlpha = 1; bxc.filter = 'none';
+    bxc.globalCompositeOperation = 'source-over'; bxc.clearRect(0, 0, fw, fh);
+    blurDraw(bxc, A, (1 + 2 * ss) * bsF, fw, fh);
+    // 4. DOWN TO THE STORE, by box average in Float64 rather than by drawImage. Two reasons, and the
+    //    second is the one that matters: a canvas downscale is the browser's filter and varies between
+    //    engines, where this is arithmetic; and averaging 8-bit samples in floating point RECOVERS
+    //    precision the 8-bit blurred canvas lost. At 4,096 -> 512 that is 64 samples a cell, so the
+    //    quantisation error falls to about 0.04 of a level before the gain below multiplies it away.
+    const px = Math.max(8, Math.min(FIELD_PX, fw)), py = Math.max(5, Math.round(px * H));
+    const src = bxc.getImageData(0, 0, fw, fh).data;
+    const acc = new Float64Array(px * py * 3);
+    for (let gy = 0; gy < py; gy++) {
+      const ay = Math.floor(gy * fh / py), by = Math.max(ay + 1, Math.floor((gy + 1) * fh / py));
+      for (let gx = 0; gx < px; gx++) {
+        const axx = Math.floor(gx * fw / px), bxx = Math.max(axx + 1, Math.floor((gx + 1) * fw / px));
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let y = ay; y < by; y++) {
+          let i = (y * fw + axx) * 4;
+          for (let x = axx; x < bxx; x++, i += 4) { r += src[i]; g += src[i + 1]; b += src[i + 2]; n++; }
+        }
+        const o = (gy * px + gx) * 3;
+        acc[o] = r / n; acc[o + 1] = g / n; acc[o + 2] = b / n;
+      }
+    }
+    // 5. THE GAIN. The field's values live in the bottom few levels of 255, so storing them raw would
+    //    quantise a value of 3 by a sixth of itself and that reads as blocks at the cell size. Scaling
+    //    to fill the range and dividing back out through globalAlpha costs nothing and is exact.
+    //    An all-zero field means there is no subsurface to add: say so with null rather than shipping a
+    //    field of zeros that every tile then draws twice for no effect.
+    let mx = 0;
+    for (let i = 0; i < acc.length; i++) if (acc[i] > mx) mx = acc[i];
+    if (!(mx > 0)) return null;
+    const K = 255 / mx;
+    const bytes = new Uint8ClampedArray(px * py * 4);
+    for (let i = 0, j = 0; i < acc.length; i += 3, j += 4) {
+      bytes[j] = Math.round(acc[i] * K); bytes[j + 1] = Math.round(acc[i + 1] * K);
+      bytes[j + 2] = Math.round(acc[i + 2] * K); bytes[j + 3] = 255;
+    }
+    // THE FIELD'S OWN MEAN, RECORDED. A master that carries the field has to be able to say how strong
+    // it was, or the only way to ask is to render twice and subtract - which is how the first version's
+    // 2.5x over-strength was found, at the cost of two 16,384 renders and an hour of reasoning about
+    // mechanisms that turned out not to be the cause. The probe that measured the envelope off disk
+    // reports the same quantity in the same units, so the two numbers are directly comparable and a
+    // disagreement localises itself to the prelude rather than to the whole route.
+    let sm = 0;
+    for (let i = 0; i < acc.length; i++) sm += acc[i];
+    const mean = sm / acc.length;
+    coatField = { w: px, h: py, K, mean, painter, cv: fieldCanvas(px, py, bytes), bytes, at: fw };
+    // hand the prelude's surfaces back; at 4,096 these are 42 MB each and the render below wants them
+    P.width = 1; P.height = 1; A.width = 1; A.height = 1; B.width = 1; B.height = 1;
+    return coatField;
+  }
+  // THE FIELD AS SOMETHING drawImage WILL TAKE, on either side of the wire. The main thread has it from
+  // buildCoatField; a worker rebuilds it from the bytes at init, because a canvas cannot be shared and
+  // the bytes are half a megabyte - small enough that every worker simply gets its own copy, which is
+  // what the three modulator bitmaps already do for the same reason.
+  function fieldCanvas(w, h, bytes) {
+    const c = newSurface(w, h), x = c.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    x.putImageData(new ImageData(bytes, w, h), 0, 0);
+    return c;
+  }
+  // THE FIELD'S HALF OF AN init MESSAGE, in ONE place because there are TWO pools - renderTiledParallel's
+  // and the GPU finisher pool - and a field that reaches one and not the other is a render where some
+  // tiles have a subsurface and some do not, seamed at the tile joins and green in every gate.
+  //
+  // NOT IN THE TRANSFER LIST on purpose. These bytes are half a megabyte at FIELD_PX 512, so a
+  // structured clone per worker is cheaper than the bookkeeping transfer would need: transfer consumes
+  // the array, and the three modulator bitmaps right beside this already pay createImageBitmap per
+  // worker for exactly that reason. Eight workers is under four megabytes, once, per render.
+  const coatFieldMsg = () => (coatField
+    ? { cf: coatField.bytes, cfw: coatField.w, cfh: coatField.h, cfK: coatField.K, cfAt: coatField.at }
+    : {});
   // ---- how far a tile must see past its own edge ---------------------------------------------------
   // Bleed exists for ONE reason: an effect that reads a NEIGHBOURING pixel. Geometry needs none — every
   // tile draws the whole picture under the same transform and the canvas clips it, so a vein crossing the
@@ -4871,6 +5137,38 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // `uv` defaults to the light being rendered, but a reality window renders the slab at ANOTHER light
   // inside its disc, and that render's reach is its own — asking this about the tile's spectrum sized a
   // daylight window's canvas for a black-light bloom it will never draw.
+  // IS THE SUBSURFACE COMING FROM THE WHOLE-PICTURE FIELD FOR THIS RENDER?
+  //
+  // ONE PREDICATE, TWO READERS: coatRadius asks it to decide the bleed, applyCoat asks it to decide
+  // which branch draws. A second copy of this condition is how a tile gets a bleed sized for one
+  // stage and a stage that needs the other, which seams at every join and looks like a blur bug.
+  //
+  // A FUNCTION DECLARATION rather than a const arrow, because coatRadius sits thousands of lines above
+  // where the flag is read and a const would be a temporal dead zone from here - the same escape hatch
+  // glowFns and windowFns use, and check-bleed reads for it.
+  //
+  // IT DOES NOT ASK WHETHER THE FIELD EXISTS YET, and that is deliberate: the bleed sizes the tile
+  // canvases, so it is wanted BEFORE the prelude has run. The two questions are "will this render use
+  // the field" (here) and "has it been built" (coatField, checked where it is drawn).
+  // WHY NOT, rather than merely NO. A flag that is on and silently does nothing is worse than one that
+  // is off, and this one cost a real comparison: at EXACTLY 4,096 the width test is strict, so ?field=1
+  // engages at every width except the most natural one to test it at, and the only tell was the absence
+  // of a line in the plan trail. Now the trail says which clause refused.
+  //
+  // coatFieldUsable IS DERIVED FROM THIS, never a second copy of the conditions - the bleed and the
+  // branch both ask the boolean, and a reasons-list that could drift from the predicate it explains
+  // would be a third spelling of the thing this whole design has exactly one of.
+  function coatFieldWhyNot(bs, uv) {
+    if (!FIELD_ON) return 'flag off';
+    if (uv === undefined) uv = uvMode;
+    if (uv) return 'spectrum, not daylight';
+    if (!(G.subsurface > 0)) return 'subsurface is 0';
+    if (BOOST) return 'boost owns this stage';
+    if (!layTiles && G.backlight > 0) return 'back light is whole-image';
+    if (!(bs * COAT_REF > FIELD_W)) return 'W ' + Math.round(bs * COAT_REF) + ' not above FIELD_W ' + FIELD_W;
+    return null;
+  }
+  function coatFieldUsable(bs, uv) { return !coatFieldWhyNot(bs, uv); }
   function coatRadius(bs, uv) {
     if (uv === undefined) uv = uvMode;
     let r = 0;
@@ -4906,8 +5204,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // geometry under the full-image CTM and lets the canvas clip, exactly as the metal mask does -
       // and the metal mask has never had a clause here either. Dropping this is what takes the bleed
       // from 929 to 4 at 65,535; leaving it would have kept the whole cost and changed only the look.
-      if (G.subsurface > 0 && !BOOST) r = Math.max(r, (2 + 3 * G.subsurface) * bs, (1 + 2 * G.subsurface) * bs);
+      // THE FIELD ROUTE DROPS THIS CLAUSE, and dropping it is the entire point - the stage still runs,
+      // it just reads a whole-picture field instead of its neighbours, so there is nothing to reach
+      // for. Same shape as the BOOST clause above it: one condition, both halves moved together, and
+      // with the flag off this line is byte for byte what it always was.
+      //
+      // THE TWO HALVES MUST AGREE OR A TILE SEAMS. coatFieldUsable is the ONLY place that decides, and
+      // applyCoat asks the same function - never a second copy of the condition, because the shorter
+      // copy is the bug and this is exactly the predicate where that would be silent.
+      if (G.subsurface > 0 && !BOOST && !coatFieldUsable(bs, uv)) r = Math.max(r, (2 + 3 * G.subsurface) * bs, (1 + 2 * G.subsurface) * bs);
       // the glaze raises the sheen, so the BLEED has to reach for it too or tiles seam at the joins
+      //
+      // AND THIS IS THE SHOULDER THE FIELD DOES NOT COVER. buildGlint is the same difference-of-blur
+      // at a quarter the radius, so with the subsurface clause gone THIS one becomes the wall: 6,296
+      // at 1,048,576, a 16,688px tile canvas, still past the 8,192 texture limit. A glossy slab
+      // therefore reaches 262,144 on the GPU with the field on, not 1,048,576. It is the same shape
+      // and the same route would serve it - but its band (2*bs in, 0.6*bs out) was NOT measured, and
+      // it cannot be from anything on disk: the glint only exists where specular or a glaze is
+      // non-zero, and there is no glossy render at two widths to compare. Unmeasured is why it is
+      // untouched, not oversight.
       if (Math.max(G.specular, surfaceGloss()) > 0) r = Math.max(r, 2 * bs, 0.6 * bs);
     }
     return r;
@@ -5515,7 +5830,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // still runs synchronously to completion exactly as before - an async function only yields at its
     // first await, and that path never reaches one.
     s += `self.onmessage=async function(e){var d=e.data;\n`;
-    s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;layTiles=!!d.layTiles;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;workC=d.bk||null;emitC=d.em||null;__bkW=d.bkW|0;__bkH=d.bkH|0;__backlit=!layTiles&&G.backlight>0&&!!workC;self.postMessage({type:'ready'});return;}\n`;
+    s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;layTiles=!!d.layTiles;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;workC=d.bk||null;emitC=d.em||null;__bkW=d.bkW|0;__bkH=d.bkH|0;__backlit=!layTiles&&G.backlight>0&&!!workC;coatField=d.cf?{w:d.cfw,h:d.cfh,K:d.cfK,cv:fieldCanvas(d.cfw,d.cfh,d.cf),bytes:d.cf,at:d.cfAt|0}:null;self.postMessage({type:'ready'});return;}\n`;
     // THE ACK IS THE ONLY WAY TO TELL A QUEUE FROM A STALL. A bitmap arriving late can mean the
     // worker painted for a minute or that it sat holding a message it had not been scheduled to
     // read, and the completion time cannot distinguish them. Posted from the top of the handler,
@@ -5638,7 +5953,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       modBitmap(layVis('breccia') && G.brecStrength > 0, ensureBreccia),
     ]);
     const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, spotOn, layTiles, hidden: [...hidden],
-                    material: currentMaterial(), marks };
+                    material: currentMaterial(), marks, ...coatFieldMsg() };
     const url = URL.createObjectURL(new Blob([renderCoreSrc()], { type: 'application/javascript' }));
     const pool = [];
     for (let i = 0; i < nWorkers; i++) {
@@ -10966,6 +11281,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // UNCHANGED WHEN OFF, the same shape light, wood, glass and the renderer use. The flag is off
         // by default, so every master already on disk keeps its signature byte for byte.
         ...(BOOST ? { boost: BOOST } : {}),
+        // AND WHETHER THE SUBSURFACE'S BLURS CAME FROM THIS TILE'S NEIGHBOURS OR FROM A WHOLE-PICTURE
+        // FIELD. Measured to agree to 1.3-1.4% over three octaves, which is close and is not the same
+        // picture - and like the boost above it carries a different BLEED, so the tile plan differs and
+        // a resume across the two would be a resume onto another plan. FIELD_W and FIELD_PX are in the
+        // key because both change the field: the prelude's width is where the envelope is sampled from
+        // and the store's width is how much of it survives.
+        //
+        // DELIBERATELY OVER-SENSITIVE. This keys on the FLAG, not on coatFieldUsable, because `inputs`
+        // does not carry the render width - two masters of one slab at 4,096 and 32,768 share a hash
+        // today - so it cannot ask a question whose answer depends on W. A small render with the flag
+        // on is pixel-identical to one without it and will still re-date. That direction is the safe
+        // one: a hash that moves when the picture did not costs a re-render, and a hash that holds when
+        // the picture moved is a false claim of determinism.
+        ...(FIELD_ON ? { field: FIELD_W + '/' + FIELD_PX } : {}),
         // Glass the same way: unchanged when off, so no stone or wood master re-dates.
         ...(s.material === 'glass' ? { material: s.material, glass: s.glass } : {}),
       }))).toString(16);
@@ -13959,11 +14288,30 @@ self.onmessage = async (e) => {
   // document.createElement, which is why corePaintsThis refused the pool for any slab carrying a
   // window - and why every windowed master this project has rendered was single-threaded.
   function windowFns() {
+    // THE FIELD'S THREE PARTS, and all of them have to make the crossing. applyCoat is serialised into
+    // the pool, so the branch it takes and the function that branch calls must both resolve at the far
+    // end - a tile whose bleed was sized for the field and whose coat then fell through to the original
+    // blur would read 25,170 pixels of neighbours it was never given. fieldCanvas comes too because the
+    // init message rebuilds the field's surface from the bytes on arrival.
+    //
+    // THE COMMENT LIVES ABOVE THE RETURN, NOT INSIDE IT, and it may not contain a brace character of
+    // either kind. check-worker-core reads this return literal as the list of names the core must
+    // carry, and it finds this function's body by counting braces - so prose inside the literal is
+    // parsed as names (it reported a function called blur that does not exist), and a closing brace
+    // anywhere in a comment above it ends the body early, which hid the three names below entirely.
+    // Both happened on the way to this line; neither is visible in a syntax check.
     return { renderSlabTo, compositeWindow, newSurface,
-             coatReachAt, coatReach, coatRadius, blurReach, shadowReach, maxAdjBlur, maxGlow };
+             coatReachAt, coatReach, coatRadius, blurReach, shadowReach, maxAdjBlur, maxGlow,
+             coatFieldWhyNot, coatFieldUsable, fieldSubsurface, fieldCanvas };
   }
   function windowPreamble() {
-    return 'var BLEED_MARGIN=' + BLEED_MARGIN + ',glowSuppress=false;' + String.fromCharCode(10);
+    // FIELD_ON AND FIELD_W TRAVEL AS LITERALS, like BLOOM_DRAW and BOOST before them: coatFieldUsable
+    // reads both and is serialised by toString(), so the far end needs the values and not the URL.
+    // coatField starts null and the init message fills it - a worker that is sent no field falls
+    // through to the original branch, which is the right answer for every render that is not using one.
+    return 'var BLEED_MARGIN=' + BLEED_MARGIN + ',glowSuppress=false;' + String.fromCharCode(10) +
+           'var FIELD_ON=' + FIELD_ON + ',FIELD_W=' + FIELD_W + ',FIELD_PX=' + FIELD_PX +
+           ',coatField=null,coatFieldBuilding=false;' + String.fromCharCode(10);
   }
   // WHAT THIS DEVICE HAS ACTUALLY DONE. canvasFits asks what the browser will grant at this instant.
   // This records what the machine has already rendered with and finished. A tablet that produced a 65535
@@ -19280,7 +19628,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     ]);
     const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, layTiles,
                     spotOn, hidden: [...hidden], material: currentMaterial(), marks,
-                    bkW: bkOn ? backlitFor.gw : 0, bkH: bkOn ? backlitFor.gh : 0 };
+                    bkW: bkOn ? backlitFor.gw : 0, bkH: bkOn ? backlitFor.gh : 0, ...coatFieldMsg() };
     const url = URL.createObjectURL(new Blob([renderCoreSrc()], { type: 'application/javascript' }));
     const pool = [];
     try {
@@ -19779,6 +20127,23 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // THE BACK LIGHT'S WHOLE-SLAB HALF, ONCE FOR THE RENDER. Every tile samples it - the pool's
     // workers get it as two bitmaps at init, and the main-thread retry path reads it from here.
     if (!layTiles && G.backlight > 0) backlitFor = backlitMaps();
+    // THE SUBSURFACE'S WHOLE-PICTURE FIELD, ONCE FOR THE RENDER, for the same reason and in the same
+    // place as the fold above: every tile samples it, both pools hand it over at init, and the
+    // main-thread retry path reads it from here. It must be built BEFORE either pool exists, because
+    // the pools copy it into their init message - and it is safe to build it this late because the
+    // BLEED does not wait for it: coatFieldUsable answers from the flag and the slab, so p.bleed was
+    // already sized for the field route when the plan was made.
+    //
+    // A NULL IS NOT A FAILURE. It means this render is not taking the field route - the flag is off,
+    // the slab has no subsurface, the width is at or below FIELD_W, or the field came back empty - and
+    // every path below then behaves exactly as it did before any of this existed.
+    const cfBuilt = await buildCoatField(W, !!(pool && pool.gpu));
+    if (cfBuilt) p.trail.push('coat field ' + cfBuilt.w + 'x' + cfBuilt.h + ' from ' + cfBuilt.at +
+                              ' by the ' + cfBuilt.painter +
+                              ' mean ' + cfBuilt.mean.toFixed(3) + ' K ' + cfBuilt.K.toFixed(1));
+    // AND WHY NOT, when the flag is on and nothing was built. The absence of the line above is not a
+    // message; it reads exactly like a render that was never asked.
+    else if (FIELD_ON) p.trail.push('coat field OFF: ' + (coatFieldWhyNot(W / COAT_REF) || 'field came back empty'));
     // THE POOL BECOMES THE FINISHER when the GPU is painting. It cannot be built any earlier: it
     // needs p.markSig, and that is taken after the painter is chosen because renderSig now records
     // which painter it was. finishOnly keeps it full width from the first pass - a finish is not a
@@ -20260,6 +20625,14 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // CLEARED, or every signature taken after a GPU export would claim the GPU drew it - including
       // the one the NEXT export takes before it has decided anything.
       drewOnGpu = false; bloomOnGpu = false; backlitFor = null;
+      // AND THE FIELD, for the reason above and one more of its own: it is a picture of THIS slab, so a
+      // field left standing would be sampled by the next export of a DIFFERENT slab until buildCoatField
+      // overwrote it. That call happens on every export, so the window is small - and a stale field is
+      // a wrong picture that renders cleanly, which is the kind of window worth closing rather than
+      // reasoning about. coatFieldBuilding goes with it: buildCoatField's own finally already clears it,
+      // but a throw between the two would leave applyCoat a no-op for the rest of the session.
+      if (coatField && coatField.cv) { coatField.cv.width = 1; coatField.cv.height = 1; }
+      coatField = null; coatFieldBuilding = false;
       btn.disabled = selW.disabled = selF.disabled = false; exporting = false; wakeOff(); expFreeze();
       resumeOffer();   // whatever this render left behind - finished, refused or killed - say so now
     }

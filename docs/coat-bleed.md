@@ -219,6 +219,130 @@ Measured on a moon-only render at 32,768, and the sign flips: on the full pictur
 over the blob's whole disc, most of which is the moon's dark centre, where gain multiplies near-zero
 by near-zero.
 
+## The field route: the same stage, read from the whole picture (`?field=1`)
+
+Added 2026-10-30. **Off by default**, and with the flag absent every path below behaves as it did
+before it existed.
+
+The subsurface's two blurs are both a fixed fraction of picture width — 0.80% and 0.50% at subsurface
+2 — so the bleed it charges is **2.40% of W at every width**. That is what makes a large render
+impossible rather than slow: at 1,048,576 the bleed is 25,170 px each side, so a tile canvas is at
+least 50,340 px *however small the tile*, against an 8,192 texture limit and a 2^28 canvas-area cap.
+`?tile=1024` and `?tile=4096` both failed at 1,048,576 with the same 50,340, which is the tell.
+
+What the stage actually is, read in three steps: a low-pass at 0.80% of W; a **pointwise** rectify,
+`|orig − that|`; and a second low-pass at 0.50% of W over the rectified result. Because the middle
+step is an absolute value, what survives is not a band of the picture — it is the **local-contrast
+envelope** of the fine detail, smoothed. Neither low-pass needs full resolution, and the pointwise
+step needs no neighbours at all.
+
+So `buildCoatField` renders a prelude at `FIELD_W`, performs those three operations over the whole
+picture with the canvas's own blur, stores the result at `FIELD_PX` with a gain, and each tile adds its
+own rectangle of it with a scaled `drawImage` and the original gain loop. No blur per tile, so
+`coatRadius` drops the clause — `coatFieldUsable` is the single predicate both the bleed and the branch
+ask, and `check-coat-field.mjs` holds them to it with sixteen ablations.
+
+### Why 4,096, measured
+
+Four regions of storm treeline v21 in picture-relative coordinates, envelopes taken from the masters on
+disk rather than from a bench:
+
+| pair | widths | gain | rms |
+|---|---|---|---|
+| `inputs 25bcafc6` | 4,096 → 32,768 | ×0.997 – ×1.002 | 1.3 – 1.4% |
+| `inputs d22cd3d4` | 16,384 → 65,535 | ×1.005 – ×1.034 | 1.1 – 12.4% |
+
+Against a floor of **0.00% exactly** for one picture rendered twice at one width and tile size, and
+0.5–1.5% in the bright regions (up to 10.54% in the dim ones) for one picture under two different tile
+sizes. Three octaves of width moves the field **less than changing the tile size does**.
+
+It converges, and by 4,096. **2,048 is measured insufficient**: the busiest region climbs 4.951 →
+5.979 → 7.432 from 1,024 to 2,048 to 16,384 — +24% over its last octave, well above floor — and is then
+flat to 65,535. Below 4,096 the content is not resolved; 361 veins across 1,024 px are near a pixel
+wide, and the rectified high-pass of a 1 px line is not the field a 16 px line with dither in it gives.
+
+### What it buys, and the shoulder it does not reach
+
+| W | bleed today | subsurface clause off | both off | `ew` @ tile 4096 |
+|---|---|---|---|---|
+| 262,144 | 6,296 | 1,577 | 4 | 16,688 / 7,250 / 4,104 |
+| 1,048,576 | 25,170 | 6,296 | 4 | 54,436 / 16,688 / 4,104 |
+
+Dropping the subsurface clause alone is **not sufficient**: `buildGlint` is the same
+difference-of-blur at a quarter the radius, so it then becomes the wall — 6,296 at 1,048,576, a 16,688
+px tile canvas, still past 8,192. A **glossy** slab therefore reaches 262,144 on the GPU with the field
+on, not 1,048,576; a slab with `specular` and layer `gloss` at zero (which v21 is) has nothing left
+charging and reaches 1,048,576. The glint's band was **not measured** and cannot be from anything on
+disk — the glint exists only where gloss is non-zero, and there is no glossy render at two widths to
+compare — so it is untouched on purpose.
+
+### Verified end to end, and what came back wrong
+
+storm treeline v21 at 16,384, stone, `state f1dbc011`, rendered back to back, the flag the only
+difference:
+
+| | control | `?field=1` |
+|---|---|---|
+| bleed (`needed`) | 2,520 → **236** | 2,064 → **8** |
+| coat sigma | 77 px | *no blur in this render* |
+| size | 52.8 MB | 52.9 MB |
+| `light.mean` | 63.24 | **66.38** |
+| render | 2.8 s | **7.6 s** |
+
+The bleed falls and `inputs` moves, both as designed. Two things do not:
+
+1. **It was brighter, and the cause was the painter.** The first version rendered its prelude through
+   `renderSlabTo` — the CPU painter — while the tiles it fed were drawn by the shader. The subsurface
+   is a high-pass, and [`stone-gpu.md`](stone-gpu.md) prices the two painters for exactly that: 7.029
+   RMS of local contrast from the painter against 0.341 from the shader, twentyfold, from the painter's
+   accumulated per-fill dither over 770 overlapping gradients. The field came back about four times too
+   strong (its own trail read `mean 8.737`) and the picture rendered **+4.97% brighter** over 71.9M
+   channels, 80.8% of them brighter against 3.9% darker.
+
+   The 2026-10-29 ruling accepted that gap *between two renders*. This had put it *inside one*, which
+   the ruling does not cover.
+
+   **Fixed 2026-10-30: the prelude is drawn by the painter that draws the tiles.** `buildCoatField`
+   takes the render's own choice and dispatches one 4,096 tile through `gpuPool` when the shader is
+   painting — the pool wants only `{ts, bleed, rAcross, rDown}`, and 4,096 is a single tile well inside
+   every limit the export has already cleared. It is **not** "always use the shader": a CPU render's
+   CPU prelude was already matched, and forcing the shader would break the match the other way. The
+   field records which painter built it, and the trail says so.
+
+   Measured at 8,192, same state, the flag the only difference:
+
+   | whole picture, 21.6M channels | CPU prelude | shader prelude |
+   |---|---|---|
+   | mean | +2.545 (+4.82%) | **−0.052 (−0.10%)** |
+   | rms of the difference | 4.584 | **0.938** |
+   | brighter / darker / identical | 67.2 / 4.5 / 28.3% | **7.9 / 9.9 / 82.2%** |
+   | over 2 levels | 31.81% | **1.40%** |
+   | over 8 levels | 8.72% | **0.26%** |
+   | field's own mean | 8.737 | **4.836** |
+
+   82% of channels land bit-identical and the bias is gone — 7.9% brighter against 9.9% darker is
+   symmetric, which is what an approximation looks like rather than an error. What remains is the
+   field's genuine cost: a 512-cell store and a bilinear upsample, 0.938 rms with a worst pixel of 29.
+   The author's verdict on renders made with the route before this fix was already *very close to the
+   same as the wide-bleed version*; this closes the measured gap behind that.
+
+   `check-coat-field.mjs`'s `prelude-matches-the-render-painter` holds it, with five ablations. One of
+   them is why that check is written as it is: the first spelling asked `includes('gpuPool(')`, and an
+   ablation that left the identifier in place while neutering the call — `gp = await null && gpuPool(` —
+   passed it. A present identifier is not a reachable call.
+
+2. **The prelude costs a render, and where that pays has not been measured.** At 8,192 the field arm
+   now takes 1.8 s against 6.9 s with the CPU prelude, because one GPU tile is far cheaper than a
+   whole-image CPU render — but the per-tile blur it replaces is itself cheap at small sizes, and the
+   saving only grows with the over-paint: 1.5× at 16,384, 51× at 262,144. `coatFieldUsable` currently
+   engages anywhere above `FIELD_W`, which is lower than where the route starts paying. The crossover
+   is an open measurement, not a tuned constant.
+
+`FIELD_PX` is a URL knob rather than a constant for a stated reason: agreement was validated at W/256
+cells and the default stores 512, which resolves the field's own smoothness (0.50% of W is 2.56 cells
+at 512, only 1.28 at 256). Storing finer than the validation carries more of the true field and cannot
+add error, but the agreement of that finer content is untested.
+
 ## Reachable from
 
 - [`capabilities.md`](capabilities.md) — the draw order and the control list.
@@ -227,3 +351,5 @@ by near-zero.
 - [`stone-gpu.md`](stone-gpu.md) — the shader, the tile ladder, and the coat/painter difference the
   high-pass amplifies.
 - [`master-timing.md`](master-timing.md) — render wall times and what they do and do not discriminate.
+- [`image-pyramid.md`](image-pyramid.md) — reduced-resolution representations of a picture, and what
+  survives one.
