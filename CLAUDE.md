@@ -61,6 +61,28 @@ node tools/check-plan-memory.mjs   # only a render the planner CHOSE may write t
 The browser harness (`harness/*.mjs`) needs Playwright and runs in CI; it cannot spawn locally here, so CI
 is its first run.
 
+**That list is not the CI set.** There are **37** `tools/check-*.mjs` and the block above names 12. The i18n
+workflow runs `tools/**`, so the other 25 — `wood-shader`, `worker-core`, `writer-worker`, `scope`, `seam`
+and the rest — gate a push whether or not they were run here. Running the twelve and pushing is how a red
+CI happens. Run all of them:
+
+```
+for f in tools/check-*.mjs; do node "$f" >/dev/null 2>&1 || echo "RED: $f"; done
+```
+
+Four are **red on a clean tree** and were before this note: `geometry`, `placement`, `same-image`, `seam`.
+They are not run by CI. Expect them, and do not go chasing them as something a change just broke.
+
+**`check-build` cannot see your working tree, so it can only go red AFTER you commit.** It diffs
+`HEAD~1..HEAD` — the last two COMMITS — and asks whether `app/stone-author.html` moved while `BUILD` did
+not. Run before committing it is reporting on the PREVIOUS commit and says nothing about the one you are
+about to make, which is why it reads green right until the moment it matters. Bump `BUILD` in the SAME
+commit as any app edit, and if you only notice after, amend rather than leave a bump commit behind.
+Missed twice in a row on 2026-10-29, both times by running the gates, seeing green, and committing after.
+
+**A derived CI expectation from `.github/workflows/*.yml` alone undercounts.** `pages build and deployment`
+is GitHub-managed and is not one of those files, so a push that changes the app fires three runs, not two.
+
 ## Facts that bite
 
 - **This repo is public.** `.claude/` is gitignored and stays that way — private tooling and notes live
