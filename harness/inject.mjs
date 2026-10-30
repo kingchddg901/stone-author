@@ -20,11 +20,14 @@ const hook = `
     recolour,
     // the export's own builders, so the harness can time them against each other. renderTiled paints the
     // whole slab's content once PER TILE; renderFull paints it once but needs the entire canvas at once.
-    renderTiled, expBaseMask, expCoverage, expIdT,
+    renderTiled, renderTiledStepped, expBaseMask, expCoverage, expIdT,
     // THE BACK LIGHT'S WHOLE-SLAB MAPS AND THE RENDER-SCOPED HANDLE TO THEM. exportTiff and
     // renderTiled set this for the length of a render and clear it after; a probe comparing ONE
     // pooled tile against one sequential tile is not inside either, so it has to say so itself.
     backlitMaps, setBacklitFor: m => { backlitFor = m; },
+    // THE TWO MAPS THEMSELVES, so a probe can ask WHICH of them differs between calls rather
+    // than inferring it from the picture they were placed into.
+    backlitScratch: () => ({ fold: workC, emit: emitC, base: backC }),
     // the strip path: a render larger than a canvas can be, assembled as a PNG stream
     renderStreamedPNG, stripPlan, renderStrip,
     // the grid path: an arbitrary rectangle of the picture, and the tiled container it is written into
@@ -160,6 +163,17 @@ if (ABL) {
     if (s.indexOf(c) < 0) { console.error('emission-bloom pass missing, the ablation would be silent: ' + c); process.exit(1); }
     s = s.replace(c, 'void 0;   /* HARNESS: emission bloom ablated */');
   }
+}
+
+// THE BACK LIGHT'S TWO HALVES, EACH SWITCHABLE OFF, to price what a GPU port of it could take.
+// backlitPlace is the only part a shader could do - a backlit tile paints no content, so there is no
+// layer walk to replace - and backlitBloom is image-space over the tile, which is the thing that
+// already lost on the GPU once today. Injected rather than edited so the app stays clean.
+const BL_PLACE = 'function backlitPlace(gw, gh) {';
+const BL_BLOOM = 'function backlitBloom(tcv, bs) {';
+for (const [open, flag] of [[BL_PLACE, '__ABL_PLACE'], [BL_BLOOM, '__ABL_BLOOMB']]) {
+  if (s.indexOf(open) < 0) { console.error('the back light half has moved: ' + open); process.exit(1); }
+  s = s.replace(open, open + ' if (self.' + flag + ') { return; }');
 }
 
 const idx = s.lastIndexOf('})();');

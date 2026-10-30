@@ -1853,7 +1853,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.29.237';
+  const BUILD = '2026.10.29.238';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2199,6 +2199,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Back-light optical declaration per layer: transmit = how much light passes where the layer covers
   // (0 opaque → 1 clear), scatter = how much it diffuses the light through it. Defaults per identity; the
   // base bucket is the glowing body (its transmit scales the whole glow). Authored on the Selected bar.
+  // FOG'S 0.6 IS NEVER APPLIED, AND THAT IS RULED. The back-light fold occludes through layerMask,
+  // which draws a layer's coverage with drawLayerArtifacts - and that has branches for major, minor,
+  // micro and web and NONE for fog. A fog layer's mask comes back all white, the multiply does
+  // nothing, and the fog passes the matrix light untouched. It is why the fog blobs are the brightest
+  // thing in a backlit slab: not because fog glows, but because it is the only content taking no
+  // occlusion at all while veins pull their region to 0.05.
+  //
+  // RULED 2026-10-29, by the author, having been shown exactly that: "let it be i like it as is".
+  // So the entry below is kept rather than deleted - it is what fog WOULD transmit if the fold ever
+  // learned to mask it - and wiring drawLayerArtifacts to cover fog would change the look he kept.
+  // A fresh walk WILL find this; diff against the ruling before touching either side of it.
   const BL_T = { base: 1, breccia: 1, clouds: 1, bands: 1, fog: 0.6, web: 0.22, micro: 0.45, drusy: 0.55, styl: 0.1, minor: 0.12, major: 0.05 };
   const blDefault = L => ({ transmit: BL_T[L.key] ?? BL_T[L.bucket] ?? 0.3, scatter: 0 });
   for (const L of layers) Object.assign(L, blDefault(L));
@@ -5130,14 +5141,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // into expCompleted alone put it in the .ora merged thumbnail and nowhere else: the kit and
     // the render-only path both come through here, and both were still exporting the slab.
     if (layTiles) { if (onTile) await onTile(0, 0); return renderFloor(W); }
+    // THE SECOND COPY OF THE BACK-LIGHT FALLBACK, and the one that outlived the first. renderTiled
+    // stopped returning renderFull on 2026-10-29; this one still did, so a STREAMED export - the PNG
+    // strip path through renderStreamedPNG - kept taking the whole-canvas route.
+    //
+    // THAT ROUTE IS NOT MERELY SLOWER, IT DRIFTS. Measured the same day: with a back light on, the
+    // FIRST renderFull of a session differs from every one after - mean -9.535 over 3.79% of
+    // channels, worst -43 - and then settles. Ruled out by ablation: the three maps hash identically
+    // across calls, five scaled draws of one of them hash identically, and ablating backlitBloom
+    // leaves it; ablating backlitPlace removes it. It is the first PLACEMENT of those maps in a
+    // fresh context. The tiled path does not have it - a cold export of four tiles re-renders every
+    // one byte-identically - so routing this through the tiles is a correctness fix, not a speed one.
+    //
+    // onTile now reports real tile counts rather than the (0, 0) the fallback passed.
     const backlit = !layTiles && G.backlight > 0;
-    if (backlit) { if (onTile) await onTile(0, 0); return renderFull(W); }
-    const p = tiledPlan(W);
-    for (let i = 0; i < p.jobs.length; i++) {
-      p.jobs[i]();
-      if (onTile) await onTile(i + 1, p.jobs.length);
-    }
-    return p.finish();
+    if (backlit) backlitFor = backlitMaps();
+    try {
+      const p = tiledPlan(W);
+      for (let i = 0; i < p.jobs.length; i++) {
+        p.jobs[i]();
+        if (onTile) await onTile(i + 1, p.jobs.length);
+      }
+      return p.finish();
+    } finally { backlitFor = null; }
   }
   // ---- CPU WORKER POOL: parallelise the tile render across cores. The render core (paintStoneContent + coat +
   // helpers) is serialised via fn.toString() into an inline Blob worker (single-file app → no separate worker
@@ -17982,6 +18008,26 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // not that trade - it moves a UV slab from CPU-only to the shader at all, which was 39x on v21 -
     // but 8x more feeder work is exactly the cost that trade has to clear.
     if (uvMode && BLOOM_DRAW) return 'exp.gpu.uv';
+    // THIS REFUSAL COSTS NOTHING, MEASURED 2026-10-29, and the reason is worth keeping: a backlit
+    // tile paints NO CONTENT. paintBacklit replaces paintContent, so the layer walk the shader
+    // exists to replace is not running, and the whole slab is drawn ONCE at 512 wide inside
+    // backlitMaps instead of once per tile at the render width.
+    //
+    // On storm treeline v21 - 22 layers, 1037 marks, ten fog layers, the slab the shader is worth
+    // most on - at 16,384, per tile, paint stage:
+    //
+    //     daylight on the CPU   3451.8 ms
+    //     daylight on the GPU     130.3 ms      26.5x, which is what this clause turns away
+    //     BACK LIGHT on the CPU    26.6 ms      5x cheaper than the shader tile it replaces
+    //     backlitMaps              53.3 ms      ONCE for the render, where those 22 layers land
+    //
+    // So turning a back light on makes a fog-heavy slab dramatically CHEAPER, and the shader has
+    // nothing left to contribute: backlitPlace - two drawImage calls of a 512 map, already a
+    // hardware-accelerated blit - measured at -0.4 ms, under the noise, of a 206 ms tile.
+    //
+    // DO NOT LIFT THIS EXPECTING A SPEEDUP. It would let the GPU path run and hand it a tile with
+    // nothing to draw, while making the device the feeder eight workers wait on - which cost 6.5 s
+    // against 4.5 when the emission bloom was moved there the same day.
     if (G.backlight > 0) return 'exp.gpu.backlight';
     const own = M.why();
     if (own) return own;
