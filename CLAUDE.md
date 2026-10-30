@@ -61,8 +61,8 @@ node tools/check-plan-memory.mjs   # only a render the planner CHOSE may write t
 The browser harness (`harness/*.mjs`) needs Playwright and runs in CI; it cannot spawn locally here, so CI
 is its first run.
 
-**That list is not the CI set.** There are **37** `tools/check-*.mjs` and the block above names 12. The i18n
-workflow runs `tools/**`, so the other 25 — `wood-shader`, `worker-core`, `writer-worker`, `scope`, `seam`
+**That list is not the CI set.** There are **38** `tools/check-*.mjs` and the block above names 12. The i18n
+workflow runs `tools/**`, so the other 26 — `wood-shader`, `worker-core`, `writer-worker`, `scope`, `seam`
 and the rest — gate a push whether or not they were run here. Running the twelve and pushing is how a red
 CI happens. Run all of them:
 

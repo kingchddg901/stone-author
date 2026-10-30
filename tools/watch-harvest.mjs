@@ -147,6 +147,52 @@ function record(p) {
   return null;
 }
 
+// THREE WAYS TO PRODUCE NOTHING, and the geometry counts see only one of them.
+//
+//   no geometry  -- the render ran before the geometry was built. marks exist, nothing else does.
+//   black frame  -- the geometry existed and was never PAINTED. Every count is perfect.
+//   nothing lit  -- it painted, and what it painted is one flat colour that is not black.
+//
+// The second was invisible here until 2026-09-30, when seven 16384 masters were harvested and deleted
+// carrying 666 marks, 70 lines, 232 cracks, 8050 specks and an image with no pixel above zero anywhere.
+// It allocated, reported success and painted nothing. Only `light.mean` sees it, and nothing was
+// reading `light.mean`.
+//
+// THE THIRD WAS INVISIBLE UNTIL 2026-10-30, and `mean === 0` is exactly why. Three wood masters came
+// off the GPU path as one flat colour with `light.mean` 23.33 — nowhere near zero — so all three passed
+// this gate, and would have been recorded as good, deleted, and left behind a sidecar saying nothing
+// was wrong. `lit40` is the share of sampled pixels above 40/255; it read 0.00 on all three against
+// 36.76 to 100 on every other master of that session.
+//
+// ENUMERATED AGAINST THE ARCHIVE BEFORE IT WAS WIDENED, because a guard that newly activates over data
+// already on disk has to be run against that data first. Of 1,138 masters carrying a `lit40`, exactly
+// ten read zero: the seven `mean === 0` frames above, and those three. The nearest legitimate render is
+// **0.94** — a deliberately near-black moon-only A/B — then 1.03, then a jump to 6.26. So any threshold
+// between 0 and 0.94 behaves identically on everything that exists, and anything at 0.94 or above
+// starts setting aside pictures somebody meant. Hence exactly zero rather than a threshold.
+//
+// A render from a build with no light figure cannot be judged and is left alone rather than guessed at.
+// The light probe samples every hundredth pixel, so a picture with a few thousand lit pixels in a
+// gigapixel could still sample to zero; that costs a file in a directory rather than a deletion, which
+// is the cheap side of this trade and the same one `blackFrame` already takes.
+//
+// LIFTED BY `check-harvest-aside.mjs` between these markers, so the gate measures this code and not a
+// second copy of it.
+// ASIDE>>>
+function asideVerdict(m) {
+  if (!m) return null;
+  const light = m.light;
+  const noGeometry = m.marks > 0 && !m.lines && !m.cracks && !m.specks;
+  const blackFrame = !!(light && light.mean === 0);
+  const nothingLit = !!(light && light.lit40 === 0);
+  if (!noGeometry && !blackFrame && !nothingLit) return null;
+  // blackFrame first, so the two cases that already existed print exactly what they always printed.
+  if (blackFrame) return { code: 'BLACK FRAME   ', detail: '(light.mean 0 at ' + m.w + 'px — allocated and painted nothing; kept)' };
+  if (nothingLit) return { code: 'NOTHING LIT   ', detail: '(lit40 0 at ' + m.w + 'px with light.mean ' + light.mean + ' — it painted, and what it painted is flat; kept)' };
+  return { code: 'EMPTY STONE   ', detail: '(marks ' + m.marks + ', no geometry; kept)' };
+}
+// <<<ASIDE
+
 function sweep() {
   for (const p of candidates()) {
     let m = null;
@@ -159,30 +205,17 @@ function sweep() {
     const name = basename(p);
     const size = (() => { try { return statSync(p).size; } catch (_) { return 0; } })();
 
-    // TWO WAYS TO PRODUCE NOTHING, and the geometry counts only see one of them.
-    //
-    //   no geometry  -- the render ran before the geometry was built. marks exist, nothing else does.
-    //   black frame  -- the geometry existed and was never PAINTED. Every count is perfect.
-    //
-    // The second was invisible here until 2026-09-30, when seven 16384 masters were harvested and
-    // deleted carrying 666 marks, 70 lines, 232 cracks, 8050 specks and an image with no pixel above
-    // zero anywhere. 16384 is the widest size that still demands one full-size assembly canvas
-    // (16384 x 10240 RGBA = 640 MiB, with three windows each asking for one); it allocated, reported
-    // success and painted nothing. Only `light.mean` sees it, and nothing was reading `light.mean`.
-    //
-    // A render from a build with no light figure cannot be judged and is left alone rather than guessed
-    // at. A deliberately black slab would be set aside too, which costs a file in a directory and is the
-    // cheap side of this trade.
-    const noGeometry = m.marks > 0 && !m.lines && !m.cracks && !m.specks;
-    const blackFrame = !!(m.light && m.light.mean === 0);
-    if (noGeometry || blackFrame) {
+    // Why a master is kept rather than recorded-and-deleted lives in `asideVerdict` above, where a gate
+    // can reach it. 16384 is the widest size that still demands one full-size assembly canvas
+    // (16384 x 10240 RGBA = 640 MiB, with three windows each asking for one), which is why that size
+    // dominates the black frames in the archive.
+    const verdict = asideVerdict(m);
+    if (verdict) {
       try {
         mkdirSync(ASIDE, { recursive: true });
         renameSync(p, join(ASIDE, name));
         aside++;
-        say((blackFrame ? 'BLACK FRAME   ' : 'EMPTY STONE   ') + name + '  -> ' + ASIDE + '   ' +
-            (blackFrame ? '(light.mean 0 at ' + m.w + 'px — allocated and painted nothing; kept)'
-                        : '(marks ' + m.marks + ', no geometry; kept)'));
+        say(verdict.code + name + '  -> ' + ASIDE + '   ' + verdict.detail);
       } catch (e) { refused++; say('could not move ' + name + ': ' + e.message); }
       continue;
     }
