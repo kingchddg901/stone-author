@@ -1854,7 +1854,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.29.240';
+  const BUILD = '2026.10.29.246';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4515,11 +4515,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // IT IS NOT THE SAME EFFECT AND DOES NOT TRY TO BE. Contrast-weighting lifts a hair-thin branch
   // harder than a fat vein, because the thin one carries more local contrast; coverage-weighting lifts
-  // both the same. Two operators, because which one reads right is a look and not an arithmetic
-  // answer - the same reason ?glow= is a dial rather than a fitted constant:
+  // both the same. The lift itself is gain - out = in * (1 + a), composited with 'lighter' - and it is
+  // the only operator; BOOST carries why screen was tried and ruled out.
   //
-  //   gain    out = in * (1 + a)           straight exposure; the brightest features clip to white first
-  //   screen  out = in + a * in * (1 - in) black and white preserved, midtones lift hardest
+  // THE TINT IS THE TOKEN'S, not a constant: innerColour, shared with the subsurface stage, so the two
+  // ways of lighting a feature from inside agree about what colour that light is.
   //
   // WHAT IT CANNOT REACH, stated because the gap is structural rather than an oversight: the ground,
   // clouds, bands and breccia are FILLS and have no geometry to re-draw, so they take no boost at all.
@@ -4533,6 +4533,53 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!vis.length) return;
     if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
     const sc = ssC.getContext('2d');                       // the subsurface scratch, free because that stage is what this replaces
+    // TINT FIRST, MASK SECOND, AND THE ORDER IS LOAD-BEARING. The obvious order - mask the picture,
+    // then multiply a tint over it - is wrong, and wrong in a way that looks like a tint working.
+    // Canvas blend modes composite source-over, so a FULL-OPACITY fillRect through 'multiply' gives
+    // Co = (1 - ab) + ab*Cb and ao = 1: outside the coverage, where ab is 0, the result is WHITE at
+    // alpha 1, and the mask this function exists to apply is destroyed. The subsurface stage above
+    // runs the same two lines safely only because ITS scratch is opaque everywhere.
+    //
+    // MEASURED, not reasoned: with the tint applied after the mask, innerColour = #ffffff did NOT
+    // reproduce the untinted hash it must be identical to. In this order it does.
+    //
+    // So: build the tinted picture OPAQUE, then punch it down to the coverage with
+    // 'destination-in', which keeps the destination's colour and takes the source's alpha.
+    // THE TINTED PICTURE IS BUILT ELSEWHERE AND THE MASK STAYS HERE, because the ORDER is what has
+    // to be preserved. Coverage into ssC, then 'source-in' the source, is the original operation.
+    // Reversing it - picture into ssC, then 'destination-in' the coverage - is identical in exact
+    // arithmetic and NOT identical in 8-bit premultiplied storage, because the mask then makes a
+    // second trip through drawImage.
+    //
+    // MEASURED, and the measurement is what settled it: reversing the order moved the untinted hash
+    // off the render it must match, and SKIPPING THE MULTIPLY ENTIRELY did not bring it back. That
+    // ruled out the tint and left the reorder. Built the other way round, an untinted boost is
+    // byte-identical to one with no tint code at all, which is the only form of 'it takes nothing
+    // away' worth claiming.
+    //
+    // mmC is the metal mask's scratch and is free here: the specular stage runs after this one and
+    // resizes and clears it before use.
+    if (mmC.width !== w || mmC.height !== h) { mmC.width = w; mmC.height = h; }
+    const mk = mmC.getContext('2d');
+    mk.setTransform(1, 0, 0, 1, 0, 0); mk.globalAlpha = 1; mk.filter = 'none';
+    mk.globalCompositeOperation = 'source-over'; mk.clearRect(0, 0, w, h);
+    mk.drawImage(tcv, 0, 0);                               // the picture, opaque
+    // THE SAME CREAM THE SUBSURFACE USES, through the same token, for the same reason: light that has
+    // travelled through the material comes back warm, and an untinted lift reads as exposure rather
+    // than as something glowing inside the stone. multiply and fillRect are per-pixel, so this costs
+    // no neighbours and coatRadius does not move - the bleed stays 8 at every width.
+    //
+    // ONE CONTROL, BOTH LOOKS. innerColour defaults to #ffcf8f, so the boost is warm out of the box;
+    // set it to #ffffff and the tint is skipped outright, which gives back the cold version this flag
+    // shipped with - by construction, not by rounding. That is why there is no second flag for
+    // tinted-or-not: the token already spans it, and a mode a colour can express is not a mode.
+    const tint = COL.innerColour || '#ffcf8f';
+    if (!/^#(fff|ffffff)$/i.test(String(tint).trim())) {
+      mk.globalCompositeOperation = 'multiply'; mk.fillStyle = tint;
+      mk.fillRect(0, 0, w, h);
+      mk.globalCompositeOperation = 'source-over';
+    }
+    // the coverage, and then the original operation with a tinted source
     sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none';
     sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, w, h);
     sc.setTransform(CTM.a, CTM.b, CTM.c, CTM.d, CTM.e, CTM.f);
@@ -4541,10 +4588,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const L of vis) drawLayerArtifacts(L, '#fff', true);
     g2d = prevG;
     sc.setTransform(1, 0, 0, 1, 0, 0);
-    sc.globalCompositeOperation = 'source-in'; sc.drawImage(tcv, 0, 0);   // the picture, kept only where features cover
+    sc.globalCompositeOperation = 'source-in'; sc.drawImage(mmC, 0, 0);   // kept only where features cover
     sc.globalCompositeOperation = 'source-over';
     tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0);
-    tx.globalCompositeOperation = BOOST === 'screen' ? 'screen' : 'lighter';
+    tx.globalCompositeOperation = 'lighter';               // gain: out = in * (1 + a). The only operator; see BOOST.
     tx.globalAlpha = a; tx.drawImage(ssC, 0, 0);
     tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
   }
@@ -14157,16 +14204,29 @@ self.onmessage = async (e) => {
   // drawn, and both exist because the blur's BLEED is what costs. BLOOM_DRAW took the emission
   // bloom's reach from 1,577 px to 4 at 65,535; this does the same for the subsurface's 929.
   //
-  // TWO VALUES, NOT A NUMBER, because the amount already has a control - the SUBSURFACE slider, read
-  // by boostFeatures through the same min(0.95, 0.9 * ss) curve the blur stage uses. What the flag
-  // picks is the OPERATOR, and which operator reads right is a look: gain is exposure and clips the
-  // brightest features to white first, screen preserves black and white and lifts midtones hardest.
+  // ON OR OFF, NOT A CHOICE OF OPERATOR. It shipped with two - gain and screen - and screen is
+  // RULED OUT 2026-10-29 by the author, shown both on the same slab: "gain had is closer". The
+  // reason is in the operators and is worth keeping, because a fresh walk will want to re-add it:
+  //
+  //   gain    out = in * (1 + a)            proportional, so the BRIGHTEST parts gain the most
+  //   screen  out = in + a * in * (1 - in)  peaks at mid-grey and falls to ZERO at white
+  //
+  // Screen exists to protect highlights. This subject IS the highlights - lightning, cloud tops, the
+  // ring - so screen spent its lift on the mid-grey cloud body and left the structure alone, which
+  // reads duller and flatter. Gain amplifies exactly what is being lit.
+  //
+  // The amount still has its own control - the SUBSURFACE slider, read by boostFeatures through the
+  // same min(0.95, 0.9 * ss) curve the blur stage uses - so this flag carries no number.
+  //
+  // `gain` IS STILL ACCEPTED and is what the value normalises to, so the masters already written with
+  // ?boost=gain keep their `inputs` and their record reads the same. ?boost=1 is the house spelling.
   //
   // ANYTHING ELSE IS OFF. An unrecognised value is not an error and not a default-on - it reads as
-  // absent, so a typo gives the shipped picture rather than a silently different one.
+  // absent, so a typo gives the shipped picture rather than a silently different one. ?boost=screen
+  // is now one of those: it turns the boost OFF rather than quietly meaning gain.
   const BOOST = (() => {
     try { const v = (new URLSearchParams(location.search).get('boost') || '').trim().toLowerCase();
-          return v === 'gain' || v === 'screen' ? v : ''; }
+          return (v === '1' || v === 'on' || v === 'true' || v === 'gain') ? 'gain' : ''; }
     catch (_) { return ''; }
   })();
   // ?glow=N - LIFT THE HALO TOWARD WHITE, 0 to 1. Drawn glow gives each element a halo in the element's
