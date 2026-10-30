@@ -2350,6 +2350,18 @@
     ],
     "where": "under the \"coat-and-light\" section"
   },
+  "sl.boost": {
+    "terms": [
+      "subsurface"
+    ],
+    "where": "checkbox label in the Coat & light panel, directly under the Subsurface slider. Switches on an alternative to the subsurface pass that lights features from their drawn geometry instead of from a blur of the picture. Only one of the two runs. 'Boost' is this app's own name for the control, not a standard term."
+  },
+  "ui.boost-lights-features-from-geometry": {
+    "terms": [
+      "subsurface"
+    ],
+    "where": "explanatory note shown under the Drawn boost checkbox in Coat & light. 'Bleed' is the margin of neighbouring pixels a tile must paint before it can be blurred; it is a rendering term, not ink spreading on paper."
+  },
   "sl.tedge": {
     "where": "in the \"tiles\" group/panel, under the \"tiles-and-floor\" section"
   },

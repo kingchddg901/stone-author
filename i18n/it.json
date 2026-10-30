@@ -492,6 +492,8 @@
   "sl.stylTooth": "Denti",
   "sl.stylWidth": "Larghezza della sutura",
   "sl.subsurface": "Subsurface",
+  "sl.boost": "Boost disegnato",
+  "ui.boost-lights-features-from-geometry": "Illumina gli elementi dalla loro geometria invece di sfocare l'immagine: un tassello non legge i pixel vicini e il margine di bleed smette di crescere con il rendering. Non e' una versione piu' economica ma un aspetto diverso: sollevamento in base alla copertura, mentre Subsurface solleva in base al contrasto locale, e sostituisce Subsurface invece di aggiungersi.",
   "sl.tedge": "Bordo",
   "sl.tgrout": "Fuga",
   "sl.tkerf": "Spessore di taglio",

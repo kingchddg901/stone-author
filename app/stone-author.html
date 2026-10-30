@@ -461,7 +461,7 @@
   <div id="ground" class="rail">
     <details class="sec" open><summary data-i18n="sec.coat-and-light">Coat & light</summary><div class="body">
     <div class="sliders" id="g-coat">
-      <!-- The nine numeric controls are declared in COAT_TOKENS and rendered by the token kit, which
+      <!-- The controls are declared in COAT_TOKENS and rendered by the token kit, which
            brings a number box beside each slider and a reset arrow per control. The two button groups
            below are still hand-written: they are not numbers, and turning a Beam button into a kit
            checkbox is an appearance decision, not a plumbing one. -->
@@ -1484,6 +1484,8 @@ window.SA_I18N = (() => {
   "sl.stylTooth": "Teeth",
   "sl.stylWidth": "Seam width",
   "sl.subsurface": "Subsurface",
+  "sl.boost": "Drawn boost",
+  "ui.boost-lights-features-from-geometry": "Lights features from their own geometry instead of blurring the picture, so a tile reads no neighbours and the bleed stops growing with the render. A different look rather than a cheaper one: it lifts by coverage where Subsurface lifts by local contrast, and it replaces Subsurface rather than adding to it.",
   "sl.tedge": "Edge",
   "sl.tgrout": "Grout",
   "sl.tkerf": "Kerf",
@@ -1854,7 +1856,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.29.246';
+  const BUILD = '2026.10.29.247';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2148,12 +2150,23 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // setSpectrum() rather than to G, which is what an adapter is for.
   const COAT_TOKENS = [
     { key: 'subsurface',    min: 0,    max: 2,   step: 0.02, labelKey: 'sl.subsurface' },
+    // THE BOOST SITS UNDER THE THING IT REPLACES, because that is the choice being made: this lights
+    // features from their geometry where Subsurface blurs the picture, and only one of them runs.
+    //
+    // SESSION, NOT SAVED, and that is what keeps it cheap. serialize() spreads G wholesale and renderSig
+    // hashes it, so a new G key would move the signature of EVERY slab on disk. lightSpectrum already
+    // established the alternative - a coat control that is deliberately not in G - and this takes it.
+    // renderSig carries the boost separately, absent when off, so nothing re-dates either way.
+    { key: 'boost',         min: 0,    max: 1,   step: 1,    labelKey: 'sl.boost', session: true, bool: true,
+      helpKey: 'ui.boost-lights-features-from-geometry',
+      def: false, get: () => BOOST === 'gain', set: v => { BOOST = v ? 'gain' : ''; } },
     { key: 'specular',      min: 0,    max: 1,   step: 0.02, labelKey: 'sl.specular' },
     { key: 'specMetal',     min: 0,    max: 1,   step: 0.02, labelKey: 'sl.specMetal' },
     { key: 'lightAngle',    min: -180, max: 180, step: 1,    labelKey: 'sl.lightAngle' },
     { key: 'lightTemp',     min: -1,   max: 1,   step: 0.02, labelKey: 'sl.lightTemp' },
     { key: 'lightSpectrum', min: -1,   max: 1,   step: 0.02, labelKey: 'sl.lightSpectrum', session: true,
-      helpKey: 'ui.spectrum-0-daylight-sweep-to' },
+      helpKey: 'ui.spectrum-0-daylight-sweep-to',
+      def: 0, get: () => lightSpectrum, set: v => { if (v !== lightSpectrum) setSpectrum(v); } },
     { key: 'spotR',         min: 0.05, max: 0.6, step: 0.01, labelKey: 'sl.spotR' },
     { key: 'backlight',     min: 0,    max: 2,   step: 0.02, labelKey: 'sl.backlight',
       helpKey: 'ui.back-light-light-from-behind' },
@@ -2164,8 +2177,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const COAT_BY_KEY = new Map(COAT_TOKENS.map(t => [t.key, t]));
   // The default a reset returns to. G0 for a stored value; daylight for the one session value, because a
   // slab opens in daylight and "reset the light" can only sensibly mean that.
-  const coatDefault = k => COAT_BY_KEY.get(k).session ? 0 : G0[k];
-  const coatCurrent = k => COAT_BY_KEY.get(k).session ? lightSpectrum : G[k];
+  // EACH SESSION TOKEN SAYS WHERE ITS VALUE LIVES. `session` used to mean "is lightSpectrum": both
+  // helpers branched on the flag and then named that one variable, so a SECOND session token would have
+  // read and written the light instead of itself. The accessors are on the token now.
+  const coatDefault = k => { const t = COAT_BY_KEY.get(k); return t.session ? t.def : G0[k]; };
+  const coatCurrent = k => { const t = COAT_BY_KEY.get(k); return t.session ? t.get() : G[k]; };
   const showLen = v => T.units === 'mm' ? `${(v * 25.4).toFixed(1)} mm` : (v < 1 ? `${Math.round(v * 16)}/16 in` : `${(+v).toFixed(2).replace(/\.?0+$/, '')} in`);
   // chevangle is DEGREES, not a length. Without an entry here show() throws on an undefined
   // formatter, which happens BEFORE the input listener is attached - so the slider renders, reads
@@ -9405,6 +9421,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // something the app does not do.
     coatKit = TTK.createThemeKit();
     coatKit.registerControlType('coatNum', { input: 'coatNum', coerce: v => Number(v), defaultValue: 0 });
+    // A TOGGLE USES THE EDITOR'S OWN CHECKBOX. coatNum needs a custom widget because a slider with a
+    // number box beside it is not built in; a checkbox is, so declaring the type is the whole cost.
+    coatKit.registerControlType('coatBool', { input: 'checkbox', coerce: v => !!v, defaultValue: false });
     registerCoatGroup();
     coatKit.setAdapter({
       // OVERRIDES ONLY, the same shape the colour editor's OVR has: a key present means "moved off its
@@ -9420,9 +9439,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       save: async v => {
         for (const t of COAT_TOKENS) {
           const raw = Object.prototype.hasOwnProperty.call(v, t.key) ? v[t.key] : coatDefault(t.key);
+          if (t.bool) { t.set(!!raw); continue; }               // a toggle has no number to validate
           const n = Number(raw);
           if (!Number.isFinite(n)) continue;
-          if (t.session) { if (n !== lightSpectrum) setSpectrum(n); }
+          if (t.session) t.set(n);
           else G[t.key] = n;                                   // Number(), so the slab's shape cannot drift to strings
         }
         saveLocal(); redraw(true);
@@ -9440,7 +9460,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     coatKit.registerTokenGroup({
       id: 'coat', label: '',                     // the section summary above already says it
       tokens: COAT_TOKENS.map(t => ({
-        key: t.key, type: 'coatNum', label: TR(t.labelKey), default: coatDefault(t.key),
+        key: t.key, type: t.bool ? 'coatBool' : 'coatNum', label: TR(t.labelKey), default: coatDefault(t.key),
         min: t.min, max: t.max, step: t.step, help: t.helpKey ? TR(t.helpKey) : undefined,
       })),
     });
@@ -14224,7 +14244,11 @@ self.onmessage = async (e) => {
   // ANYTHING ELSE IS OFF. An unrecognised value is not an error and not a default-on - it reads as
   // absent, so a typo gives the shipped picture rather than a silently different one. ?boost=screen
   // is now one of those: it turns the boost OFF rather than quietly meaning gain.
-  const BOOST = (() => {
+  // `let`, BECAUSE THE PANEL OWNS IT TOO. The URL seeds it and the Coat & Light toggle moves it;
+  // both write the same two values, '' and 'gain', so everything downstream - renderSig, the master's
+  // record, glowPreamble - reads what it always read. The worker pools build their source fresh per
+  // render (renderCoreSrc is called at pool creation, both call sites), so a toggled value travels.
+  let BOOST = (() => {
     try { const v = (new URLSearchParams(location.search).get('boost') || '').trim().toLowerCase();
           return (v === '1' || v === 'on' || v === 'true' || v === 'gain') ? 'gain' : ''; }
     catch (_) { return ''; }
