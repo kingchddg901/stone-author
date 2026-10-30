@@ -18013,7 +18013,11 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // render is slower rather than absent. bloomWhy carries the reason so a probe can print it.
     let pipeBlSave = null, pipeBlBox = null, pipeBlAdd = null, pipeBlMix = null,
         pipeBlTr = null, bloomWhy = null;
-    try {
+    // STONE'S ALONE. These five entry points exist only in stone's module, so asking for them on wood
+    // or glass is five pipeline builds that are MEANT to fail, inside an error scope, on every pool
+    // the other two materials make. The guard is also what makes the per-material claim true: an
+    // entry point the app names is a pipeline somebody creates, but not for every material.
+    if (currentMaterial() === 'stone') try {
       dev.pushErrorScope('validation');
       pipeBlSave = await dev.createComputePipelineAsync({
         layout: 'auto', compute: { module: mod, entryPoint: 'blsave' } });

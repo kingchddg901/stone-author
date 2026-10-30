@@ -278,8 +278,27 @@ console.log('  put them in different places. That needs both running on the same
 // pipeline somebody creates, so the app states the requirement and this checks it - which is the
 // difference between a gate and a note.
 {
-  const want = [...new Set([...APP.matchAll(/entryPoint: '([A-Za-z_]\w*)'/g)].map(m => m[1]))];
-  ok('the app names its entry points where this gate reads them', want.length >= 4, want.join(' '));
+  const all = [...new Set([...APP.matchAll(/entryPoint: '([A-Za-z_]\w*)'/g)].map(m => m[1]))];
+  ok('the app names its entry points where this gate reads them', all.length >= 4, all.join(' '));
+
+  // NOT EVERY ENTRY POINT IS EVERY MATERIAL'S. This read the whole list and required wood to have
+  // all of it, which was true while the only pipelines were the shared readback - and went red the
+  // day stone grew five of its own. An entry point the app names is still a pipeline somebody
+  // creates; it is just not created for every material, and the ones below are built inside
+  // `if (currentMaterial() === 'stone')`. A reason each, as the field exemptions above carry.
+  const STONE_ONLY = new Map([
+    ['blsave', 'the emission bloom keeps a pristine copy of the content; stone-only, and ?gbloom=1'],
+    ['blbox', 'one box pass of the three-box blur ctx.filter actually is; stone-only'],
+    ['bladd', 'adds a blurred copy back at its own gain; stone-only'],
+    ['blmix', 'lays the dither main skipped when the bloom runs; stone-only'],
+    ['bltrans', 'the tiled transpose that keeps both blur axes coalesced; stone-only'],
+  ]);
+  ok('and every stone-only exemption says why', [...STONE_ONLY.values()].every(r => r.length > 30));
+  const inApp = [...STONE_ONLY.keys()].filter(n => all.indexOf(n) < 0);
+  ok('every exemption names an entry point the app still creates', inApp.length === 0,
+     'GONE FROM THE APP: ' + inApp.join(', '));
+
+  const want = all.filter(n => !STONE_ONLY.has(n));
   const code = woodSource(GLASS).code;
   const missing = want.filter(n => code.indexOf('fn ' + n + '(') < 0);
   ok('the wood module declares every one', missing.length === 0, 'MISSING: ' + missing.join(', '));
