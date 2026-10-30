@@ -1170,7 +1170,7 @@ probe pages build their own uniform and rely on the fallback.
 
 #### Three verifications, on hardware, against the CPU painter
 
-Nothing in the 52 gates executes WGSL, so none of this was proven by them. Each piece was measured by
+Nothing in the repo's gates executes WGSL, so none of this was proven by them. Each piece was measured by
 rendering the same document on both renderers at 32,768 and comparing all 2,013,265,920 channels:
 
 | | speedup | channels differing | worst | worst tile | per-tile min / median / max |

@@ -359,13 +359,23 @@ The ablation swaps painting for a blit, so a null result could in principle mean
 same. Two independent readings say it does not: the median tile is 2 ms in **both** arms, and the
 write alone accounts for the whole render without reference to painting at all.
 
-`gpuWhyNot` answers `exp.gpu.nomaterial` for stone, named for the absence rather than for whichever
-material happens to be missing a shader.
+`gpuWhyNot` answers `exp.gpu.nomaterial` for a material with no shader — named for the absence rather
+than for whichever material happens to be missing one. **It answered that for stone until
+2026-10-29**, and a stone master written before then carries the key in its record, which is why it
+is kept in the strings rather than deleted.
 
 **Glass and wood are both on the shader**, and land within 1.1× of each other there against 2.1×
-apart on the CPU.
+apart on the CPU. **Stone joined them on 2026-10-29** — [`stone-gpu.md`](stone-gpu.md).
 
-**What a third material would cost** is now a known quantity rather than a guess: a packer, a WGSL
-block set, five entries in `GPU_MAT`, and a `why()`. The pipeline underneath has taken a second
-material without changing a line, which is the only evidence that it was ever a pipeline rather than
-a glass renderer with a loop in it.
+**What a third material would cost** was a known quantity rather than a guess when this was written:
+a packer, a WGSL block set, five entries in `GPU_MAT`, and a `why()`. **It has since been paid, at
+that price.** The pipeline underneath has now taken a second and a third material without changing a
+line, which is the evidence that it was ever a pipeline rather than a glass renderer with a loop in it.
+
+**And stone changed sides because the SLAB changed, not because the measurement was wrong.**
+Everything above is still true of the document it was taken on: 350.3 MB out at 22.1 MB/s *is* the
+15.8 s, ablating the painter moves nothing, and a shader would have removed work that was not being
+waited on. What made a stone shader worth building is a denser slab — veins at 5,565 chunk strokes a
+tile, fog planes of 770 blobs — where the cost is the command stream rather than the write. Same
+renderer, same arithmetic, a different document. A port is worth what the slab makes it worth, and
+that is the reading to carry out of this section rather than a verdict on stone.

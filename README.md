@@ -87,14 +87,22 @@ path that taking one small want seriously actually produced.
 Each app is one file with everything inline. No build step; no server needed to open one.
 
 ### `gallery/` — the public showcase
-A static page (`index.html`, no build) — **"African St Laurent, Warped"**: one authored marble idea
-shown four ways (pristine → subtly wrong → screaming → and the inversion: orderly daylight with one
-window of the screaming held at the burn). Four heroes (`img/*.png`) from two slabs
-(`slabs/before.json`, `slabs/warped.json`) — three of them that second slab under settings the harness
-applies at render time, not stored in it; `reference.json` is the render recipe + reference hashes.
-The page also opens and closes on four 1600-px downsamples of the **65,535 × 40,959 masters** — the
-burned pair that states the fiction, then the same pair raw — badged so a composited picture and a pure
-render are never mistaken for each other. CC0. See [`docs/gallery.md`](docs/gallery.md).
+A static page (`index.html`, no build), in three parts. It opens on **"African St Laurent, Warped"**:
+one authored marble idea shown four ways (pristine → subtly wrong → screaming → and the inversion:
+orderly daylight with one window of the screaming held at the burn). Those four heroes come from two
+slabs (`slabs/before.json`, `slabs/warped.json`) — three of them that second slab under settings the
+harness applies at render time, not stored in it; `reference.json` is the render recipe + reference
+hashes. They are the only images the harness renders and the only ones gated.
+
+Everything else on the page is a **master downsampled to 1600 px**, which is cheaper to commit than a
+render made at that size: measured on what is here, the native 1600 renders mean 3,008 KB and the
+downsamples 2,103 KB, because a 41:1 box filter averages away the dither and sub-pixel aliasing that
+PNG cannot compress. Those are: the burned pair and the same pair raw at **65,535 × 40,959**; a
+**one slab, three materials** set where all six plates carry the same 666 marks, 70 lines, 232 cracks
+and 8,050 specks and the material decides what that becomes; and **what a blur costs** — one picture
+under the two coat paths at 65,535, 13.4 min against 24.9 s, plus four settings of the same A/B at
+16,384. 26 images, every one badged `pure render` or `composited` so the two are never mistaken.
+CC0. See [`docs/gallery.md`](docs/gallery.md).
 
 ### `harness/` — the determinism harness
 A Playwright harness that drives the real app under headless Chromium and gates the things a
