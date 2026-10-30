@@ -148,6 +148,83 @@ Each is cached to an offscreen and rebuilt only when its inputs change.
   default plane; a `#` key moves only its own plane. Works for granite layers too. *(≈1427)*
 - `hexRGB(h)` — parse `#rgb`/`#rrggbb` to `[r,g,b]`. *(2366)*
 
+## Wood — a log, and a plane put through it
+
+Material path 2. A three-dimensional growth-ring field about a wandering pith, and **nothing stores a
+board**: a board is a plane handed to that field, and the face is the field's level set on the plane.
+So the cut is not a setting the figure is derived from — it is where the plane stands, and
+
+```
+cos(theta) = plane / r        plane = the plane's distance from the axis
+                              r     = the radius from the pith at that point
+```
+
+decides everything. `r = plane` is tangent and opens into plainsawn cathedrals; `r ≈ 1.41 plane` is
+rift; `r >> plane` meets the face square and comes out quartersawn. **One log yields every cut**, and
+a wide board drifts in character across its own width because `r` does — that drift is the behaviour,
+not a tolerance. The shader's own half of this is in [`wood-gpu.md`](wood-gpu.md); what follows is the
+CPU painter and the field under both.
+
+- `woodField(cfg)` — **the log.** Ring profile and pith wander sampled into lookups. Memoised on the
+  *function* so the copy serialised into the worker carries the memo with it, and keyed on the whole
+  settings object rather than a hand-kept list of the fields that happen to matter today — a list is a
+  slider that silently does nothing the first time someone forgets to add one. A ring of **four** slots
+  rather than one, because a graft needs the trunk's field and the scion's in the same pixel loop and a
+  single slot would have them evict each other every sample. *(6613)*
+- `woodSampler()` — **one sampler, two queries.** Everything that turns a point in the log into a
+  colour: the field, its scales, the five palette entries resolved out of `COL` at draw time, and the
+  graft. Built once per paint — the closure costs one allocation and saves re-resolving tokens and
+  feature tables per pixel. The two views below differ *only* in how a pixel becomes a point. Returns
+  `shade(ddx, ddy, zi, zp, fu, fv, out)`, which fills `out` and returns false beyond the bark. *(6993)*
+- `woodRect()` — the slab rectangle in **device** pixels, rounded *inward* to pixel centres.
+  `putImageData` replaces alpha as well as colour, so a box one pixel wider than the slab would punch a
+  transparent hairline through the lit ground the caller drew underneath — an erase, not a miss. Null
+  means a tile the slab does not touch. Despite the name it reads only the canvas and the transform, so
+  it is material-agnostic, and the GPU face blit uses it to bound **every** material. *(7345)*
+- `paintWoodContent(ident, angleView)` — **the board.** Inverts the canvas transform once per row and
+  adds one step per pixel, so the slab coordinate stays exact rather than being rebuilt from a scale.
+  Clamps at the field's edge and never skips: skipping would leave alpha at 0, and that erases. Writes
+  through `putImageData` in ~2 Mpx bands, which ignores the transform — the face is already resolved in
+  slab space and must not be resampled on the way down. Returns early for the ident pass and under
+  black light, because wood has no items and no fluorescent minerals and painting a flat brown into
+  either would be a lie that looks like data. *(8542)*
+- `paintWoodLog()` — **the same field, cut at z = const instead of x = const.** Not a diagram of the
+  log: an actual section through it, with every feature the board shows, because it is the same
+  sampler. Sets the face normal to `(0, 0, 1)` — end grain, every fibre perpendicular, no figure — and
+  paints `STONE_BG` beyond the bark so the section reads as an object. *(8597)*
+- `logGeom(F)` — slab units per log unit for that section, with the log filling `LOG_FIT` of the slab's
+  height, plus the z slice it is cut at. *(8593)*
+- `drawLogGuides(F, G)` — **the saw, on the section**, so where a plank comes from is something you
+  look at rather than something you work out. The plane is carried as a point and a direction so the
+  guides rotate with the cut instead of assuming it is vertical, and the chord is drawn only where the
+  plane meets the log. Line width comes from the transform rather than the live zoom: right at any
+  export size, and it exists off the main thread. *(8625)*
+- `woodEye(th, zp, cell, wFt, rad)` — how deep into a bird's-eye this point sits, 0 outside. A jittered
+  grid over (theta, z), checking the containing cell and its eight neighbours because an eye near a
+  boundary reaches across it. The angular offset is turned into an **arc length** before the distance
+  test, which is what makes the eye round rather than smeared. A **cone**, not a bump: constant slope
+  from centre to rim, so the ring boundaries it bends come out evenly spaced — the little contour map
+  that reads as an eye. *(6941)*
+- `woodStain(th, rad, zp, inv, thr)` — how stained this point is. A smooth field over the
+  cross-section, **thresholded**, so coverage is one declared number rather than the product of three
+  chances that can collapse to zero. The streaks run *up* because the field's z frequency is a
+  fiftieth of its cross-section frequency: nearly constant along z means a patch in the section
+  extrudes into a slowly drifting column, which is how a vessel runs — and it crosses the rings
+  instead of following them. *(6977)*
+- `woodHash(a, b)` — keyed to quantised **slab** position rather than to pixel or tile index, so two
+  tiles that cover the same wood agree about it. *(6985)*
+- `woodAtan2(y, x)` — a polynomial `atan2`, because the eye and stain fields want an angle per pixel
+  and a master tile is tens of megapixels. *(6928)*
+- `packWood(F, extra)` — the field, the sampler's constants, the palette and the graft into **one
+  arena and one uniform** for the shader. Refuses two things rather than shipping them: a declared
+  field that nothing supplies — the struct names it, the shader reads it, and it would be quietly zero
+  for the life of the port — and more features than the shader's scratch array holds, which the CPU
+  painter has no limit on. *(16201)*
+- `woodSource(GW)` — assembles wood's WGSL. **Assembled, not concatenated**: it borrows `woodAtan2`,
+  `woodHash` and `fbm2` from the glass blocks rather than keeping unverified copies of each, and closes
+  over the call sites rather than listing them, because `fbm2` calls `vnoise` and `vnoise` calls `nz`
+  and neither name appears anywhere in wood's own text. *(16827)*
+
 ## Glass — a lay-up, then a forming process
 
 Material path 3. Two fields, and the order between them is the whole model: the ribbons are laid
