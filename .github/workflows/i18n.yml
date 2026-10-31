@@ -69,6 +69,10 @@ jobs:
         run: node tools/check-fmt-vocab.mjs
       - name: ...and that gate can go red, without tripping on a comment
         run: node tools/check-fmt-vocab.mjs --ablate
+      - name: A routed element inline text says what its dictionary entry says
+        run: node tools/check-i18n-fallback.mjs
+      - name: ...and that gate can go red, without tripping on a decoded entity
+        run: node tools/check-i18n-fallback.mjs --ablate
       - name: PNG metadata
         run: node tools/check-png-meta.mjs
       - name: A master's own record is found however far back it sits
