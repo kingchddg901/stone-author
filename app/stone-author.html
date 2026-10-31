@@ -1856,7 +1856,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.30.252';
+  const BUILD = '2026.10.31.253';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5018,8 +5018,37 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     ax.setTransform(1, 0, 0, 1, 0, 0); ax.globalAlpha = 1; ax.filter = 'none';
     ax.globalCompositeOperation = 'source-over'; ax.clearRect(0, 0, fw, fh);
     ax.drawImage(P, 0, 0);
-    ax.globalCompositeOperation = 'difference';
-    blurDraw(ax, P, (2 + 3 * ss) * bsF, fw, fh);               // |P - blur_wide(P)|
+    // THE BLURRED COPY IS MADE OPAQUE BEFORE THE DIFFERENCE, and this is not tidiness.
+    //
+    // A canvas blur pulls in whatever is outside the source, and outside is TRANSPARENT - so the
+    // blurred copy's alpha falls off over 4*sigma at every border. Measured on a flat opaque grey at
+    // sigma 20: alpha reads 130 at the edge, 155 at 5px, 216 at 20px and only reaches 255 at 80px.
+    // The RGB is fine - getImageData un-premultiplies, so it is already the correct average of the
+    // samples that EXIST, which is the right treatment at a boundary.
+    //
+    // But `difference` is a COMPOSITE, and with an opaque backdrop it resolves to
+    //     a*|P - blur| + (1 - a)*P
+    // so a short alpha mixes P back in. At the extreme edge a is about 0.51, and P's mean is ~65
+    // against the envelope's ~5, so the envelope is inflated by up to ~32 levels in a band 4*sigma
+    // deep. At the 4,096 prelude that band is ~131px - 3.2% of the width - which upsamples to ~2,096px
+    // at 65,535, almost exactly one 2048 tile. That is what the column profile found: every edge tile
+    // leaning positive (+0.87 to +2.25) while the interior sat at +0.204.
+    //
+    // Forcing alpha to 255 keeps the renormalised RGB and makes the composite exactly |P - blur|.
+    // The tile path has no such problem: renderOneTile fills its whole canvas with ground and paints
+    // content across it, so a tile's blur reads real painted pixels out to its own bleed.
+    {
+      const Wd = newSurface(fw, fh), wx = Wd.getContext('2d');
+      wx.setTransform(1, 0, 0, 1, 0, 0); wx.globalAlpha = 1; wx.filter = 'none';
+      wx.globalCompositeOperation = 'source-over'; wx.clearRect(0, 0, fw, fh);
+      blurDraw(wx, P, (2 + 3 * ss) * bsF, fw, fh);
+      const id = wx.getImageData(0, 0, fw, fh), d4 = id.data;
+      for (let i = 3; i < d4.length; i += 4) d4[i] = 255;
+      wx.putImageData(id, 0, 0);
+      ax.globalCompositeOperation = 'difference';
+      ax.drawImage(Wd, 0, 0);                                  // |P - blur_wide(P)|, exactly
+      Wd.width = 1; Wd.height = 1;
+    }
     ax.filter = 'none'; ax.globalCompositeOperation = 'multiply';
     ax.fillStyle = COL.innerColour || '#ffcf8f'; ax.fillRect(0, 0, fw, fh);
     ax.globalCompositeOperation = 'source-over';
@@ -5032,6 +5061,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     bxc.globalCompositeOperation = 'source-over'; bxc.clearRect(0, 0, fw, fh);
     blurDraw(bxc, A, (1 + 2 * ss) * bsF, fw, fh);
     // 4. DOWN TO THE STORE, by box average in Float64 rather than by drawImage. Two reasons, and the
+    //    AND THE NARROW BLUR NEEDS NO SUCH REPAIR, which is worth saying because the asymmetry looks
+    //    like an oversight. Its result is READ with getImageData rather than composited, and
+    //    getImageData un-premultiplies - so the RGB it hands back is already the renormalised average
+    //    of the samples that exist. Only a COMPOSITE is hurt by a short alpha, and only the wide blur
+    //    is composited.
     //    second is the one that matters: a canvas downscale is the browser's filter and varies between
     //    engines, where this is arithmetic; and averaging 8-bit samples in floating point RECOVERS
     //    precision the 8-bit blurred canvas lost. At 4,096 -> 512 that is 64 samples a cell, so the

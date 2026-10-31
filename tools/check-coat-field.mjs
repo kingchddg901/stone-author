@@ -171,6 +171,27 @@ const CHECKS = {
     return null;
   },
 
+  'prelude-blur-is-opaque-before-the-difference': app => {
+    // MEASURED 2026-10-31. A canvas blur pulls transparency in from outside its source, so the blurred
+    // copy's alpha falls off over 4*sigma at every border - 130 at the edge for sigma 20, reaching 255
+    // only at 80px. `difference` is a composite, and over an opaque backdrop it resolves to
+    // a*|P - blur| + (1 - a)*P, so a short alpha mixes the PICTURE back into the envelope. P's mean is
+    // ~65 against the envelope's ~5, so the inflation reached ~32 levels in a band one tile deep after
+    // upsampling: every edge tile of a 65,535 render leaned +0.87 to +2.25 while the interior sat at
+    // +0.204. Forcing alpha to 255 keeps the renormalised RGB and makes the composite exactly the
+    // difference. The narrow blur needs none of this - it is READ with getImageData, never composited.
+    const b = body(app, 'async function buildCoatField');
+    if (!b) return 'buildCoatField is not in the app';
+    if (/blurDraw\(ax,/.test(b)) {
+      return 'the wide blur is drawn straight into the difference context, so its short alpha mixes P ' +
+             'back into the envelope at every picture border';
+    }
+    if (!/d4\[i\] = 255/.test(b)) return 'the blurred copy is never forced opaque, so the difference composites a*|P-blur| + (1-a)*P at the edges';
+    if (!/globalCompositeOperation = 'difference'/.test(b)) return 'the prelude no longer takes a difference at all';
+    if (!/ax\.drawImage\(Wd, 0, 0\)/.test(b)) return 'the difference does not draw the opaque blurred copy';
+    return null;
+  },
+
   'prelude-width-is-the-measured-floor': app => {
     // 2,048 was MEASURED insufficient: the busiest region's envelope climbs 24% from 2,048 to 16,384,
     // well above a 10.54% floor, while 4,096 -> 32,768 holds to 1.4%. A default below 4,096 ships a
@@ -323,6 +344,10 @@ const ABLATIONS = [
    a => a.replace('finally { coatFieldBuilding = false; }', '').replace('try { P = renderSlabTo', 'P = renderSlabTo')],
   ['the field loses its tint', 'prelude-flag-is-paired',
    a => a.replace("ax.fillStyle = COL.innerColour || '#ffcf8f';", "ax.fillStyle = '#ffffff';")],
+  ['the blurred copy is left translucent', 'prelude-blur-is-opaque-before-the-difference',
+   a => a.replace('for (let i = 3; i < d4.length; i += 4) d4[i] = 255;', '')],
+  ['the wide blur goes straight into the difference', 'prelude-blur-is-opaque-before-the-difference',
+   a => a.replace('ax.drawImage(Wd, 0, 0);', 'blurDraw(ax, P, (2 + 3 * ss) * bsF, fw, fh);')],
   ['the prelude drops below the measured floor', 'prelude-width-is-the-measured-floor',
    a => a.replace('(v | 0) : 4096;', '(v | 0) : 2048;')],
   // the four shapes the painter match can break in, one ablation each

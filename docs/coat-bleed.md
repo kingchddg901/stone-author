@@ -343,6 +343,61 @@ cells and the default stores 512, which resolves the field's own smoothness (0.5
 at 512, only 1.28 at 256). Storing finer than the validation carries more of the true field and cannot
 add error, but the agreement of that finer content is untested.
 
+### The border band, and the one the control still has
+
+Added 2026-10-31, after a column profile of a 65,535 A/B found every edge tile leaning positive
+(+0.87 to +2.25) while the interior sat flat.
+
+A canvas blur pulls in whatever lies outside its source, and outside is **transparent**. Measured on a
+flat opaque grey at sigma 20, the blurred copy's alpha reads 130 at the edge, 155 at 5 px, 216 at 20 px
+and reaches 255 only at 80 px — a band of **4 sigma**. The RGB is fine, because `getImageData`
+un-premultiplies and hands back the correct average of the samples that exist. But `difference` is a
+*composite*, and over an opaque backdrop it resolves to
+
+```
+a * |P - blur|  +  (1 - a) * P
+```
+
+so a short alpha mixes the **picture itself** back into the envelope. P's mean is ~65 against the
+envelope's ~5, so the inflation reaches ~32 levels at the very edge. At the 4,096 prelude the band is
+~131 px — 3.2% of the width — which upsamples to ~2,096 px at 65,535, almost exactly one 2048 tile.
+That is why whole edge tiles lit up and nothing inside them did.
+
+Forcing the blurred copy's alpha to 255 before the difference keeps the renormalised RGB and makes the
+composite exactly `|P - blur|`. On a flat region, where the true answer is zero at every depth:
+
+| depth from border | 0 | 2 | 5 | 10 | 20 | 40 | 80 |
+|---|---|---|---|---|---|---|---|
+| before | 34 | 32 | 29 | 24 | 15 | 6 | 3 |
+| after | 1 | 1 | 1 | 1 | 1 | 0 | 0 |
+
+The residual 1 is un-premultiply rounding and does not decay; it is the floor of the method. On a
+*textured* interior the change is **exactly zero** — which is the shape the first test skipped, and
+checking only the flat case is what made an interior figure look like it had moved when it had not.
+
+**The narrow blur needs none of this**, and the asymmetry is not an oversight: its result is read with
+`getImageData` rather than composited, so it already gets the renormalised average. Only a composite
+is hurt by a short alpha, and only the wide blur is composited.
+
+### What this exposed in the per-tile path
+
+Measured over 540 interior tiles with the border excluded on **both** axes — excluding on one axis and
+averaging over the other is what made an earlier reading of this wrong:
+
+| pair | whole picture | border ring (100 tiles) | true interior (540) |
+|---|---|---|---|
+| control → field, before | +0.2461 | +1.4186 | **+0.0290** |
+| control → field, after | −0.4692 | −3.0542 | **+0.0096** |
+
+The interior agrees to **0.015% of mean**. The ring now reads −3.05, and that is the **control's** own
+border artifact, not the field's: an edge tile is a 5202 px canvas with 1577 px of bleed, its blur's
+artifact band is 4 sigma = 2096 px from the *canvas* edge, so it reaches 2096 − 1577 = **519 px into
+the picture** — a quarter of an edge tile. The field no longer has one at all, so the difference is the
+per-tile path being wrong there.
+
+Left alone deliberately. Matching would mean reproducing a defect; repairing the per-tile path would
+move every master ever rendered, which is the same trade the 2026-10-29 ruling weighed and declined.
+
 ## Reachable from
 
 - [`capabilities.md`](capabilities.md) — the draw order and the control list.
