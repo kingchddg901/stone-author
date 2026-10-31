@@ -406,7 +406,7 @@
  "lay.spec-tint": "Teinte métallique",
  "tool.roller": "Rouleau",
  "toolhint.roller": "Passez le rouleau sur la dalle. Il presse sa matrice dans le verre au fur et à mesure — C = πD, son tour est donc la répétition, et une pièce plus courte que cela ne voit jamais un tour complet. Courbez la passe et le motif se courbe avec elle. Avec la pression active, la force avec laquelle vous appuyez fixe la profondeur de la morsure ; avec l'inclinaison active, pencher en travers de la passe abaisse ce bout de la face.",
- "sl.rollD": "Rouleau en largeur",
+ "sl.rollD": "Diamètre du rouleau",
  "sl.rollFace": "Face du rouleau",
  "sl.rollStampN": "Empreintes tout autour",
  "sl.rollStampSize": "Empreinte en largeur",

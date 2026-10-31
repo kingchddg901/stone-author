@@ -406,7 +406,7 @@
  "lay.spec-tint": "Tinte metálico",
  "tool.roller": "Rodillo",
  "toolhint.roller": "Pase el rodillo por la tabla. Va prensando su matriz en el vidrio a su paso — C = πD, así que su vuelta es la repetición, y una pieza más corta que eso nunca ve una vuelta completa. Curve la pasada y el patrón se curva con ella. Con la presión activa, la fuerza con que aprieta fija lo hondo que muerde; con la inclinación activa, ladearse a través de la pasada baja ese extremo de la cara.",
- "sl.rollD": "Rodillo a lo ancho",
+ "sl.rollD": "Diámetro del rodillo",
  "sl.rollFace": "Cara del rodillo",
  "sl.rollStampN": "Sellos alrededor",
  "sl.rollStampSize": "Sello a lo ancho",
