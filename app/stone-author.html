@@ -337,7 +337,7 @@
     <div class="sl"><label for="moonStrength"><span data-i18n="sl.moonStrength">Pull</span> <output id="moonStrengthV"></output></label><input id="moonStrength" type="range" min="0.2" max="3" step="0.05"></div>
   </div>
   <div class="sliders" data-mat-only="glass" id="s-roller" hidden>
-    <div class="sl"><label for="rollD"><span data-i18n="sl.rollD">Roller across</span> <output id="rollDV"></output></label><input id="rollD" type="range" min="1" max="24" step="0.25"></div>
+    <div class="sl"><label for="rollD"><span data-i18n="sl.rollD">Roller diameter</span> <output id="rollDV"></output></label><input id="rollD" type="range" min="1" max="24" step="0.25"></div>
     <div class="sl"><label for="rollFace"><span data-i18n="sl.rollFace">Roller face</span> <output id="rollFaceV"></output></label><input id="rollFace" type="range" min="0.2" max="8" step="0.05"></div>
     <div class="sl"><label for="rollStampN"><span data-i18n="sl.rollStampN">Stamps round it</span> <output id="rollStampNV"></output></label><input id="rollStampN" type="range" min="0" max="48" step="1"></div>
     <div class="sl"><label for="rollStampSize"><span data-i18n="sl.rollStampSize">Stamp across</span> <output id="rollStampSizeV"></output></label><input id="rollStampSize" type="range" min="0.1" max="4" step="0.05"></div>
@@ -595,8 +595,8 @@
       <div class="sl"><label for="wood-plane"><span data-i18n="sl.wood-plane">Cut</span> <output id="wood-planeV"></output></label><input id="wood-plane" type="range" min="-1.3" max="1.3" step="0.01"></div>
       <div class="sl"><label for="wood-y0"><span data-i18n="sl.wood-y0">Board position</span> <output id="wood-y0V"></output></label><input id="wood-y0" type="range" min="-1.3" max="1.3" step="0.01"></div>
       <div class="sl"><label for="wood-glaze"><span data-i18n="sl.wood-glaze">Glaze</span> <output id="wood-glazeV"></output></label><input id="wood-glaze" type="range" min="0" max="1" step="0.02"></div>
-      <div class="sl"><label for="wood-wid"><span data-i18n="sl.wood-wid">Plank width</span> <output id="wood-widV"></output></label><input id="wood-wid" type="range" min="0.05" max="5" step="0.01"></div>
-      <div class="sl"><label for="wood-len"><span data-i18n="sl.wood-len">Plank length</span> <output id="wood-lenV"></output></label><input id="wood-len" type="range" min="0.2" max="8" step="0.05"></div>
+      <div class="sl"><label for="wood-wid"><span data-i18n="sl.wood-wid">Board width</span> <output id="wood-widV"></output></label><input id="wood-wid" type="range" min="0.05" max="5" step="0.01"></div>
+      <div class="sl"><label for="wood-len"><span data-i18n="sl.wood-len">Board length</span> <output id="wood-lenV"></output></label><input id="wood-len" type="range" min="0.2" max="8" step="0.05"></div>
       <div class="sl" style="grid-column:1/-1"><span class="lbl" data-i18n="lbl.board-inches">Board, inches</span>
         <input id="board-len-in" type="number" min="1" max="2400" step="0.01" style="width:5.5em" data-i18n-attr="aria-label=a11y.board-len-in" aria-label="Board length in inches">
         <span class="lbl" style="opacity:0.6">&times;</span>
@@ -647,7 +647,7 @@
       <div class="sl"><label for="wood-curl"><span data-i18n="sl.wood-curl">Curl</span> <output id="wood-curlV"></output></label><input id="wood-curl" type="range" min="0" max="30" step="0.5"></div>
       <div class="sl"><label for="wood-curlRate"><span data-i18n="sl.wood-curlRate">Curl rate</span> <output id="wood-curlRateV"></output></label><input id="wood-curlRate" type="range" min="0" max="120" step="0.5"></div>
       <div class="sl"><label for="wood-mineral"><span data-i18n="sl.wood-mineral">Mineral stain</span> <output id="wood-mineralV"></output></label><input id="wood-mineral" type="range" min="0" max="1" step="0.01"></div>
-      <div class="sl"><label for="wood-mineralSize"><span data-i18n="sl.wood-mineralSize">Streak width</span> <output id="wood-mineralSizeV"></output></label><input id="wood-mineralSize" type="range" min="0" max="1" step="0.01"></div>
+      <div class="sl"><label for="wood-mineralSize"><span data-i18n="sl.wood-mineralSize">Stain spread</span> <output id="wood-mineralSizeV"></output></label><input id="wood-mineralSize" type="range" min="0" max="1" step="0.01"></div>
       <div class="sl"><label for="wood-mineralSpacing"><span data-i18n="sl.wood-mineralSpacing">Streak spacing</span> <output id="wood-mineralSpacingV"></output></label><input id="wood-mineralSpacing" type="range" min="0.3" max="12" step="0.1"></div>
     </div></details>
     <details class="sec"><summary data-i18n="sec.wood-eyes">Bird's eye</summary><div class="body">
@@ -1887,7 +1887,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.262';
+  const BUILD = '2026.10.31.263';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
