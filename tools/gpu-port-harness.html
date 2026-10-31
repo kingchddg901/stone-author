@@ -200,7 +200,10 @@ ${call}
 }
 
 // ---- the cases ---------------------------------------------------------------------------------
-// Each says what it needs, what it expects, and how close counts as right. `kind` is the whole point:
+// Each says what it needs, what it expects, and how close counts as right.
+// A `call` MAY NOT DECLARE `g`: runWgsl names main's global_invocation_id parameter g, so a
+// `let g = ...` is a redeclaration and the row reads DID NOT COMPILE. All three relief rows
+// below were written that way first. `kind` is the whole point:
 // an integer port that is 1e-7 off is BROKEN, and a float port that is bit-identical is luck.
 const N = 2048;
 function cases(app) {
@@ -389,6 +392,135 @@ function cases(app) {
         for (let i = 0; i < N; i++) o[2 * i] = app.glassFormT(a[4 * i], a[4 * i + 1], F, [a[4 * i + 2], a[4 * i + 3]]);
         return o; } },
 
+    // ---- THE RELIEF GRADIENT: the three functions a relieved sheet's slope is made of ------------
+    //
+    // THESE JOINED THE SHADER WITHOUT A ROW HERE, which is the one thing the paragraph at the top of
+    // this page says must not happen. They were checked instead by running glassFormTG against
+    // glassFormT - BOTH ON THE GPU - and a pair like that cannot see a mistake made identically in
+    // both, which is most of the mistakes a port can make. ch0 of all three is arithmetic the app
+    // already shipped and is held to the ordinary gate; ch1 and ch2 are the two partials, which are
+    // the new work and the reason these rows exist.
+
+    { name: 'vnoiseG', kind: 'f32', needs: ['nz', 'vnoiseG'], outs: 3,
+      // NO GATE OF ITS OWN: 2.0e-7 across all three channels, inside the ordinary 2e-6. One
+      // octave at a coordinate near 6 is the cheap end of what the two rows below do.
+      // NEGATIVE COORDINATES, AND tx ACROSS THE WHOLE CELL. The derivative factor is 6*tx*(1-tx),
+      // zero at both ends of a cell and largest in the middle, and tx is x - floor(x) - so a port
+      // that truncates instead of flooring agrees everywhere x > 0 and is wrong on half a slab.
+      // Stepping 0.0417 against a unit cell puts samples at 313 different offsets inside it.
+      call: '  let gr = vnoiseG(IN[i * 2], IN[i * 2 + 1], 71);\n'
+          + '  OUT[i * 3] = gr.x; OUT[i * 3 + 1] = gr.y; OUT[i * 3 + 2] = gr.z;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround(((i % 313) - 156) * 0.0417);
+          a[2 * i + 1] = Math.fround((((i * 19) % 271) - 135) * 0.0353); } return a; },
+      cpu: a => { const o = new Float64Array(N * 3), t = [0, 0, 0];
+        for (let i = 0; i < N; i++) { app.vnoiseG(a[2 * i], a[2 * i + 1], 71, t);
+          o[3 * i] = t[0]; o[3 * i + 1] = t[1]; o[3 * i + 2] = t[2]; } return o; } },
+
+    { name: 'fbm2G', kind: 'f32', needs: ['nz', 'vnoiseG', 'fbm2G'], outs: 3,
+      // THE SLOPES GET THEIR OWN GATE AND THE VALUE DOES NOT. ch0 is held to the ordinary 2e-6 and
+      // measures 4.2e-7, because it is arithmetic the app already shipped. ch1 and ch2 measure
+      // 3.1e-6 and 3.9e-6, and the reason is the top octave: its partial is sampled at 4.3x the
+      // coordinate AND multiplied by 4.3 again by the chain rule, so an f32 coordinate near 29
+      // carries an ulp of 1.9e-6 into a factor of ~2.6. 8e-6 is twice the measured worst, and it
+      // bites: delete that second 4.3 and ch1 reads 4.3e-1 while ch0 and ch2 do not move.
+      channelKinds: ['f32', 'custom', 'custom'], gate: 8e-6,
+      gateWhy: 'value within 2e-6; the slopes 8e-6, the top octave on an f32 coordinate',
+      // THE CHAIN RULE IS THE CLAIM. Each octave's slope carries its own frequency - 2.1 and 4.3 -
+      // because the argument underneath it is scaled. Drop one of those factors and the VALUE stays
+      // bit-identical while the gradient is wrong by a third, so ch0 agreeing here proves nothing
+      // whatever about ch1 and ch2. All three are read for that reason.
+      call: '  let gr = fbm2G(IN[i * 2], IN[i * 2 + 1], 71);\n'
+          + '  OUT[i * 3] = gr.x; OUT[i * 3 + 1] = gr.y; OUT[i * 3 + 2] = gr.z;',
+      inputs: () => { const a = new Float32Array(N * 2);
+        for (let i = 0; i < N; i++) { a[2 * i] = Math.fround(((i % 311) - 155) * 0.0431);
+          a[2 * i + 1] = Math.fround((((i * 17) % 293) - 146) * 0.0367); } return a; },
+      cpu: a => { const o = new Float64Array(N * 3), t = [0, 0, 0];
+        for (let i = 0; i < N; i++) { app.fbm2G(a[2 * i], a[2 * i + 1], 71, t);
+          o[3 * i] = t[0]; o[3 * i + 1] = t[1]; o[3 * i + 2] = t[2]; } return o; } },
+
+    { name: 'glassFormTG', kind: 'f32', needs: ['env', 'nz', 'vnoiseG', 'fbm2G', 'glassFormTG'],
+      uni: () => envUni({ form: CURFORM }), arrays: allArrays, perForm: true, gpuTranscendental: true,
+      outs: 3,
+      // THE THICKNESS IS HELD TO THE ORDINARY TRANSCENDENTAL GATE AND CLEARS IT: 4.4e-5 against
+      // 5e-5, which is 0.011 of a colour level, and T feeds exp(-a*T) on colour and nothing else.
+      // THE TWO SLOPES DO NOT, AND THE REASON IS CONDITIONING RATHER THAN THE PORT:
+      //
+      //   measured   ch1 1.3e-2, ch2 9.7e-3 relative, 1.6e-2 absolute at worst
+      //   where      ALL FIVE ARMS, spun and rolled and the three that take neither - so it is the
+      //              RM noise branch they share, not the crown and not the fold
+      //   why        the noise coordinate here is c * RS with |c| out to 11 and RS 26, so ~294, and
+      //              the top octave reads 4.3x that: 1264, where an f32 ulp is 1.2e-4 against the
+      //              1.9e-6 the fbm2G row above sees at 29. Sixty-three times the coordinate error,
+      //              through a second derivative of order 6, amplified by T * k * RS = 36. That
+      //              lands at 7e-3 against a measured 1.4e-2 - within 2x, the rest being the second
+      //              coordinate a * RS * 0.06, the rotation through fv, and the GPU's own cos.
+      //   costs      sl = (gu*LX + gv*LY) * 0.05 with LX, LY a unit vector, so Cauchy-Schwarz caps
+      //              the pair at 2.3e-2 and sl moves by 1.1e-3. m adds REL * 0.55 * sl/(1+|sl|),
+      //              REL out to 3, and the derivative of that term is at most 1 - so m moves by
+      //              1.9e-3, which on a full-white channel is 0.48 of a level. Every term at its
+      //              own worst at once; where the slope is actually large |sl| is about 1.8 and the
+      //              term's derivative 0.13, so the realistic figure is nearer 0.06 of a level.
+      //
+      // 3e-2 IS TWICE THE MEASURED WORST, AND IT CAN STILL BITE. A dropped chain-rule
+      // factor is not a conditioning residual: it is a fixed FRACTION of the slope, so it survives
+      // at any coordinate magnitude. Ablated by deleting the top octave's 4.3 from fbm2G's x
+      // partial in tools/lib/glass-gpu.mjs: ch1 went to 9.6e+0 and ch2 to 9.2e+0 - the rotation
+      // reads g.y into both - while ch0 held at 4.4e-5 and the glassFormT and fbm2 rows above did
+      // not move at all. Four hundred times this gate, from one missing factor.
+      channelKinds: ['trig', 'custom', 'custom'], gate: 3e-2,
+      gateWhy: 'thickness within 5e-5; the two slopes 3e-2, conditioning, 0.48 of a level at worst',
+      call: TOUCH_ALL + '  let fv = vec2<f32>(IN[i * 4 + 2], IN[i * 4 + 3]);\n'
+          + '  let gr = glassFormTG(IN[i * 4], IN[i * 4 + 1], fv);\n'
+          + '  OUT[i * 3] = gr.x; OUT[i * 3 + 1] = gr.y; OUT[i * 3 + 2] = gr.z;',
+      // THREE BANDS, BECAUSE THE glassFormT ROW'S SWEEP IS BLIND TO TWO OF THEM AND SO WAS I.
+      //
+      //   r < 0.6   the pontil boss, which is where the slope is largest and the glassFormT row
+      //             barely goes. exp(-(r/(FR*0.07))^2) with FR 2.1 is down to 1.2e-4 by r = 0.44,
+      //             so the whole boss is a 0.44 ft disc and a sweep running r out to 11 lands
+      //             almost nothing in it. MEASURED, by flipping kb's sign in tools/lib: with this
+      //             band the row fails on 431 samples of 2048; with every sample forced onto the
+      //             broad band below it still fails, but on THREE - and three is the count the
+      //             harness itself prints "discrete, not rounding" against. Whether a stride drops
+      //             three samples inside a small disc is luck, so this band buys the catch a
+      //             factor of 140 and is the reason it comes first.
+      //   broad     the slab as the renderer sees it, |ox| and |oy| out to SLAB_FT, which crosses
+      //             r = FR so both arms of the crown taper run.
+      //   cusps     the rolled fold, whose derivative has to take a SIDE. frac(ox * FP) is held at
+      //             least 0.004 from 0, 0.5 and 1: the two sides disagree about ox * FP by around
+      //             1.4e-6 at this magnitude, so a sample nearer the cusp than that would read as
+      //             a port error when it is only f32 and f64 rounding onto opposite slopes.
+      //
+      // AND fv IS ZERO ON EVERY THIRD SAMPLE. It is the only way the second RM arm runs at all -
+      // the glassFormT row's fv is the cos and sin of an angle and never zero, so `else if (RM > 0)`
+      // is a whole branch of the function that has never been compared against anything.
+      inputs: () => { const a = new Float32Array(N * 4), FP = FV.FP;
+        for (let i = 0; i < N; i++) {
+          let ox, oy;
+          if (i < N / 3) {                          // the boss, and r = 0 exactly at i = 0
+            const th = i * 2.399963, rr = (i % 97) / 96 * 0.6;
+            ox = Math.fround(rr * Math.cos(th)); oy = Math.fround(rr * Math.sin(th));
+          } else if (i < 2 * N / 3) {               // the slab
+            ox = Math.fround(((i % 181) - 90) * 0.0884);
+            oy = Math.fround((((i * 7) % 167) - 83) * 0.0957);
+          } else {                                  // the fold cusps, approached from both sides
+            const fr = 0.004 + ((i * 37) % 123) / 123 * 0.492;
+            const u = ((i * 11) % 23) - 11 + (i % 2 ? fr + 0.5 : fr);
+            ox = Math.fround(u / FP);
+            oy = Math.fround((((i * 13) % 149) - 74) * 0.0531);
+          }
+          a[4 * i] = ox; a[4 * i + 1] = oy;
+          const flat = i % 3 === 2;                 // sends this sample down the second RM arm
+          a[4 * i + 2] = flat ? 0 : Math.fround(Math.cos(i * 0.013));
+          a[4 * i + 3] = flat ? 0 : Math.fround(Math.sin(i * 0.013));
+        } return a; },
+      cpu: (a, form) => { const o = new Float64Array(N * 3), t = [0, 0, 0];
+        const F = { TH: FV.TH, RM: FV.RM, RS: FV.RS, FR: FV.FR, FP: FV.FP, FD: FV.FD, form };
+        for (let i = 0; i < N; i++) {
+          app.glassFormTG(a[4 * i], a[4 * i + 1], F, [a[4 * i + 2], a[4 * i + 3]], t);
+          o[3 * i] = t[0]; o[3 * i + 1] = t[1]; o[3 * i + 2] = t[2];
+        } return o; } },
+
     { name: 'glassMelt', kind: 'f32', needs: ['env', 'woodHash', 'glassMelt'],
       uni: () => envUni({ form: CURFORM }), arrays: allArrays, perForm: true,
       // divides by cs * 0.32 = 0.0192 and squares, so f32 epsilon arrives about 2,700x larger. The
@@ -527,7 +659,8 @@ document.getElementById('run').onclick = async () => {
       'fbm2C', 'glassCellSDF', 'glassDepth', 'rollerAt', 'rollerHand', 'woodHash', 'glassFormT',
       'glassMelt', 'glassBlob', 'glassBlobDepth', 'rollStampAt', 'starR', 'glassLay',
       'compileOps', 'spinTable', 'glassUnform',
-      'fbm2', 'woodEye', 'woodStain']);
+      'fbm2', 'woodEye', 'woodStain',
+      'vnoiseG', 'fbm2G', 'glassFormTG']);
     if (!navigator.gpu) throw new Error('no WebGPU on this device');
     const ad = await navigator.gpu.requestAdapter();
     if (!ad) throw new Error('no adapter');
@@ -542,9 +675,16 @@ document.getElementById('run').onclick = async () => {
       // PER FORM, RESET EACH TIME. The first version carried `worst` across the whole loop, so one
       // computing arm marked every form as failing and the note read "spun! poured! blown!" when only
       // spun had anything to answer for.
-      let worst = 0, note = [], anyBad = false, overCount = 0; const chBad = [];
+      let worst = 0, note = [], anyBad = false, overCount = 0; const chTot = [], chW = [], chA = [];
       for (const form of forms) {
         let fWorst = 0;
+        // PER FORM, LIKE fWorst ABOVE, AND FOR THE SAME REASON. The reset note two lines up
+        // covered `worst` and stopped at the shoulder: this counter was declared OUTSIDE the
+        // loop, so one arm's bad channels carried into every arm after it. No row had both
+        // perForm and channelKinds, so nothing had ever read it twice - glassFormTG below is
+        // the first, and it would have reported five failing forms for one. chTot keeps the
+        // total the notes column prints; chBad decides THIS arm.
+        const chBad = [];
         const inp = c.inputs();
         const bodies = {};
         for (const n of c.needs) bodies[n] = WGSL[n];
@@ -563,6 +703,15 @@ document.getElementById('run').onclick = async () => {
           const d = ck === 'EXACT' ? (Math.fround(w) === g ? 0 : 1)
                   : Math.abs(w - g) / Math.max(1, Math.abs(w));
           if (d > GATE[ck]) chBad[i % (c.outs || 2)] = (chBad[i % (c.outs || 2)] || 0) + 1;
+          // PER CHANNEL, AND THE ABSOLUTE SIZE BESIDE THE GATE MEASURE. One worst for a 3-channel
+          // row cannot say whether the value or a slope is at fault, which is the only question
+          // worth asking of a gradient port - and the gate measure floors its denominator at 1, so
+          // above that it is relative and below it absolute. A residual is converted to colour
+          // levels from the ABSOLUTE figure, so both are kept.
+          const ch = i % (c.outs || 2);
+          if (d > (chW[ch] || 0)) chW[ch] = d;
+          const ab = Math.abs(w - g);
+          if (ab > (chA[ch] || 0)) chA[ch] = ab;
           if (d > fWorst) fWorst = d;
         }
         const fOk = c.channelKinds ? !chBad.some(v => v > 0) : fWorst <= GATE[kind];
@@ -574,6 +723,7 @@ document.getElementById('run').onclick = async () => {
             if (d > GATE[kind]) over++;
           }
           overCount = Math.max(overCount, over); }
+        chBad.forEach((v, n) => { chTot[n] = (chTot[n] || 0) + v; });
         if (!fOk) anyBad = true;
         if (fWorst > worst) worst = fWorst;
         if (form) note.push(form + ':' + (kind === 'f32' ? fWorst.toExponential(0) : fOk ? 'exact' : 'DIFFERS'));
@@ -592,10 +742,12 @@ document.getElementById('run').onclick = async () => {
         c.kind === 'EXACT' ? (worst ? 'DIFFERS' : 'identical') : worst.toExponential(1),
         c.gate ? c.gate.toExponential(0) : c.perForm ? 'per arm'
           : c.gpuTranscendental ? '5e-5' : c.kind === 'f32' ? '2e-6' : '0',
-        (c.channelKinds ? c.channelKinds.map((k, n) => 'ch' + n + ':' + k + (chBad[n] ? ' ' + chBad[n] + ' BAD' : ' ok')).join('  ') : '')
+        (c.channelKinds ? c.channelKinds.map((k, n) => 'ch' + n + ':' + k + (chTot[n] ? ' ' + chTot[n] + ' BAD' : ' ok')).join('  ') : '')
           + (note.length ? 'forms: ' + note.join(' ') : '')
           + (overCount ? '   ' + overCount + ' of ' + (N * (c.outs || 2)) + ' past the gate'
-              + (overCount < 8 ? ' — discrete, not rounding' : '') : '')], ok ? 'good' : 'bad');
+              + (overCount < 8 ? ' — discrete, not rounding' : '') : '')
+          + (c.outs ? '   by channel ' + chW.map((v, n) => 'ch' + n + ' ' + v.toExponential(1)
+              + ' (abs ' + (chA[n] || 0).toExponential(1) + ')').join(', ') : '')], ok ? 'good' : 'bad');
       log(c.name + ': worst ' + worst);
     }
 
@@ -607,7 +759,7 @@ document.getElementById('run').onclick = async () => {
     TB = null;
     const p = document.createElement('p');
     p.style.color = 'var(--dim)';
-    p.textContent = 'ALL 282 LINES. Eighteen rows, sixteen functions, every per-pixel path the '
+    p.textContent = 'ALL 282 LINES. Twenty-three rows, twenty functions, every per-pixel path the '
       + 'renderer takes. What is NOT yet ported is the plumbing rather than the arithmetic: op.B and '
       + 'op.S are a per-op roller grid and warp grid in the app, and here every press reads one '
       + 'synthetic roller and every stir one synthetic warp. Next is assembly — one shader, one '
