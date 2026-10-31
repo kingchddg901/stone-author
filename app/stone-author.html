@@ -1763,14 +1763,28 @@ window.SA_I18N = (() => {
     if (want !== LANG) await setLang(want);
   }
 
+  // A CATALOGUE ENTRY IS EITHER A NAME OR A RECORD. A plain string is a language whose translation has
+  // been read by somebody who speaks it; `{ name, draft }` is one that has not, and `draft` is the word
+  // for "draft" IN THAT LANGUAGE — "Deutsch (Entwurf)", "日本語 (下書き)", "Русский (черновик)". Tagging
+  // it in English would put the one warning that matters in the one language that reader did not choose.
+  // Promotion after a native review is deleting the `draft` word, and check-i18n refuses an entry that
+  // claims neither — so a pack cannot arrive quietly as though it had been reviewed.
+  const idxName  = l => { const v = INDEX[l]; return (typeof v === 'string' ? v : v && v.name) || l; };
+  const idxDraft = l => { const v = INDEX[l]; return (v && typeof v === 'object' && v.draft) || ''; };
+  const nameOf   = l => NAMES[l] || idxName(l);
+  // SORTED BY THE NAME, LABELLED WITH THE TAG. Sorting on the tagged string would file every draft
+  // under its own endonym's first letter anyway, but a language promoted later would jump the list
+  // for no reason a reader could see.
+  const labelOf  = l => { const d = idxDraft(l); return d ? nameOf(l) + ' (' + d + ')' : nameOf(l); };
+
   return { T, apply, register, load, setLang, onChange: f => listeners.add(f),
            get lang() { return LANG; },
            // loaded packs AND the ones we merely know exist — English first, the rest by their own name
            get languages() {
              const all = [...new Set([...Object.keys(PACKS), ...Object.keys(INDEX)])];
-             return all.sort((a, b) => a === 'en' ? -1 : b === 'en' ? 1 : (NAMES[a] || INDEX[a] || a).localeCompare(NAMES[b] || INDEX[b] || b));
+             return all.sort((a, b) => a === 'en' ? -1 : b === 'en' ? 1 : nameOf(a).localeCompare(nameOf(b)));
            },
-           nameOf: l => NAMES[l] || INDEX[l] || l, get missing() { return [...missing]; },
+           nameOf, labelOf, isDraft: l => !!idxDraft(l), get missing() { return [...missing]; },
            keys: () => Object.keys(PACKS.en), _init: () => { LANG = pick(); applyDir(); apply(); catalogue(); }, get isRTL() { return RTL.has(String(LANG).toLowerCase().split('-')[0]); } };
 })();
 SA_I18N._init();   // the studio markup above is already parsed, so this paints the first frame translated
@@ -1887,7 +1901,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.265';
+  const BUILD = '2026.10.31.266';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13981,7 +13995,7 @@ self.onmessage = async (e) => {
   { const sel = document.getElementById('lang');   // LANGUAGE: the list builds itself from the registered packs,
     const fill = () => {                           // so adding one never means touching this block
       sel.textContent = '';
-      for (const l of SA_I18N.languages) { const o = document.createElement('option'); o.value = l; o.textContent = SA_I18N.nameOf(l); sel.appendChild(o); }
+      for (const l of SA_I18N.languages) { const o = document.createElement('option'); o.value = l; o.textContent = SA_I18N.labelOf(l); sel.appendChild(o); }
       sel.value = SA_I18N.lang;
     };
     fill();

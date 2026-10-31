@@ -233,7 +233,29 @@ for (const file of packs) {
     for (const file of packs) {
       const lang = file.replace(/\.json$/, '');
       if (!(lang in idx)) fail.push(`i18n/${file} exists but _index.json does not list it — nothing can reach that pack`);
-      else if (!String(idx[lang]).trim()) fail.push(`_index.json gives "${lang}" no name, so the menu would show a blank row`);
+      else {
+        // AN ENTRY SAYS WHO WROTE IT, OR IT IS REFUSED. A plain string is a language somebody who
+        // speaks it has read; { name, draft } is one nobody has, and `draft` is the word for "draft"
+        // in that language, which the menu shows beside the endonym. Requiring one or the other is
+        // the point: a pack added without a word on either would be offered as though it had been
+        // reviewed, and nothing downstream could tell. `status: "stable"` is the deliberate claim
+        // that it has, and is how a language is promoted once a native reader has been through it.
+        //
+        // String(entry) WAS THE WHOLE TEST AND IT CANNOT SEE THIS. An object stringifies to
+        // "[object Object]" — truthy, not blank — so every shape below would have passed it.
+        const e = idx[lang];
+        const name = typeof e === 'string' ? e : (e && typeof e === 'object' ? e.name : undefined);
+        if (typeof name !== 'string' || !name.trim())
+          fail.push(`_index.json gives "${lang}" no name, so the menu would show a blank row`);
+        else if (e && typeof e === 'object') {
+          const draft = typeof e.draft === 'string' ? e.draft.trim() : '';
+          if (!draft && e.status !== 'stable')
+            fail.push(`_index.json offers "${lang}" with neither a "draft" word nor "status": "stable" — `
+              + 'an unreviewed pack would be listed as though a native reader had been through it');
+          if (draft && e.status === 'stable')
+            fail.push(`_index.json marks "${lang}" stable AND gives it a draft word — it is one or the other`);
+        }
+      }
     }
   }
 }
