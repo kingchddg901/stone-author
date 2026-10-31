@@ -1856,7 +1856,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.254';
+  const BUILD = '2026.10.31.255';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -1898,10 +1898,31 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // width, but that is reasoning and not a measurement, and this comment is not going to pretend
   // otherwise. The probes are in the session scratchpad, not the repo: they read masters that this
   // repo deliberately does not commit.
+  // DEFAULT ON since 2026-10-31, measured. ?field=0 opts out.
+  //
+  // AN UNRECOGNISED VALUE READS AS ABSENT, which for a default-on flag means ON - the same principle
+  // BOOST states for a default-off one. A typo gives the shipped picture, not a silently different
+  // one; only an explicit 0/off/false turns it off.
   const FIELD_ON = (() => {
     try { const v = (new URLSearchParams(location.search).get('field') || '').trim().toLowerCase();
-          return (v === '1' || v === 'on' || v === 'true'); }
-    catch (_) { return false; }
+          return !(v === '0' || v === 'off' || v === 'false'); }
+    catch (_) { return true; }
+  })();
+  // WHERE THE ROUTE STARTS PAYING, which is a DIFFERENT question from where the envelope has
+  // converged, and conflating the two is what made 4,096 silently inert for three rounds of renders.
+  //
+  // MEASURED on one slab at subsurface 2, tile 2048, field off against on:
+  //      8,192   1.0 s -> 1.4 s   0.71x   the field paints 71% of the pixels and loses
+  //     16,384   2.6 s -> 2.4 s   1.08x   break-even
+  //     32,768  26.4 s -> 6.1 s   4.3x
+  //     65,535   7.4 min -> 20.9 s  21.2x
+  // The speedup outruns the pixel ratio badly above 16,384 because the per-tile path's canvas grows
+  // with W and falls off a memory cliff - its own 16,384 -> 32,768 step is 10x for 4x the pixels -
+  // while the field's canvas stays at 2064px at every width. So 16,384 is the crossover and the
+  // default; below it the prelude costs more than the bleed saves.
+  const FIELD_MIN = (() => {
+    try { const v = +new URLSearchParams(location.search).get('fieldmin'); return v >= 0 ? (v | 0) : 16384; }
+    catch (_) { return 16384; }
   })();
   // The prelude's width, and the field's stored width. FIELD_W is the measured convergence floor above.
   // FIELD_PX is a knob rather than a constant for one reason: agreement was VALIDATED at W/256 cells,
@@ -5199,7 +5220,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (!(G.subsurface > 0)) return 'subsurface is 0';
     if (BOOST) return 'boost owns this stage';
     if (!layTiles && G.backlight > 0) return 'back light is whole-image';
-    if (!(bs * COAT_REF > FIELD_W)) return 'W ' + Math.round(bs * COAT_REF) + ' not above FIELD_W ' + FIELD_W;
+    // TWO CONDITIONS, TWO MEASUREMENTS, both required. FIELD_W is where the envelope has CONVERGED
+    // (2,048 measured insufficient at +24% over its last octave); FIELD_MIN is where the route starts
+    // PAYING. They are three octaves apart and they answer different questions - one constant doing
+    // both jobs is what made the flag inert at exactly the width it was being tested at.
+    const Wnow = Math.round(bs * COAT_REF);
+    if (!(Wnow > FIELD_W)) return 'W ' + Wnow + ' not above FIELD_W ' + FIELD_W;
+    if (!(Wnow > FIELD_MIN)) return 'W ' + Wnow + ' not above FIELD_MIN ' + FIELD_MIN;
     return null;
   }
   function coatFieldUsable(bs, uv) { return !coatFieldWhyNot(bs, uv); }
@@ -11328,7 +11355,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // on is pixel-identical to one without it and will still re-date. That direction is the safe
         // one: a hash that moves when the picture did not costs a re-render, and a hash that holds when
         // the picture moved is a false claim of determinism.
-        ...(FIELD_ON ? { field: FIELD_W + '/' + FIELD_PX } : {}),
+        // FIELD_MIN JOINS THE KEY because it decides WHICH renders take the field, and a render that
+        // took it is not the render that did not. Now that the flag is default-on this key is present
+        // on nearly every master, so every master written before 2026-10-31 re-dates once against a
+        // re-render - correct, because above FIELD_MIN the pixels genuinely differ, and the cost is
+        // that an unfinished job in the resume record from before the change cannot be resumed.
+        ...(FIELD_ON ? { field: FIELD_MIN + '/' + FIELD_W + '/' + FIELD_PX } : {}),
         // Glass the same way: unchanged when off, so no stone or wood master re-dates.
         ...(s.material === 'glass' ? { material: s.material, glass: s.glass } : {}),
       }))).toString(16);
@@ -14354,7 +14386,7 @@ self.onmessage = async (e) => {
     // coatField starts null and the init message fills it - a worker that is sent no field falls
     // through to the original branch, which is the right answer for every render that is not using one.
     return 'var BLEED_MARGIN=' + BLEED_MARGIN + ',glowSuppress=false;' + String.fromCharCode(10) +
-           'var FIELD_ON=' + FIELD_ON + ',FIELD_W=' + FIELD_W + ',FIELD_PX=' + FIELD_PX +
+           'var FIELD_ON=' + FIELD_ON + ',FIELD_W=' + FIELD_W + ',FIELD_MIN=' + FIELD_MIN + ',FIELD_PX=' + FIELD_PX +
            ',coatField=null,coatFieldBuilding=false;' + String.fromCharCode(10);
   }
   // WHAT THIS DEVICE HAS ACTUALLY DONE. canvasFits asks what the browser will grant at this instant.

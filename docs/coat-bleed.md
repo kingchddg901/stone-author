@@ -424,6 +424,46 @@ The shape worth carrying: **a predicate that authorises a saving must be answera
 takes the saving.** `coatFieldUsable` authorises dropping the bleed; only one of three callers was
 also arranging the thing that made it safe.
 
+### Default on, and two thresholds that are two different measurements
+
+Changed 2026-10-31. `?field=0` opts out; an unrecognised value reads as absent, which for a
+default-on flag means **on** — the same principle `BOOST` states for a default-off one, so a typo
+gives the shipped picture rather than a silently different one.
+
+The predicate now gates on **two** numbers, because they answer different questions and were being
+asked by one constant:
+
+| | value | what it measures |
+|---|---|---|
+| `FIELD_W` | 4,096 | where the **envelope has converged** — 2,048 insufficient at +24% over its last octave |
+| `FIELD_MIN` | 16,384 | where the **route starts paying** |
+
+Three octaves apart, and collapsing them is what made the flag silently inert at exactly 4,096 — the
+most natural width to test it at — for three rounds of renders. Both are reachable from the URL
+(`?fieldw=`, `?fieldmin=`) and the trail names whichever clause refused.
+
+`FIELD_MIN` comes from the ladder, one slab at subsurface 2, tile 2048, field off against on:
+
+| W | over-paint off | field paints | off | on | speed |
+|---|---|---|---|---|---|
+| 8,192 | 1.43× | 71% | 1.0 s | 1.4 s | **0.71×** |
+| 16,384 | 1.93× | 53% | 2.6 s | 2.4 s | **1.08×** |
+| 32,768 | 3.14× | 32% | 26.4 s | 6.1 s | **4.3×** |
+| 65,535 | 6.45× | 16% | 7.4 min | 20.9 s | **21.2×** |
+
+The speedup outruns the pixel ratio badly above 16,384, and that is the more important half of the
+result: the per-tile path's canvas grows with W and falls off a **memory cliff** — its own 16,384 →
+32,768 step is 10× for 4× the pixels, and 32,768 → 65,535 another 17× for 4× — while the field's
+canvas stays at 2064 px at every width. The field is not mainly winning by painting fewer pixels; it
+is winning by never leaving the regime where the machine hands out buffers smoothly.
+
+**One-time cost of defaulting on.** The signature carries `FIELD_MIN/FIELD_W/FIELD_PX` whenever the
+flag is set, so every master written before this re-dates once against a re-render. Above `FIELD_MIN`
+that is correct — the pixels genuinely differ. Below it the picture is identical and the hash still
+moves, which is the same deliberate over-sensitivity the key has always had: `inputs` does not carry
+the render width, so it cannot ask a question whose answer depends on W. The practical consequence is
+that an unfinished job in the resume record from before the change cannot be resumed.
+
 ## Reachable from
 
 - [`capabilities.md`](capabilities.md) — the draw order and the control list.

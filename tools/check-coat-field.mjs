@@ -70,9 +70,17 @@ const CHECKS = {
     // THE COMPARISON, not the name. `includes('FIELD_W')` passed an ablation that replaced the test
     // with `if (false)` while leaving FIELD_W in the reason string beside it - the SECOND time in this
     // one gate that a presence test stood in for a reachability test, after `includes('gpuPool(')`.
-    if (!/if \(!\(bs \* COAT_REF > FIELD_W\)\)/.test(w)) {
-      return 'coatFieldWhyNot does not GATE on bs * COAT_REF > FIELD_W (the name may be present, the ' +
-             'test is not), so a render at or below the prelude width would build a field for nothing';
+    // THE COMPARISONS, not the names. `includes('FIELD_W')` passed an ablation that replaced the test
+    // with `if (false)` while leaving FIELD_W in the reason string beside it - the SECOND time in this
+    // one gate that a presence test stood in for a reachability test, after `includes('gpuPool(')`.
+    if (!/if \(!\(Wnow > FIELD_W\)\)/.test(w)) {
+      return 'coatFieldWhyNot does not GATE on Wnow > FIELD_W (the name may be present, the test is ' +
+             'not), so a render below the measured convergence floor would build a field from an ' +
+             'envelope that has not settled';
+    }
+    if (!/if \(!\(Wnow > FIELD_MIN\)\)/.test(w)) {
+      return 'coatFieldWhyNot does not GATE on Wnow > FIELD_MIN, so the route would engage below the ' +
+             'crossover where it measurably LOSES - 0.71x at 8,192';
     }
     if (!w.includes('G.subsurface')) return 'coatFieldWhyNot does not check that there IS a subsurface';
     if (!w.includes('BOOST')) return 'coatFieldWhyNot does not stand aside for the boost, which already replaced this stage';
@@ -219,6 +227,32 @@ const CHECKS = {
     return null;
   },
 
+  'threshold-and-prelude-width-are-separate-measurements': app => {
+    // They answer different questions and they are three octaves apart. FIELD_W = 4,096 is where the
+    // envelope has CONVERGED (2,048 measured insufficient, +24% over its last octave). FIELD_MIN =
+    // 16,384 is where the route starts PAYING (measured 0.71x at 8,192, 1.08x at 16,384, 4.3x at
+    // 32,768, 21.2x at 65,535). One constant doing both jobs is what made the flag silently inert at
+    // exactly the width it was being tested at, for three rounds of renders.
+    const d = app.match(/get\('fieldmin'\)[\s\S]{0,160}?\?\s*\(v\s*\|\s*0\)\s*:\s*(\d+)/);
+    if (!d) return 'FIELD_MIN has no readable default';
+    if (+d[1] < 16384) return 'FIELD_MIN defaults to ' + d[1] + '; 8,192 measured 0.71x - a loss - and 16,384 is where it breaks even';
+    const w = app.match(/get\('fieldw'\)[\s\S]{0,160}?\?\s*\(v\s*\|\s*0\)\s*:\s*(\d+)/);
+    if (!w) return 'FIELD_W has no readable default';
+    if (+w[1] === +d[1]) return 'FIELD_W and FIELD_MIN are the same number again; they are different measurements and collapsing them is the original defect';
+    return null;
+  },
+
+  'flag-defaults-on-and-an-unrecognised-value-reads-as-absent': app => {
+    const b = body(app, 'const FIELD_ON') || app.slice(app.indexOf('const FIELD_ON'), app.indexOf('const FIELD_MIN'));
+    if (!b) return 'FIELD_ON is not in the app';
+    if (!/return !\(v === '0' \|\| v === 'off' \|\| v === 'false'\)/.test(b)) {
+      return 'FIELD_ON does not default on by rejecting only the explicit off values - an unrecognised ' +
+             'value must read as ABSENT, which for a default-on flag means ON';
+    }
+    if (!/catch \(_\) \{ return true; \}/.test(b)) return 'FIELD_ON falls back to OFF when the URL cannot be read, which is a different default by accident';
+    return null;
+  },
+
   'prelude-width-is-the-measured-floor': app => {
     // 2,048 was MEASURED insufficient: the busiest region's envelope climbs 24% from 2,048 to 16,384,
     // well above a 10.54% floor, while 4,096 -> 32,768 holds to 1.4%. A default below 4,096 ships a
@@ -347,7 +381,7 @@ const ABLATIONS = [
   ['the coat decides on its own', 'coat-asks-the-predicate',
    a => a.replace('&& coatField && vp && coatFieldUsable(bs, f.uvMode))', '&& coatField && vp)')],
   ['the predicate loses its width test', 'one-predicate-only',
-   a => a.replace("if (!(bs * COAT_REF > FIELD_W)) return 'W '", "if (false) return 'W '")],
+   a => a.replace("if (!(Wnow > FIELD_W)) return 'W '", "if (false) return 'W '")],
   ['the boolean stops deriving from the reasons', 'one-predicate-only',
    a => a.replace('function coatFieldUsable(bs, uv) { return !coatFieldWhyNot(bs, uv); }',
                   'function coatFieldUsable(bs, uv) { return FIELD_ON && G.subsurface > 0 && !BOOST && bs * COAT_REF > FIELD_W; }')],
@@ -385,6 +419,16 @@ const ABLATIONS = [
    a => a.replace('ax.drawImage(Wd, 0, 0);', 'blurDraw(ax, P, (2 + 3 * ss) * bsF, fw, fh);')],
   ['the prelude drops below the measured floor', 'prelude-width-is-the-measured-floor',
    a => a.replace('(v | 0) : 4096;', '(v | 0) : 2048;')],
+  ['the threshold drops below break-even', 'threshold-and-prelude-width-are-separate-measurements',
+   a => a.replace('(v | 0) : 16384;', '(v | 0) : 8192;')],
+  ['the two numbers collapse into one again', 'threshold-and-prelude-width-are-separate-measurements',
+   a => a.replace('(v | 0) : 16384;', '(v | 0) : 4096;')],
+  ['the width gate loses its FIELD_MIN test', 'one-predicate-only',
+   a => a.replace("if (!(Wnow > FIELD_MIN)) return 'W '", "if (false) return 'W '")],
+  ['the flag goes back to default-off', 'flag-defaults-on-and-an-unrecognised-value-reads-as-absent',
+   a => a.replace("return !(v === '0' || v === 'off' || v === 'false');", "return (v === '1' || v === 'on' || v === 'true');")],
+  ['the catch falls back to off', 'flag-defaults-on-and-an-unrecognised-value-reads-as-absent',
+   a => a.replace('catch (_) { return true; }', 'catch (_) { return false; }')],
   // the four shapes the painter match can break in, one ablation each
   ['the prelude decides its own painter', 'prelude-matches-the-render-painter',
    a => a.replace('async function buildCoatField(W, viaGpu) {', 'async function buildCoatField(W) {\n    const viaGpu = true;')],
@@ -408,7 +452,7 @@ const ABLATIONS = [
   ['the preamble forgets the flag', 'worker-can-resolve-the-field',
    a => a.replace("'var FIELD_ON=' + FIELD_ON + ',FIELD_W=' + FIELD_W", "'var FIELD_W=' + FIELD_W")],
   ['the signature stops moving', 'signature-moves-with-the-flag',
-   a => a.replace("...(FIELD_ON ? { field: FIELD_W + '/' + FIELD_PX } : {}),", '')],
+   a => a.replace("...(FIELD_ON ? { field: FIELD_MIN + '/' + FIELD_W + '/' + FIELD_PX } : {}),", '')],
   ['the field is left standing', 'field-is-cleared-after-a-render',
    a => a.replace('drewOnGpu = false; bloomOnGpu = false; backlitFor = null;', 'drewOnGpu = false; bloomOnGpu = false; backlitFor = null; /*x*/')
          .replace(/drewOnGpu = false; bloomOnGpu = false; backlitFor = null; \/\*x\*\/[\s\S]*?coatField = null; coatFieldBuilding = false;/,
