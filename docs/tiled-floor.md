@@ -59,12 +59,32 @@ Same slab, same tile, same 17 pieces:
 | --- | --- | --- |
 | floor tile | 6,318 ms | **701 ms** |
 | floor ÷ slab tile | 17.22× | **1.87×** |
-| painting share of a floor tile | 98.63% | **−3.17%** |
+| painting share of a floor tile | 98.63% | **96.2%** |
 
-**9.0×.** The painting share is the result worth reading: the ablation in
-`tools/make-probe-builds.mjs --only=ablate` can no longer find any painting to remove, and the small
-negative sits inside the 2–3% run-to-run spread. What remains in the 1.87 is the blits, the per-piece
-canvases and `applyCoat`.
+**9.0×**, and painting is still almost all of what is left — which is the opposite of what this
+document said when it was written.
+
+**CORRECTED 2026-10-31.** The first reading here was **−3.17%**, taken from
+`tools/make-probe-builds.mjs --only=ablate` and reported as "the ablation can no longer find any
+painting to remove". That was the instrument failing, not the work vanishing. The ablation caches one
+painted canvas and blits it for every call after, **keyed on canvas size** — and windowing gives every
+piece its own box. Counted on the key the tool actually uses: **19 calls, 18 distinct keys, one hit.**
+It ablated nothing, so the ablated arm was the full arm with a rounding error, and the negative sat
+inside the run-to-run spread exactly as a null does.
+
+Re-measured with the same bargain and a key that can hit — one cache, blitted *scaled* to whatever
+size the caller asks for, so byte volume survives in every piece and per-piece painting does not:
+
+```
+              full      ablated   painting share
+slab tile    370.1 ms     58.0 ms     84.3%     <- known cell; the repo's own ablation reads ~90%
+floor tile   730.8 ms     27.5 ms     96.2%
+```
+
+A **timer around `paintContent` is not an alternative** and was tried first: it reads 5.2% on that
+same slab tile, because stone paints by issuing canvas commands that the browser rasterises lazily,
+so the time spent inside the function is command submission and not the work. The known cell is what
+caught it — a probe that disagrees with a measured answer by 17× is the probe.
 
 ## It is not the same picture, and that was ruled
 
