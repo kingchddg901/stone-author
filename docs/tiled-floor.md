@@ -187,12 +187,83 @@ That zero is also the reason the claim is that narrow. An interior tile was meas
 at exactly 0.000, and a null that clean on a difference known to exist is a sample that could not
 contain it — the border had to be put in frame before the number meant anything.
 
+## And then one paint for the whole tile
+
+Windowing removed the redundancy but not the repetition: seventeen pieces still meant seventeen
+paints, and a floor tile still cost 1.87 slab tiles for the same pixels.
+
+Under `guide` it need not. `drawTilesTo` says so itself: *"Guide is the absent case on purpose: the
+piece a slot is handed is the one cut at that slot, the delta is zero"*. The only displacement is the
+grout spacing, so every piece's material is the slab's material a **bounded** distance away. Measured
+over every instance, as a share of render width:
+
+| | pieces | max shift | px @8192 | px @65535 |
+| --- | --- | --- | --- | --- |
+| guide, grout 1/32 | 139 | 0.106% | 9 | 70 |
+| guide, grout 1/4 | 139 | 0.846% | 70 | 555 |
+| guide, 6in tiles | 1048 | 0.297% | 25 | 195 |
+
+So the tile is painted **once** over a box grown by that much, and each piece is a blit of that one
+buffer at its own offset through its own clip. Shuffle and stack are not this: there the assembly
+plan adds a delta that can reach anywhere in the slab, and a graft or a cut section takes the piece
+off another board entirely.
+
+**The offset is rounded to a whole pixel**, and that is the one thing it changes about the picture. A
+fractional translate applied to vector drawing is exact; applied to a raster it RESAMPLES, and every
+piece would come back softened. Rounding keeps the material crisp and puts the floor's spacing out by
+under a pixel — sub-pixel on a 70 px spread at 65,535.
+
+**It is guarded on area, not on mode.** The margin grows with the grout and with the render while the
+tile does not, so the one-paint path is taken only while the grown box stays under `ONE_PAINT_MAX`
+(1.5×) of the tile. The per-piece walk costs about 2× a single paint of the same area — 730 ms
+against a slab tile's 370 — so the guard sits below where it stops paying rather than at it.
+
+### What it bought
+
+| | per-piece | one paint |
+| --- | --- | --- |
+| floor tile | 730.8 ms | **349.1 ms** |
+| floor ÷ slab tile | 1.87× | **0.96×** |
+| painting share | 96.2% | 97.45% |
+
+**A floor tile now costs what a slab tile costs.** Against where this started — 6,318 ms for the same
+tile — that is **18.1×**. The painting share staying high is the point, not a leftover: it is one
+paint now, and that paint is nearly all of it.
+
+### The picture, and how the guard was proved
+
+`harness/floor-window.mjs`, ten cells at 8,192, against the build before:
+
+| pattern, in order | mean | max | | shuffled |
+| --- | --- | --- | --- | --- |
+| hex | 4.765 | 175.7 | | IDENTICAL |
+| cairo | 7.031 | 178 | | IDENTICAL |
+| rhombus | 7.424 | 178 | | IDENTICAL |
+| subway | 8.246 | 177 | | IDENTICAL |
+| herringbone | 8.252 | 177 | | IDENTICAL |
+
+**Five differ, five are identical, and which five is the result.** Every shuffled cell comes back
+byte-identical because shuffle takes the per-piece path in both builds; every in-order cell differs
+because that is the path that changed. A single mean could not have shown that the branch fires
+exactly where it is supposed to and nowhere else.
+
+For scale, the engine gate accepts **7.919** between Blink and Gecko. Ruled 2026-10-31 on the worst
+512 px crop the data could find: *"i cant see a diff"*.
+
+The first attempt to show that crop was taken with `shuffle: true` and came back at mean 0.000 — a
+configuration that structurally could not contain the change, read as a clean result. That is twice
+in one session, and both times the zero was too clean to be believed.
+
 ## What this did NOT change
 
-**`exp.gpu.floor` still stands.** The windowing and the pool are both CPU work; a floor master still
-has no shader. It is now the last of the three, and worth proportionally less than it was, because
-the redundant painting it would have moved to a shader is gone and the remaining work is spread over
-twelve workers.
+**`exp.gpu.floor` still stands**, but it is no longer the same problem. A floor tile under `guide` is
+now ONE paint of one rectangle — the same shape `renderOneTile` hands the shader — and
+`renderFloorTile` takes the same `paint` parameter to receive it. Lifting the refusal is wiring
+rather than a shader feature. It is NOT done here because this machine reports `exp.gpu.noadapter`
+and cannot run, measure or verify a GPU path at all; that work belongs where the rest of this repo's
+GPU numbers were taken, in a real browser.
+
+Shuffle, stack, a graft and a cut section keep the per-piece walk, so they would keep the refusal.
 
 **A floor laid from sections still runs sequentially**, by the same argument the graft clause already
 made: a section is a whole slab record and nothing ships one. The refusal still reports

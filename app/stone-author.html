@@ -1926,7 +1926,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.269';
+  const BUILD = '2026.10.31.270';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5655,7 +5655,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
     const el = document.createElement('canvas'); el.width = w; el.height = h; return el;
   };
-  function renderFloorTile(W, tx0, ty0, tw, th, bleed) {
+  // `paint` REPLACES THE CONTENT STEP, exactly as it does in renderOneTile, and it is only ever
+  // offered the ONE-PAINT path below: a caller that paints a tile for us cannot be asked to paint
+  // it seventeen times in pieces. Absent, which is every caller today, it is paintContent.
+  function renderFloorTile(W, tx0, ty0, tw, th, bleed, paint) {
     const finalW = W, bs = W / COAT_REF, prevG = g2d; glowPx = BLOOM_DRAW ? 16 * bs : 0;
     const ex0 = tx0 - bleed, ey0 = ty0 - bleed, ew = tw + 2 * bleed, eh = th + 2 * bleed;
     const c = floorCanvas(ew, eh);
@@ -5665,6 +5668,54 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     cx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round';
     const STAGE = stageN();
     const only = [ex0 / finalW, ey0 / finalW, (ex0 + ew) / finalW, (ey0 + eh) / finalW];
+    // ONE PAINT FOR THE WHOLE TILE, WHEN THE PIECES ONLY MOVED A LITTLE.
+    //
+    // Under `guide` the floor IS the slab, pushed apart by the grout, and drawTilesTo says so in its
+    // own words: "Guide is the absent case on purpose: the piece a slot is handed is the one cut at
+    // that slot, the delta is zero". So every piece's material is the slab's material a bounded
+    // distance away, and that distance is the spacing alone. Measured over every instance, as a
+    // share of the render width: 0.106% at grout 1/32, 0.846% at grout 1/4, 0.297% at 6in tiles -
+    // 9, 70 and 25 pixels at 8,192.
+    //
+    // So paint the tile ONCE over a box grown by that much, and let each piece be a BLIT of it at
+    // its own offset. Seventeen paints become one, which is where the floor's remaining 2x over a
+    // slab tile lives - and it hands the tile back the shape renderOneTile has, which is the shape a
+    // shader already paints.
+    //
+    // SHUFFLE AND STACK ARE NOT THIS. There the assembly plan adds a delta that can reach anywhere
+    // in the slab, so no bounded box holds the material and the per-piece walk below still runs.
+    // A graft or a cut section is the same: the piece comes off another board or another slab.
+    //
+    // THE OFFSET IS ROUNDED TO A WHOLE PIXEL, and that is the one thing this changes about the
+    // picture. A fractional translate applied to vector drawing is exact; applied to a raster it
+    // RESAMPLES, and every piece would come back softened. Rounding keeps the material crisp and
+    // puts the floor's spacing out by less than a pixel - sub-pixel on a 70 px spread at 65,535.
+    //
+    // AND IT IS GUARDED ON AREA, because the margin grows with the grout and with the render while
+    // the tile does not. The per-piece walk costs about 2x a single paint of the same area, measured
+    // at 730 ms against a slab tile's 370; so one paint pays while the grown box stays under that,
+    // and ONE_PAINT_MAX is set below it rather than at it.
+    const ONE_PAINT_MAX = 1.5;
+    let src = null, srcM = 0;
+    if (STAGE === 1 && !T.shuffle && T.assembly !== 'stack' && !sectionList().length) {
+      let mx = 0;
+      for (const t of tileInstances()) {
+        const m = Math.max(Math.abs(t.shift[0]), Math.abs(t.shift[1]));
+        if (m > mx) mx = m;
+      }
+      const m = Math.ceil(mx * finalW) + bleed, sw = ew + 2 * m, sh = eh + 2 * m;
+      if (sw * sh <= ONE_PAINT_MAX * ew * eh) {
+        srcM = m;
+        src = floorCanvas(sw, sh);
+        const sc = src.getContext('2d');
+        sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1;
+        sc.setTransform(finalW, 0, 0, finalW, -(ex0 - m), -(ey0 - m));
+        sc.lineCap = 'round'; sc.lineJoin = 'round';
+        const pg = g2d; g2d = sc;
+        try { if (paint) paint(sc, sw, sh, ex0 - m, ey0 - m); else paintContent(false, false); }
+        finally { g2d = pg; }
+      }
+    }
     // THROUGH A SCRATCH CANVAS, BECAUSE putImageData IGNORES THE CLIP.
     //
     // paintContent writes the material as an ImageData band, and by specification putImageData is
@@ -5705,6 +5756,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const scr = floorCanvas(1, 1);
     const sx = scr.getContext('2d');
     drawTilesTo(null, cx, 1 / finalW, (tc, shiftNoBand, band, bx0, by0, bx1, by1) => {
+      // THE BLIT. Source pixel s shows at tile pixel d when s = d + srcM - shift*finalW, so drawing
+      // the source at (round(shift*finalW) - srcM) puts every piece's own material under its own
+      // clip. No scale change, so nothing resamples once the offset is whole.
+      if (src) {
+        tc.save(); tc.setTransform(1, 0, 0, 1, 0, 0);
+        tc.drawImage(src, Math.round(shiftNoBand[0] * finalW) - srcM,
+                          Math.round(shiftNoBand[1] * finalW) - srcM);
+        tc.restore();
+        return;
+      }
       const px0 = Math.max(0, Math.floor(bx0 * finalW - ex0) - bleed);
       const py0 = Math.max(0, Math.floor(by0 * finalW - ey0) - bleed);
       const px1 = Math.min(ew, Math.ceil(bx1 * finalW - ex0) + bleed);
@@ -5729,6 +5790,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // which is the same honesty the blit path had.
       tc.save(); tc.setTransform(1, 0, 0, 1, 0, 0); tc.drawImage(scr, px0, py0); tc.restore();
     }, only);
+    if (src) { src.width = 1; src.height = 1; src = null; }   // hand the allocation back before the coat
     applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true },
               { ox: ex0, oy: ey0, fw: finalW, fh: Math.round(W * H) });
     g2d = prevG;
