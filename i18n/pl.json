@@ -103,7 +103,12 @@
  "cal.too-short": "Za krótka, aby ją zmierzyć — poprowadź linię przez całą płytę.",
  "exp.ceiling": "to urządzenie kończy się na {px}px",
  "exp.ceiling-direct": "tutaj do {px}px — więcej za polami wyboru poniżej",
- "exp.done-kit": "Wyeksportowane pliki: {n} · {px}px · {t}",
+ "exp.done-kit": {
+  "one": "Wyeksportowano {n} plik · {px}px · {t}",
+  "few": "Wyeksportowano {n} pliki · {px}px · {t}",
+  "many": "Wyeksportowano {n} plików · {px}px · {t}",
+  "other": "Wyeksportowano {n} pliku · {px}px · {t}"
+ },
  "exp.done-render": "Render zapisany · {px}px · {t}",
  "exp.encoding": "Kodowanie PNG…",
  "exp.err.encode": "To urządzenie nie zdołało zakodować obrazu {px}px.",
@@ -204,7 +209,7 @@
  "hint.select-the-layers-for-the-folder": "Najpierw wybierz warstwy do folderu (ich pola ▢), a potem + folder.",
  "hint.show-through-off-the-next-island": "Prześwit wyłączony: następna wyspa kształtuje tylko deformację, bez prześwitu.",
  "hint.show-through-on-the-next-island": "Prześwit włączony: następna wyspa renderuje płytę ponownie w swoim Widmie okna i wtapia ją przez dysk — 0 to światło dzienne, więc pod światłem UV/psykera czyta się to jako okno ze zwykłego kamienia. Namaluj wyspę (przeciągnij, aby ustalić rozmiar).",
- "hint.spotlight-on-only-artifacts-inside-the": "Reflektor włączony: świecą tylko artefakty w wiązce (i przy wartości jej widma). Przeciągaj go narzędziem Światło; Wiązka ustala jej rozmiar.",
+ "hint.spotlight-on-only-artifacts-inside-the": "Reflektor włączony: świecą tylko artefakty w wiązce (i przy wartości jej widma). Przeciągaj go narzędziem Światło; o jej szerokości decyduje Rozmiar wiązki.",
  "hint.switch-show-through-on-to-also": ". Włącz Prześwit, aby zobaczyć przez nią także inne światło.",
  "hint.switch-show-through-on-to-give": ". Włącz Prześwit, aby dać jej własne światło.",
  "hint.tap-a-vein-web-crack-or": "Dotknij żyły, pęknięcia siatki albo szwu, aby je wybrać — a potem pokoloruj albo wyreguluj tylko to jedno.",
@@ -583,14 +588,29 @@
  "tool.clear-cuts": "Wyczyść",
  "tool.build-composite": "Zbuduj kompozycję",
  "tip.build-composite": "Wycina kompozycję z jej sekcji od nowa. Dopóki zachowana jest więcej niż jedna sekcja, podłoga nie przebudowuje się w miarę zmian — naciśnij to, kiedy chcesz ją zobaczyć.",
- "hint.cut-kept": "Zachowano — cięć: {n}. Podłoga układana jest teraz z nich; zmień cokolwiek, choćby gatunek, i zachowaj następne.",
+ "hint.cut-kept": {
+  "one": "Zachowano — {n} cięcie. Podłoga układana jest teraz z niego; zmień cokolwiek, choćby gatunek, i zachowaj następne.",
+  "few": "Zachowano — {n} cięcia. Podłoga układana jest teraz z nich; zmień cokolwiek, choćby gatunek, i zachowaj następne.",
+  "many": "Zachowano — {n} cięć. Podłoga układana jest teraz z nich; zmień cokolwiek, choćby gatunek, i zachowaj następne.",
+  "other": "Zachowano — {n} cięcia. Podłoga układana jest teraz z nich; zmień cokolwiek, choćby gatunek, i zachowaj następne."
+ },
  "hint.cuts-cleared": "Wyczyszczono. Podłoga wraca do schodzenia w głąb jednej kłody.",
  "hint.section-dropped": "Usunięto — pozostało: {n}. Każda płytka ustawiona na tę sekcję wraca do wybierania samodzielnie.",
- "hint.section-added": "Dodano {name} ({mat}) — sekcji: {n}. Twoja własna płyta jest nietknięta; Wczytaj by ją zastąpiło.",
+ "hint.section-added": {
+  "one": "Dodano {name} ({mat}) — {n} sekcję. Twoja własna płyta jest nietknięta; Wczytaj by ją zastąpiło.",
+  "few": "Dodano {name} ({mat}) — {n} sekcje. Twoja własna płyta jest nietknięta; Wczytaj by ją zastąpiło.",
+  "many": "Dodano {name} ({mat}) — {n} sekcji. Twoja własna płyta jest nietknięta; Wczytaj by ją zastąpiło.",
+  "other": "Dodano {name} ({mat}) — {n} sekcji. Twoja własna płyta jest nietknięta; Wczytaj by ją zastąpiło."
+ },
  "hint.snag-needs-tiles": "Najpierw włącz Ułóż płytki — Zaczep bierze płytkę, więc muszą być płytki do wzięcia.",
  "hint.snag-tap-a-tile": "Dotknij płytki. Zaczep zachowuje kawałek, na który wskazujesz, we współrzędnych, z których został wycięty.",
  "hint.picking-shows-the-slab": "Płyta jest pokazana, żebyś mógł z niej wybierać — dotykaj płytek, aby je zachować. Twoje sekcje wrócą, kiedy wyjdziesz z Zaczepu.",
- "hint.snag-took": "Zaczepiono — sekcji: {n}. Każda płytka ułożona z tej sekcji pokazuje teraz ten sam kawałek, w dziewięciokrotnym szczególe.",
+ "hint.snag-took": {
+  "one": "Zaczepiono — {n} sekcję. Każda płytka ułożona z tej sekcji pokazuje teraz ten sam kawałek, w dziewięciokrotnym szczególe.",
+  "few": "Zaczepiono — {n} sekcje. Każda płytka ułożona z tej sekcji pokazuje teraz ten sam kawałek, w dziewięciokrotnym szczególe.",
+  "many": "Zaczepiono — {n} sekcji. Każda płytka ułożona z tej sekcji pokazuje teraz ten sam kawałek, w dziewięciokrotnym szczególe.",
+  "other": "Zaczepiono — {n} sekcji. Każda płytka ułożona z tej sekcji pokazuje teraz ten sam kawałek, w dziewięciokrotnym szczególe."
+ },
  "hint.cuts-full": "Osiem zachowanych cięć to granica — każde z nich jest osobną kłodą do zbudowania.",
  "sl.wood-rings": "Słoje",
  "sl.wood-late": "Kontrast drewna późnego",

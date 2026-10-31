@@ -917,7 +917,10 @@ window.SA_I18N = (() => {
   "cal.too-short": "Too short to measure — draw right across the slab.",
   "exp.ceiling": "this device tops out at {px}px",
   "exp.ceiling-direct": "up to {px}px here — more behind the tickboxes below",
-  "exp.done-kit": "Exported {n} files · {px}px · {t}",
+  "exp.done-kit": {
+    "one": "Exported {n} file · {px}px · {t}",
+    "other": "Exported {n} files · {px}px · {t}"
+  },
   "exp.done-render": "Saved the render · {px}px · {t}",
   "exp.encoding": "Encoding the PNG…",
   "exp.err.encode": "This device could not encode a {px}px image.",
@@ -1421,14 +1424,23 @@ window.SA_I18N = (() => {
   "tool.clear-cuts": "Clear",
   "tool.build-composite": "Build composite",
   "tip.build-composite": "Re-cut the composite from its sections. While more than one section is kept the floor is not rebuilt as you change things — press this when you want to see it.",
-  "hint.cut-kept": "Kept \u2014 {n} cut(s). The floor is laid from these now; change anything, even the species, and keep another.",
+  "hint.cut-kept": {
+    "one": "Kept \u2014 {n} cut. The floor is laid from it now; change anything, even the species, and keep another.",
+    "other": "Kept \u2014 {n} cuts. The floor is laid from these now; change anything, even the species, and keep another."
+  },
   "hint.cuts-cleared": "Cleared. The floor goes back to walking down one log.",
   "hint.section-dropped": "Dropped \u2014 {n} left. Any tile that was set to it goes back to choosing for itself.",
-  "hint.section-added": "Added {name} ({mat}) \u2014 {n} section(s). Your own slab is untouched; Load would have replaced it.",
+  "hint.section-added": {
+    "one": "Added {name} ({mat}) \u2014 {n} section. Your own slab is untouched; Load would have replaced it.",
+    "other": "Added {name} ({mat}) \u2014 {n} sections. Your own slab is untouched; Load would have replaced it."
+  },
   "hint.snag-needs-tiles": "Turn Lay tiles on first \u2014 Snag takes a tile, so there have to be tiles to take.",
   "hint.snag-tap-a-tile": "Tap on a tile. Snag keeps the piece you point at, at the coordinates it was cut from.",
   "hint.picking-shows-the-slab": "Showing the slab so you can pick from it \u2014 tap tiles to keep them. Your sections come back when you leave Snag.",
-  "hint.snag-took": "Snagged \u2014 {n} section(s). Every tile laid from it now shows that same piece, at nine times the detail.",
+  "hint.snag-took": {
+    "one": "Snagged \u2014 {n} section. Every tile laid from it now shows that same piece, at nine times the detail.",
+    "other": "Snagged \u2014 {n} sections. Every tile laid from it now shows that same piece, at nine times the detail."
+  },
   "hint.cuts-full": "Eight kept cuts is the limit \u2014 each one is its own log to build.",
   "sl.wood-rings": "Rings",
   "sl.wood-late": "Latewood contrast",
@@ -1875,7 +1887,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.260';
+  const BUILD = '2026.10.31.261';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those

@@ -98,7 +98,11 @@
   "cal.too-short": "Troppo corta per misurarla — traccia da un lato all'altro della lastra.",
   "exp.ceiling": "questo dispositivo arriva al massimo a {px}px",
   "exp.ceiling-direct": "fino a {px}px qui — altro dietro le caselle qui sotto",
-  "exp.done-kit": "Esportati {n} file · {px}px · {t}",
+  "exp.done-kit": {
+    "one": "Esportato {n} file · {px}px · {t}",
+    "many": "Esportati {n} file · {px}px · {t}",
+    "other": "Esportati {n} file · {px}px · {t}"
+  },
   "exp.done-render": "Render salvato · {px}px · {t}",
   "exp.encoding": "Codifica del PNG…",
   "exp.err.encode": "Questo dispositivo non è riuscito a codificare un'immagine da {px}px.",
@@ -191,7 +195,7 @@
   "hint.select-the-layers-for-the-folder": "Prima seleziona i livelli per la cartella (le loro caselle ▢), poi + cartella.",
   "hint.show-through-off-the-next-island": "Mostra attraverso disattivo: la prossima isola modella solo la distorsione, senza trasparenza.",
   "hint.show-through-on-the-next-island": "Mostra attraverso attivo: la prossima isola rende di nuovo la lastra con lo spettro della sua Finestra e la sfuma attraverso il disco — 0 è luce diurna, quindi sotto una luce UV/psyker si legge come una finestra di pietra normale. Dipingi un'isola (trascina per dimensionarla).",
-  "hint.spotlight-on-only-artifacts-inside-the": "Faretto attivo: brillano solo gli artifact dentro il fascio (e al valore del suo spettro). Trascinalo con lo strumento Luce; Fascio ne stabilisce la misura.",
+  "hint.spotlight-on-only-artifacts-inside-the": "Faretto attivo: brillano solo gli artifact dentro il fascio (e al valore del suo spettro). Trascinalo con lo strumento Luce; Misura del fascio ne stabilisce l'ampiezza.",
   "hint.switch-show-through-on-to-also": ". Attiva Mostra attraverso per vedere anche un'altra luce attraverso di essa.",
   "hint.switch-show-through-on-to-give": ". Attiva Mostra attraverso per darle una luce propria.",
   "hint.tagged-layers": {
@@ -431,7 +435,7 @@
   "sec.granite-ground": "Fondo di granito",
   "sec.how-the-tools-read": "Come leggono gli strumenti",
   "sec.layers": "Livelli",
-  "note.floor-planks": "Questi parametri modellano solo il motivo a doghe — la lunghezza dell’asse, quanto variano le lunghezze e di quanto si spostano i giunti di ogni fila rispetto a quella sotto. Da quante tavole è ricavato il pavimento lo decide <b>Tavole</b>, in Piastrelle & pavimento, e quello vale per ogni motivo.",
+  "note.floor-planks": "Questi parametri modellano solo il motivo a doghe — la lunghezza della doga, quanto variano le lunghezze e di quanto si spostano i giunti di ogni fila rispetto a quella sotto. Da quante tavole è ricavato il pavimento lo decide <b>Tavole</b>, in Piastrelle & pavimento, e quello vale per ogni motivo.",
   "sec.floor-planks": "Doghe del pavimento",
   "sec.tiles-and-floor": "Piastrelle & pavimento",
   "sec.wood": "Legno",
@@ -533,14 +537,26 @@
   "tool.clear-cuts": "Azzera",
   "tool.build-composite": "Crea il composito",
   "tip.build-composite": "Ricompone il composito dalle sue sezioni. Finché è conservata più di una sezione il pavimento non viene ricostruito mentre modifichi: premi qui quando vuoi vederlo.",
-  "hint.cut-kept": "Salvato — {n} taglio/i. Ora il pavimento si ricava da questi; cambia qualsiasi cosa, anche la specie, e salvane un altro.",
+  "hint.cut-kept": {
+    "one": "Salvato — {n} taglio. Ora il pavimento si ricava da questo; cambia qualsiasi cosa, anche la specie, e salvane un altro.",
+    "many": "Salvati — {n} tagli. Ora il pavimento si ricava da questi; cambia qualsiasi cosa, anche la specie, e salvane un altro.",
+    "other": "Salvati — {n} tagli. Ora il pavimento si ricava da questi; cambia qualsiasi cosa, anche la specie, e salvane un altro."
+  },
   "hint.cuts-cleared": "Azzerato. Il pavimento torna a scendere lungo un solo tronco.",
   "hint.section-dropped": "Eliminata — ne restano {n}. Le piastrelle assegnate a questa tornano a scegliere da sole.",
-  "hint.section-added": "Aggiunta {name} ({mat}) — {n} sezione/i. La tua lastra resta intatta; Carica l'avrebbe sostituita.",
+  "hint.section-added": {
+    "one": "Aggiunta {name} ({mat}) — {n} sezione. La tua lastra resta intatta; Carica l'avrebbe sostituita.",
+    "many": "Aggiunta {name} ({mat}) — {n} sezioni. La tua lastra resta intatta; Carica l'avrebbe sostituita.",
+    "other": "Aggiunta {name} ({mat}) — {n} sezioni. La tua lastra resta intatta; Carica l'avrebbe sostituita."
+  },
   "hint.snag-needs-tiles": "Attiva prima Posa piastrelle — Preleva prende una piastrella, quindi devono essercene.",
   "hint.snag-tap-a-tile": "Tocca una piastrella. Preleva conserva il pezzo che indichi, alle coordinate da cui è stato tagliato.",
   "hint.picking-shows-the-slab": "Mostra la lastra per poter scegliere — tocca le piastrelle da conservare. Le sezioni tornano quando esci da Preleva.",
-  "hint.snag-took": "Prelevato — {n} sezione/i. Ogni piastrella posata da questa mostra ora lo stesso pezzo, con nove volte il dettaglio.",
+  "hint.snag-took": {
+    "one": "Prelevata — {n} sezione. Ogni piastrella posata da questa mostra ora lo stesso pezzo, con nove volte il dettaglio.",
+    "many": "Prelevate — {n} sezioni. Ogni piastrella posata da questa mostra ora lo stesso pezzo, con nove volte il dettaglio.",
+    "other": "Prelevate — {n} sezioni. Ogni piastrella posata da questa mostra ora lo stesso pezzo, con nove volte il dettaglio."
+  },
   "hint.cuts-full": "Otto tagli salvati sono il massimo — ognuno è un tronco da costruire.",
   "sl.wood-plankWid": "Larghezza della doga",
   "sl.wood-plankLen": "Lunghezza della doga",

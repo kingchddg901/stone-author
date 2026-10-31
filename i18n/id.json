@@ -103,7 +103,9 @@
  "cal.too-short": "Terlalu pendek untuk diukur — gambar melintang penuh di lempengan.",
  "exp.ceiling": "perangkat ini paling tinggi sampai {px}px",
  "exp.ceiling-direct": "sampai {px}px di sini — yang lebih besar ada di balik kotak centang di bawah",
- "exp.done-kit": "{n} file diekspor · {px}px · {t}",
+ "exp.done-kit": {
+  "other": "{n} file diekspor · {px}px · {t}"
+ },
  "exp.done-render": "Render tersimpan · {px}px · {t}",
  "exp.encoding": "Mengodekan PNG…",
  "exp.err.encode": "Perangkat ini tidak sanggup mengodekan gambar {px}px.",
@@ -219,7 +221,7 @@
  "hint.select-the-layers-for-the-folder": "Pilih dulu lapisan untuk foldernya (kotak ▢ masing-masing), lalu + folder.",
  "hint.show-through-off-the-next-island": "Tembus pandang mati: pulau berikutnya hanya membentuk distorsi, tanpa tembus pandang.",
  "hint.show-through-on-the-next-island": "Tembus pandang aktif: pulau berikutnya merender lempengannya lagi pada Spektrum jendela miliknya lalu melembutkannya masuk lewat cakram itu — 0 adalah cahaya siang, jadi di bawah lampu UV/psyker itu terbaca sebagai jendela batu biasa. Lukis sebuah pulau (tarik untuk mengatur ukurannya).",
- "hint.spotlight-on-only-artifacts-inside-the": "Lampu sorot aktif: hanya artifact di dalam berkasnya (dan pada nilai spektrumnya) yang berpijar. Tarik dengan alat Cahaya; Berkas mengatur ukurannya.",
+ "hint.spotlight-on-only-artifacts-inside-the": "Lampu sorot aktif: hanya artifact di dalam berkasnya (dan pada nilai spektrumnya) yang berpijar. Tarik dengan alat Cahaya; Ukuran berkas mengatur lebarnya.",
  "hint.switch-show-through-on-to-also": ". Aktifkan Tembus pandang untuk melihat cahaya lain menembusnya juga.",
  "hint.switch-show-through-on-to-give": ". Aktifkan Tembus pandang untuk memberinya cahaya sendiri.",
  "hint.tagged-layers": {
@@ -601,14 +603,20 @@
  "tool.clear-cuts": "Hapus",
  "tool.build-composite": "Susun komposit",
  "tip.build-composite": "Memotong ulang kompositnya dari bagian-bagiannya. Selama lebih dari satu bagian tersimpan, lantainya tidak dibangun ulang sambil Anda mengubah sesuatu — tekan ini kalau Anda mau melihatnya.",
- "hint.cut-kept": "Tersimpan — {n} potongan. Lantainya kini dipasang dari potongan-potongan ini; ubah apa saja, bahkan spesiesnya, lalu simpan satu lagi.",
+ "hint.cut-kept": {
+  "other": "Tersimpan — {n} potongan. Lantainya kini dipasang dari potongan ini; ubah apa saja, bahkan spesiesnya, lalu simpan satu lagi."
+ },
  "hint.cuts-cleared": "Terhapus. Lantainya kembali menyusuri satu gelondong saja.",
  "hint.section-dropped": "Dibuang — tersisa {n}. Setiap ubin yang tadinya disetel ke bagian itu kembali memilih sendiri.",
- "hint.section-added": "{name} ({mat}) ditambahkan — {n} bagian. Lempengan Anda sendiri tidak tersentuh; Muat akan menggantikannya.",
+ "hint.section-added": {
+  "other": "{name} ({mat}) ditambahkan — {n} bagian. Lempengan Anda sendiri tidak tersentuh; Muat akan menggantikannya."
+ },
  "hint.snag-needs-tiles": "Aktifkan Pasang ubin lebih dulu — Ambil mengambil satu ubin, jadi harus ada ubin untuk diambil.",
  "hint.snag-tap-a-tile": "Ketuk sebuah ubin. Ambil menyimpan potongan yang Anda tunjuk, pada koordinat tempat ia dipotong.",
  "hint.picking-shows-the-slab": "Lempengannya ditampilkan supaya Anda bisa memilih darinya — ketuk ubin untuk menyimpannya. Bagian-bagian Anda kembali begitu Anda keluar dari Ambil.",
- "hint.snag-took": "Terambil — {n} bagian. Setiap ubin yang dipasang darinya kini menampilkan potongan yang sama itu, dengan sembilan kali detailnya.",
+ "hint.snag-took": {
+  "other": "Terambil — {n} bagian. Setiap ubin yang dipasang darinya kini menampilkan potongan yang sama itu, dengan sembilan kali detailnya."
+ },
  "hint.cuts-full": "Delapan potongan tersimpan adalah batasnya — tiap potongan adalah satu gelondong sendiri yang harus dibangun.",
  "sl.wood-rings": "Lingkaran tahun",
  "sl.wood-late": "Kontras kayu akhir",

@@ -103,7 +103,10 @@
  "cal.too-short": "Ölçmek için çok kısa — plakanın bir ucundan öbür ucuna çiz.",
  "exp.ceiling": "bu cihaz en çok {px}px'e çıkıyor",
  "exp.ceiling-direct": "burada {px}px'e kadar — fazlası aşağıdaki kutucukların arkasında",
- "exp.done-kit": "{n} dosya dışa aktarıldı · {px}px · {t}",
+ "exp.done-kit": {
+  "one": "{n} dosya dışa aktarıldı · {px}px · {t}",
+  "other": "{n} dosya dışa aktarıldı · {px}px · {t}"
+ },
  "exp.done-render": "Render kaydedildi · {px}px · {t}",
  "exp.encoding": "PNG kodlanıyor…",
  "exp.err.encode": "Bu cihaz {px}px'lik bir görüntüyü kodlayamadı.",
@@ -224,7 +227,7 @@
  "hint.select-the-layers-for-the-folder": "Önce klasöre girecek katmanları seç (▢ kutularını), sonra + klasör.",
  "hint.show-through-off-the-next-island": "İçinden göster kapalı: bundan sonraki ada yalnızca çarpıtmayı biçimler, içinden bir şey görünmez.",
  "hint.show-through-on-the-next-island": "İçinden göster açık: bundan sonraki ada plakayı kendi pencere spektrumunda yeniden render eder ve diskin içinden yumuşatarak katar — 0 gün ışığıdır, yani bir UV/psyker ışığı altında bu, normal taştan bir pencere gibi okunur. Bir ada boya (boyutlandırmak için sürükle).",
- "hint.spotlight-on-only-artifacts-inside-the": "Spot ışık açık: yalnızca huzmenin içindeki (ve onun spektrum değerindeki) artifactlar ışır. Işık aracıyla sürükle; boyunu Huzme belirler.",
+ "hint.spotlight-on-only-artifacts-inside-the": "Spot ışık açık: yalnızca huzmenin içindeki (ve onun spektrum değerindeki) artifactlar ışır. Işık aracıyla sürükle; ne kadar geniş olduğunu Huzme boyu belirler.",
  "hint.switch-show-through-on-to-also": ". İçinden başka bir ışığı da görmek için İçinden göster'i aç.",
  "hint.switch-show-through-on-to-give": ". Ona kendi ışığını vermek için İçinden göster'i aç.",
  "hint.tagged-layers": {
@@ -607,14 +610,23 @@
  "tool.clear-cuts": "Temizle",
  "tool.build-composite": "Bileşiği kur",
  "tip.build-composite": "Bileşiği bölümlerinden yeniden keser. Birden fazla bölüm saklıyken, sen bir şeyleri değiştirdikçe döşeme yeniden kurulmaz — görmek istediğinde buna bas.",
- "hint.cut-kept": "Saklandı — {n} kesim. Döşeme artık bunlardan diziliyor; dilediğini değiştir, türü bile, ve bir tane daha sakla.",
+ "hint.cut-kept": {
+  "one": "Saklandı — {n} kesim. Döşeme artık bundan diziliyor; dilediğini değiştir, türü bile, ve bir tane daha sakla.",
+  "other": "Saklandı — {n} kesim. Döşeme artık bunlardan diziliyor; dilediğini değiştir, türü bile, ve bir tane daha sakla."
+ },
  "hint.cuts-cleared": "Temizlendi. Döşeme yeniden tek bir tomruğu boydan boya iniyor.",
  "hint.section-dropped": "Çıkarıldı — {n} tane kaldı. Ona bağlanmış karolar yeniden kendileri seçmeye döner.",
- "hint.section-added": "{name} ({mat}) eklendi — {n} bölüm. Kendi plakana dokunulmadı; Yükle onu değiştirirdi.",
+ "hint.section-added": {
+  "one": "{name} ({mat}) eklendi — {n} bölüm. Kendi plakana dokunulmadı; Yükle onu değiştirirdi.",
+  "other": "{name} ({mat}) eklendi — {n} bölüm. Kendi plakana dokunulmadı; Yükle onu değiştirirdi."
+ },
  "hint.snag-needs-tiles": "Önce Karoları döşe'yi aç — Kap bir karo alır, dolayısıyla alınacak karolar olması gerekir.",
  "hint.snag-tap-a-tile": "Bir karoya dokun. Kap, işaret ettiğin parçayı kesildiği koordinatlarıyla saklar.",
  "hint.picking-shows-the-slab": "Üzerinden seçebilmen için plaka gösteriliyor — saklamak için karolara dokun. Kap'tan çıkınca bölümlerin geri gelir.",
- "hint.snag-took": "Kapıldı — {n} bölüm. Bundan dizilen her karo artık aynı parçayı, dokuz katı ayrıntıyla gösteriyor.",
+ "hint.snag-took": {
+  "one": "Kapıldı — {n} bölüm. Bundan dizilen her karo artık aynı parçayı, dokuz katı ayrıntıyla gösteriyor.",
+  "other": "Kapıldı — {n} bölüm. Bundan dizilen her karo artık aynı parçayı, dokuz katı ayrıntıyla gösteriyor."
+ },
  "hint.cuts-full": "Sekiz saklanan kesim sınırdır — her biri kurulacak kendi tomruğudur.",
  "sl.wood-rings": "Halkalar",
  "sl.wood-late": "Yaz odunu kontrastı",

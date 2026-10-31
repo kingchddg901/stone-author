@@ -414,6 +414,7 @@
     "where": "the small line beside the export width menu, when a larger size is available but its tickbox is not ticked yet"
   },
   "exp.done-kit": {
+    "plural": "a count string: supply the plural forms your language needs. It was \"{n} cut(s)\" until 2026-10-31, which is why a pack written before then may carry a tally instead of prose",
     "placeholders": {
       "n": "how many files the archive holds",
       "px": "the export width in pixels",
@@ -2653,6 +2654,7 @@
     "where": "tooltip on the Build composite button, explaining that the floor is not rebuilt automatically while sections are kept"
   },
   "hint.cut-kept": {
+    "plural": "a count string: supply the plural forms your language needs. It was \"{n} cut(s)\" until 2026-10-31, which is why a pack written before then may carry a tally instead of prose",
     "placeholders": {
       "n": "how many cuts are now kept, e.g. 3"
     },
@@ -2675,6 +2677,7 @@
     "where": "status shown after deleting one section from the list"
   },
   "hint.section-added": {
+    "plural": "a count string: supply the plural forms your language needs. It was \"{n} cut(s)\" until 2026-10-31, which is why a pack written before then may carry a tally instead of prose",
     "placeholders": {
       "name": "the added slab's name, e.g. Carrara",
       "mat": "its material: stone, wood or glass",
@@ -2696,6 +2699,7 @@
     "where": "status when the Snag tool is armed. While picking, the floor shows the live slab rather than the composed sections, so every tap selects from the original material instead of from the floor already built out of earlier picks"
   },
   "hint.snag-took": {
+    "plural": "a count string: supply the plural forms your language needs. It was \"{n} cut(s)\" until 2026-10-31, which is why a pack written before then may carry a tally instead of prose",
     "placeholders": {
       "n": "how many sections are now kept, e.g. 3"
     },

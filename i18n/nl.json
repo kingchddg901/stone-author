@@ -103,7 +103,10 @@
  "cal.too-short": "Te kort om te meten — trek er een dwars over de plaat.",
  "exp.ceiling": "dit apparaat komt niet verder dan {px}px",
  "exp.ceiling-direct": "hier tot {px}px — meer achter de vinkjes hieronder",
- "exp.done-kit": "{n} bestanden geëxporteerd · {px}px · {t}",
+ "exp.done-kit": {
+  "one": "{n} bestand geëxporteerd · {px}px · {t}",
+  "other": "{n} bestanden geëxporteerd · {px}px · {t}"
+ },
  "exp.done-render": "Render opgeslagen · {px}px · {t}",
  "exp.encoding": "De PNG coderen…",
  "exp.err.encode": "Dit apparaat kon geen afbeelding van {px}px coderen.",
@@ -224,7 +227,7 @@
  "hint.select-the-layers-for-the-folder": "Selecteer eerst de lagen voor de map (hun vakjes ▢), dan + map.",
  "hint.show-through-off-the-next-island": "Laat doorschijnen staat uit: het volgende eiland vormt alleen de vervorming, er schijnt niets doorheen.",
  "hint.show-through-on-the-next-island": "Laat doorschijnen staat aan: het volgende eiland rendert de plaat opnieuw op het spectrum van zijn Venster en vloeit hem door de schijf naar binnen — 0 is daglicht, dus onder een UV/psyker-licht leest dat als een venster van gewone steen. Schilder een eiland (sleep om het op maat te maken).",
- "hint.spotlight-on-only-artifacts-inside-the": "Spot staat aan: alleen artifacts binnen de bundel (en op de spectrumwaarde ervan) gloeien. Sleep hem met het gereedschap Licht; Bundel bepaalt zijn grootte.",
+ "hint.spotlight-on-only-artifacts-inside-the": "Spot staat aan: alleen artifacts binnen de bundel (en op de spectrumwaarde ervan) gloeien. Sleep hem met het gereedschap Licht; Grootte van de bundel bepaalt hoe breed hij is.",
  "hint.switch-show-through-on-to-also": ". Zet Laat doorschijnen aan om er ook een ander licht doorheen te zien.",
  "hint.switch-show-through-on-to-give": ". Zet Laat doorschijnen aan om het een eigen licht te geven.",
  "hint.tagged-layers": {
@@ -446,7 +449,7 @@
  "note.each-line-keeps-what-it": "<b>Elke lijn houdt vast waarmee hij gemaakt is.</b> Zijn familie en zijn instellingen liggen vast op het moment dat je hem tekent, dus die veranderen vormt alleen de volgende lijn. Dit maakt de basisstructuur; de kleuren hier zijn slechts een voorproefje, en op een echte laag kies je de kleur zelf. Knijp of gebruik + en &minus; om te zoomen; een secundaire ader die je ingezoomd laat groeien komt korter uit, op de schaal waarop je werkt.",
  "note.granite": "<b>Graniet.</b> Graniet legt een ondergrond van spikkels die samendringen maar elkaar nooit raken. Zwaartekracht verplaatst ze: tik voor een punt, sleep voor een lijn; aantrekken verzamelt ze tot groepen of banden, afstoten maakt ruimte vrij. Een ader die door graniet getrokken wordt duwt de spikkels opzij en buigt ze met zich mee &mdash; opeengepakt aan de binnenkant van een bocht, uitgedund aan de buitenkant &mdash; en dichte spikkels kunnen hem een paar graden afbuigen, nooit meer. Alleen spikkels die er al liggen worden verplaatst, dus wat je eerst tekent is ouder gesteente.",
  "note.identity": "<b>Identiteit</b> toont wat een animatie zou uitlezen: elke lijn in zijn eigen kleur, oplichtend over zijn lengte in de richting waarin je hem getekend hebt; scheuren in het web lichten op naar de lijn die ze heeft laten lopen. Er viel niets na te trekken &mdash; de lijn was bekend op het moment dat hij werd gemaakt.",
- "note.floor-planks": "Deze vormen het patroon van de vloerdelen en verder niets — de lengte van de plank, hoeveel de lengtes onderling verschillen, en hoe ver de naden van elke rij opschuiven ten opzichte van de rij eronder. Uit hoeveel planken de vloer wordt gesneden bepaalt <b>Planken</b>, onder Tegels & vloer, en dat geldt voor elk patroon.",
+ "note.floor-planks": "Deze vormen het patroon van de vloerdelen en verder niets — de lengte van het vloerdeel, hoeveel de lengtes onderling verschillen, en hoe ver de naden van elke rij opschuiven ten opzichte van de rij eronder. Uit hoeveel planken de vloer wordt gesneden bepaalt <b>Planken</b>, onder Tegels & vloer, en dat geldt voor elk patroon.",
  "note.lay-tiles": "<b>Tegels leggen</b> snijdt de plaat die je hebt getekend tot een herhalend patroon en legt dat op een vloer. De voeg is de ruimte tussen de tegels; de snedebreedte is het materiaal dat de snede wegneemt, waardoor de aders bij elke naad een klein beetje verspringen. Op volgorde laat de aders van tegel tot tegel doorlopen; Geschud snijdt elke tegel uit een willekeurig deel van de plaat. In hout geeft Planken aan uit hoeveel verschillende sneden van diezelfde stam de vloer is gemaakt — op 1 is het één plank die zich herhaalt, hoger loopt het blok af zodat naburige rijen naburige planken zijn, en een hoog aantal met Geschud en een visgraat- of Cairopatroon levert een mozaïek. Deze snede bewaren legt de plank vast waar je naar kijkt; zodra er iets bewaard is wordt de vloer uit de bewaarde sneden gelegd, en elk daarvan kan een volstrekt andere boom zijn. Vloerdelen is de enige indeling die geen herhalend patroon is: rijen planken van verschillende lengte met hun kopse naden verspringend. De plank is de plank die je snijdt — zijn breedte en zijn grootste lengte komen van de regelaars hierboven, niet van Tegelgrootte — dus Lengte van het vloerdeel is een richtmaat waar Variatie in lengte omheen strooit, en Verspringing van de naden is hoe ver de naden van elke rij opschuiven ten opzichte van de rij eronder. Op nul stapelen ze zich op tot kolommen, en dat is nu juist waar een vloer tegen wordt gelegd. Tik met Schilfer op de rand van een tegel om er een hoek af te slaan. De maten gelden voor een plaat van 8&times;5 voet.",
  "note.magnet": "<b>Magneet.</b> De pen is een staafmagneet en de spikkels zijn ijzervijlsel. Zijn hoek is de as van de magneet: rechtop gehouden verlaat het veld de punt en waaieren de spikkels daarvandaan uit; overhellend kamt het ze langs de richting waarin de pen helt. Langzame passages lijnen harder uit; Verstrooien breekt de uitlijning weer open. Met Druk aan brengt harder drukken de magneet dichterbij. Een vinger of muis, die geen hoek door te geven heeft, richt de magneet langs de richting waarin hij beweegt. Zwevende sporen laten een pen of muis licht werken van boven de plaat. De weergave Hoek kleurt elke spikkel naar de richting waarin hij wijst, zodat uitlijning als één kleur zichtbaar wordt.",
  "opt.fmt-png": "PNG",
@@ -607,14 +610,23 @@
  "tool.clear-cuts": "Wissen",
  "tool.build-composite": "Samenstelling bouwen",
  "tip.build-composite": "Snijdt de samenstelling opnieuw uit haar secties. Zolang er meer dan één sectie bewaard is wordt de vloer niet opnieuw opgebouwd terwijl je dingen verandert — druk hierop als je hem wilt zien.",
- "hint.cut-kept": "Bewaard — {n} snede(n). De vloer wordt nu hieruit gelegd; verander wat je wilt, ook de houtsoort, en bewaar er nog een.",
+ "hint.cut-kept": {
+  "one": "Bewaard — {n} snede. De vloer wordt nu hieruit gelegd; verander wat je wilt, ook de houtsoort, en bewaar er nog een.",
+  "other": "Bewaard — {n} sneden. De vloer wordt nu hieruit gelegd; verander wat je wilt, ook de houtsoort, en bewaar er nog een."
+ },
  "hint.cuts-cleared": "Gewist. De vloer gaat weer één stam af.",
  "hint.section-dropped": "Verwijderd — er zijn er nog {n}. Elke tegel die hierop was ingesteld kiest weer voor zichzelf.",
- "hint.section-added": "{name} ({mat}) toegevoegd — {n} sectie(s). Je eigen plaat is onaangeroerd; Laden had hem vervangen.",
+ "hint.section-added": {
+  "one": "{name} ({mat}) toegevoegd — {n} sectie. Je eigen plaat is onaangeroerd; Laden had hem vervangen.",
+  "other": "{name} ({mat}) toegevoegd — {n} secties. Je eigen plaat is onaangeroerd; Laden had hem vervangen."
+ },
  "hint.snag-needs-tiles": "Zet eerst Tegels leggen aan — Afpakken neemt een tegel, dus er moeten tegels zijn om te nemen.",
  "hint.snag-tap-a-tile": "Tik op een tegel. Afpakken bewaart het stuk dat je aanwijst, op de coördinaten waar het vandaan is gesneden.",
  "hint.picking-shows-the-slab": "De plaat wordt getoond zodat je eruit kunt kiezen — tik tegels aan om ze te bewaren. Je secties komen terug zodra je Afpakken verlaat.",
- "hint.snag-took": "Afgepakt — {n} sectie(s). Elke tegel die hieruit wordt gelegd toont nu datzelfde stuk, met negen keer zoveel detail.",
+ "hint.snag-took": {
+  "one": "Afgepakt — {n} sectie. Elke tegel die hieruit wordt gelegd toont nu datzelfde stuk, met negen keer zoveel detail.",
+  "other": "Afgepakt — {n} secties. Elke tegel die hieruit wordt gelegd toont nu datzelfde stuk, met negen keer zoveel detail."
+ },
  "hint.cuts-full": "Acht bewaarde sneden is het maximum — elk daarvan is een eigen stam om op te bouwen.",
  "sl.wood-rings": "Ringen",
  "sl.wood-late": "Contrast van het najaarshout",
