@@ -322,7 +322,7 @@
  "resume.light-uv": "lampu UV, spektrum {s}",
  "resume.gone": "Perangkat ini tidak lagi menawarkan lebar tersebut, jadi render yang belum selesai itu tidak bisa dilanjutkan di sini.",
  "sl.glass-cords": "Batang",
- "ui.cords-clear": "jernih",
+ "ui.cords-clear": "tanpa warna",
  "sl.glass-cordN": "Warna batang",
  "sl.glass-cordScale": "Jumlah batang",
  "sl.glass-cordWander": "Kelokan batang",

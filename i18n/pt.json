@@ -334,7 +334,7 @@
  "resume.light-uv": "luz negra, espectro {s}",
  "resume.gone": "Este dispositivo já não oferece essa largura, por isso o render inacabado não pode continuar aqui.",
  "sl.glass-cords": "Canas",
- "ui.cords-clear": "límpido",
+ "ui.cords-clear": "incolor",
  "sl.glass-cordN": "Cores das canas",
  "sl.glass-cordScale": "Número de canas",
  "sl.glass-cordWander": "Deriva das canas",

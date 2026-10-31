@@ -1420,7 +1420,7 @@
     "terms": [
       "wood"
     ],
-    "where": "slider value at 0 degrees: the branch leaves the trunk horizontally"
+    "where": "slider value at 0 degrees: the branch leaves the trunk horizontally. Every other value on this slider is a number of degrees, so this is the word for the zero angle, not a direction"
   },
   "ui.prune-died": {
     "terms": [
@@ -1447,7 +1447,7 @@
     "terms": [
       "glass"
     ],
-    "where": "slider value at 0: no seeds, so the glass is clear"
+    "where": "slider value at 0: no seeds - the small bubbles trapped in the melt - so the glass is free of them. DISTINCT from ui.cords-clear, which is absence of COLOUR: these are two different optical properties and most languages have two words"
   },
   "ui.incl-none": {
     "terms": [
@@ -1459,7 +1459,7 @@
     "terms": [
       "glass"
     ],
-    "where": "slider value at 0: no canes, so the glass is clear"
+    "where": "slider value at 0: no canes of colour show, so the glass carries no colour. DISTINCT from ui.seeds-clear, which is freedom from BUBBLES: these are two different optical properties and most languages have two words"
   },
   "sl.glass-opacity": {
     "terms": [

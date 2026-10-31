@@ -1142,7 +1142,7 @@ window.SA_I18N = (() => {
   "resume.light-uv": "black light, spectrum {s}",
   "resume.gone": "This device no longer offers that width, so the unfinished render cannot be continued here.",
   "sl.glass-cords": "Canes",
-  "ui.cords-clear": "clear",
+  "ui.cords-clear": "colourless",
   "sl.glass-cordN": "Cane colours",
   "sl.glass-cordScale": "Cane count",
   "sl.glass-cordWander": "Cane wander",
@@ -1365,7 +1365,7 @@ window.SA_I18N = (() => {
   "sl.wood-cutAngle": "Cut angle",
   "sl.wood-treeDia": "Tree size",
   "sl.wood-dev2Rise": "Branch rise",
-  "ui.rise-straight": "straight out",
+  "ui.rise-straight": "horizontal",
   "sl.wood-dev2Prune": "Taken off",
   "ui.prune-died": "died on the tree",
   "ui.prune-clean": "taken off clean",
@@ -1875,7 +1875,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.257';
+  const BUILD = '2026.10.31.258';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
