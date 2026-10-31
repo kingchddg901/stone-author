@@ -825,6 +825,7 @@
     "where": "transient hint line under the tool palette"
   },
   "hint.spotlight-on-only-artifacts-inside-the": {
+    "controls": "the size is set by sl.spotR, labelled \"Beam size\" - NOT by btn.spot-toggle, labelled \"Beam\", which is only the on/off. The English said Beam until 2026-10-31 and five packs followed it",
     "terms": [
       "light",
       "spectrum",
@@ -2191,6 +2192,7 @@
     "where": "title of a collapsible section in the right-hand rail"
   },
   "note.floor-planks": {
+    "controls": "the first of the three is sl.wood-plankLen, \"Plank length\". \"Board length\" is sl.wood-len, the mother board the planks are cut out of - the two must not share a name. The English said board until 2026-10-31 and five packs followed it",
     "terms": [],
     "where": "the note under the Floor planks sliders. It says these three shape the plank-run pattern only, and that the control for HOW MANY boards the floor is cut from lives elsewhere (Boards, under Tiles & floor) and applies to every pattern. Written because all four sat in one block and the one actually doing the work read as a plank setting"
   },

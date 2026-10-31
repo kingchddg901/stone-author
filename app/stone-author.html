@@ -456,7 +456,7 @@
     <div class="sl"><label for="chevangle"><span data-i18n="sl.chev-angle">Mitre angle</span> <output id="chevangleV"></output></label><input id="chevangle" type="range" min="15" max="75" step="1"></div>
     <div class="sl"><label for="wood-plankStagger"><span data-i18n="sl.wood-plankStagger">Joint stagger</span> <output id="wood-plankStaggerV"></output></label><input id="wood-plankStagger" type="range" min="0" max="1" step="0.01"></div>
   </div>
-  <p class="note" data-i18n="note.floor-planks">These shape the plank-run pattern and nothing else — board length, how much the lengths differ, and how far each row’s joints shift from the row below. How many boards the floor is cut from is <b>Boards</b>, under Tiles &amp; floor, and that one applies to every pattern.</p>
+  <p class="note" data-i18n="note.floor-planks">These shape the plank-run pattern and nothing else — plank length, how much the lengths differ, and how far each row’s joints shift from the row below. How many boards the floor is cut from is <b>Boards</b>, under Tiles &amp; floor, and that one applies to every pattern.</p>
   </div></details>
   <div id="ground" class="rail">
     <details class="sec" open><summary data-i18n="sec.coat-and-light">Coat & light</summary><div class="body">
@@ -1021,7 +1021,7 @@ window.SA_I18N = (() => {
     "other": "{n} selected — colour or adjust them in the editor / Selected bar."
   },
   "hint.n-selected-tools": {
-    "one": "{n} selected — tools + effects act on it; its colour show in the editor.",
+    "one": "{n} selected — tools + effects act on it; its colour shows in the editor.",
     "other": "{n} selected — tools + effects act on them; their colours show in the editor."
   },
   "hint.pressure-is-on-for-your-next": "Pressure is on for your next lines: press harder for a heavier vein or more paint, lighter to thin it out.",
@@ -1038,7 +1038,7 @@ window.SA_I18N = (() => {
   "hint.select-the-layers-for-the-folder": "Select the layers for the folder first (their ▢ boxes), then + folder.",
   "hint.show-through-off-the-next-island": "Show through off: the next island only shapes the warp, no show-through.",
   "hint.show-through-on-the-next-island": "Show through on: the next island renders the slab again at its Window spectrum and feathers it in through the disc — 0 is daylight, so under a UV/psyker light that reads as a window of normal stone. Paint an island (drag to size it).",
-  "hint.spotlight-on-only-artifacts-inside-the": "Spotlight on: only artifacts inside the beam (and at its spectrum value) glow. Drag it with the Light tool; Beam sets its size.",
+  "hint.spotlight-on-only-artifacts-inside-the": "Spotlight on: only artifacts inside the beam (and at its spectrum value) glow. Drag it with the Light tool; Beam size sets how wide it is.",
   "hint.switch-show-through-on-to-also": ". Switch Show through on to also see another light through it.",
   "hint.switch-show-through-on-to-give": ". Switch Show through on to give it its own light.",
   "hint.tagged-layers": {
@@ -1260,7 +1260,7 @@ window.SA_I18N = (() => {
   "note.each-line-keeps-what-it": "<b>Each line keeps what it was made with.</b> Its family and its settings are fixed when you draw it, so changing them shapes the next line only. This generates the base structure; the colours here are only a preview, and on a real layer the colour is yours to set. Pinch or use + and &minus; to zoom; a minor vein grown while zoomed in comes out shorter, at the scale you are working.",
   "note.granite": "<b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space. A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only specks already down are moved, so what you draw first is older rock.",
   "note.identity": "<b>Identity</b> shows what an animation would read: each line in its own colour, brightening along its length in the direction you drew it; web cracks brighten toward the line that spread them. Nothing had to be traced &mdash; the line was known when it was made.",
-  "note.floor-planks": "These shape the plank-run pattern and nothing else — board length, how much the lengths differ, and how far each row’s joints shift from the row below. How many boards the floor is cut from is <b>Boards</b>, under Tiles & floor, and that one applies to every pattern.",
+  "note.floor-planks": "These shape the plank-run pattern and nothing else — plank length, how much the lengths differ, and how far each row’s joints shift from the row below. How many boards the floor is cut from is <b>Boards</b>, under Tiles & floor, and that one applies to every pattern.",
   "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint. In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Plank run is the one layout that is not a repeating pattern: rows of boards of differing lengths with their end joints staggered. The plank is the board you cut — its width and its longest length come from the Plank controls above, not from Size — so Plank length is a nominal that Length variation scatters around, and Joint stagger is how far each row's joints shift from the row below. At zero they stack into columns, which is exactly what a floor is laid to avoid. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
   "note.magnet": "<b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab. The Angle view colours every speck by the way it points, so alignment shows as a single colour.",
   "opt.fmt-png": "PNG",
@@ -1538,7 +1538,7 @@ window.SA_I18N = (() => {
   "tip.double-tap-to-rename": "Double-tap to rename",
   "tip.emission-colour-for-this-folder": "Emission colour for this folder",
   "tip.give-every-layer-here-this-emission": "Give every layer here this emission at this spectrum, at once",
-  "tip.hide-the-renderer-ignores-it-and": "Hide — the renderer ignores it and it can\\'t be clicked; recover it from the Hidden list",
+  "tip.hide-the-renderer-ignores-it-and": "Hide — the renderer ignores it and it can't be clicked; recover it from the Hidden list",
   "tip.select-effects-and-the-force-tools": "Select — effects and the force tools act on the selected layers",
   "tip.reset-all": "Clear every override and return every token to its declared default",
   "tip.reset-group": "Reset every token in {name}",
@@ -1569,7 +1569,7 @@ window.SA_I18N = (() => {
   "tool.move": "Move",
   "tool.pour": "Pour",
   "hint.rosette-wants": "This pattern sets {n} tiles around each centre and none may repeat — you have {have} sections, so it is laying a plain cut instead. Keep a few more.",
-  "hint.grouping-smaller-fits": "This grouping sets {n} tiles per motif and none may repeat \u2014 you have {have}. \u2014 Group by {alt} wants only {altn}.",
+  "hint.grouping-smaller-fits": "This grouping sets {n} tiles per motif and none may repeat \u2014 you have {have}. \u2014 the {alt} grouping wants only {altn}.",
   "tool.stack": "Off the stack",
   "tool.shuffle": "Shuffled",
   "tool.slottest": "Slot colours",
@@ -1875,7 +1875,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.258';
+  const BUILD = '2026.10.31.259';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
