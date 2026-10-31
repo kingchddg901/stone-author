@@ -1926,7 +1926,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.270';
+  const BUILD = '2026.10.31.271';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5651,6 +5651,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // The fallback is for a browser with no OffscreenCanvas, which also has no pool - so there is no
   // second path on that machine to disagree with.
+  // CAN THIS FLOOR BE PAINTED ONCE PER TILE? Three readers ask it and they have to agree: gpuWhyNot
+  // decides whether to offer the shader at all, gpuPool sizes its buffers from the margin, and
+  // renderFloorTile lays the pieces out of the box. A clause added to one copy and not the others is
+  // a tile painted on the CPU while the master records a GPU render - so there is one copy.
+  const floorOnePaint = () => layTiles && !T.shuffle && T.assembly !== 'stack'
+    && stageN() === 1 && !sectionList().length;
+  // AND HOW FAR OUTSIDE THE TILE ITS MATERIAL REACHES, in device pixels, or 0 when the floor is not
+  // one of those. The spacing is the whole displacement under guide, so the largest one over every
+  // instance bounds the lot; bleed rides on top because the coat still wants its own margin.
+  function floorMargin(W, bleed) {
+    if (!floorOnePaint()) return 0;
+    let mx = 0;
+    for (const t of tileInstances()) {
+      const m = Math.max(Math.abs(t.shift[0]), Math.abs(t.shift[1]));
+      if (m > mx) mx = m;
+    }
+    return Math.ceil(mx * W) + bleed;
+  }
   const floorCanvas = (w, h) => {
     if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
     const el = document.createElement('canvas'); el.width = w; el.height = h; return el;
@@ -5697,14 +5715,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // and ONE_PAINT_MAX is set below it rather than at it.
     const ONE_PAINT_MAX = 1.5;
     let src = null, srcM = 0;
-    if (STAGE === 1 && !T.shuffle && T.assembly !== 'stack' && !sectionList().length) {
-      let mx = 0;
-      for (const t of tileInstances()) {
-        const m = Math.max(Math.abs(t.shift[0]), Math.abs(t.shift[1]));
-        if (m > mx) mx = m;
-      }
-      const m = Math.ceil(mx * finalW) + bleed, sw = ew + 2 * m, sh = eh + 2 * m;
-      if (sw * sh <= ONE_PAINT_MAX * ew * eh) {
+    const fm = floorMargin(finalW, bleed);
+    if (fm) {
+      const m = fm, sw = ew + 2 * m, sh = eh + 2 * m;
+      // A CALLER THAT SUPPLIES `paint` TAKES THIS PATH WHATEVER THE AREA. The guard prices the CPU's
+      // choice between one paint and seventeen; a shader paints the box in one dispatch either way,
+      // and a `paint` that was never called would leave the tile CPU-painted while the master
+      // recorded a GPU render - the one failure here that would not look like one.
+      if (paint || sw * sh <= ONE_PAINT_MAX * ew * eh) {
         srcM = m;
         src = floorCanvas(sw, sh);
         const sc = src.getContext('2d');
@@ -5755,6 +5773,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // tighter box would drop a blur that reaches in from a mark the box does not contain.
     const scr = floorCanvas(1, 1);
     const sx = scr.getContext('2d');
+    // FAIL CLOSED. floorOnePaint is what gpuWhyNot consults before offering the shader, so reaching
+    // here with a painter and no source means those two have drifted apart - and the quiet version of
+    // that bug is a CPU-painted tile in a master that says gpu.
+    if (paint && !src) throw new Error('floor/paint:no-one-paint-path');
     drawTilesTo(null, cx, 1 / finalW, (tc, shiftNoBand, band, bx0, by0, bx1, by1) => {
       // THE BLIT. Source pixel s shows at tile pixel d when s = d + srcM - shift*finalW, so drawing
       // the source at (round(shift*finalW) - srcM) puts every piece's own material under its own
@@ -5980,6 +6002,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // the graft clause already declined, so poolWhyNot refuses a floor laid from sections rather
       // than shipping twelve slabs to twelve workers.
       drawTilesTo, renderFloorTile, tileInstances, patternOf, plankInstances, floorPitch, chipMap, floorCanvas,
+      floorOnePaint, floorMargin,
       assemblyPlan, cantBand, stageN, insetPoly, polyCentroid, cairoCell, jointIn, picking,
       plankWidthIn, plankLenIn, boardsAvailable, chipEdge, edgeFinish, inFr };
     // stoneSource is NOT carried. It paints the slab offscreen that the BLIT paths read, and a
@@ -18978,7 +19001,12 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // answers that master was written under.
     const mat = currentMaterial(), M = GPU_MAT[mat];
     if (!M) return 'exp.gpu.nomaterial';
-    if (layTiles) return 'exp.gpu.floor';
+    // THE FLOOR IS NO LONGER A FLAT REFUSAL. Under guide a tile is ONE paint of one rectangle - the
+    // same shape renderOneTile hands the shader - so the only floors still refused are the ones that
+    // are not: shuffle and stack, whose assembly plan moves a piece anywhere in the slab, and a graft
+    // or a cut section, which takes it off another board entirely. floorOnePaint is that question,
+    // asked in one place so this clause and renderFloorTile cannot disagree.
+    if (layTiles && !floorOnePaint()) return 'exp.gpu.floor';
     // SPECTRUM IS A COLOUR DIFFERENCE - UNTIL THE HALO IS DRAWN, AND BY DEFAULT IT IS.
     //
     // Under a spectrum the body goes dark, the ground is UV_GROUND, the modulators and every haze
@@ -19080,7 +19108,12 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const M = GPU_MAT[currentMaterial()];
     const mod = cap.mods.get(currentMaterial()).mod;
     if (!M.uni) { console.warn('gpu: no uniform size'); return null; }
-    const ew = p.ts + 2 * p.bleed;
+    // THE BOX THE SHADER FILLS. A floor tile's pieces read material up to floorMargin outside the
+    // tile, so the slot buffers cover that too and every origin below steps back by it. It is 1.3% of
+    // a 2,048 tile at 8,192 with grout 1/32, and it is zero for everything that is not a one-paint
+    // floor, which is what keeps a slab render allocating exactly what it always did.
+    const fmar = floorMargin(W, p.bleed);
+    const ew = p.ts + 2 * p.bleed + 2 * fmar;
 
     // BANDS, SIZED TO WHAT THIS DEVICE WILL BIND. The f32 intermediate is twelve bytes a pixel, so
     // a 4096 px export tile plus bleed wants 202 MB against a 128 MiB storage binding limit - and
@@ -19649,7 +19682,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const start = (i, slot) => {
       const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
       const f = texOn ? paintTex : paintOne;
-      return f(gx * p.ts - p.bleed, gy * p.ts - p.bleed, set[slot]);
+      return f(gx * p.ts - p.bleed - fmar, gy * p.ts - p.bleed - fmar, set[slot]);
     };
 
     // QUEUE ONE TILE, IF IT IS NOT QUEUED ALREADY. The draw joins the chain, so the GPU still does
@@ -19801,7 +19834,14 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
           // here and there would leave every later CPU render on this page missing its bloom.
           coatBloomDone = bloomReady;
           try {
-          return renderOneTile(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed, cx => {
+          // A FLOOR TAKES THE SAME PAINTER. renderFloorTile paints its one source box and then lays
+          // the pieces out of it, so the shader's output lands in exactly the place paintContent
+          // would have written - the callback below needs no edit, because it asks woodRect() where
+          // the slab is in whatever context it is handed, and that context is now the source box.
+          // The box is larger than the tile by floorMargin, which is why `ew` and every origin above
+          // already carry it.
+          const one = layTiles ? renderFloorTile : renderOneTile;
+          return one(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed, cx => {
             // ONLY WHERE THE SLAB IS. paintGlassContent writes through
             // g2d.putImageData(img, B.x0, by, ...) for the band rows inside woodRect() and nowhere
             // else, so every pixel outside that rectangle keeps the ground renderOneTile laid. The

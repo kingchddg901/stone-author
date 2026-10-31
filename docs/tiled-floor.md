@@ -256,14 +256,31 @@ in one session, and both times the zero was too clean to be believed.
 
 ## What this did NOT change
 
-**`exp.gpu.floor` still stands**, but it is no longer the same problem. A floor tile under `guide` is
-now ONE paint of one rectangle — the same shape `renderOneTile` hands the shader — and
-`renderFloorTile` takes the same `paint` parameter to receive it. Lifting the refusal is wiring
-rather than a shader feature. It is NOT done here because this machine reports `exp.gpu.noadapter`
-and cannot run, measure or verify a GPU path at all; that work belongs where the rest of this repo's
-GPU numbers were taken, in a real browser.
+**`exp.gpu.floor` is no longer a flat refusal.** A floor tile under `guide` is one paint of one
+rectangle — the same shape `renderOneTile` hands the shader — so the clause now reads
+`layTiles && !floorOnePaint()`, and only the floors that are *not* one paint are turned away: shuffle
+and stack, whose assembly plan moves a piece anywhere in the slab, and a graft or a cut section,
+which takes it off another board entirely.
 
-Shuffle, stack, a graft and a cut section keep the per-piece walk, so they would keep the refusal.
+`floorOnePaint()` has **three readers and one copy**: `gpuWhyNot` to decide whether to offer the
+shader, `gpuPool` to size its slot buffers by `floorMargin`, and `renderFloorTile` to lay the pieces
+out of the box. That is deliberate — `poolWhyNot` and `corePaintsThis` are a documented twin pair and
+a clause was added to one and not the other earlier the same day, five lines apart, and a harness
+caught it rather than a person.
+
+The pool's buffers grow by `floorMargin` and every dispatch origin steps back by it. That margin is
+**0** for anything that is not a one-paint floor, which is what keeps a slab render allocating
+exactly what it always did — `uv-pool` and `tiff` still read 0 differing bytes.
+
+`renderFloorTile` **throws** `floor/paint:no-one-paint-path` if it is handed a painter it cannot use.
+Of everything here that could go wrong, a CPU-painted tile inside a master that records `gpu` is the
+only one that would not look like a failure, so it is the one made loud.
+
+> **THE GPU BRANCH HAS NEVER EXECUTED.** Every gate above exercises the CPU path, because the machine
+> this was written on reports `exp.gpu.noadapter` — WebGPU's API present, no adapter — so a shader
+> cannot be run, measured or verified here at all. The wiring is reasoned from the code and gated on
+> the CPU side only. It wants a real browser before it is believed, which is where the rest of this
+> repo's GPU numbers were taken.
 
 **A floor laid from sections still runs sequentially**, by the same argument the graft clause already
 made: a section is a whole slab record and nothing ships one. The refusal still reports
