@@ -59,13 +59,14 @@ node tools/check-plan-memory.mjs   # only a render the planner CHOSE may write t
 node tools/check-coat-field.mjs    # one predicate decides both the subsurface field and the bleed it drops
 node tools/check-fmt-vocab.mjs     # a slider readout that prints a word routes it; the prose rule cannot see one
 node tools/check-i18n-fallback.mjs # a routed element inline fallback still says what its dictionary entry says
+node tools/check-draft-gate.mjs    # an unreviewed translation is offered, never imposed on a matching browser
 ```
 
 The browser harness (`harness/*.mjs`) needs Playwright and runs in CI; it cannot spawn locally here, so CI
 is its first run.
 
-**That list is not the CI set, and CI is not `tools/**`.** There are **42** `tools/check-*.mjs` and the
-block above names 15. `tools/**` in `i18n.yml` is the **trigger** — it decides *when* the workflow runs,
+**That list is not the CI set, and CI is not `tools/**`.** There are **43** `tools/check-*.mjs` and the
+block above names 16. `tools/**` in `i18n.yml` is the **trigger** — it decides *when* the workflow runs,
 not *what* it runs. The workflow then executes an **explicit list of named `run:` steps**, so a check that
 is not in that list gates nothing, however green it is locally. Corrected 2026-10-30: this used to say the
 other checks "gate a push whether or not they were run here", which is how two gates written that same day

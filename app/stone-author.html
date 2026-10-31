@@ -1661,6 +1661,20 @@ window.SA_I18N = (() => {
   // language menu had exactly one entry no matter how many packs were sitting next to it.
   const NAMES = { en: 'English' };
   let INDEX = {};
+
+  // A CATALOGUE ENTRY IS EITHER A NAME OR A RECORD. A plain string is a language whose translation has
+  // been read by somebody who speaks it; `{ name, draft }` is one that has not, and `draft` is the word
+  // for "draft" IN THAT LANGUAGE — "Deutsch (Entwurf)", "日本語 (下書き)", "Русский (черновик)". Tagging
+  // it in English would put the one warning that matters in the one language that reader did not choose.
+  // Promotion after a native review is deleting the `draft` word, and check-i18n refuses an entry that
+  // claims neither — so a pack cannot arrive quietly as though it had been reviewed.
+  const idxName  = l => { const v = INDEX[l]; return (typeof v === 'string' ? v : v && v.name) || l; };
+  const idxDraft = l => { const v = INDEX[l]; return (v && typeof v === 'object' && v.draft) || ''; };
+  const nameOf   = l => NAMES[l] || idxName(l);
+  // SORTED BY THE NAME, LABELLED WITH THE TAG. Sorting on the tagged string would file every draft
+  // under its own endonym's first letter anyway, but a language promoted later would jump the list
+  // for no reason a reader could see.
+  const labelOf  = l => { const d = idxDraft(l); return d ? nameOf(l) + ' (' + d + ')' : nameOf(l); };
   const KEY = 'sa.lang';
   let LANG = 'en';
   const _pr = {}, missing = new Set(), listeners = new Set();
@@ -1723,29 +1737,54 @@ window.SA_I18N = (() => {
     el.dir = RTL.has(String(LANG).toLowerCase().split('-')[0]) ? 'rtl' : 'ltr';
   }
 
-  async function setLang(lang) {
+  // REMEMBERING IS FOR A CHOICE, NOT FOR A GUESS. Writing an auto-detected language down turns it into
+  // a REMEMBERED one, and a remembered language is explicit — so the draft gate would hold on the first
+  // load and wave the same language through on the second, having laundered the browser's guess into
+  // the reader's consent. Nothing is lost by not storing it: detection runs on every load anyway, so a
+  // reader we match still gets matched. The menu, and `?lang=`, still write.
+  async function setLang(lang, remember = true) {
     if (!PACKS[lang]) await load(lang);
     LANG = PACKS[lang] ? lang : 'en';
-    try { localStorage.setItem(KEY, LANG); } catch (e) {}
+    if (remember) { try { localStorage.setItem(KEY, LANG); } catch (e) {} }
     applyDir(); apply(); listeners.forEach(f => f(LANG));
     return LANG;
   }
 
-  function pick() {                                 // ?lang= wins, then a remembered choice, then the browser
-    const q = new URLSearchParams(location.search).get('lang');
-    let stored = null; try { stored = localStorage.getItem(KEY); } catch (e) {}
-    const known = c => PACKS[c] || INDEX[c];
-    for (const c of [q, stored, ...(navigator.languages || [navigator.language || 'en'])]) {
-      if (!c) continue;
-      const short = String(c).toLowerCase().split('-')[0];
-      if (known(c)) return c;
-      if (known(short)) return short;
-      // zh-TW and zh-HK are Traditional; the bare "zh" and everything else fall to Simplified.
-      const region = String(c).toLowerCase();
-      if (short === 'zh') { const want = /-(tw|hk|mo|hant)/.test(region) ? 'zh-Hant' : 'zh-Hans'; if (known(want)) return want; }
-    }
-    return 'en';
+  // One preference string to a pack we actually have: the tag itself, then its base, then the two
+  // Chinese scripts. zh-TW and zh-HK are Traditional; the bare "zh" and everything else go Simplified.
+  function resolve(c) {
+    if (!c) return null;
+    const known = k => (PACKS[k] || INDEX[k]) ? k : null;
+    const region = String(c).toLowerCase(), short = region.split('-')[0];
+    return known(c) || known(short)
+      || (short === 'zh' ? known(/-(tw|hk|mo|hant)/.test(region) ? 'zh-Hant' : 'zh-Hans') : null);
   }
+
+  // AN UNREVIEWED TRANSLATION IS OFFERED, NEVER IMPOSED.
+  //
+  // Every pack beside this page was written by a model and none has been read by somebody who speaks
+  // it, which is why the menu tags each one with its own word for "draft". A reader who picks one from
+  // that menu has been told. A reader whose BROWSER merely happens to be set to that language has not
+  // chosen anything and has been told nothing — so a draft reached that way is passed over and the
+  // next preference tried, English if none is left. Their language is still one click away, and still
+  // labelled. The same shape the vacuum card ships: an explicit pin reaches a draft, a system language
+  // does not.
+  //
+  // ?lang= AND A REMEMBERED CHOICE ARE EXPLICIT. Both are something a person did: typed a link, or
+  // used the menu. They reach a draft freely, and the caller is told which route won, because that
+  // decides whether the answer is worth writing down — see setLang's `remember`.
+  function pick() {
+    for (const c of [new URLSearchParams(location.search).get('lang'), store()]) {
+      const hit = resolve(c);
+      if (hit) return { lang: hit, explicit: true };
+    }
+    for (const c of (navigator.languages || [navigator.language || 'en'])) {
+      const hit = resolve(c);
+      if (hit && !idxDraft(hit)) return { lang: hit, explicit: false };
+    }
+    return { lang: 'en', explicit: false };
+  }
+  function store() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
 
   // The catalogue of packs that exist beside the page. Fetched once, after the first frame has already
   // painted in English — so nobody waits on the network to see the studio, and a reader whose language we
@@ -1759,23 +1798,9 @@ window.SA_I18N = (() => {
       } catch (e) { /* file:// blocks fetch outright, and a single-file build has no folder at all */ }
     }
     listeners.forEach(f => f(LANG));            // the language menu rebuilds itself from this
-    const want = pick();
-    if (want !== LANG) await setLang(want);
+    const want = pick();                        // only now is INDEX populated, so this is the real answer
+    if (want.lang !== LANG) await setLang(want.lang, want.explicit);
   }
-
-  // A CATALOGUE ENTRY IS EITHER A NAME OR A RECORD. A plain string is a language whose translation has
-  // been read by somebody who speaks it; `{ name, draft }` is one that has not, and `draft` is the word
-  // for "draft" IN THAT LANGUAGE — "Deutsch (Entwurf)", "日本語 (下書き)", "Русский (черновик)". Tagging
-  // it in English would put the one warning that matters in the one language that reader did not choose.
-  // Promotion after a native review is deleting the `draft` word, and check-i18n refuses an entry that
-  // claims neither — so a pack cannot arrive quietly as though it had been reviewed.
-  const idxName  = l => { const v = INDEX[l]; return (typeof v === 'string' ? v : v && v.name) || l; };
-  const idxDraft = l => { const v = INDEX[l]; return (v && typeof v === 'object' && v.draft) || ''; };
-  const nameOf   = l => NAMES[l] || idxName(l);
-  // SORTED BY THE NAME, LABELLED WITH THE TAG. Sorting on the tagged string would file every draft
-  // under its own endonym's first letter anyway, but a language promoted later would jump the list
-  // for no reason a reader could see.
-  const labelOf  = l => { const d = idxDraft(l); return d ? nameOf(l) + ' (' + d + ')' : nameOf(l); };
 
   return { T, apply, register, load, setLang, onChange: f => listeners.add(f),
            get lang() { return LANG; },
@@ -1785,7 +1810,7 @@ window.SA_I18N = (() => {
              return all.sort((a, b) => a === 'en' ? -1 : b === 'en' ? 1 : nameOf(a).localeCompare(nameOf(b)));
            },
            nameOf, labelOf, isDraft: l => !!idxDraft(l), get missing() { return [...missing]; },
-           keys: () => Object.keys(PACKS.en), _init: () => { LANG = pick(); applyDir(); apply(); catalogue(); }, get isRTL() { return RTL.has(String(LANG).toLowerCase().split('-')[0]); } };
+           keys: () => Object.keys(PACKS.en), _init: () => { LANG = pick().lang; applyDir(); apply(); catalogue(); }, get isRTL() { return RTL.has(String(LANG).toLowerCase().split('-')[0]); } };
 })();
 SA_I18N._init();   // the studio markup above is already parsed, so this paints the first frame translated
 </script>
@@ -1901,7 +1926,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.266';
+  const BUILD = '2026.10.31.267';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
