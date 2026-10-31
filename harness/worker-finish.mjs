@@ -30,7 +30,7 @@
 // than passing on an empty comparison - two blank tiles are equal, which is how this family of test
 // lies. `--ablate=all` runs the shipped path and all three in one go, so a single CI line shows the
 // gate passing and shows it able to fail.
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { createServer } from 'http';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -83,7 +83,7 @@ const server = createServer((req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const base = 'http://127.0.0.1:' + server.address().port;
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const fail = [], out = [];
 
 for (const mode of modes) {

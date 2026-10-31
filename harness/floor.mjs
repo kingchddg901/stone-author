@@ -16,7 +16,7 @@
 // anyone will do for every render. That is the gap this closes.
 //
 //   node harness/inject.mjs && node harness/floor.mjs
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 
@@ -25,7 +25,7 @@ const hooked = pathToFileURL(join(here, 'dist', 'stone-author.hooked.html')).hre
 
 const W = 1024, H = 640, TS = 256;      // small tiles, so a 1024 strip crosses several joins
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 page.on('pageerror', e => console.error('page error:', e.message));
 await page.goto(hooked);

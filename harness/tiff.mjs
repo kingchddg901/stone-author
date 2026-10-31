@@ -18,7 +18,7 @@
 // of this means anything.
 //
 //   node harness/inject.mjs && node harness/tiff.mjs
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { inflateSync } from 'zlib';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
@@ -30,7 +30,7 @@ const hooked = pathToFileURL(join(here, 'dist', 'stone-author.hooked.html')).hre
 // demands and the one most likely to be written wrong.
 const W = 1024, H = 640, TS = 512;
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 page.on('pageerror', e => console.error('page error:', e.message));
 await page.goto(hooked);

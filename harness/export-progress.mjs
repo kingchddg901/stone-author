@@ -11,7 +11,7 @@
 // It then checks the other half: that an export which CANNOT finish says so instead of waiting for ever.
 //
 //   node harness/export-progress.mjs
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { createServer } from 'http';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -26,7 +26,7 @@ const app = `http://127.0.0.1:${server.address().port}/stone-author.html`;
 const WIDTH = '1024';        // the smallest export: if the signal survives here it survives everywhere
 const MIN_UPDATES = 3;       // a single message that never changes is the defect this exists to catch
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
 page.on('pageerror', e => console.error('page error:', e.message));
 await page.goto(app, { waitUntil: 'domcontentloaded' });

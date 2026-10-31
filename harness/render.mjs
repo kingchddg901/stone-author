@@ -7,7 +7,7 @@
 //
 //   node harness/inject.mjs && node harness/render.mjs            # self-determinism gate
 //   node harness/inject.mjs && node harness/render.mjs --write     # + regenerate gallery/img/*.png
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
@@ -22,7 +22,7 @@ const hooked = pathToFileURL(join(here, 'dist', 'stone-author.hooked.html')).hre
 // The hero setup lives in harness/hero.mjs — shared with the engine gate, so neither can drift from it.
 const hero1 = (page, hero) => renderHero(page, { root, hero, ref });
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 page.on('pageerror', e => console.error('page error:', e.message));
 await page.goto(hooked);

@@ -49,7 +49,7 @@
 // `ground` and `glow` are SOURCE edits that put each fault back and require a red. `dark` and `nogeo`
 // are the two vacuity modes above and require a self-check to trip. `all` runs the shipped file and
 // all four in turn, so one CI run shows the gate passing and shows it is able to fail.
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { createServer } from 'http';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -179,7 +179,7 @@ async function measure(page, vacuous) {
   }, { vacuous, LIT_FLOOR, MAXV_FLOOR });
 }
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const fail = [];
 const out = [];
 

@@ -7,7 +7,7 @@
 // as it did before this existed.
 //
 //   node harness/inject.mjs && node harness/strain.mjs
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { readFileSync } from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
@@ -17,7 +17,7 @@ const root = join(here, '..');
 const hooked = pathToFileURL(join(here, 'dist', 'stone-author.hooked.html')).href;
 const slab = JSON.parse(readFileSync(join(root, 'gallery', 'slabs', 'before.json'), 'utf8'));
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 page.on('pageerror', e => console.error('page error:', e.message));
 await page.goto(hooked);

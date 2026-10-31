@@ -15,7 +15,7 @@
 // and it is why the same figure appeared on two calibration runs that agreed about nothing else.
 //
 //   node harness/calibration.mjs
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { createServer } from 'http';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -53,7 +53,7 @@ const WANT = {
   speedQuick: PEN.span / dur(60),
 };
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
 page.on('pageerror', e => console.error('page error:', e.message));
 // domcontentloaded, not load: the page asks Google Fonts for a face it has a fallback for, and there is

@@ -26,7 +26,7 @@
 // `skip` inverts the worker's own skip test so it composites nothing, and must go RED. `nowin` takes
 // the window away so the two paths agree trivially, and must trip a SELF-CHECK rather than passing -
 // because two tiles with no window in them are equal, and that is how this family of test lies.
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { createServer } from 'http';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -78,7 +78,7 @@ const server = createServer((req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const base = 'http://127.0.0.1:' + server.address().port;
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const fail = [], out = [];
 
 for (const mode of modes) {

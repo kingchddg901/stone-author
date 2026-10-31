@@ -19,7 +19,7 @@
 // claim is checked in both directions: the pixels MUST differ, or the probe proved nothing.
 //
 //   node harness/inject.mjs && node harness/signature.mjs
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 
@@ -27,7 +27,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const hooked = pathToFileURL(join(here, 'dist', 'stone-author.hooked.html')).href;
 const W = 512;
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 page.on('pageerror', e => console.error('page error:', e.message));
 await page.goto(hooked);

@@ -9,14 +9,14 @@
 // If that ever stops being true, this goes red before anyone's stone changes colour.
 //
 //   node harness/inject.mjs && node harness/spectrum.mjs
-import { chromium } from 'playwright';
+import { launchChromium } from './browser.mjs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const hooked = pathToFileURL(join(here, 'dist', 'stone-author.hooked.html')).href;
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 page.on('pageerror', e => console.error('page error:', e.message));
 await page.goto(hooked);
