@@ -68,6 +68,8 @@ jobs:
         run: node harness/tiff.mjs
       - name: The tiled floor puts the right material in every output tile
         run: node harness/floor.mjs
+      - name: A pooled floor tile is byte-identical to the sequential one
+        run: node harness/floor-pool.mjs
       - name: The signature that describes a render covers the light
         run: node harness/signature.mjs
       - name: A pooled tile matches the sequential one under black light

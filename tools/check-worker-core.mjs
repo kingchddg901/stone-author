@@ -155,7 +155,11 @@ const DECLARED = {
           + 'declares it, so the core SOURCE never spells the name and this scan cannot see it',
   a: 'a matcher floor, not a reach - the app has a one-letter name at IIFE indentation and uses() '
    + 'finds the token `a` in very nearly every body, so this says nothing about the worker',
-  sectionList: 'gated - only a graft reaches it, and corePaintsThis refuses the pool when one is set',
+  LANG:        'false positive - THE APP HAS TWO MODULE-SCOPE BINDINGS NAMED T - the i18n translate function and the floor settings object - in SEPARATE script blocks, which is the only reason that is not a redeclaration. This scanner binds the i18n one, so these are ITS free names and the core never reaches them: what the core carries is the floor T, declared in the worker preamble and set from the init message. The collision is worth removing at the source; until it is, this gate cannot tell the two apart in either direction',
+  missing:     'false positive - the i18n T, as above',
+  pluralOf:    'false positive - the i18n T, as above',
+  m:           'false positive - a local declarator; cutBoxFromInstance binds its own wrap(v, m), and the i18n T binds m too',
+  V:           'false positive - a LOCAL declarator inside the rhombus entry of PATTERNS, const R = u / 2, V = k => ... . topLevel is built from top-level declarations only, so a name bound inside a nested arrow reads as free. Verified by reading the entry, not assumed - the same shape as m inside cutBoxFromInstance',
   blurDraw:    'gated - applyCoat reaches it only under `f.uvMode`, and corePaintsThis refuses the pool in uvMode. Verified at the call site, not assumed',
   serialize:   'unreviewed - wrap; lifting it would carry the whole app state, so it has to stay gated instead',
   TR:          'unreviewed - weightOf, on a branch no tile paint is known to take',

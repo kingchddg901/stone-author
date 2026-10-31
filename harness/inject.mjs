@@ -112,6 +112,11 @@ const hook = `
     // a typo. With this a gate can drive eight workers over a small picture and assert that an ack
     // came back, that the busy counts move, and that each worker is identified.
     tilePool, corePaintsThis, poolWhyNot, poolWidthFor,
+    // THE SERIALISED CORE ITSELF. A worker that throws while compiling it leaves the pool's
+    // promises unsettled and the caller hangs for ever - the failure this file's own comments
+    // record - so a hang and a slow start look identical from outside. Handing the source out
+    // lets a harness syntax-check it in one call instead of inferring the fault from silence.
+    renderCoreSrc,
     get OVR() { return OVR; },                  // the adjustment ladder's store, so a gate can set strain
     // prevGen++ IS THE DOCUMENT CHANGING. In the app every mutation reaches the GPU face
     // through redraw, which counts a generation; this entry does not go through redraw, so

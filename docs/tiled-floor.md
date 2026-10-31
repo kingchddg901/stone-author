@@ -105,24 +105,102 @@ Correctness is unaffected and `harness/floor.mjs` says so on the windowed build:
 a re-rendered tile identical to itself (mean 0, max 0), and the shuffle-versus-guide control firing
 at 15.46 over 96.8% of pixels — the positive control that proves that gate has a question to answer.
 
+## And the pool takes it now
+
+`poolWhyNot` and its boolean twin `corePaintsThis` both opened with `!layTiles`, because the
+serialised worker core had neither `drawTilesTo` nor `renderFloorTile` in its function list. A floor
+master therefore ran single-threaded while a slab master got twelve workers. Both travel now.
+
+**What the core gained.** The floor's functions in the `fns` list, and in the preamble the things an
+object cannot ride that list as: `PATTERNS` is emitted as source, because the list serialises each
+value with `toString` and an object stringifies to `[object Object]`. `CAIRO8`, `GROUT` and
+`SLOT_INK` are JSON. `T` travels in both pool inits and is declared beside `layTiles`.
+
+**What it deliberately did not gain.** `stoneSource`, `sectionOf`, `cutScale` and `coverSrc` are
+**throwing** stubs. They serve the blit branches, and a pooled tile always supplies `direct`, so it
+never reaches one; a stub that returned a plausible value instead would turn an unreachable branch
+into a picture that is merely wrong. `sectionList` is the exception and returns `[]` — `drawTilesTo`
+and `stageN` genuinely call it on every floor tile — and that empty list is true **by construction**,
+because any section at all now refuses the pool, not just a cut one.
+
+Two things fell out of reading the path rather than from the goal:
+
+- **`drawScaleBar` was called at the end of `drawTilesTo`, unconditionally.** It draws into the
+  studio's `ctx`, not into the target beside it, so it was repainting the studio's own scale bar as a
+  side effect of writing a file — and it reads `Wc`, `V.z` and `dpr`, none of which exist in a worker.
+  It belongs to `drawTiles`, the path that is drawing the studio, and is now there.
+- **`stoneSource` painted a 1,600 px slab offscreen even when every piece is painted directly.** That
+  is work nobody collects, and it is what dragged `renderStoneOffscreen`, `syncBuild` and
+  `holdingBuild` behind it. Now conditional on something actually reading `stoneC`.
+
+## The canvas kind, which is what a pooled floor really cost
+
+A pooled floor tile came back differing from the sequential one by 110,762 pixels of a 4,104 tile, up
+to 189 levels. None of it was the core, the serialisation or the lift list. **A DOM canvas
+antialiases a clip edge and an OffscreenCanvas does not**, and a worker shims
+`document.createElement` to `new OffscreenCanvas`, so the two threads drew different edges:
+
+```
+pooled vs sequential                      110,762 px (0.6576%)  max 189
+DOM vs OffscreenCanvas, ONE thread        110,787 px (0.6578%)  max 189
+```
+
+The second row is the same function, the same inputs, the same thread, swapping only the kind of
+canvas — and it is the same number. A DOM canvas leaves `rgba(33,33,33,23)` on a clip edge where an
+OffscreenCanvas leaves nothing.
+
+**The floor is the only path that clips**, which is why this was never reachable before: `uv-pool`,
+`window-pool` and `worker-finish` all assert a pooled tile is byte-identical to a sequential one and
+all of them pass, because `renderOneTile` sets no clip and the two kinds then agree exactly.
+
+`floorCanvas(w, h)` now hands both threads an OffscreenCanvas, falling back to a DOM canvas only
+where there is none — and a browser without `OffscreenCanvas` has no pool either, so there is no
+second path on that machine to disagree with. **Pooled against sequential is now 0 pixels**, with the
+control firing at 60.4%.
+
+**The picture cost is the floor's outer border and nothing else.** Interior tiles are byte-identical
+between the two kinds: the same comparison on an interior tile at 8,192 reads mean 0.000, max 0.0,
+and only a tile the border crosses differs at all — mean 0.019 over a whole 4,096 picture. Ruled
+2026-10-31 after looking at both.
+
+That zero is also the reason the claim is that narrow. An interior tile was measured first, came back
+at exactly 0.000, and a null that clean on a difference known to exist is a sample that could not
+contain it — the border had to be put in frame before the number meant anything.
+
 ## What this did NOT change
 
-**`exp.gpu.floor` still stands.** The windowing is a CPU change. A floor master still has no shader,
-and `exportTiff` still nulls the pool whenever tiles are laid — the serialised worker core has
-neither `drawTilesTo` nor `renderFloorTile` in its function list — so it also still runs
-single-threaded while a slab master gets twelve workers. Both remain open; they are now worth
-proportionally more than they were, because the redundant painting they would have parallelised or
-moved to a shader is gone.
+**`exp.gpu.floor` still stands.** The windowing and the pool are both CPU work; a floor master still
+has no shader. It is now the last of the three, and worth proportionally less than it was, because
+the redundant painting it would have moved to a shader is gone and the remaining work is spread over
+twelve workers.
+
+**A floor laid from sections still runs sequentially**, by the same argument the graft clause already
+made: a section is a whole slab record and nothing ships one. The refusal still reports
+`exp.pool.floor`, whose string reads "a tiled floor" — now less specific than the clause it reports.
+Renaming it is fifteen packs of work and has not been done.
 
 ## The instruments
 
 | | |
 | --- | --- |
 | `harness/floor.mjs` | the correctness gate — joins, re-render, and a positive control. Runs in CI |
+| `harness/floor-pool.mjs` | a pooled floor tile against the sequential one, byte for byte, plus the refusal in both directions and a control |
 | `harness/floor-cost.mjs` | the painting share, via the repo's own paint ablation. Asks what painting costs, never what a port would buy |
 | `harness/floor-window.mjs` | the cross-build pixel differential. Needs `tools/make-probe-builds.mjs --only=ab`, so it is not in CI |
 
-Both of the latter open **a fresh page per cell**. The first version of `floor-window.mjs` reused one
-page per build, and each cell then inherited what the last had left behind: the same comparison read
-mean 0.95 over 12.4% of pixels on a reused page and 2.05 over 48.7% on a fresh one. The contaminated
+The last two open **a fresh page per cell**. The first version of `floor-window.mjs` reused one page
+per build, and each cell then inherited what the last had left behind: the same comparison read mean
+0.95 over 12.4% of pixels on a reused page and 2.05 over 48.7% on a fresh one. The contaminated
 number was the flattering one, which is how it survived being read.
+
+## Two things worth fixing that this did not
+
+- **The app has two module-scope bindings named `T`** — the i18n translate function and the floor
+  settings object — in separate `<script>` blocks, which is the only reason that is not a
+  redeclaration. `check-worker-core` binds the i18n one, so it cannot tell the two apart in either
+  direction: it reports that function's free names as the core's, and it would not notice the floor
+  `T` failing to travel.
+- **A registry entry in `check-worker-core` can rot while staying green.** `sectionList` was recorded
+  as "only a graft reaches it"; `drawTilesTo` and `stageN` then started reaching it and the status
+  stayed `known`. The gate *did* print the new callers beside the name — nothing compares a recorded
+  reason against the callers it was written for.

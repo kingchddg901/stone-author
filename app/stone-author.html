@@ -1926,7 +1926,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.268';
+  const BUILD = '2026.10.31.269';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4415,9 +4415,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (const q of t.poly) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
       return x1 >= only[0] && x0 <= only[2] && y1 >= only[1] && y0 <= only[3];
     };
-    stoneSource();
     const pat = patternOf(T.sizeIn);
     const inst = tileInstances(), chips = chipMap(), SET = picking() ? [] : sectionList();
+    // THE SLAB OFFSCREEN IS ONLY READ BY THE BLIT PATHS. A caller that supplies `direct` paints every
+    // piece itself, so unless a cut section is laid there is nothing to blit out of stoneC and
+    // painting a 1,600px slab first is work nobody collects. It is also what lets the worker core
+    // take a floor at all: stoneSource pulls renderStoneOffscreen, syncBuild and holdingBuild in
+    // behind it, none of which a tile render has any business reaching.
+    const wantsSource = !direct || SET.some(x => x && x.cut);
+    if (wantsSource) stoneSource();
     // THE JOINTS, AND NOTHING OUTSIDE THEM. The floor is smaller than the slab by the kerf it cost to
     // cut it, so a backdrop over the whole frame would paint grout where there is no floor. Over the
     // tiles' own extent instead: background in the preview, TRANSPARENT in an export, which is what a
@@ -4509,12 +4515,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (const t of inst) { if (!seen(t)) continue; let poly = t.poly; const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
         tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath(); tc.stroke(); } }
     tc.restore();                                        // the slab clip opened before the tiles
-    drawScaleBar();
   }
   // The live preview is one caller of it, with the view's own transform.
   function drawTiles(F) {
     stoneSource();
     drawTilesTo(F, ctx, 1 / (Wc * V.z));
+    // THE SCALE BAR IS A STUDIO OVERLAY and it draws into `ctx`, never into the target it was called
+    // beside. Sitting at the end of drawTilesTo it therefore ran on every EXPORT as well, repainting
+    // the studio's own bar as a side effect of writing a file; and it reads Wc, V.z and dpr, none of
+    // which exist in a worker. It belongs to the path that is drawing the studio, which is this one.
+    drawScaleBar();
   }
   // Edge finish: a lit chamfer. Edges facing the shared light (G.lightAngle) catch it; those facing away fall dark.
   function edgeFinish(poly, px, tc) {
@@ -5626,10 +5636,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // units, and each piece is painted through its own clip with the slab slid under it by its shift.
   // The band is a position down the cant, not an offset into a stack, so it is set the way
   // renderStoneOffscreen sets it rather than folded into the translate.
+  // ONE CANVAS KIND FOR THE FLOOR, ON EITHER THREAD, and it has to be the worker's kind because
+  // a worker cannot have the other one. A DOM canvas ANTIALIASES A CLIP EDGE and an OffscreenCanvas
+  // does not. Measured on ONE thread, swapping only the kind and changing nothing else: 110,787
+  // pixels of a 4,104 tile differ, up to 189 levels, every one of them on the floor border, the
+  // bleed edge or a grout joint - a DOM canvas leaves rgba(33,33,33,23) where an OffscreenCanvas
+  // leaves nothing at all.
+  //
+  // THE FLOOR IS THE ONLY PATH THAT CLIPS, which is why this never surfaced before: uv-pool,
+  // window-pool and worker-finish all assert a pooled tile is byte-identical to a sequential one
+  // and all of them pass, because renderOneTile sets no clip and the two kinds then agree exactly.
+  // Pooling the floor is what made the difference reachable, and a master whose bytes depend on how
+  // many cores drew it is the thing renderer-determinism.md exists to rule out.
+  //
+  // The fallback is for a browser with no OffscreenCanvas, which also has no pool - so there is no
+  // second path on that machine to disagree with.
+  const floorCanvas = (w, h) => {
+    if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
+    const el = document.createElement('canvas'); el.width = w; el.height = h; return el;
+  };
   function renderFloorTile(W, tx0, ty0, tw, th, bleed) {
     const finalW = W, bs = W / COAT_REF, prevG = g2d; glowPx = BLOOM_DRAW ? 16 * bs : 0;
     const ex0 = tx0 - bleed, ey0 = ty0 - bleed, ew = tw + 2 * bleed, eh = th + 2 * bleed;
-    const c = document.createElement('canvas'); c.width = ew; c.height = eh;
+    const c = floorCanvas(ew, eh);
     if (c.width !== ew || c.height !== eh) throw new Error('tile canvas clamped to ' + c.width + 'x' + c.height);
     const cx = c.getContext('2d');
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalAlpha = 1;   // transparent surround: past the slab is nothing
@@ -5673,7 +5702,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // INTO this box from outside it, content blur and glow included. Using the tile's own answer
     // rather than a fresh constant is what keeps a windowed piece and a whole tile agreeing; a
     // tighter box would drop a blur that reaches in from a mark the box does not contain.
-    const scr = document.createElement('canvas');
+    const scr = floorCanvas(1, 1);
     const sx = scr.getContext('2d');
     drawTilesTo(null, cx, 1 / finalW, (tc, shiftNoBand, band, bx0, by0, bx1, by1) => {
       const px0 = Math.max(0, Math.floor(bx0 * finalW - ex0) - bleed);
@@ -5879,7 +5908,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // with a metal layer reached it, and nothing gated that. It carries nothing new behind it.
       fbm2, woodAtan2, groundCol, surfaceGloss, woodEye, woodStain, specRGB, drawLayerArtifacts, boostFeatures,
       resample, smoothPath, handRoute, pathLen, segD, tangent, roughen, lineGeom, curvature, sinuate,
-      vnoise, vnoiseG, fbm2G, vnoiseC, vnoiseCfill, fbm2C, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath };
+      vnoise, vnoiseG, fbm2G, vnoiseC, vnoiseCfill, fbm2C, nz, smoothstep, wrap, cellGrid, starR, deflect, forNear, loudestCell, polyPath,
+      // THE FLOOR. The core had no floor path at all, which is why poolWhyNot refused one: a floor
+      // master ran single-threaded on the main thread while a slab master got twelve workers.
+      // renderFloorTile needs no edit to run here - the preamble already shims document.createElement
+      // to hand back an OffscreenCanvas, which is the thing that looked like it would block this.
+      // cutScale, coverSrc and cutBoxFromInstance are NOT here, and sectionOf is not either: they
+      // serve the cut-section branch, which needs a whole slab per section. That is the same trade
+      // the graft clause already declined, so poolWhyNot refuses a floor laid from sections rather
+      // than shipping twelve slabs to twelve workers.
+      drawTilesTo, renderFloorTile, tileInstances, patternOf, plankInstances, floorPitch, chipMap, floorCanvas,
+      assemblyPlan, cantBand, stageN, insetPoly, polyCentroid, cairoCell, jointIn, picking,
+      plankWidthIn, plankLenIn, boardsAvailable, chipEdge, edgeFinish, inFr };
+    // stoneSource is NOT carried. It paints the slab offscreen that the BLIT paths read, and a
+    // worker always supplies `direct`, so nothing in a pooled tile reaches it - which is what
+    // keeps renderStoneOffscreen, syncBuild and holdingBuild out of the core behind it.
     // THE GLOW TRIO ARRIVES SEPARATELY, and not for tidiness. liftCol is a function declaration and
     // emitCross is declared up at the top, so both could be named in the literal above - glowLift is a
     // const arrow seven thousand lines below it, and naming it there is a temporal dead zone that
@@ -5907,8 +5950,41 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // from the first version of check-worker-core.mjs.
     s += `var woodBandY=0,WOOD0=${JSON.stringify(WOOD0)};\n`;
     s += `var GLASS=${JSON.stringify(GLASS)},IN=${IN},SLAB_FT=${SLAB_FT};\n`;
+    // THE FLOOR'S OWN CONSTANTS AND TABLES. PATTERNS is an OBJECT of arrows, so it cannot ride in
+    // the fns list: that serialises each value with toString, and an object stringifies to
+    // [object Object]. Emitted as source instead, which is what the fns loop does one level down.
+    s += `var GROUT=${JSON.stringify(GROUT)},SLOT_INK=${JSON.stringify(SLOT_INK)};
+`;
+    s += `var CAIRO8=${JSON.stringify(CAIRO8)};
+`;
+    s += `var PATTERNS={${Object.keys(PATTERNS).map(k => k + ':' + PATTERNS[k]).join(',')}};
+`;
+    // picking() asks which tool is live. A worker has no palette and never picks, so the name has to
+    // exist and must never answer yes - the branch that lays a cut SECTION stays shut.
+    s += `var tool='';
+`;
+    // THE BLIT PATHS, WHICH A POOLED TILE NEVER TAKES: it always supplies `direct`, and poolWhyNot
+    // refuses a floor laid from cut sections. These exist so a read of the core resolves - and they
+    // THROW rather than answer, because a stub that quietly returned a plausible value would turn a
+    // branch that should be unreachable into a picture that is merely wrong.
+    // EMPTY BY CONSTRUCTION, not by hope: drawTilesTo and stageN both read it on every floor tile,
+    // and the two ways it could be non-empty - a graft, or a floor laid from sections - are each
+    // refused a pool above. A throwing stub would be wrong here because the floor path really does
+    // call it; an empty list is the same answer the main thread gives under the same refusals.
+    s += `var sectionList=()=>[];
+`;
+    s += `var stoneC=null,stoneReady=false;
+`;
+    s += `var stoneSource=()=>{throw new Error('core/stoneSource:unreachable-in-worker')};
+`;
+    s += `var sectionOf=()=>{throw new Error('core/sectionOf:unreachable-in-worker')};
+`;
+    s += `var cutScale=()=>{throw new Error('core/cutScale:unreachable-in-worker')};
+`;
+    s += `var coverSrc=()=>{throw new Error('core/coverSrc:unreachable-in-worker')};
+`;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
-    s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,view,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br,coatBloomDone,layTiles,workC,emitC,__bkW,__bkH,__backlit;\n`;
+    s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,view,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br,coatBloomDone,layTiles,T,workC,emitC,__bkW,__bkH,__backlit;\n`;
     // MATERIAL is what paintContent forks on, and it was never declared here at all - a free
     // variable in a worker throws on read, so this core could paint NO material, not just not
     // glass. marks and _wmask travel for the same reason: the glass painter reads the mark list
@@ -5998,7 +6074,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // still runs synchronously to completion exactly as before - an async function only yields at its
     // first await, and that path never reaches one.
     s += `self.onmessage=async function(e){var d=e.data;\n`;
-    s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;layTiles=!!d.layTiles;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;workC=d.bk||null;emitC=d.em||null;__bkW=d.bkW|0;__bkH=d.bkH|0;__backlit=!layTiles&&G.backlight>0&&!!workC;coatField=d.cf?{w:d.cfw,h:d.cfh,K:d.cfK,cv:fieldCanvas(d.cfw,d.cfh,d.cf),bytes:d.cf,at:d.cfAt|0}:null;self.postMessage({type:'ready'});return;}\n`;
+    s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;layTiles=!!d.layTiles;T=d.T||T;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);lensC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;workC=d.bk||null;emitC=d.em||null;__bkW=d.bkW|0;__bkH=d.bkH|0;__backlit=!layTiles&&G.backlight>0&&!!workC;coatField=d.cf?{w:d.cfw,h:d.cfh,K:d.cfK,cv:fieldCanvas(d.cfw,d.cfh,d.cf),bytes:d.cf,at:d.cfAt|0}:null;self.postMessage({type:'ready'});return;}\n`;
     // THE ACK IS THE ONLY WAY TO TELL A QUEUE FROM A STALL. A bitmap arriving late can mean the
     // worker painted for a minute or that it sat holding a message it had not been scheduled to
     // read, and the completion time cannot distinguish them. Posted from the top of the handler,
@@ -6027,6 +6103,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // same storedTilePixels, the same deflate, the same reply. A worker that paints and a worker
     // that finishes differ by which side of this branch they took.
     s += `if(d.bmp){tcx.drawImage(d.bmp,0,0);d.bmp.close();}else{\n`;
+    // THE FLOOR PAINTS ITS WHOLE TILE - ground, pieces and coat - so it REPLACES the three steps
+    // below rather than slotting between them. renderFloorTile is the one implementation and the
+    // main thread calls that same function: a second copy here is how the two would drift, and a
+    // floor tile that differs by which thread drew it is the defect harness/floor.mjs exists for.
+    s += `if(layTiles){var fc=renderFloorTile(d.finalW,d.tx0,d.ty0,d.tileW,d.tileH,d.bleed);` + NL;
+    s += `tcx.setTransform(1,0,0,1,0,0);tcx.drawImage(fc,0,0);fc.width=1;fc.height=1;}else{` + NL;
     s += `tcx.setTransform(1,0,0,1,0,0);if(__backlit){tcx.fillStyle='#0b0b0e';tcx.fillRect(0,0,d.ew,d.eh);}else if(uvMode){tcx.fillStyle=UV_GROUND;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
     s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
     // CONTENT FROM SOMEBODY ELSE, GROUND AND COAT STILL OURS. d.bmp above is a tile that is already
@@ -6050,10 +6132,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `tcx.drawImage(d.glass,WB.x0,WB.y0,WB.bw,WB.bh,WB.x0,WB.y0,WB.bw,WB.bh);tcx.restore();}` + NL;
     s += `d.glass.close();}else if(__backlit){backlitPlace(__bkW,__bkH);backlitBloom(tc,d.bs);}else{paintContent(false,false);}` + NL;
     s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:__backlit,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
+    s += `}` + NL;                                 // closes the layTiles branch
     // THE WINDOWS, after the coat and only for tiles a disc actually reaches - the same order and
     // the same skip test renderOneTile uses, because a window composites over a FINISHED tile and a
     // tile the disc misses must not pay for one. Line for line the main thread's block; any
     // divergence here is a windowed master that differs by which path drew it.
+    // A FLOOR TAKES NO REALITY WINDOWS, which is not a rule invented here: draw() guards the
+    // screen pass with `!ident && !layTiles` and renderFloorTile never reaches one. Without this
+    // the pool would composite a window onto a floor tile that the sequential path leaves alone,
+    // and the two would differ only on slabs that have a window AND a floor.
+    s += `if(!layTiles){` + NL;
     s += `var __W=windowMasks();for(var wi=0;wi<__W.length;wi++){var win=__W[wi];` + NL;
     s += `var wx=win.x*d.finalW,wy=win.y*d.finalW,wr=(win.r+win.feather)*d.finalW;` + NL;
     s += `if(wx+wr<d.ex0||wx-wr>d.ex0+d.ew||wy+wr<d.ey0||wy-wr>d.ey0+d.eh)continue;` + NL;
@@ -6062,6 +6150,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `var R={x:rx,y:ry,w:Math.min(d.ew-rx,d.tileW+2*ab),h:Math.min(d.eh-ry,d.tileH+2*ab)};` + NL;
     s += `compositeWindow(tcx,win,d.ew,d.eh,[d.finalW,0,0,d.finalW,-d.ex0,-d.ey0],d.bs,wx-d.ex0,wy-d.ey0,d.finalW,` + NL;
     s += `{ox:d.ex0+R.x,oy:d.ey0+R.y,fw:d.finalW,fh:d.finalH},R);}` + NL;
+    s += `}` + NL;                                 // closes the floor guard above
     s += `}` + NL;                                 // closes the else the d.bmp branch opened
     // keepBleed: the export reads its quarters at [bleed + sx*store), so it wants the bled tile
     // exactly as renderOneTile returns it. Cropping here and re-offsetting there would be two
@@ -6120,7 +6209,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       modBitmap(layVis('bands') && G.bandStrength > 0, ensureBands),
       modBitmap(layVis('breccia') && G.brecStrength > 0, ensureBreccia),
     ]);
-    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, spotOn, layTiles, hidden: [...hidden],
+    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, spotOn, layTiles, T, hidden: [...hidden],
                     material: currentMaterial(), marks, ...coatFieldMsg() };
     const url = URL.createObjectURL(new Blob([renderCoreSrc()], { type: 'application/javascript' }));
     const pool = [];
@@ -15394,7 +15483,9 @@ self.onmessage = async (e) => {
   // It was expensive while it lasted: every slab carrying an island with Show through rendered
   // single-threaded, and on a 131,072 that is four and a half minutes against fifty-one seconds.
   // harness/window-pool.mjs holds the proof that both paths write the same bytes.
-  const corePaintsThis = () => !layTiles && !(WOOD.graft > 0) &&
+  // THE FLOOR CLAUSE IS NOW A SECTIONS CLAUSE, and it has to read the same here as in
+  // poolWhyNot below: a plain floor pools, a floor laid from cut sections does not.
+  const corePaintsThis = () => !(layTiles && sectionList().length) && !(WOOD.graft > 0) &&
     typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
   // WHICH CLAUSE SAID NO, in the same order corePaintsThis evaluates them. A predicate that answers
   // only true or false is fine for the code and useless to a person: a render that silently never
@@ -15410,7 +15501,19 @@ self.onmessage = async (e) => {
   // short reasons are translated too, not merely the two long enough to trip check-i18n.
   function poolWhyNot() {
     if (EXP_FORCE_SEQ) return 'exp.pool.forced';
-    if (layTiles) return 'exp.pool.floor';
+    // THE FLOOR CAME OFF THIS LIST on 2026-10-31. The core had no floor path - drawTilesTo and
+    // renderFloorTile were not in its function list - so a floor master ran single-threaded on
+    // the main thread while a slab master got twelve workers. Both travel now.
+    //
+    // WHAT STILL REFUSES is a floor laid from CUT SECTIONS. A section is a whole slab record and
+    // the branch that lays one blits out of a slab offscreen painted per section: the same trade
+    // the graft clause below already declined, for the same reason - shipping a slab per section
+    // to every worker is not the bargain. ANY section refuses, not only one that is a cut: that is
+    // what makes the worker's `sectionList = () => []` true by construction rather than nearly so,
+    // and stageN and boardsAvailable both read that list.
+    // to every worker is not the bargain. The key still reads 'a tiled floor', which is now less
+    // specific than the clause it reports; renaming it is fifteen packs of work, not yet done.
+    if (layTiles && sectionList().length) return 'exp.pool.floor';
     if (WOOD.graft > 0) return 'exp.pool.graft';
     // THE BACK LIGHT CAME OFF THIS LIST on 2026-10-29. It refused because the fold was whole-slab
     // and rebuilt per call; it is built once now and travels to each worker as two bitmaps. The
@@ -19930,7 +20033,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       bkOn ? createImageBitmap(workC) : null,
       bkOn ? createImageBitmap(emitC) : null,
     ]);
-    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, layTiles,
+    const state = { geo, G, COL, OVR, OVR_uv, perItem, fam, layers, soloLay, uvMode, view, lightSpectrum, layTiles, T,
                     spotOn, hidden: [...hidden], material: currentMaterial(), marks,
                     bkW: bkOn ? backlitFor.gw : 0, bkH: bkOn ? backlitFor.gh : 0, ...coatFieldMsg() };
     const url = URL.createObjectURL(new Blob([renderCoreSrc()], { type: 'application/javascript' }));
