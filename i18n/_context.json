@@ -1336,6 +1336,131 @@
     ],
     "where": "slider value: the canes meet edge to edge with no overlap"
   },
+  "ui.temp-neutral": {
+    "terms": [
+      "light"
+    ],
+    "where": "slider value at 0: the light has no warm or cool tint"
+  },
+  "ui.temp-warm": {
+    "placeholders": {
+      "n": "distance from neutral, two decimals, always positive"
+    },
+    "terms": [
+      "light"
+    ],
+    "where": "slider value below 0: a warmer light"
+  },
+  "ui.temp-cool": {
+    "placeholders": {
+      "n": "distance from neutral, two decimals, always positive"
+    },
+    "terms": [
+      "light"
+    ],
+    "where": "slider value above 0: a cooler light"
+  },
+  "ui.glaze-bare": {
+    "terms": [
+      "wood"
+    ],
+    "where": "slider value at 0: the board is REAL WOOD. Above zero it becomes wood-look porcelain - a tile, with grout - so the contrast here is wood versus tile, not bare versus varnished. A word meaning untreated or unfinished is still true of zero and is fine; a word meaning only unvarnished understates it"
+  },
+  "ui.mineral-clean": {
+    "terms": [
+      "wood"
+    ],
+    "where": "slider value at 0: no mineral stain in the wood - free of it, not washed"
+  },
+  "ui.graft-own": {
+    "terms": [
+      "wood",
+      "knot"
+    ],
+    "where": "slider value at 0: the tree grew this branch itself, so the knot is its own wood"
+  },
+  "ui.graft-kept": {
+    "placeholders": {
+      "n": "WHICH kept cut the graft came from - an index, not a measurement"
+    },
+    "terms": [
+      "wood",
+      "knot"
+    ],
+    "where": "slider value above 0: the branch was grafted from one of the kept cuts, so the knot is another species"
+  },
+  "ui.fire-never": {
+    "terms": [
+      "wood"
+    ],
+    "where": "slider value at 0: the tree never burned"
+  },
+  "ui.fire-ring": {
+    "placeholders": {
+      "n": "a growth ring number, whole"
+    },
+    "terms": [
+      "wood"
+    ],
+    "where": "slider value above 0: the growth ring the tree burned in"
+  },
+  "ui.taper-cylinder": {
+    "terms": [
+      "wood"
+    ],
+    "where": "slider value at 0: no taper, so the trunk is a plain cylinder"
+  },
+  "ui.flare-none": {
+    "terms": [
+      "wood"
+    ],
+    "where": "slider value at 0: no flare where the trunk meets the ground"
+  },
+  "ui.rise-straight": {
+    "terms": [
+      "wood"
+    ],
+    "where": "slider value at 0 degrees: the branch leaves the trunk horizontally"
+  },
+  "ui.prune-died": {
+    "terms": [
+      "wood",
+      "knot"
+    ],
+    "where": "slider value at 0: the branch died on the tree and was buried in its own bark, which leaves a loose knot"
+  },
+  "ui.prune-clean": {
+    "terms": [
+      "wood",
+      "knot"
+    ],
+    "where": "slider value at 1 or above: the branch was cut off while alive and the live collar healed over sound wood"
+  },
+  "ui.die-alive": {
+    "terms": [
+      "wood",
+      "knot"
+    ],
+    "where": "slider value at 0: the branch never died"
+  },
+  "ui.seeds-clear": {
+    "terms": [
+      "glass"
+    ],
+    "where": "slider value at 0: no seeds, so the glass is clear"
+  },
+  "ui.incl-none": {
+    "terms": [
+      "glass"
+    ],
+    "where": "slider value at 0: no inclusions in the glass"
+  },
+  "ui.cords-clear": {
+    "terms": [
+      "glass"
+    ],
+    "where": "slider value at 0: no canes, so the glass is clear"
+  },
   "sl.glass-opacity": {
     "terms": [
       "glass"

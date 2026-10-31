@@ -1142,6 +1142,7 @@ window.SA_I18N = (() => {
   "resume.light-uv": "black light, spectrum {s}",
   "resume.gone": "This device no longer offers that width, so the unfinished render cannot be continued here.",
   "sl.glass-cords": "Canes",
+  "ui.cords-clear": "clear",
   "sl.glass-cordN": "Cane colours",
   "sl.glass-cordScale": "Cane count",
   "sl.glass-cordWander": "Cane wander",
@@ -1249,8 +1250,10 @@ window.SA_I18N = (() => {
   "sl.glass-flutePitch": "Flute pitch",
   "sl.glass-fluteDepth": "Flute depth",
   "sl.glass-seeds": "Seeds",
+  "ui.seeds-clear": "clear",
   "sl.glass-seedStretch": "Seed stretch",
   "sl.glass-incl": "Inclusions",
+  "ui.incl-none": "none",
   "sl.glass-relief": "Relief",
   "mat.wood": "Wood",
   "note.calibrate": "Twenty short strokes teach the studio <i>your</i> hand: the pressure you actually use, how you normally hold the pen, and what counts as fast for you. Nothing is drawn on the slab while you calibrate, and nothing leaves this device.",
@@ -1331,6 +1334,9 @@ window.SA_I18N = (() => {
   "sl.lightAngle": "Light angle",
   "sl.lightSpectrum": "Light spectrum",
   "sl.lightTemp": "Light temperature",
+  "ui.temp-neutral": "neutral",
+  "ui.temp-warm": "warm {n}",
+  "ui.temp-cool": "cool {n}",
   "sl.maskFeather": "Feather",
   "sl.maskSpec": "Window spectrum",
   "sl.mheight": "Height",
@@ -1350,6 +1356,7 @@ window.SA_I18N = (() => {
   "sl.wood-plane": "Cut",
   "sl.wood-y0": "Board position",
   "sl.wood-glaze": "Glaze",
+  "ui.glaze-bare": "bare wood",
   "sl.wood-wid": "Board width",
   "sl.wood-len": "Board length",
   "lbl.board-inches": "Board, inches",
@@ -1358,8 +1365,13 @@ window.SA_I18N = (() => {
   "sl.wood-cutAngle": "Cut angle",
   "sl.wood-treeDia": "Tree size",
   "sl.wood-dev2Rise": "Branch rise",
+  "ui.rise-straight": "straight out",
   "sl.wood-dev2Prune": "Taken off",
+  "ui.prune-died": "died on the tree",
+  "ui.prune-clean": "taken off clean",
   "sl.wood-graft": "Graft branch from",
+  "ui.graft-own": "own wood",
+  "ui.graft-kept": "kept cut {n}",
   "sec.wood-cut": "The cut",
   "sec.wood-tree": "The tree",
   "sec.wood-growth": "Growth",
@@ -1373,6 +1385,8 @@ window.SA_I18N = (() => {
   "sec.wood-fire": "Fire",
   "sl.wood-stage": "Boards",
   "sl.wood-fireAt": "Fire year",
+  "ui.fire-never": "never",
+  "ui.fire-ring": "ring {n}",
   "sl.wood-fireSeverity": "Fire severity",
   "sl.wood-fireWidth": "Fire width",
   "sl.wood-fireAngle": "Fire face",
@@ -1380,10 +1394,12 @@ window.SA_I18N = (() => {
   "sl.wood-fireZ": "Fire reach",
   "sl.wood-trunkH": "Trunk height",
   "sl.wood-taper": "Taper",
+  "ui.taper-cylinder": "cylinder",
   "sl.wood-dEarly": "Bad years young",
   "sl.wood-dMid": "Bad years middle",
   "sl.wood-dLate": "Bad years old",
   "sl.wood-flare": "Basal flare",
+  "ui.flare-none": "none",
   "sl.wood-flareH": "Flare height",
   "sl.wood-zBase": "Height up trunk",
   "sl.wood-plankWid": "Plank width",
@@ -1426,6 +1442,7 @@ window.SA_I18N = (() => {
   "sl.wood-lateSharp": "Latewood edge",
   "sl.wood-gloss": "Figure",
   "sl.wood-mineral": "Mineral stain",
+  "ui.mineral-clean": "clean",
   "sl.wood-mineralSize": "Stain spread",
   "sl.wood-mineralSpacing": "Streak spacing",
   "lay.wood-mineral": "Wood mineral stain",
@@ -1468,6 +1485,7 @@ window.SA_I18N = (() => {
   "sl.wood-dev2Knot": "Knot",
   "sl.wood-dev2KnotPitch": "Knot pitch",
   "sl.wood-dev2Die": "Died at ring",
+  "ui.die-alive": "alive",
   "sp.fir": "Douglas fir",
   "sp.redwood": "Redwood",
   "sp.oak": "White oak",
@@ -1857,7 +1875,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.256';
+  const BUILD = '2026.10.31.257';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2211,7 +2229,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // load is a PURE FUNCTION of the slab: a key absent from the save falls to its default, never a leftover from
   // whatever was loaded before. Without this, loading a partial/older slab into a dirtied session renders differently.
   const G0 = JSON.parse(JSON.stringify(G)), T0 = JSON.parse(JSON.stringify(T)), NEXT0 = JSON.parse(JSON.stringify(NEXT));
-  const GFMT = { subsurface: v => (+v).toFixed(2), specular: v => (+v).toFixed(2), lightAngle: v => `${Math.round(v)}°`, lightTemp: v => (+v == 0 ? 'neutral' : (v < 0 ? 'warm ' : 'cool ') + Math.abs(v).toFixed(2)), spotR: v => (+v).toFixed(2), speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
+  const GFMT = { subsurface: v => (+v).toFixed(2), specular: v => (+v).toFixed(2), lightAngle: v => `${Math.round(v)}°`, lightTemp: v => (+v == 0 ? TR('ui.temp-neutral') : TR(v < 0 ? 'ui.temp-warm' : 'ui.temp-cool', { n: Math.abs(v).toFixed(2) })), spotR: v => (+v).toFixed(2), speckGroups: v => `${Math.round(v)}`, speckSubs: v => `${Math.round(v)}`, cloudStrength: v => (+v).toFixed(2), cloudScale: v => `${(+v).toFixed(2)}\u00d7`, warp: v => (+v).toFixed(2), warpDepth: v => (+v).toFixed(2), cloudX: v => (+v).toFixed(2), cloudY: v => (+v).toFixed(2),
                  bandStrength: v => (+v).toFixed(2), bandFreq: v => `${Math.round(v)}`, bandAngle: v => `${v}\u00b0`, bandWave: v => (+v).toFixed(2), fogHaze: v => `${Math.round(v * 100)}%`,
                  brecStrength: v => (+v).toFixed(2), brecClasts: v => `${Math.round(v)}`, brecSeam: v => (+v).toFixed(2),
                  drusyDensity: v => (+v).toFixed(2), drusyBright: v => (+v).toFixed(2), drusyGroups: v => `${Math.round(v)}`, drusySubs: v => `${Math.round(v)}`,
@@ -2283,7 +2301,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const k of selected) if (k.startsWith('lay:')) { const L = layAt(k.slice(4)); if (L) { if (L.field === 'fog') return L.key; if (L.field === 'specks' && !micro) micro = L.key; } }
     return micro;
   };
-  const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), maskFeather: v => (+v).toFixed(3), maskWin: v => (+v ? 'on' : 'off'), maskSpec: v => (+v === 0 ? 'daylight' : (+v).toFixed(2)), maskInvert: v => (+v ? 'chaos' : 'protect') };
+  const FMT = { prate: v => `${v}/s`, pfling: v => (+v).toFixed(1), strength: v => (+v).toFixed(2), mstrength: v => (+v).toFixed(2), maskFeather: v => (+v).toFixed(3), maskWin: v => (+v ? TR('mask.win.on') : TR('mask.win.off')), maskSpec: v => (+v === 0 ? TR('hint.daylight') : (+v).toFixed(2)), maskInvert: v => (+v ? TR('mask.sense.chaos') : TR('mask.sense.protect')) };
   let fam = 'carrara', tool = 'vein', view = 'stone';
   let marks = [], nextId = 1, geo = { lines: [], byId: new Map(), web: [], specks: [], guides: [], styl: [], drusy: [], fog: [] };
   // CANONICAL LAYERS - the contract every consumer reads (VA: base/major/minor/micro; the dashboard
@@ -10136,7 +10154,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   const WDFMT = { rings: v => `${Math.round(v)}`, plane: v => (+v).toFixed(2), y0: v => (+v).toFixed(2),
                   // zero is the default and the common case, so it says what it means rather than "0.00"
-                  glaze: v => +v === 0 ? 'bare wood' : (+v).toFixed(2),
+                  glaze: v => +v === 0 ? TR('ui.glaze-bare') : (+v).toFixed(2),
                   late: v => (+v).toFixed(2), drift: v => (+v).toFixed(2),
                   // FEET, and they never said so. Everything else in this panel prints its unit:
                   // plankLen inches, trunkH and flareH feet. A bare 5.00 here is a five-foot plank.
@@ -10146,20 +10164,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   vary: v => (+v).toFixed(2), dRate: v => `${Math.round(v * 100)}%`,
                   dDepth: v => (+v).toFixed(2), lateFrac: v => `${Math.round(v * 100)}%`,
                   lateSharp: v => (+v).toFixed(2), gloss: v => (+v).toFixed(2),
-                  mineral: v => +v === 0 ? 'clean' : (+v).toFixed(2),
+                  mineral: v => +v === 0 ? TR('ui.mineral-clean') : (+v).toFixed(2),
                   mineralSize: v => (+v).toFixed(2), mineralSpacing: v => `${(+v).toFixed(1)}\u2033`,
                   fibreSpiral: v => `${(+v).toFixed(1)}\u00b0`, interlock: v => `${(+v).toFixed(1)}\u00b0`,
                   interlockRings: v => `${Math.round(v)}`, curl: v => `${(+v).toFixed(1)}\u00b0`,
                   curlRate: v => (+v).toFixed(1), eyes: v => (+v).toFixed(2),
                   stage: v => `${Math.round(v)}`,
-                  graft: v => +v === 0 ? 'own wood' : `kept cut ${Math.round(v)}`,
-                  fireAt: v => +v === 0 ? 'never' : `ring ${Math.round(v)}`,
+                  graft: v => +v === 0 ? TR('ui.graft-own') : TR('ui.graft-kept', { n: Math.round(v) }),
+                  fireAt: v => +v === 0 ? TR('ui.fire-never') : TR('ui.fire-ring', { n: Math.round(v) }),
                   fireSeverity: v => (+v).toFixed(2), fireWidth: v => `${Math.round(v)}\u00b0`,
                   fireAngle: v => `${Math.round(v)}\u00b0`, fireHeal: v => `${Math.round(v)}`,
                   fireZ: v => `${(+v).toFixed(1)}\u2032`,
                   trunkH: v => `${Math.round(v)}\u2032`, zBase: v => `${(+v).toFixed(1)}\u2032`,
-                  taper: v => +v === 0 ? 'cylinder' : (+v).toFixed(2),
-                  flare: v => +v === 0 ? 'none' : (+v).toFixed(2),
+                  taper: v => +v === 0 ? TR('ui.taper-cylinder') : (+v).toFixed(2),
+                  flare: v => +v === 0 ? TR('ui.flare-none') : (+v).toFixed(2),
                   dEarly: v => `\u00d7${(+v).toFixed(2)}`, dMid: v => `\u00d7${(+v).toFixed(2)}`,
                   dLate: v => `\u00d7${(+v).toFixed(2)}`, flareH: v => `${(+v).toFixed(1)}\u2032`, plankLen: v => `${Math.round(v)}\u2033`, plankWid: v => `${(+v).toFixed(2)}\u2033`,
                   plankVary: v => (+v).toFixed(2), plankStagger: v => (+v).toFixed(2),
@@ -10178,9 +10196,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   dev2ZSpan: v => (+v).toFixed(2), dev2Start: v => `${Math.round(v)}`,
                   dev2Ramp: v => `${Math.round(v)}`, dev2Knot: v => (+v).toFixed(3),
                   dev2KnotPitch: v => `${Math.round(v)}`,
-                  dev2Rise: v => +v === 0 ? 'straight out' : `${Math.round(v)}\u00b0`,
-                  dev2Prune: v => +v === 0 ? 'died on the tree' : (+v >= 1 ? 'taken off clean' : (+v).toFixed(2)),
-                  dev2Die: v => +v === 0 ? 'alive' : `${Math.round(v)}`,
+                  dev2Rise: v => +v === 0 ? TR('ui.rise-straight') : `${Math.round(v)}\u00b0`,
+                  dev2Prune: v => +v === 0 ? TR('ui.prune-died') : (+v >= 1 ? TR('ui.prune-clean') : (+v).toFixed(2)),
+                  dev2Die: v => +v === 0 ? TR('ui.die-alive') : `${Math.round(v)}`,
                   // the effective count, not the stored ask: a slab saved against a wider board can
                   // carry a stage this log cannot fill, and printing the ask would be a lie.
                   stage: v => `${Math.max(1, Math.min(boardsAvailable(), Math.round(v) || 1))}` };
@@ -10199,10 +10217,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
                   paneX: v => `${(+v).toFixed(2)}\u2032`, paneY: v => `${(+v).toFixed(2)}\u2032`,
                   formR: v => `${(+v).toFixed(2)}\u2032`, ream: v => (+v).toFixed(2),
                   reamScale: v => (+v).toFixed(1), flutePitch: v => (+v).toFixed(1),
-                  fluteDepth: v => (+v).toFixed(2), seeds: v => +v === 0 ? 'clear' : (+v).toFixed(2),
+                  fluteDepth: v => (+v).toFixed(2), seeds: v => +v === 0 ? TR('ui.seeds-clear') : (+v).toFixed(2),
                   seedStretch: v => `${(+v).toFixed(1)}\u00d7`, relief: v => (+v).toFixed(2),
-                  incl: v => +v === 0 ? 'none' : (+v).toFixed(3),
-                  cords: v => +v === 0 ? 'clear' : (+v).toFixed(2),
+                  incl: v => +v === 0 ? TR('ui.incl-none') : (+v).toFixed(3),
+                  cords: v => +v === 0 ? TR('ui.cords-clear') : (+v).toFixed(2),
                   cordN: v => `${Math.round(v)}`, cordScale: v => (+v).toFixed(1),
                   cordWander: v => (+v).toFixed(2),
                   // Worded, because the ends are the two lay-ups anyone actually names.
