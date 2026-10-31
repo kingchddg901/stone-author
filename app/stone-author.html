@@ -1856,7 +1856,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.253';
+  const BUILD = '2026.10.31.254';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13055,7 +13055,15 @@ self.onmessage = async (e) => {
     btn.disabled = selW.disabled = selWhat.disabled = true;
     expReset();
     hint(TR('hint.exporting-render', { w: W }));
+    // THE FIELD, ON THIS PATH TOO. tiledPlan takes its bleed from coatReach, and coatReach drops the
+    // subsurface clause the moment coatFieldUsable says yes - so without this the bleed falls to 4
+    // while applyCoat, finding no field, runs the FULL blur against it. That is a banded picture at
+    // every tile join, and it renders cleanly and reports success. Found 2026-10-31, after the field
+    // was wired into exportTiff ALONE; both PNG paths were drop-the-bleed-keep-the-blur for two builds.
+    // CPU by construction here: neither PNG path builds a GPU pool, and the tiles they paint are the
+    // CPU painter's - so the prelude must be the painter's too, or the two disagree.
     try {
+      await buildCoatField(W, false);
       if (only) {
         expStat(TR('exp.preparing'), null); await breathe();
         // 16 x 10 tiles at 16384, about 0.75 s each on a phone: enough to watch, cheap enough to yield to.
@@ -13163,7 +13171,9 @@ self.onmessage = async (e) => {
       const msg = TR('hint.export-failed-msg', { err: errWhere(e) });
       hint(msg); expStat(msg, -1);                         // stays on screen; the hint will not
     }
-    finally { btn.disabled = selW.disabled = selWhat.disabled = false; exporting = false; wakeOff(); resumeOffer(); }
+    finally { if (coatField && coatField.cv) { coatField.cv.width = 1; coatField.cv.height = 1; }
+              coatField = null; coatFieldBuilding = false;
+              btn.disabled = selW.disabled = selWhat.disabled = false; exporting = false; wakeOff(); resumeOffer(); }
   }
   // the family's ground belongs to the slab, so switching family rebuilds the ground under the lines
   for (const b of document.querySelectorAll('[data-fam]')) b.addEventListener('click', () => { fam = b.dataset.fam; press('[data-fam]', b); showGround(); redraw(true); });
@@ -20682,6 +20692,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     try {
       expStat(TR('exp.preparing'), null); await breathe();
       await sealing;                                        // the device block, ready before the metadata is built
+      await buildCoatField(W, false);                       // stripPlan's bleed drops with the clause too; see exportAll
       // pngMeta, not expMeta: it adds the glow lift, without which the light figure cannot be read.
       const r = await renderStreamedPNG(W, m => pngMeta({
         scope: 'render', streamed: true, w: W, h: Math.round(W * H),
@@ -20706,7 +20717,9 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     } catch (e) {
       const msg = TR('hint.export-failed-msg', { err: errWhere(e) });
       hint(msg); expStat(msg, -1);
-    } finally { btn.disabled = selW.disabled = false; exporting = false; wakeOff(); applyTiers(); }
+    } finally { if (coatField && coatField.cv) { coatField.cv.width = 1; coatField.cv.height = 1; }
+                coatField = null; coatFieldBuilding = false;
+                btn.disabled = selW.disabled = false; exporting = false; wakeOff(); applyTiers(); }
     // applyTiers already calls resumeOffer at its tail, so this path needs nothing further.
   }
   applyTiers();

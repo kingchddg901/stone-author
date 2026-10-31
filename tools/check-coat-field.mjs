@@ -171,6 +171,33 @@ const CHECKS = {
     return null;
   },
 
+  'every-export-that-drops-the-bleed-builds-the-field': app => {
+    // THE DEFECT, 2026-10-31. The field was wired into exportTiff alone. But coatRadius drops the
+    // subsurface clause from coatFieldUsable, which knows nothing about WHICH export is running - so
+    // exportAll (tiledPlan) and exportStreamed (stripPlan) took their bleed from coatReach, got 4,
+    // and then applyCoat found coatField null and ran the FULL blur against it. A 131px blur with 4px
+    // of margin bands at every tile join, renders cleanly, and reports success. Two builds shipped
+    // that way and a real PNG was made with it.
+    //
+    // So: every export entry that reaches a planner must build the field. Named explicitly rather
+    // than discovered, because "I added a path and forgot" is exactly how this happened.
+    const PLANNERS = { exportTiff: 'tiffPlan', exportAll: 'tiledPlan', exportStreamed: 'stripPlan' };
+    for (const [fn, planner] of Object.entries(PLANNERS)) {
+      const b = body(app, 'async function ' + fn) || body(app, 'function ' + fn);
+      if (!b) return fn + ' is not in the app; this check no longer describes the export surface';
+      if (!b.includes('buildCoatField(')) {
+        return fn + ' never builds the field, but its bleed comes from ' + planner + ' -> coatReach, ' +
+               'which drops the subsurface clause - so it would blur full width against a bleed of 4';
+      }
+      if (!/coatField = null/.test(b)) return fn + ' never clears coatField, so the next render of another slab could sample this one\'s';
+    }
+    // and a planner nobody checked is a planner that can repeat it
+    for (const planner of Object.values(PLANNERS)) {
+      if (!app.includes('function ' + planner)) return planner + ' is gone; the export surface changed under this check';
+    }
+    return null;
+  },
+
   'prelude-blur-is-opaque-before-the-difference': app => {
     // MEASURED 2026-10-31. A canvas blur pulls transparency in from outside its source, so the blurred
     // copy's alpha falls off over 4*sigma at every border - 130 at the edge for sigma 20, reaching 255
@@ -266,7 +293,8 @@ function strip(t) {
 function body(app, head) {
   const i = app.indexOf(head);
   if (i < 0) return null;
-  const s = strip(app.slice(i, i + 20000));
+  const s = strip(app.slice(i));                 // to the end: exportTiff alone exceeds any fixed slice,
+                                                 // and a truncated body reads as a MISSING function
   let d = 0, started = false;
   for (let k = 0; k < s.length; k++) {
     if (s[k] === '{') { d++; started = true; }
@@ -344,6 +372,13 @@ const ABLATIONS = [
    a => a.replace('finally { coatFieldBuilding = false; }', '').replace('try { P = renderSlabTo', 'P = renderSlabTo')],
   ['the field loses its tint', 'prelude-flag-is-paired',
    a => a.replace("ax.fillStyle = COL.innerColour || '#ffcf8f';", "ax.fillStyle = '#ffffff';")],
+  // one per export entry: the bug was ONE path forgotten, so each must be able to go red alone
+  ['exportAll stops building the field', 'every-export-that-drops-the-bleed-builds-the-field',
+   a => a.replace('      await buildCoatField(W, false);\n      if (only) {', '      if (only) {')],
+  ['exportStreamed stops building the field', 'every-export-that-drops-the-bleed-builds-the-field',
+   a => a.replace("      await buildCoatField(W, false);                       // stripPlan's", "      // stripPlan's")],
+  ['exportTiff stops building the field', 'every-export-that-drops-the-bleed-builds-the-field',
+   a => a.replace('const cfBuilt = await buildCoatField(W, !!(pool && pool.gpu));', 'const cfBuilt = null;')],
   ['the blurred copy is left translucent', 'prelude-blur-is-opaque-before-the-difference',
    a => a.replace('for (let i = 3; i < d4.length; i += 4) d4[i] = 255;', '')],
   ['the wide blur goes straight into the difference', 'prelude-blur-is-opaque-before-the-difference',
@@ -375,7 +410,9 @@ const ABLATIONS = [
   ['the signature stops moving', 'signature-moves-with-the-flag',
    a => a.replace("...(FIELD_ON ? { field: FIELD_W + '/' + FIELD_PX } : {}),", '')],
   ['the field is left standing', 'field-is-cleared-after-a-render',
-   a => a.replace('coatField = null; coatFieldBuilding = false;', '')],
+   a => a.replace('drewOnGpu = false; bloomOnGpu = false; backlitFor = null;', 'drewOnGpu = false; bloomOnGpu = false; backlitFor = null; /*x*/')
+         .replace(/drewOnGpu = false; bloomOnGpu = false; backlitFor = null; \/\*x\*\/[\s\S]*?coatField = null; coatFieldBuilding = false;/,
+                  'drewOnGpu = false; bloomOnGpu = false; backlitFor = null;')],
 ];
 
 let bad = 0;

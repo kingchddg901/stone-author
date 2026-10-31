@@ -398,6 +398,32 @@ per-tile path being wrong there.
 Left alone deliberately. Matching would mean reproducing a defect; repairing the per-tile path would
 move every master ever rendered, which is the same trade the 2026-10-29 ruling weighed and declined.
 
+### Three export paths, and the bleed is dropped by a predicate that knows about none of them
+
+Found 2026-10-31, two builds after the route shipped. `buildCoatField` was wired into `exportTiff`
+alone — but `coatRadius` drops the subsurface clause on the word of `coatFieldUsable`, which knows the
+flag, the slab and the width and **nothing about which export is running**. So:
+
+| path | widths | bleed from | built the field? |
+|---|---|---|---|
+| `exportTiff` | all, TIFF | `tiffPlan` → `coatReach` | yes |
+| `exportAll` | ≤ `STRIP_FROM` (16,384), PNG | `tiledPlan` → `coatReach` | **no** |
+| `exportStreamed` | > 16,384, PNG | `stripPlan` → `coatReach` | **no** |
+
+On both PNG paths the bleed fell to 4 and then `applyCoat`, finding `coatField` null, fell through to
+the **original** branch and ran the full blur against it — a 131 px blur with 4 px of margin at 16,384.
+That bands at every tile join, renders cleanly, and reports success. A real PNG was made that way.
+
+Both now build it, with `viaGpu` false: neither PNG path creates a GPU pool, so the tiles are the CPU
+painter's and the prelude must be too. `check-coat-field.mjs`'s
+`every-export-that-drops-the-bleed-builds-the-field` names all three explicitly and ablates each one
+alone, because "a path was added and forgotten" is precisely how this happened — twice, counting the
+painter mismatch.
+
+The shape worth carrying: **a predicate that authorises a saving must be answerable by everything that
+takes the saving.** `coatFieldUsable` authorises dropping the bleed; only one of three callers was
+also arranging the thing that made it safe.
+
 ## Reachable from
 
 - [`capabilities.md`](capabilities.md) — the draw order and the control list.
