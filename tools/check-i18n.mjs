@@ -271,6 +271,63 @@ if (existsSync(glPath)) glossary = JSON.parse(readFileSync(glPath, 'utf8'));
 let terms = new Set();
 if (glossary) for (const group of ['homographs', 'termsOfArt']) for (const t of Object.keys(glossary[group] || {})) terms.add(t);
 
+// ---- 5b. a `keep` ruling has to actually hold in the packs ----------------------------------------
+// KEEP MEANS THE WORD, NOT THE LETTERS. Inflection is expected — tokeny, Token, tokens, token
+// degerleri — and a script that is not Latin writes the term in its own, which the entry's `forms`
+// map records: токен, トークン, 토큰. A bare Latin word mid-sentence in Cyrillic or kana reads as a
+// string nobody translated, so demanding the ASCII spelling everywhere would be demanding a defect.
+//
+// WHAT IT RULES OUT is a pack reaching for a native word of its own, because that is how a term lands
+// on the very `notThe` its own entry warns about. French shipped "jeton" for `token` across four keys
+// — a gaming chip and a transit token, both named in that entry's notThe — and nothing could see it:
+// the glossary said `keep` and no gate read the glossary, while verify-pack's KEEP list is hardcoded
+// in that file and never contained `token`. The ruling and the packs disagreed for as long as both
+// existed. This reads the ruling itself, so a term added to the glossary is enforced the same day.
+{
+  const keeps = [];
+  for (const group of ['homographs', 'termsOfArt'])
+    for (const [t, v] of Object.entries((glossary || {})[group] || {}))
+      if (v && v.ruling === 'keep') keeps.push([t, (v.forms && typeof v.forms === 'object') ? v.forms : {}]);
+  const joined = v => (typeof v === 'string' ? [v] : Object.values(v || {})).join(' ');
+  // A HYPHEN AND A SPACE ARE THE SAME JOIN, AND SO IS AN ACCENT. "En-echelon", "En echelon" and
+  // "En échelon" are one term written three ways: English drops the accent because English does, and
+  // French keeps it because the phrase IS French — the entry's own hint says so. That is orthography,
+  // not a different word, and a gate that cannot tell them apart would be asking French to misspell
+  // a French term. Decompose, drop the combining marks, recompose — the recompose matters, because
+  // NFD also splits Hangul into jamo and 토큰 has to come back out as 토큰.
+  const norm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC')
+    .toLowerCase().replace(/[-‐-―\s]+/g, ' ');
+  // The character BEFORE must not be a letter, the one after may be: that is what lets "tokeny" and
+  // "Token" count while a term buried inside an unrelated word does not.
+  //
+  // THE BOUNDARY ONLY APPLIES TO A LATIN TERM. Japanese and Chinese do not put spaces between words,
+  // so every occurrence of トークン is pressed against a letter on both sides and a boundary rule can
+  // NEVER match one — the first run of this check reported all four Japanese keys as dropping a term
+  // the pack plainly carries. There is also nothing for the rule to protect against there: it exists
+  // to stop a short Latin term matching inside an unrelated English-looking word.
+  const starts = (hay, term) => {
+    const h = norm(hay), t = norm(term);
+    const latin = /^[a-z]/.test(t);
+    for (let i = h.indexOf(t); i >= 0; i = h.indexOf(t, i + 1))
+      if (!latin || i === 0 || !/[\p{L}\p{N}]/u.test(h[i - 1])) return true;
+    return false;
+  };
+  for (const file of packs) {
+    const lang = file.replace(/\.json$/, '');
+    const pack = JSON.parse(readFileSync(join(dir, file), 'utf8'));
+    for (const [term, forms] of keeps) {
+      const want = forms[lang] || term;
+      for (const k of enKeys) {
+        if (!(k in pack) || !starts(joined(EN[k]), term)) continue;
+        if (!starts(joined(pack[k]), want))
+          fail.push(`${lang}: ${k} drops "${term}", which _glossary.json rules keep`
+            + (forms[lang] ? ` — in ${lang} that term is written "${forms[lang]}"` : '')
+            + ' — a language that reaches for its own word here lands on the entry\'s own notThe');
+      }
+    }
+  }
+}
+
 if (ctx) {
   const holesOf = v => new Set([...String(v).matchAll(/\{(\w+)\}/g)].map(m => m[1]));
   for (const k of enKeys) {
