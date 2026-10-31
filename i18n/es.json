@@ -180,6 +180,7 @@
  },
  "hint.could-not-read-that-file": "No se pudo leer ese archivo.",
  "hint.daylight": "luz de día",
+ "hint.light-of": "una luz en {light}",
  "hint.declined": "rechazado",
  "hint.deleted-layer": "{name} borrada.",
  "hint.deleted-layer-marks": {

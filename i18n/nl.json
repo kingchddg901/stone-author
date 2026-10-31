@@ -179,6 +179,7 @@
  },
  "hint.could-not-read-that-file": "Dat bestand was niet te lezen.",
  "hint.daylight": "daglicht",
+ "hint.light-of": "een licht van {light}",
  "hint.declined": "geweigerd",
  "hint.deleted-layer": "{name} verwijderd.",
  "hint.deleted-layer-marks": {

@@ -1012,6 +1012,7 @@ window.SA_I18N = (() => {
   "hint.gravity-moves-specks-switch-to-granite": "Gravity moves specks. Switch to Granite, or pour some first.",
   "hint.hover-traces-on-move-the-pen": "Hover traces on: move the pen or mouse just above the slab to work lightly; each pause keeps the trace.",
   "hint.island-placed-it-freezes-the-warp": "Island placed — it freezes the warp here (an island of normalcy)",
+  "hint.light-of": "a light of {light}",
   "hint.loaded": "Loaded.",
   "hint.material-loaded": "Loaded the {mat} from {name} \u2014 the other two are untouched.",
   "hint.saved-material": "Saved the {mat} as {name} \u2014 load it back with Load one material and it lands in this slot.",
@@ -1856,7 +1857,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.255';
+  const BUILD = '2026.10.31.256';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9544,7 +9545,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     } else if (g.type === 'draw' && tool === 'mask') {
       const c = g.samples[0], last = g.samples[g.samples.length - 1], dr = Math.hypot(last[0] - c[0], last[1] - c[1]);
       commit({ id, kind: 'mask', at: [c[0], c[1]], r: dr < 0.02 ? 0.08 : dr });   // tap = default disc, drag = sized disc; feather/window from the panel
-      const sp = NEXT.maskSpec === 0 ? 'daylight' : 'a light of ' + (+NEXT.maskSpec).toFixed(2);
+      const sp = NEXT.maskSpec === 0 ? TR('hint.daylight') : TR('hint.light-of', { light: (+NEXT.maskSpec).toFixed(2) });
       hint(NEXT.maskInvert
         ? TR('hint.window-into-chaos-placed-the-slab') + (NEXT.maskWin ? TR('hint.and-it-looks-out-on') + sp + '.' : TR('hint.switch-show-through-on-to-give'))
         : TR('hint.island-placed-it-freezes-the-warp') + (NEXT.maskWin ? TR('hint.and-shows') + sp + TR('hint.through-the-disc') : TR('hint.switch-show-through-on-to-also')));
@@ -10096,7 +10097,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     folders.forEach((F, fi) => {
       const it = document.createElement('div'); it.className = 'hidden-item';
       const nm = document.createElement('span'); nm.style.cursor = 'pointer'; nm.title = TR('tip.double-tap-to-rename');
-      nm.textContent = F.name + ' · ' + (F.v === 0 ? 'daylight' : '@' + (+F.v).toFixed(2)) + ' · ' + F.members.length;
+      nm.textContent = F.name + ' · ' + (F.v === 0 ? TR('hint.daylight') : '@' + (+F.v).toFixed(2)) + ' · ' + F.members.length;
       nm.addEventListener('dblclick', () => { const inp = document.createElement('input'); inp.className = 'nm-edit'; inp.value = F.name; nm.replaceWith(inp); inp.focus(); inp.select(); const done = () => { const v = inp.value.trim(); if (v) F.name = v; buildLayerUI(); saveLocal(); }; inp.addEventListener('blur', done); inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); else if (e.key === 'Escape') buildLayerUI(); }); });
       const grp = document.createElement('span'); grp.className = 'grp';
       const col = document.createElement('input'); col.type = 'color'; col.value = F.c; col.title = TR('tip.emission-colour-for-this-folder'); col.style.cssText = 'width:26px;height:22px;padding:0;border:none;background:none';

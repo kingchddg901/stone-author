@@ -178,6 +178,7 @@
  },
  "hint.could-not-read-that-file": "File itu tidak bisa dibaca.",
  "hint.daylight": "cahaya siang",
+ "hint.light-of": "cahaya di {light}",
  "hint.declined": "ditolak",
  "hint.deleted-layer": "{name} dihapus.",
  "hint.deleted-layer-marks": {

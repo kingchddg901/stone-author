@@ -179,6 +179,7 @@
  },
  "hint.could-not-read-that-file": "O dosya okunamadı.",
  "hint.daylight": "gün ışığı",
+ "hint.light-of": "{light} ışığı",
  "hint.declined": "reddedildi",
  "hint.deleted-layer": "{name} silindi.",
  "hint.deleted-layer-marks": {

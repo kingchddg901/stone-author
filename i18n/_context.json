@@ -618,6 +618,15 @@
   "hint.daylight": {
     "where": "transient hint line under the tool palette"
   },
+  "hint.light-of": {
+    "placeholders": {
+      "light": "a spectrum value, already formatted to two decimals. The word for daylight is a SEPARATE string (hint.daylight) and can never arrive here, so phrase this for a number only"
+    },
+    "terms": [
+      "light"
+    ],
+    "where": "transient hint line under the tool palette. SPLICED between two fragments — it follows hint.and-shows or hint.and-it-looks-out-on and is followed by hint.through-the-disc or a full stop — so it must read as a noun phrase, never a sentence"
+  },
   "hint.declined": {
     "where": "transient hint line under the tool palette"
   },

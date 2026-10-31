@@ -143,6 +143,7 @@
   },
   "hint.could-not-read-that-file": "Impossibile leggere quel file.",
   "hint.daylight": "luce diurna",
+  "hint.light-of": "una luce a {light}",
   "hint.declined": "rifiutato",
   "hint.deleted-layer": "Eliminato {name}.",
   "hint.deleted-layer-marks": {

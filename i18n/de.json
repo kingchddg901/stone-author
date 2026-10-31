@@ -179,6 +179,7 @@
  },
  "hint.could-not-read-that-file": "Diese Datei ließ sich nicht lesen.",
  "hint.daylight": "Tageslicht",
+ "hint.light-of": "ein Licht bei {light}",
  "hint.declined": "abgelehnt",
  "hint.deleted-layer": "{name} gelöscht.",
  "hint.deleted-layer-marks": {
