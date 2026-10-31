@@ -65,6 +65,10 @@ jobs:
         run: node tools/check-coat-field.mjs
       - name: ...and every claim that gate makes can go red
         run: node tools/check-coat-field.mjs --ablate
+      - name: No slider readout invents its own English, where the prose rule cannot see it
+        run: node tools/check-fmt-vocab.mjs
+      - name: ...and that gate can go red, without tripping on a comment
+        run: node tools/check-fmt-vocab.mjs --ablate
       - name: PNG metadata
         run: node tools/check-png-meta.mjs
       - name: A master's own record is found however far back it sits
