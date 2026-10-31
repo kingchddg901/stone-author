@@ -110,7 +110,7 @@ function envUni(o) {
   // 40 floats then 36 integers - 304 bytes, which the uniform address space needs to be a multiple
   // of sixteen. The order mirrors the Env struct in glass-gpu.mjs exactly; the two are read together
   // or not at all.
-  const b = new ArrayBuffer(304), d = new DataView(b);
+  const b = new ArrayBuffer(320), d = new DataView(b);
   const F = [FV.TH, FV.RM, FV.RS, FV.FR,
              FV.FP, FV.FD, FV.SD, FV.INC,
              FV.SST, MOB, MST, BLV.MW,
@@ -133,6 +133,10 @@ function envUni(o) {
     .concat([NCANE, o.tileW || 0, o.tileX || 0, o.tileY || 0])
     .concat([o.fullW || 0, 0, 0, 0]);
   I.forEach((v, i) => d.setInt32(160 + i * 4, v, true));
+  // THE RELIEF TAIL. All three default to ZERO, so every probe that does not ask for relief
+  // packs exactly the bytes it packed before and its picture cannot move.
+  [o.REL || 0, o.LX || 0, o.LY || 0, 0]
+    .forEach((v, i) => d.setFloat32(304 + i * 4, v, true));
   return b;
 }
 

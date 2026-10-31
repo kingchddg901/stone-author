@@ -1887,7 +1887,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.264';
+  const BUILD = '2026.10.31.265';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15505,6 +15505,12 @@ struct Env {
   // independently by four probe pages, and a required binding added here would break every one of
   // them. glass-real.mjs packs it at the same index - that pair is a replica and moves together.
   fullW: i32, tileH: i32, ss: i32, pad8: i32,
+  // THE RELIEF SLOPE'S THREE, APPENDED AFTER THE INTS. REL gates the slope term; LX and LY are
+  // the light unit vector, passed rather than derived from an angle because a GPU cos and a CPU
+  // cos differ within the ULP budget and the point of this port is a clean comparison. They sit
+  // here and not in the f32 block because growing that block moves the i32 block off byte 160,
+  // which is where glass off() reads tileX/tileY/tileH from by hand.
+  REL: f32, LX: f32, LY: f32, pad10: f32,
 };
 @group(0) @binding(2) var<uniform> E: Env;
 @group(0) @binding(3) var<storage, read> ARR: array<f32>;
@@ -15611,10 +15617,46 @@ fn vnoise(x: f32, y: f32, s: i32) -> f32 {
   return (a * (1.0 - sx) + b * sx) * (1.0 - sy) + (c * (1.0 - sx) + d * sx) * sy;
 }`;
 
+  // VALUE AND BOTH PARTIALS OFF ONE SET OF HASHES. The smoothstep sx = tx*tx*(3-2tx) differentiates
+  // to 6tx(1-tx), and the value and the slopes read the SAME four corner hashes - so the gradient
+  // costs arithmetic and no hashing, where a finite difference costs three times everything.
+  //
+  // .x IS WRITTEN WITH vnoise's OWN EXPRESSION, named rather than rearranged. a+(b-a)*sx is
+  // algebraically equal and differs in the last place, and T feeds exp(-a*T) on every channel, so
+  // keeping the value bit-identical confines this port to the GRADIENT.
+  WGSL.vnoiseG = `
+fn vnoiseG(x: f32, y: f32, s: i32) -> vec3<f32> {
+  let fx = floor(x); let fy = floor(y);
+  let xi = i32(fx); let yi = i32(fy);
+  let tx = x - fx; let ty = y - fy;
+  let sx = tx * tx * (3.0 - 2.0 * tx); let sy = ty * ty * (3.0 - 2.0 * ty);
+  let a = nz(xi, yi, s); let b = nz(xi + 1, yi, s);
+  let c = nz(xi, yi + 1, s); let d = nz(xi + 1, yi + 1, s);
+  let top = a * (1.0 - sx) + b * sx;
+  let bot = c * (1.0 - sx) + d * sx;
+  return vec3<f32>(top * (1.0 - sy) + bot * sy,
+                   6.0 * tx * (1.0 - tx) * ((b - a) * (1.0 - sy) + (d - c) * sy),
+                   6.0 * ty * (1.0 - ty) * (bot - top));
+}`;
+
   WGSL.fbm2 = `
 fn fbm2(x: f32, y: f32, s: i32) -> f32 {
   return vnoise(x, y, s) * 0.6 + vnoise(x * 2.1, y * 2.1, s + 9) * 0.3
        + vnoise(x * 4.3, y * 4.3, s + 19) * 0.1;
+}`;
+
+  // THE SAME THREE OCTAVES, PLUS THE CHAIN RULE. Each octave's slope carries its own frequency, 2.1
+  // and 4.3, because the inner argument is scaled. The value accumulates ((a*0.6)+(b*0.3))+(c*0.1),
+  // which is how fbm2's sum above evaluates left to right - so .x stays bit-identical to it.
+  WGSL.fbm2G = `
+fn fbm2G(x: f32, y: f32, s: i32) -> vec3<f32> {
+  let n0 = vnoiseG(x, y, s);
+  var v = n0.x * 0.6; var gx = n0.y * 0.6; var gy = n0.z * 0.6;
+  let n1 = vnoiseG(x * 2.1, y * 2.1, s + 9);
+  v = v + n1.x * 0.3; gx = gx + n1.y * 0.3 * 2.1; gy = gy + n1.z * 0.3 * 2.1;
+  let n2 = vnoiseG(x * 4.3, y * 4.3, s + 19);
+  v = v + n2.x * 0.1; gx = gx + n2.y * 0.1 * 4.3; gy = gy + n2.z * 0.1 * 4.3;
+  return vec3<f32>(v, gx, gy);
 }`;
 
   // THE RIBBON GEOMETRY. MEX, MHL, MD and MRIM are per-ribbon arrays; MOB and MST are scalars. The
@@ -15731,6 +15773,58 @@ fn glassFormT(ox: f32, oy: f32, fv: vec2<f32>) -> f32 {
     T = T + E.TH * E.FD * (1.0 - abs(2.0 * f - 1.0));
   }
   return max(T, 0.05);
+}`;
+
+  // THICKNESS AND BOTH SLOPES, OFF ONE SET OF HASHES. Every value line here is glassFormT's own,
+  // character for character; the derivative lines are the new part. The floor is a clamp, so the
+  // slope through it is zero rather than whatever it was about to be.
+  WGSL.glassFormTG = `
+fn glassFormTG(ox: f32, oy: f32, fv: vec2<f32>) -> vec3<f32> {
+  var T = E.TH; var dx = 0.0; var dy = 0.0;
+  if (E.RM > 0.0 && (fv.x != 0.0 || fv.y != 0.0)) {
+    let a = ox * fv.x + oy * fv.y;
+    let c = -ox * fv.y + oy * fv.x;
+    let g = fbm2G(c * E.RS, a * E.RS * 0.06, 71);
+    let k = E.RM * 0.30 * 2.0;
+    dx = T * k * (g.y * -fv.y * E.RS + g.z * fv.x * E.RS * 0.06);
+    dy = T * k * (g.y * fv.x * E.RS + g.z * fv.y * E.RS * 0.06);
+    T = T * (1.0 + E.RM * 0.30 * (g.x - 0.5) * 2.0);
+  } else if (E.RM > 0.0) {
+    let g = fbm2G(ox * E.RS * 0.5, oy * E.RS * 0.5, 11);
+    let k = E.RM * 0.18 * 2.0;
+    dx = T * k * g.y * E.RS * 0.5; dy = T * k * g.z * E.RS * 0.5;
+    T = T * (1.0 + E.RM * 0.18 * (g.x - 0.5) * 2.0);
+  }
+  if (E.form == 1) {
+    let r = sqrt(ox * ox + oy * oy);
+    var drx = 0.0; var dry = 0.0;
+    if (r > 0.0) { drx = ox / r; dry = oy / r; }
+    var kr = 1.0;
+    if (r < E.FR) { kr = r / E.FR; }
+    let m = 1.0 - 0.45 * kr;
+    var ix = 0.0; var iy = 0.0;
+    if (r < E.FR) { ix = -0.45 * drx / E.FR; iy = -0.45 * dry / E.FR; }
+    dx = dx * m + T * ix;
+    dy = dy * m + T * iy;
+    T = T * m;
+    let b = r / (E.FR * 0.07);
+    let e = exp(-b * b);
+    let kb = E.TH * 2.0 * e * -2.0 * b / (E.FR * 0.07);
+    dx = dx + kb * drx; dy = dy + kb * dry;
+    T = T + E.TH * 2.0 * e;
+    let ks = E.TH * E.RM * 0.14 * cos(r * E.RS * 7.0) * E.RS * 7.0;
+    dx = dx + ks * drx; dy = dy + ks * dry;
+    T = T + E.TH * E.RM * 0.14 * sin(r * E.RS * 7.0);
+  } else if (E.form == 4) {
+    let u = ox * E.FP;
+    let f = u - floor(u);
+    var sg = -2.0;
+    if (f < 0.5) { sg = 2.0; }
+    dx = dx + E.TH * E.FD * sg * E.FP;
+    T = T + E.TH * E.FD * (1.0 - abs(2.0 * f - 1.0));
+  }
+  if (T > 0.05) { return vec3<f32>(T, dx, dy); }
+  return vec3<f32>(0.05, 0.0, 0.0);
 }`;
 
   // A NINE-CELL WALK with an early a continue in it - the first ported function whose threads can take
@@ -16002,9 +16096,13 @@ fn glassUnform(x0: f32, y0: f32) -> vec3<f32> {
   // end - three Beer-Lambert exponentials over absorptions the canes and the lay decide.
   //
   // WHAT IS LEFT OUT, deliberately, because none of it is per-pixel arithmetic a GPU would take over:
-  // supersampling (the renderer is at one sample a pixel on this slab, counted), the canvas write, and
-  // the relief slope, which needs glassFormTG rather than glassFormT and is cold here - REL is 0 on
-  // the slab this was measured against, which the call counter showed as fbm2G firing zero times.
+  // supersampling (the renderer is at one sample a pixel on this slab, counted) and the canvas write.
+  //
+  // THE RELIEF SLOPE WAS IN THIS LIST UNTIL 2026-10-31, left out because it was COLD rather than hard:
+  // REL was 0 on the slab this was measured against, so the call counter showed fbm2G firing zero
+  // times and porting it would have been credited with removing nothing. It is ported now - vnoiseG,
+  // fbm2G and glassFormTG above - because a relieved sheet was refusing the shader outright, which is
+  // a cost that does not show up in a profile of a slab that has no relief.
   WGSL.tile = `
 @group(0) @binding(0) var<storage, read_write> PX: array<f32>;
 // DISPATCHED IN TWO DIMENSIONS WHEN IT HAS TO BE. A 512 px tile is 4,096 workgroups and fits in one
@@ -16052,7 +16150,16 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
 
   let u = glassUnform(ox, oy);
   let fv = glassFlow(ox, oy, E.form);
-  var T = glassFormT(ox, oy, fv);
+  // RELIEF TAKES THE GRADIENT PATH. Without relief the slope would be multiplied by zero, so the
+  // cheaper glassFormT still runs and its value is untouched - which is what keeps every master
+  // already rendered on the GPU bit-identical.
+  var T = 0.0; var gu = 0.0; var gv = 0.0;
+  if (E.REL > 0.0) {
+    let gt = glassFormTG(ox, oy, fv);
+    T = gt.x; gu = gt.y; gv = gt.z;
+  } else {
+    T = glassFormT(ox, oy, fv);
+  }
   let melt = glassMelt(u.x, u.y, fv);
   if (melt.x > 0.0) { T = T - E.TH2 * 0.5 * melt.x; }
   if (melt.y > 0.0) { T = T + E.TH2 * 0.6 * melt.y; }
@@ -16060,7 +16167,14 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
   T = max(T, 0.05);
   if (E.OPQ > 0.0) { T = T + (E.OREF - T) * E.OPQ; }
 
-  var m = 1.0 - 0.45 * melt.x + 0.25 * melt.y;
+  // THE SLOPE IS WHAT YOU SEE, saturated rather than clipped: the slope is millimetres per FOOT and
+  // a spun disc's concentric ream runs at tens of radians per foot, so the raw term leaves [0,1]
+  // across most of the sheet. sl/(1+|sl|) is bounded by construction and linear for small slopes.
+  //
+  // WITH REL AT ZERO THIS IS EXACTLY THE OLD LINE. gu and gv are 0, so sl is 0, so the whole term
+  // is 0, and 1.0 + 0.0 is exactly 1.0 - no existing GPU render moves by a bit.
+  let sl = (gu * E.LX + gv * E.LY) * 0.05;
+  var m = 1.0 + E.REL * 0.55 * (sl / (1.0 + abs(sl))) - 0.45 * melt.x + 0.25 * melt.y;
   m = max(m, 0.0);
 
   var ar = E.kr; var ag = E.kg; var ab = E.kb;
@@ -16399,7 +16513,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     const arena = new Float32Array(at);
     for (const n of PART_NAMES) if (parts[n].length) arena.set(parts[n], offs[n]);
 
-    const b = new ArrayBuffer(304), d = new DataView(b);
+    const b = new ArrayBuffer(320), d = new DataView(b);
     const FL = [
       F.TH || 0, F.RM || 0, F.RS || 0, F.FR || 1,
       F.FP || 0, F.FD || 0, F.SD || 0, F.INC || 0,
@@ -16429,6 +16543,11 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
       extra.fullW || 0, extra.tileH || extra.tileW || 0, extra.ss || 1, 0,
     ];
     IN.forEach((v, i) => d.setInt32(160 + i * 4, v, true));
+      // THE RELIEF TAIL, past the int block so no existing offset moves. glass off() reads
+      // tileX/tileY/tileH as 160 + n * 4 by hand, and growing the FLOAT block would have shifted
+      // every one of them - the shape that wrote three flat masters on 2026-10-30.
+      [extra.REL || 0, extra.LX || 0, extra.LY || 0, 0]
+        .forEach((v, i) => d.setFloat32(304 + i * 4, v, true));
 
     return { uni: b, arena, offs, parts,
       summary: {
@@ -18429,16 +18548,18 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
       // layout is positional so these are written down beside it; wood's names its own slots and
       // gets asked, which is the difference that stopped this being a third copy of a layout.
       off: () => ({ x: 160 + 30 * 4, y: 160 + 31 * 4, h: 160 + 33 * 4 }),
-      // THE LAST CLAUSE THAT IS NOT CAUTION: GLASS.relief > 0 sends the CPU through glassFormTG,
-      // which returns the thickness AND both slopes, and the shader has glassFormT and no slope at
-      // all - so a relieved sheet would come back flat. Unported work, not a tolerance to widen.
-      why: () => (Math.max(0, GLASS.relief) > 0 ? 'exp.gpu.relief' : null),
+      // RELIEF IS PORTED as of 2026-10-31: the shader has glassFormTG and the uniform carries REL
+      // with the light vector, so a relieved sheet draws here instead of refusing. The slope feeds
+      // the brightness multiplier and nothing else - never a coordinate, never the thickness,
+      // never glassLay's compartment - which is the safe side of glass-gpu.md S3.
+      why: () => null,
       pack: (ew, W) => {
         const scene = glassScene();
         return packReal(scene.F, {
           SLAB: SLAB_FT, spin: spinTable(), canes: scene.canes,
           CORD: scene.CORD, OPQ: scene.OPQ, OREF: scene.OREF,
           kr: scene.kr, kg: scene.kg, kb: scene.kb,
+          REL: scene.REL, LX: scene.Lx, LY: scene.Ly,
           LBR: scene.LBR, LBG: scene.LBG, LBB: scene.LBB,
           tileW: ew, tileH: ew, tileX: 0, tileY: 0, fullW: W,
           // SAMPLES PER PIXEL, read the same way the CPU painter reads it so the two cannot

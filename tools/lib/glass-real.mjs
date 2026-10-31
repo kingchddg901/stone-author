@@ -211,7 +211,7 @@ export function packReal(F, extra) {
   const arena = new Float32Array(at);
   for (const n of PART_NAMES) if (parts[n].length) arena.set(parts[n], offs[n]);
 
-  const b = new ArrayBuffer(304), d = new DataView(b);
+  const b = new ArrayBuffer(320), d = new DataView(b);
   const FL = [
     F.TH || 0, F.RM || 0, F.RS || 0, F.FR || 1,
     F.FP || 0, F.FD || 0, F.SD || 0, F.INC || 0,
@@ -241,6 +241,11 @@ export function packReal(F, extra) {
     extra.fullW || 0, extra.tileH || extra.tileW || 0, extra.ss || 1, 0,
   ];
   IN.forEach((v, i) => d.setInt32(160 + i * 4, v, true));
+    // THE RELIEF TAIL, past the int block so no existing offset moves. glass off() reads
+    // tileX/tileY/tileH as 160 + n * 4 by hand, and growing the FLOAT block would have shifted
+    // every one of them - the shape that wrote three flat masters on 2026-10-30.
+    [extra.REL || 0, extra.LX || 0, extra.LY || 0, 0]
+      .forEach((v, i) => d.setFloat32(304 + i * 4, v, true));
 
   return { uni: b, arena, offs, parts,
     summary: {
