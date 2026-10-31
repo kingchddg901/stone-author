@@ -1926,7 +1926,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.271';
+  const BUILD = '2026.10.31.272';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5676,7 +5676,68 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // `paint` REPLACES THE CONTENT STEP, exactly as it does in renderOneTile, and it is only ever
   // offered the ONE-PAINT path below: a caller that paints a tile for us cannot be asked to paint
   // it seventeen times in pieces. Absent, which is every caller today, it is paintContent.
+  // AN ORDERED FLOOR IS A CUT PATTERN ON A SLAB, and for `guide` that is literally all it is: a set
+  // of geometric lines laid over a finished tile. Nothing is re-rendered, nothing is sampled at a
+  // shift, nothing is coated twice - the tile IS a slab tile, so its subsurface is the slab's by
+  // construction and cannot diverge.
+  //
+  // IT HAD DIVERGED, AND NOT ONLY THROUGH THE COAT. Measured on storm treeline v21 at W 512, cairo
+  // 36in, square edge, against the same slab rendered whole:
+  //
+  //        slab  ss 0   sat  1.9   luma 44.9        floor ss 0   sat   6.3   luma  72.8
+  //        slab  ss 2   sat 12.6   luma 51.7        floor ss 2   sat 124.7   luma 121.6
+  //
+  // With the subsurface OFF the floor was already 62% brighter than the slab it is cut from, so the
+  // per-piece walk never produced the slab's picture; the subsurface then multiplied that gap
+  // eleven-fold and the floor came out flat acid green. Neither the piece count (58 and ~1,000 both
+  // read ~124) nor the edge finish (tumbled 124.4, square 124.7) moved it, which is what ruled out
+  // the seams and the chamfer in turn.
+  //
+  // SHUFFLE AND STACK KEEP THE OLD WALK, because there a piece genuinely comes from somewhere else
+  // and no overlay can move material. A graft or a cut section is the same.
+  //
+  // WHAT THIS DROPS, deliberately: when kerf is not grout the pieces spread apart and the laid floor
+  // is fractionally larger than the slab. As lines on a slab the stone stays put and only the lines
+  // move - bounded at 0.106% of the width for 1/32 grout, 0.846% at 1/4. With kerf = grout it is
+  // exactly zero, because then the floor reassembles the slab.
+  const floorAsCut = () => layTiles && !T.shuffle && T.assembly !== 'stack'
+    && stageN() === 1 && !sectionList().length;
+  // THE LINES THEMSELVES. Grout is everything inside the floor's extent that is not a piece - one
+  // even-odd fill, not a backdrop the pieces are painted over, because there is nothing to paint.
+  function cutOverlay(c, cx, finalW, ex0, ey0) {
+    const pat = patternOf(T.sizeIn), inst = tileInstances(), chips = chipMap();
+    const fS = floorPitch(pat, T.sizeIn);
+    const SX = 0.5 - fS / 2, SY = H / 2 - fS * H / 2, SW2 = fS, SH2 = fS * H;
+    const polyOf = t => {
+      let poly = t.poly;
+      if (T.edge === 'tumbled') poly = insetPoly(poly, inFr(0.04 * T.sizeIn));
+      const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
+      return poly;
+    };
+    cx.save();
+    cx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0);
+    cx.lineCap = 'round'; cx.lineJoin = 'round';
+    // PAST THE FLOOR THERE IS NOTHING. The slab tile painted the whole rectangle; the floor is the
+    // slab at floorPitch and a remainder is transparent, which is what the per-piece walk left.
+    cx.save(); cx.globalCompositeOperation = 'destination-in';
+    cx.fillStyle = '#000'; cx.fillRect(SX, SY, SW2, SH2); cx.restore();
+    cx.beginPath();
+    cx.rect(SX, SY, SW2, SH2);
+    for (const t of inst) { const poly = polyOf(t); poly.forEach((q, i) => (i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1]))); cx.closePath(); }
+    cx.fillStyle = GROUT; cx.fill('evenodd');
+    // AND THE EDGE FINISH ON TOP, which is the one part of a cut that is shading rather than a line.
+    for (const t of inst) edgeFinish(polyOf(t), 1 / finalW, cx);
+    cx.restore();
+  }
   function renderFloorTile(W, tx0, ty0, tw, th, bleed, paint) {
+    // THE ORDERED CASE IS A SLAB TILE WITH LINES ON IT. renderOneTile is the whole pipeline -
+    // ground, content, coat, and the `paint` hook a shader arrives through - so an ordered floor
+    // gets every one of those for free and exp.gpu.floor has nothing left to refuse.
+    if (floorAsCut()) {
+      const c = renderOneTile(W, tx0, ty0, tw, th, bleed, paint);
+      cutOverlay(c, c.getContext('2d'), W, tx0 - bleed, ty0 - bleed);
+      return c;
+    }
     const finalW = W, bs = W / COAT_REF, prevG = g2d; glowPx = BLOOM_DRAW ? 16 * bs : 0;
     const ex0 = tx0 - bleed, ey0 = ty0 - bleed, ew = tw + 2 * bleed, eh = th + 2 * bleed;
     const c = floorCanvas(ew, eh);
@@ -6002,7 +6063,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // the graft clause already declined, so poolWhyNot refuses a floor laid from sections rather
       // than shipping twelve slabs to twelve workers.
       drawTilesTo, renderFloorTile, tileInstances, patternOf, plankInstances, floorPitch, chipMap, floorCanvas,
-      floorOnePaint, floorMargin,
+      // AN ORDERED FLOOR IS A SLAB TILE WITH LINES ON IT, so the core needs renderOneTile itself
+      // now - renderFloorTile delegates to it and then strokes the cut over the result.
+      floorOnePaint, floorMargin, floorAsCut, cutOverlay, renderOneTile,
       assemblyPlan, cantBand, stageN, insetPoly, polyCentroid, cairoCell, jointIn, picking,
       plankWidthIn, plankLenIn, boardsAvailable, chipEdge, edgeFinish, inFr };
     // stoneSource is NOT carried. It paints the slab offscreen that the BLIT paths read, and a
@@ -6057,6 +6120,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // refused a pool above. A throwing stub would be wrong here because the floor path really does
     // call it; an empty list is the same answer the main thread gives under the same refusals.
     s += `var sectionList=()=>[];
+`;
+    // renderOneTile reads backlitFor, and a worker never holds the whole-slab back-light maps. It is
+    // unreachable on the floor path anyway - `!layTiles && ...` short-circuits before it - but the
+    // name has to resolve for a read of the core, and null is the honest value rather than a stub.
+    s += `var backlitFor=null;
 `;
     s += `var stoneC=null,stoneReady=false;
 `;
@@ -19006,7 +19074,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // are not: shuffle and stack, whose assembly plan moves a piece anywhere in the slab, and a graft
     // or a cut section, which takes it off another board entirely. floorOnePaint is that question,
     // asked in one place so this clause and renderFloorTile cannot disagree.
-    if (layTiles && !floorOnePaint()) return 'exp.gpu.floor';
+    if (layTiles && !floorAsCut()) return 'exp.gpu.floor';
     // SPECTRUM IS A COLOUR DIFFERENCE - UNTIL THE HALO IS DRAWN, AND BY DEFAULT IT IS.
     //
     // Under a spectrum the body goes dark, the ground is UV_GROUND, the modulators and every haze
