@@ -50,7 +50,7 @@ const res = await page.evaluate(async ({ W, TS }) => {
   // real shift as well - the two are independent and a gate that fixed both would be testing neither.
   sa.layTiles = true;
   Object.assign(sa.T, { pattern: 'rhombus', sizeIn: 17, groutIn: 0.03125, kerfIn: 0, edge: 'square',
-                        joints: true, assembly: 'guide', shuffle: true });
+                        joints: true });
   sa.render();
   const pieces = sa.tileInstances().length;
 
@@ -77,10 +77,13 @@ const res = await page.evaluate(async ({ W, TS }) => {
   // (c) THE POSITIVE CONTROL, and it is the whole reason this file can be believed. If the pieces
   // happen to carry the SAME material - a flat slab, or an assembly that moved nothing - then every
   // join above is perfect for a reason that has nothing to do with the renderer being right, and this
-  // gate passes on an empty question. So: the shuffled floor must differ from the guide floor over the
+  // gate passes on an empty question. SHUFFLE USED TO BE THAT CONTROL and is gone: a floor is now a cut
+  // pattern on a slab, so nothing makes a piece carry material from elsewhere and guide-vs-shuffle reads
+  // 0.0000. The question is still real, so the control has to be something that still moves - a DIFFERENT
+  // PATTERN cuts the same slab along different lines, which must change the picture over the
   // same region. That difference is also the only evidence here that `diff` can return anything but 0.
   const shuf = grab(sa.renderFloorTile(W, 0, 0, TS * 2, TS, bleed), bleed, bleed, TS * 2, TS);
-  sa.T.shuffle = false;
+  sa.T.pattern = 'hex';
   sa.render();
   const guide = grab(sa.renderFloorTile(W, 0, 0, TS * 2, TS, bleed), bleed, bleed, TS * 2, TS);
   const moved = diff(shuf, guide);
@@ -96,7 +99,7 @@ const f4 = v => v.toFixed(4);
 // The positive control FIRST: everything below it is meaningless if the pieces all carry the same
 // material, and reporting a green join on an empty question is the failure this ordering prevents.
 if (!(res.moved.mean > 0.5))
-  fail.push(`the shuffled floor is the same picture as the guide floor (mean ${f4(res.moved.mean)}) — ` +
+  fail.push(`a hex floor is the same picture as a rhombus floor (mean ${f4(res.moved.mean)}) — ` +
             `the pieces carry no material of their own, so every join below is perfect for a reason ` +
             `that is not the renderer. This gate cannot bite on this slab.`);
 
@@ -115,7 +118,7 @@ if (!(res.again.mean === 0 && res.again.max === 0))
 console.log(`floor: ${res.pieces} pieces, ${TS}px tiles, bleed ${res.bleed}`);
 console.log(`  joins      ${res.joins.map((d, k) => `t${k} ${f4(d.mean)}`).join('  ')}`);
 console.log(`  re-render  mean ${f4(res.again.mean)}, max ${res.again.max}`);
-console.log(`  shuffle vs guide  mean ${f4(res.moved.mean)}, ${res.moved.pct.toFixed(1)}% of pixels — the control that proves this gate has a question to answer`);
+console.log(`  rhombus vs hex    mean ${f4(res.moved.mean)}, ${res.moved.pct.toFixed(1)}% of pixels — the control that proves this gate has a question to answer`);
 
 if (fail.length) { for (const m of fail) console.error(`  ${m}`); process.exit(1); }
 console.log('floor: every output tile is the same material the whole picture would have put there');

@@ -407,8 +407,6 @@
   </div>
   <div class="sliders" id="s-tiles">
     <div class="sl"><label for="tsize"><span data-i18n="sl.tsize">Tile size</span> <output id="tsizeV"></output></label><input id="tsize" type="range" min="2" max="36" step="1"></div>
-    <div class="sl" data-mat-only="stone glass"><label for="tgrout"><span data-i18n="sl.tgrout">Grout</span> <output id="tgroutV"></output></label><input id="tgrout" type="range" min="0.03125" max="0.5" step="0.03125"></div>
-    <div class="sl"><label for="tkerf"><span data-i18n="sl.tkerf">Kerf</span> <output id="tkerfV"></output></label><input id="tkerf" type="range" min="0" max="0.375" step="0.03125"></div>
     <div class="sl"><label for="tedge" data-i18n="sl.tedge">Edge</label>
       <div class="grp"><button id="e-square" type="button" data-edge="square" aria-pressed="true" data-i18n="tile.edge.square">Square</button>
         <button id="e-bevel" type="button" data-edge="bevel" aria-pressed="false" data-i18n="tile.edge.bevel">Bevel</button>
@@ -416,9 +414,6 @@
         <button id="e-tumbled" type="button" data-edge="tumbled" aria-pressed="false" data-i18n="tile.edge.tumbled">Tumbled</button></div></div>
   </div>
   <div class="grp" role="group" aria-label="Tile options" data-i18n-attr="aria-label=a11y.tile-options"><span class="lbl" data-i18n="lbl.layout">Layout</span>
-    <button id="t-inorder" type="button" data-lay="order" aria-pressed="true" data-i18n="tool.inorder">In order</button>
-    <button id="t-stack" type="button" data-lay="stack" aria-pressed="false" data-i18n="tool.stack">Off the stack</button>
-    <button id="t-shuffle" type="button" data-lay="shuffle" aria-pressed="false" data-i18n="tool.shuffle">Shuffled</button>
     <span class="lbl" style="margin-inline-start:8px" data-i18n="lbl.units">Units</span>
     <button id="u-in" type="button" data-unit="in" aria-pressed="true" data-i18n="unit.in">inches</button>
     <button id="u-mm" type="button" data-unit="mm" aria-pressed="false" data-i18n="unit.mm">mm</button>
@@ -444,8 +439,7 @@
     <div class="sl"><label for="wood-graft"><span data-i18n="sl.wood-graft">Graft branch from</span> <output id="wood-graftV"></output></label><input id="wood-graft" type="range" min="0" max="8" step="1"></div>
   </div>
   <p data-i18n-html="note.lay-tiles"><b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor.
-    Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint.
-    In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Plank run is the one layout that is not a repeating pattern: rows of boards of differing lengths with their end joints staggered. The plank is the board you cut — its width and its longest length come from the Plank controls above, not from Size — so Plank length is a nominal that Length variation scatters around, and Joint stagger is how far each row's joints shift from the row below. At zero they stack into columns, which is exactly what a floor is laid to avoid.
+    The cut is a set of lines over the stone you already have, so the veins run on across every joint and the tiles fit; the joint itself is a hairline that shows you the shape. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Plank run is the one layout that is not a repeating pattern: rows of boards of differing lengths with their end joints staggered. The plank is the board you cut — its width and its longest length come from the Plank controls above, not from Size — so Plank length is a nominal that Length variation scatters around, and Joint stagger is how far each row's joints shift from the row below. At zero they stack into columns, which is exactly what a floor is laid to avoid.
     Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.</p>
   </div></details>
   <details class="sec" data-mat-only="wood"><summary data-i18n="sec.floor-planks">Floor planks</summary><div class="body">
@@ -1264,7 +1258,7 @@ window.SA_I18N = (() => {
   "note.granite": "<b>Granite.</b> Granite lays a ground of specks that bunch but never touch. Gravity moves them: tap for a point, drag for a line; pull gathers them into clusters or bands, push clears space. A vein drawn through granite pushes the specks aside and bends them with it &mdash; crowded on the inside of a turn, thinned on the outside &mdash; and dense specks can deflect it a few degrees, never more. Only specks already down are moved, so what you draw first is older rock.",
   "note.identity": "<b>Identity</b> shows what an animation would read: each line in its own colour, brightening along its length in the direction you drew it; web cracks brighten toward the line that spread them. Nothing had to be traced &mdash; the line was known when it was made.",
   "note.floor-planks": "These shape the plank-run pattern and nothing else — plank length, how much the lengths differ, and how far each row’s joints shift from the row below. How many boards the floor is cut from is <b>Boards</b>, under Tiles & floor, and that one applies to every pattern.",
-  "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. Grout is the gap between tiles; kerf is the material the cut removes, so the veins drift a little across each joint. In order keeps the veins running from tile to tile; Shuffled cuts each tile from a random part of the slab. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with Shuffled and a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Plank run is the one layout that is not a repeating pattern: rows of boards of differing lengths with their end joints staggered. The plank is the board you cut — its width and its longest length come from the Plank controls above, not from Size — so Plank length is a nominal that Length variation scatters around, and Joint stagger is how far each row's joints shift from the row below. At zero they stack into columns, which is exactly what a floor is laid to avoid. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
+  "note.lay-tiles": "<b>Lay tiles</b> cuts the slab you drew into a repeating pattern and lays it on a floor. The cut is a set of lines over the stone you already have, so the veins run on across every joint and the tiles fit; the joint itself is a hairline that shows you the shape. In wood, Boards is how many different cuts of the one log the floor is made from — at 1 it is a single board repeated, higher walks down the cant so neighbouring rows are neighbouring boards, and a high count with a herringbone or Cairo pattern gives a mosaic. Keep this cut saves the board you are looking at; once anything is kept the floor is laid from the kept cuts instead, and each of those may be a different tree entirely. Plank run is the one layout that is not a repeating pattern: rows of boards of differing lengths with their end joints staggered. The plank is the board you cut — its width and its longest length come from the Plank controls above, not from Size — so Plank length is a nominal that Length variation scatters around, and Joint stagger is how far each row's joints shift from the row below. At zero they stack into columns, which is exactly what a floor is laid to avoid. Tap a tile edge with Chip to knock a corner off. Sizes are on an 8&times;5 ft slab.",
   "note.magnet": "<b>Magnet.</b> The pen is a bar magnet and the specks are iron filings. Its angle is the magnet's axis: held upright the field leaves the tip and fans the specks out from it; laid over, it combs them along the way the pen leans. Slow passes align harder; Scatter breaks alignment up. With Pressure on, pressing harder brings the magnet closer. A finger or mouse, with no angle to read, aims the magnet along the way it moves. Hover traces lets a pen or mouse work lightly from above the slab. The Angle view colours every speck by the way it points, so alignment shows as a single colour.",
   "opt.fmt-png": "PNG",
   "opt.fmt-tiff": "TIFF",
@@ -1926,7 +1920,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.272';
+  const BUILD = '2026.10.31.275';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2271,9 +2265,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               backlight: 0,
               lens: 0, lensPitch: 10, lensType: 'fresnel' };
   // Tiling is a property of the whole slab, so one T, its changes apply at once. Sizes in inches.
-  const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, edge: 'square',
-              chipIn: 0.6, shuffle: false, units: 'in', joints: true, slotTest: false, chevAngle: 45,
-              assembly: 'guide',   // guide | stack. `shuffle` is kept beside it: slabs carry it, and it still means shuffled.
+  // GROUT, KERF, SHUFFLE AND THE STACK ARE GONE as settings, 2026-10-31. A floor is a cut pattern on
+  // a slab: the stone is the slab's, the cut is a set of lines over it, and the pieces fit. Shuffle
+  // and the stack were the only reason a piece's material ever came from somewhere else, and that is
+  // what made a floor a separately-built picture rather than a slab with lines on it - measured, with
+  // the subsurface off, 62% brighter than the slab it was cut from. A slab saved with any of them
+  // loads and renders as an ordered cut; the fields are simply not read.
+  const T = { pattern: 'square', sizeIn: 12, edge: 'square',
+              chipIn: 0.6, units: 'in', joints: true, slotTest: false, chevAngle: 45,
               grouping: null, slotMap: {}, seedMap: {} };   // null = the pattern's first grouping, so an old slab lands where it always did
   let layTiles = false;
   // Pristine defaults, captured before any edit. deserialize() resets to these before applying a slab, so a
@@ -2338,7 +2337,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // chevangle is DEGREES, not a length. Without an entry here show() throws on an undefined
   // formatter, which happens BEFORE the input listener is attached - so the slider renders, reads
   // its value, and silently does nothing. A missing row in this table is a dead control.
-  const TFMT = { tsize: showLen, tgrout: showLen, tkerf: showLen, chipsize: showLen,
+  const TFMT = { tsize: showLen, chipsize: showLen,
                  chevangle: v => Math.round(v) + '°' };
   let guidesOn = true;
   // SELECTION: the set of layers an effect is scoped to. Empty = global (the effect hits its default).
@@ -3844,8 +3843,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // edge of the piece; the floor lays what is left at (width - kerf + joint). Twelve boards off a
     // slab therefore cover eleven kerfs less floor than the slab they came from, which is the whole
     // point - the run used to lose nothing to the saw.
-    const fS = Math.max(0.05, (wIn - T.kerfIn + jointIn()) / wIn);
-    const blade = inFr(T.kerfIn) / 2;
+    const fS = 1;                                        // planks fit too; see floorPitch
+    const blade = 0;                                     // no kerf: nothing is taken off the piece
     const cx = 0.5, cy = H / 2, out = [];
     const halfW = IN * 0.75, halfH = IN * H * 0.75;           // inches from centre, generous; off-frame is culled
     const rows = Math.ceil(halfH / wIn) + 1;
@@ -3884,8 +3883,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // the instance builder and by the painter, which needs it to know where the slab reaches.
   const floorPitch = (pat, u) => {
     if (pat.overlap) return 1;                           // scales overlap; they are never pushed apart
-    const un = pat.unit || u;
-    return Math.max(0.05, (un - T.kerfIn + jointIn()) / un);
+    // NEAR-PERFECT FITTING. The pieces used to be pushed apart by the joint and pulled together by
+    // the kerf; with both gone the floor is the slab at its own size and the hairline is drawn ON
+    // the seam rather than in a gap opened for it. `un` is kept so a pattern can still say it is
+    // sized from something other than u.
+    const un = pat.unit || u; void un;
+    return 1;
   };
   function tileInstances() {
     if (T.pattern === 'plank') return plankInstances();       // not a lattice; it generates itself
@@ -3906,7 +3909,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         // as well, two tiles are closer together than they are small and they overlap - which is what
         // any kerf wider than the grout was doing.
         const poly = insetPoly(base.map(q => [cx + fc[0] + (inFr(q[0]) - inFr(ctr[0])), cy + fc[1] + (inFr(q[1]) - inFr(ctr[1]))]),
-                               inFr(T.kerfIn) / 2);
+                               0);                       // no kerf
         // cull tiles fully off-frame
         let on = false; for (const q of poly) if (q[0] > -0.05 && q[0] < 1.05 && q[1] > -0.05 && q[1] < H + 0.05) { on = true; break; }
         if (!on) continue;
@@ -4074,7 +4077,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const rec = src ? JSON.parse(JSON.stringify(src)) : sectionFromHere();
     rec.id = 'cut' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
     rec.cut = src && src.cut ? src.cut
-      : { pattern: T.pattern, sizeIn: T.sizeIn, kerfIn: T.kerfIn,   // the geometry it was measured against
+      : { pattern: T.pattern, sizeIn: T.sizeIn,   // the geometry it was measured against
           n: t.n, m: t.m, pi: t.pi, box: cutBoxFromInstance(t) };
     rec.name = TR('sec.snagged', { pat: T.pattern });    // the pattern is a slug, so it is not translated
     sections = [...sectionList(), rec];
@@ -4444,7 +4447,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const plan = (T.shuffle || T.assembly === 'stack') ? assemblyPlan(inst, T.shuffle) : null;
     for (const t of inst) {
       if (!seen(t)) continue;                              // nothing of it reaches this target
-      let poly = insetPoly(t.poly, inFr(T.groutIn) * 0);   // grout already in the spread; keep full poly
+      let poly = t.poly;                                   // nothing is inset: the pieces fit
       if (T.edge === 'tumbled') poly = insetPoly(poly, inFr(0.04 * T.sizeIn));
       const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
       let shift = t.shift;
@@ -5655,8 +5658,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // decides whether to offer the shader at all, gpuPool sizes its buffers from the margin, and
   // renderFloorTile lays the pieces out of the box. A clause added to one copy and not the others is
   // a tile painted on the CPU while the master records a GPU render - so there is one copy.
-  const floorOnePaint = () => layTiles && !T.shuffle && T.assembly !== 'stack'
-    && stageN() === 1 && !sectionList().length;
+  // Only a floor laid from SECTIONS still walks piece by piece, and a section's material is on
+  // another slab, so no single box holds it. This is false there and the walk paints each window.
+  const floorOnePaint = () => false;
   // AND HOW FAR OUTSIDE THE TILE ITS MATERIAL REACHES, in device pixels, or 0 when the floor is not
   // one of those. The spacing is the whole displacement under guide, so the largest one over every
   // instance bounds the lot; bleed rides on top because the coat still wants its own margin.
@@ -5700,8 +5704,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // is fractionally larger than the slab. As lines on a slab the stone stays put and only the lines
   // move - bounded at 0.106% of the width for 1/32 grout, 0.846% at 1/4. With kerf = grout it is
   // exactly zero, because then the floor reassembles the slab.
-  const floorAsCut = () => layTiles && !T.shuffle && T.assembly !== 'stack'
-    && stageN() === 1 && !sectionList().length;
+  const floorAsCut = () => layTiles && stageN() === 1 && !sectionList().length;
   // THE LINES THEMSELVES. Grout is everything inside the floor's extent that is not a piece - one
   // even-odd fill, not a backdrop the pieces are painted over, because there is nothing to paint.
   function cutOverlay(c, cx, finalW, ex0, ey0) {
@@ -5721,10 +5724,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // slab at floorPitch and a remainder is transparent, which is what the per-piece walk left.
     cx.save(); cx.globalCompositeOperation = 'destination-in';
     cx.fillStyle = '#000'; cx.fillRect(SX, SY, SW2, SH2); cx.restore();
+    // A HAIRLINE, NOT A FILL. Near-perfect fitting is the idea: the stone runs continuous across the
+    // joint and the cut is SHOWN rather than opened, so there is no gap for grout to sit in and
+    // nothing is painted over. One line a couple of pixels wide, floored at a device pixel so it
+    // stays visible when the joint goes sub-pixel - the same Math.max(px, ...) the joints stroke has
+    // always used. One path for every piece, one stroke.
+    const px = 1 / finalW;
+    cx.strokeStyle = GROUT; cx.lineWidth = Math.max(px, inFr(jointIn()));
     cx.beginPath();
-    cx.rect(SX, SY, SW2, SH2);
     for (const t of inst) { const poly = polyOf(t); poly.forEach((q, i) => (i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1]))); cx.closePath(); }
-    cx.fillStyle = GROUT; cx.fill('evenodd');
+    cx.stroke();
     // AND THE EDGE FINISH ON TOP, which is the one part of a cut that is shading rather than a line.
     for (const t of inst) edgeFinish(polyOf(t), 1 / finalW, cx);
     cx.restore();
@@ -6065,7 +6074,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       drawTilesTo, renderFloorTile, tileInstances, patternOf, plankInstances, floorPitch, chipMap, floorCanvas,
       // AN ORDERED FLOOR IS A SLAB TILE WITH LINES ON IT, so the core needs renderOneTile itself
       // now - renderFloorTile delegates to it and then strokes the cut over the result.
-      floorOnePaint, floorMargin, floorAsCut, cutOverlay, renderOneTile,
+      floorOnePaint, floorMargin, floorAsCut, cutOverlay, renderOneTile, JOINT_IN,
       assemblyPlan, cantBand, stageN, insetPoly, polyCentroid, cairoCell, jointIn, picking,
       plankWidthIn, plankLenIn, boardsAvailable, chipEdge, edgeFinish, inFr };
     // stoneSource is NOT carried. It paints the slab offscreen that the BLIT paths read, and a
@@ -7045,7 +7054,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // it is on - herringbone and chevron came from wood, it serves both and knows neither - so the
   // question lives here and the material answers it. T.groutIn is left alone, so an author who sets a
   // grout for stone still has it when they switch back.
-  function jointIn() { return (MATERIAL === 'wood' && !(WOOD.glaze > 0)) ? 0 : T.groutIn; }
+  // THE JOINT IS A HAIRLINE NOW, not a width. Tiles fit; the cut is SHOWN rather than opened, so
+  // this is the width of the line that marks it and no longer a gap anything sits in. Kept as a
+  // physical measure so it scales with the picture, and the stroke floors it at one device pixel so
+  // it never vanishes - which is the hairline the preview always fell back to when grout went
+  // sub-pixel. Wood with no glaze still shows none: boards butt, they are not grouted.
+  const JOINT_IN = 1 / 32;
+  function jointIn() { return (MATERIAL === 'wood' && !(WOOD.glaze > 0)) ? 0 : JOINT_IN; }
   // HOW GLOSSY THE SURFACE IS, on its own account. A ceramic glaze is a clear coat over the printed
   // graphic, so it reads as one sheen across the whole face rather than as the material's own optics.
   // applyCoat asks and never learns which material answered - the same contract as jointIn.
@@ -11398,7 +11413,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function syncUI() {
     const pv = (attr, val) => { const k = attr.slice(5); for (const el of document.querySelectorAll('[' + attr + ']')) el.setAttribute('aria-pressed', String(el.dataset[k]) === String(val)); };
     pv('data-mat', currentMaterial()); pv('data-fam', fam); pv('data-tool', tool); pv('data-view', view); pv('data-pat', T.pattern);
-    pv('data-edge', T.edge); pv('data-lay', T.shuffle ? 'shuffle' : T.assembly === 'stack' ? 'stack' : 'order'); pv('data-unit', T.units);
+    pv('data-edge', T.edge); pv('data-unit', T.units);
     if (typeof syncGroups === 'function') syncGroups();   // which groupings this pattern HAS, not just which is pressed
     if (typeof syncTileLocks === 'function') syncTileLocks();   // a loaded slab may arrive holding cuts
     pv('data-sign', NEXT.sign); pv('data-mag', NEXT.mag); pv('data-var', NEXT.variant); pv('data-lens', G.lensType); pv('data-mwin', NEXT.maskWin); pv('data-minv', NEXT.maskInvert);
@@ -11407,7 +11422,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     tog('laytiles', layTiles); tog('t-joints', T.joints); tog('t-slottest', !!T.slotTest); tog('m-hover', hoverMag); tog('warp-holdmajor', layAt('major').warp === 0);
     for (const id of Object.keys(G)) { const el = document.getElementById(id); if (el) { el.value = G[id]; document.getElementById(id + 'V').textContent = GFMT[id] ? GFMT[id](G[id]) : `${(+G[id]).toFixed(2)}×`; } }
     for (const id of Object.keys(NEXT)) { const el = document.getElementById(id); if (el) { el.value = NEXT[id]; document.getElementById(id + 'V').textContent = FMT[id] ? FMT[id](NEXT[id]) : `${(+NEXT[id]).toFixed(2)}×`; } }
-    for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn'], ['chevangle', 'chevAngle']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
+    for (const [id, key] of [['tsize', 'sizeIn'], ['chipsize', 'chipIn'], ['chevangle', 'chevAngle']]) { const el = document.getElementById(id); if (el) { el.value = T[key]; document.getElementById(id + 'V').textContent = TFMT[id](T[key]); } }
     const showTool = tool === 'move' ? 'vein' : tool;
     for (const k of ['vein', 'branch', 'styl', 'web', 'pour', 'gravity', 'magnet', 'chip', 'moon', 'roller', 'mask']) { const el = document.getElementById('s-' + k); if (el) el.hidden = k !== showTool; }
     showGround(); syncWood(); syncGlass(); syncLayerUI(); syncGranite(); syncFog(); hint();
@@ -11868,10 +11883,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // and a shuffled guide are both just shuffled, and that is what the floor did.
     lay: layTiles ? {
       pattern: T.pattern,
-      setting: T.shuffle ? 'shuffle' : T.assembly === 'stack' ? 'stack' : 'guide',
+      setting: 'cut',                                    // the only assembly there is now
       sizeIn: T.sizeIn,
       pieceIn: cutFromBoard(T.pattern) ? [+plankWidthIn().toFixed(3), +plankLenIn().toFixed(3)] : undefined,
-      edge: T.edge, groutIn: T.groutIn, kerfIn: T.kerfIn, joints: !!T.joints,
+      edge: T.edge, joints: !!T.joints,
       grouping: T.grouping, chevAngle: T.pattern === 'chevron' ? T.chevAngle : undefined,
     } : undefined,
   }, o));
@@ -13957,7 +13972,7 @@ self.onmessage = async (e) => {
   // A cut exists => the tile geometry it was cut against is settled. Checked on the sections rather
   // than on a flag, so it cannot drift out of step with what is actually held.
   const cutsHeld = () => sectionList().some(x => x && x.cut);
-  const LOCKED_BY_CUT = ['tsize', 'tkerf', 'chevangle'];
+  const LOCKED_BY_CUT = ['tsize', 'chevangle'];
   function syncTileLocks() {
     const lock = cutsHeld();
     for (const b of document.querySelectorAll('[data-pat]')) b.disabled = lock;
@@ -14379,7 +14394,7 @@ self.onmessage = async (e) => {
   { const sb = document.getElementById('t-slottest');
     if (sb) sb.addEventListener('click', () => { T.slotTest = !T.slotTest;
       sb.setAttribute('aria-pressed', T.slotTest); redraw(false); }); }
-  for (const [id, key] of [['tsize', 'sizeIn'], ['tgrout', 'groutIn'], ['tkerf', 'kerfIn'], ['chipsize', 'chipIn'], ['chevangle', 'chevAngle']]) {
+  for (const [id, key] of [['tsize', 'sizeIn'], ['chipsize', 'chipIn'], ['chevangle', 'chevAngle']]) {
     const el = document.getElementById(id);
     const show = () => { document.getElementById(id + 'V').textContent = TFMT[id](+el.value); };
     el.value = T[key]; show();

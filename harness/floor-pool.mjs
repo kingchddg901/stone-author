@@ -40,10 +40,12 @@ const r = await page.evaluate(async ({ SLAB, W }) => {
   const plan = await sa.tiffPlan(W);
   const ts = plan.ts, bleed = plan.bleed;
 
-  const lay = shuffle => {
+  // SHUFFLE WAS THE CONTROL AND IS GONE: a floor is a cut pattern on a slab, so nothing makes a
+  // piece carry material from elsewhere. A DIFFERENT PATTERN cuts the same slab along different
+  // lines, which still must move the picture.
+  const lay = pattern => {
     sa.layTiles = true;
-    Object.assign(sa.T, { pattern: 'rhombus', sizeIn: 17, groutIn: 0.03125, kerfIn: 0,
-                          edge: 'square', joints: true, assembly: 'guide', shuffle });
+    Object.assign(sa.T, { pattern, sizeIn: 17, edge: 'square', joints: true });
     sa.render();
   };
   const px = c => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data.slice();
@@ -59,7 +61,7 @@ const r = await page.evaluate(async ({ SLAB, W }) => {
     return { px: n, max, pct: +(100 * n / (a.length / 4)).toFixed(4) };
   };
 
-  lay(false);
+  lay('rhombus');
 
   // THE REFUSAL, BOTH WAYS. A plain floor is allowed now; one laid from a cut section is not.
   out.notes.push('poolWhyNot on a plain floor: ' + JSON.stringify(sa.poolWhyNot()));
@@ -85,10 +87,10 @@ const r = await page.evaluate(async ({ SLAB, W }) => {
   if (d.px) out.fail.push(`a pooled floor tile differs from the sequential one: ${d.px} pixels (${d.pct}%), up to ${d.max} levels`);
 
   // THE CONTROL.
-  lay(true);
+  lay('hex');
   const ctl = diff(seq, px(sa.renderFloorTile(W, gx * ts, gy * ts, ts, ts, bleed)));
   out.control = ctl;
-  if (!ctl.px) out.fail.push('the control found nothing - shuffling the floor changed no pixel, so this comparison is measuring nothing');
+  if (!ctl.px) out.fail.push('the control found nothing - a hex floor equals a rhombus floor, so this comparison is measuring nothing');
 
   return out;
 }, { SLAB, W });
@@ -99,7 +101,7 @@ console.log('\nfloor-pool: Hero_Psyker at ' + W + 'px, the middle tile\n');
 for (const n of r.notes) console.log('  ' + n);
 if (r.diff) console.log('  pooled vs sequential   ' + r.diff.px + ' pixels differ'
                       + (r.diff.px ? ' (' + r.diff.pct + '%, up to ' + r.diff.max + ' levels)' : ''));
-if (r.control) console.log('  control, shuffled      ' + r.control.px + ' pixels differ ('
+if (r.control) console.log('  control, hex pattern   ' + r.control.px + ' pixels differ ('
                       + r.control.pct + '%) — the comparison can see a difference');
 if (r.fail.length) { console.log('\nRED:'); for (const f of r.fail) console.log('  - ' + f); process.exit(1); }
 console.log('\nfloor-pool: a pooled floor tile is byte-identical to the sequential one, and the control fired');
