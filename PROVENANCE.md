@@ -101,43 +101,79 @@ swap can be re-checked rather than taken on trust.
 
 ### The build since the archives — 2026-11-01
 
-The two sessions above are no longer the whole build. **This repo holds 812 commits; the archives
-cover 296 of them.** Where the rest were made is only partly recorded here:
+The two sessions above are no longer the whole build. **This repo holds 813 commits; the archives
+above cover 296 of them.** The rest are not a second effort and not missing — the build is one
+continuous conversation, and every session in it opens seconds after the last one closed:
 
-| window | commits | session | archived |
+| session | span | commits | archived |
 |---|---|---|---|
-| → 2026-10-01 | 296 | `698bc007…`, `28da307f…` | **yes** — both complete, hashed above |
-| 2026-10-01 → 10-19 | **255** | — | **no record** |
-| 2026-10-19 → 10-26 | 179 | `04a48e69-bc78-4cd7-8215-7d16bde8a113` | not yet |
-| 2026-10-26 → 11-01 | 82 | `c0060eab-6f05-43e2-a66a-39273ecc4ede` | open, still running |
+| `698bc007-76d7-4c9f-8f93-ad00bf28ca5c` | 2026-09-20T20:03:43Z → 09-23T06:55:12Z | 41 | **complete** |
+| `28da307f-5ea7-4449-815d-ae43b7b0ba89` | 2026-09-23T06:55:35Z → 10-01T07:34:30Z | 255 | **complete** |
+| `737db4ea-f00e-4813-9c88-318db85d6fab` | 2026-10-01T07:36:19Z → 10-11T20:05:57Z | 91 | not yet |
+| `cabd461f-55fa-425c-80ca-5f8c1d6f80c7` | 2026-10-11T20:06:16Z → 10-17T03:57:11Z | 124 | not yet |
+| `4a8d2045-4cd6-4ebb-ac6e-043e2e5d5369` | 2026-10-17T03:57:32Z → 10-18T08:06:38Z | 33 | not yet |
+| `1ac6f3a3-b809-4883-8d66-66ea6ad56959` | 2026-10-18T08:07:26Z → 10-19T04:21:57Z | 7 | not yet |
+| `04a48e69-bc78-4cd7-8215-7d16bde8a113` | 2026-10-19T04:22:17Z → 10-26T07:24:40Z | 179 | **complete** |
+| `c0060eab-6f05-43e2-a66a-39273ecc4ede` | 2026-10-26T07:24:54Z → **open** | 83 | prefix only |
 
-**That 255-commit window is a gap in this record rather than a quiet stretch**, and it is close to a
-third of the repo. It holds the work the corpus section below reports, the second tebipixel among it.
-No transcript for it is in the project folder, and none sits in the archive directory beside the two
-`.tar.xz` files. Whether it was archived elsewhere or lost, this file cannot say — and saying that is
-better than leaving the impression the two archives cover everything.
+**Those counts sum to 813, which is every commit in the repo**, and the first two sum to the 296 the
+sections above were written from. Nothing falls outside a session. The gaps between them, in order,
+are 22.8 s, 1 m 49 s, 19.0 s, 21.0 s, 48.0 s, 20.9 s and 14.2 s.
 
-The two later sessions chain the way the first two did: `04a48e69` closes at 2026-10-26T07:24:40.155Z
-and `c0060eab` opens **fourteen seconds after it**.
+#### Why this looked like a gap
 
-| | `04a48e69…` | `c0060eab…` |
-|---|---|---|
-| Span | 2026-10-19T04:22:17.929Z → 2026-10-26T07:24:40.155Z | 2026-10-26T07:24:54.358Z → **open** |
-| Transcript | 267.6 MB, 58,284 lines | 349.5 MB, 66,038 lines, still growing |
-| Tool calls | 7,132 | 9,069 |
-| Commits here | 179 | 82 |
+An earlier version of this section reported 2026-10-01 → 10-19 as having **no record**. That was
+wrong, and how it was wrong is worth keeping.
 
-Tool *results* are deliberately not listed. The inline count disagrees with the call count in both of
-these sessions in a way the first two do not, the cause has not been established, and a number whose
-derivation is not understood does not belong on this page.
+**A transcript is filed under the directory its session STARTED in, not the one it worked in.** This
+build began inside a `eufy-vacuum-manager` worktree and changed directory into `stone-author`, so
+four of its sessions are stored under a `eufy-vacuum-manager` key and three more under that
+worktree's key — both archived sessions among them. Searching the folder named after this repo finds
+the two most recent sessions and nothing else, which reads exactly like a hole in the middle of the
+record. The folder named for the project is the one place these transcripts were never going to be.
 
-**Neither is captured, and the second cannot be.** By this file's own standard a capture taken while a
-session runs is a prefix and not a record — the lesson the two swaps above paid for twice. That
-right-hand column was read at 2026-11-01T07:57Z with the session still open, and it will be wrong by
-the time the session closes.
+The four sessions in question carry `GITHUB/stone-author` as the dominant working directory on their
+entries — 9,728, 11,848, 6,237 and 748 of them respectively — and name this repo four times more
+often than the one they are filed under.
 
-A further, small transcript exists for a worktree session (`9ab59a3e…`, 2.7 MB, 2026-10-27); its
-commits fall inside the windows above and are counted there.
+**The search that confirmed the gap was wrong in its own way, which is the more useful half.** A
+sweep by file modification time returned nothing, and nothing read as corroboration. But these files
+are touched long after their sessions close: one that ended 2026-10-01 carries a modification time of
+2026-11-01. That timestamp says nothing about when a session ran. The sweep that found them reads the
+first and last timestamp *inside* each transcript instead, which is the only thing that does.
+
+Two further transcripts are not in the chain and are recorded here rather than left out: a 1 h 27 m
+session on 2026-10-01 that ran concurrently with the one above it, and a worktree session spanning
+2026-09-24 → 10-09 that refreshed docs. Their commits fall inside the windows in the table.
+
+#### The two newest archives
+
+`04a48e69` has closed, so it is archived complete, the same way the first two were.
+
+| | |
+|---|---|
+| Transcript | 267,606,296 bytes, 58,284 lines |
+| Tool calls | 7,132 |
+| Sidecars | 6, every one referenced by the transcript, no orphans either way |
+| Archive | `stone-author-session-04a48e69-bc78-4cd7-8215-7d16bde8a113.tar.xz` — 37,897,172 bytes, xz -6 -T0 |
+| SHA-256 | `71e17e781070a1a7f8f7525e1f319e0832e3dc9ae3a779ceab8485a9c567bd04` |
+
+`c0060eab` is still running, so what exists for it is a prefix **and is named one**, the way the two
+earlier live captures were. It is cut from a staged snapshot, so the check below describes the same
+bytes the archive holds, and it must be re-cut once the session closes.
+
+| | |
+|---|---|
+| Captured | 2026-11-01T08:13Z — **session still open; this is a PREFIX** |
+| Transcript | 350,378,062 bytes at capture, still growing |
+| Sidecars | 77 — 35 in `tool-results/`, 42 in `subagents/` |
+| Referenced | 33 of 77. The 42 subagent files are not named in the transcript at all, by filename or by agent id, where the earlier sessions' were; 2 background-task outputs are present and unreferenced |
+| Archive | `…c0060eab-6f05-43e2-a66a-39273ecc4ede.PARTIAL-capture-2026-11-01T0813Z.tar.xz` — 55,667,916 bytes |
+| SHA-256 | `529935cdd659b78bfefd01e83a3c759a5468856c5630316aaa6a3c42a8475525` |
+
+**Four sessions in the middle of the chain remain unarchived** — `737db4ea`, `cabd461f`, `4a8d2045`
+and `1ac6f3a3`, 255 commits between them. They are closed and can be cut at any time; that they have
+not been is a stated condition of this record rather than something left to be discovered.
 
 What that period built is the part of the program this record does not otherwise describe: wood and
 glass returning as the second and third material paths behind a single fork, the GPU renderers beside
