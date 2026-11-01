@@ -1,6 +1,19 @@
 # A GPU path for glass — measured, and worth building for the long ones
 
-Status: **CLOSED 2026-10-24. Do not build it.** Both halves are now measured and they point opposite
+Status: **MEASURED 2026-11-01. The measurement this page asked for now exists, and the path
+shipped.** The closing position below — *"this cannot be decided from this page as written… what it
+needs is one measurement: the port's ratio against the current arithmetic, on a poured sheet, with
+the corner cache in place on the CPU side"* — has been answered on the S23 Ultra at 65,535, end to
+end, both renderers. **Glass is 11.93× on the GPU. Stone is 3.71× the other way.** The sign is not
+constant across materials, which is a thing no single ratio on this page could have said. See
+"Measured on the shipped path, 2026-11-01".
+
+And the path shipped regardless: **204 masters carry `gpu: true`**, over builds 2026.10.24.186 to
+2026.10.31.289 — glass 106, stone 81, wood 17, across Blink on Windows, Blink on Android and WebKit
+on iOS. "Do not build it" describes a decision that events overtook on the day it was written, and
+it is left standing below rather than edited, because the reasoning is the useful part.
+
+Earlier status, left as written: **CLOSED 2026-10-24. Do not build it.** Both halves are now measured and they point opposite
 ways. A GPU-native field is **246× the eight-worker pool** (`tools/gpu-native-probe.html`, three
 devices) — and the field is only **13–18% of a render** (`tools/count-field-calls.mjs`, counted on
 the master slab), so the whole port is worth **1.15× to 1.21×**. 5:05 becomes about 4:20. That buys a
@@ -403,6 +416,64 @@ Both tablets predate WebGPU, which is not a coincidence that will age away in th
 wants: the hardware slow enough to need a GPU path is the hardware too old to have the API. Those
 figures are also the optimistic bound: the probe is a proxy with no op chain, no SDF loop and no cell
 walk, and all three branch — divergence costs a GPU far more than it costs a core.
+
+### Measured on the shipped path, 2026-11-01
+
+That table is a proxy — WGSL against JavaScript, on arithmetic alone. This is the whole renderer, end
+to end. One device: **S23 Ultra, Blink on Android, build 2026.10.31.289**, every master
+65,535 × 40,959 on a 2048 tile, 640 tiles, the corner cache in place on the CPU side. The figure is
+`ms.render` from each master's own record, which agrees with that master's summed per-tile times to
+within 2% on all fifteen. Read any master's record with
+[`tools/tiff-meta.mjs`](../tools/tiff-meta.mjs).
+
+| material | CPU | GPU | GPU is |
+| --- | --- | --- | --- |
+| glass | 511.0 s | 42.8 s | **11.93× faster** |
+| wood | 208.3 s | 18.2 s | **11.46× faster** |
+| stone | 32.7 s | 121.4 s | **3.71× slower** |
+| stone, subsurface 1 | 35.9 s | 176.7 s | **4.92× slower** |
+
+**The sign is not constant, and that is the finding.** Not a bigger number or a smaller one than this
+page predicted — a different *kind* of answer. A port priced on one material would have been right
+about that material and backwards about the next, and nothing in the proxy table above could have
+shown it, because a proxy that runs the same arithmetic everywhere cannot vary by material.
+
+**The CPU column is not a baseline either.** Glass costs the CPU 511.0 s where stone costs 32.7 s —
+**15.6× apart on one device, one size, one build**. The GPU wins exactly where the CPU work is
+heaviest, and the two materials the GPU loses are the two cheapest on the CPU. That is four points
+and an observation, not a law; what it rules out is quoting any GPU ratio for this renderer without
+naming the material it was measured on.
+
+**What this is not.** One device, one size, one build. The proxy above predicted **1.56×** for this
+same S23 and the shipped path returns **11.93×** on glass — not a refutation, because the two measure
+different things with different instruments, but *"nothing reaches 2×"* does not describe what
+shipped. Each figure is the mean of the runs that exist, and their spreads are uneven: glass on the
+GPU ran 40.1 s and 45.5 s (13% apart), glass on the CPU 503.0 s and 519.1 s (3%), stone with
+subsurface on the CPU 36.7 s and 35.2 s. Whether 11.93× on a 65,535 survives to a 1,048,576 is not
+measured here, and by this page's own argument — *the multiple is not the decision, the clock is* —
+that is the question that matters.
+
+**The two renderers do not draw the same picture, and the bytes say so in both directions.** On glass
+the GPU writes 27,332,193 bytes of image data against the CPU's 25,908,386, **5.5% larger**. On stone
+it writes *smaller* — 339.8 MB against 606.1, and 477.5 against 809.1 with subsurface — which is the
+shape already ruled on elsewhere: the coat's subsurface stage is a high-pass, and the painter's
+per-fill dither gives it far more local contrast to work on than the shader does. The two carry
+different render signatures, which is correct rather than a defect: the renderer reaches the pixels.
+
+**UV is absent from the table by construction.** `uvMode && BLOOM_DRAW` refuses the shader
+(`stone-author.html`, the `exp.gpu.uv` clause), because under a spectrum the drawn halo *is* the
+picture and the shader reads one pixel. A UV pair run with the default bloom is therefore **two CPU
+renders**, and they come back byte-identical — the most convincing null on this page, and entirely
+empty. Only `gpuWhy: "exp.gpu.uv"` in the record distinguishes it from a real agreement.
+`?bloom=blur` moves the halo into `applyCoat` after the shader hands its face back, and the shader
+then takes the slab; that pairing has not been run.
+
+**Determinism held.** Every cell repeated on its own renderer came back byte-identical — 27,332,193
+twice, 25,908,386 twice, 706,080,803 twice, 706,117,636 twice. One exception, unexplained:
+809,056,133 against 809,055,975, both CPU, same signature, same light — 158 bytes in 809 MB.
+
+**And the tablets are still none.** That column of the proxy table is the one part of it that needs
+no revision: both predate WebGPU, and no 2 GB device in the archive has ever recorded a GPU render.
 
 ### The multiple is not the decision. The clock is.
 
