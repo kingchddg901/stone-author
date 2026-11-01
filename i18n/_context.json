@@ -585,6 +585,34 @@
 },
     "where": "progress while rendering: {i} is the frame just finished, {n} the total. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
   },
+  "lbl.anim-kind": {
+    "terms": [],
+    "where": "the label beside the two buttons that pick WHICH kind of film: the light ramping, or the slab being made. in the \"Animate\" box, which renders a film of a stone slab. Stone only."
+  },
+  "opt.anim-light": {
+    "terms": [],
+    "where": "one of two buttons: a film of the coat and light controls ramping over time. in the \"Animate\" box, which renders a film of a stone slab. Stone only."
+  },
+  "opt.anim-creation": {
+    "terms": [],
+    "where": "the other button: a film of the slab being built, every mark replayed in the order it was drawn. in the \"Animate\" box, which renders a film of a stone slab. Stone only."
+  },
+  "sl.anim-per": {
+    "terms": [],
+    "where": "how many frames each mark of the slab holds for. A mark that grows (a vein) gets five times this. in the \"Animate\" box, which renders a film of a stone slab. Stone only."
+  },
+  "anim.nomarks": {
+    "terms": [],
+    "where": "shown where the frame count would be, when the slab has nothing drawn on it yet to replay. in the \"Animate\" box, which renders a film of a stone slab. Stone only."
+  },
+  "anim.cost": {
+    "terms": [],
+    "where": "a standing warning under the frame count. The film is held in memory until it saves, and width, frame rate and length multiply together. No time is estimated - three attempts to predict one were out by 2.4x, 1.7x and 3.6x. in the \"Animate\" box, which renders a film of a stone slab. Stone only."
+  },
+  "note.anim-creation": {
+    "terms": [],
+    "where": "the explainer for the creation film. A \"mark\" is one drawn stroke; a \"vein\" is the main structural kind and the only one with a growth worth animating. in the \"Animate\" box, which renders a film of a stone slab. Stone only."
+  },
   "anim.done": {
     "terms": [],
     "placeholders": {
@@ -596,14 +624,9 @@
     "terms": [],
     "placeholders": {
       "n": "how many frames the film will have",
-      "secs": "how many seconds the finished film runs",
-      "mins": "an already-formatted duration such as \"40 s\" or \"2.5 min\" - do not reformat it"
+      "secs": "how many seconds the finished film runs"
 },
-    "where": "the estimate before rendering. {n} frames, {secs} seconds of film, {mins} an already-formatted duration like \"40 s\" or \"2.5 min\". in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
-  },
-  "anim.measuring": {
-    "terms": [],
-    "where": "shown for a moment while one frame is rendered and timed to price the film. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+    "where": "the exact size of the film, shown before rendering. No time is predicted. {n} frames, {secs} seconds of film, {mins} an already-formatted duration like \"40 s\" or \"2.5 min\". in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
   },
   "exp.pool.backlight": {
     "terms": [],

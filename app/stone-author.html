@@ -768,10 +768,14 @@
       <select id="anim-fps" aria-label="Frames per second" title="Frames per second" data-i18n-attr="aria-label=a11y.anim-fps;title=a11y.anim-fps"><option value="24">24</option><option value="30" selected>30</option><option value="60">60</option></select>
       <span class="stat" id="anim-cap"></span>
     </div>
-    <div class="sl"><label for="anim-secs"><span data-i18n="sl.anim-secs">Seconds</span> <output id="anim-secsV"></output></label><input id="anim-secs" type="range" min="2" max="120" step="1"></div>
-    <div class="sl"><span class="lbl" data-i18n="lbl.anim-add">Ramp</span><div class="grp"><select id="anim-add" aria-label="Add a control to the film" data-i18n-attr="aria-label=a11y.anim-add"></select><label class="tgl"><input type="checkbox" id="anim-stagger"><span data-i18n="lbl.anim-stagger">One after another</span></label></div></div>
-    <div id="anim-tracks"></div>
+    <div class="sl"><span class="lbl" data-i18n="lbl.anim-kind">Film</span><div class="grp"><button id="anim-kind-light" type="button" aria-pressed="true" data-i18n="opt.anim-light">The light</button><button id="anim-kind-creation" type="button" aria-pressed="false" data-i18n="opt.anim-creation">How it was made</button></div></div>
+    <div class="sl" data-anim-kind="light"><label for="anim-secs"><span data-i18n="sl.anim-secs">Seconds</span> <output id="anim-secsV"></output></label><input id="anim-secs" type="range" min="2" max="120" step="1"></div>
+    <div class="sl" data-anim-kind="creation"><label for="anim-per"><span data-i18n="sl.anim-per">Frames a mark</span> <output id="anim-perV"></output></label><input id="anim-per" type="range" min="1" max="24" step="1"></div>
+    <p class="note" data-anim-kind="creation" data-i18n-html="note.anim-creation">Every mark replayed in the order it was drawn. Veins <b>grow</b> &mdash; they get five times the frames, because a vein is structure and the only mark with a growth worth watching; everything else appears whole and holds. The length comes from the slab, not from a slider, so the estimate below is the film.</p>
+    <div class="sl" data-anim-kind="light"><span class="lbl" data-i18n="lbl.anim-add">Ramp</span><div class="grp"><select id="anim-add" aria-label="Add a control to the film" data-i18n-attr="aria-label=a11y.anim-add"></select><label class="tgl"><input type="checkbox" id="anim-stagger"><span data-i18n="lbl.anim-stagger">One after another</span></label></div></div>
+    <div id="anim-tracks" data-anim-kind="light"></div>
     <div class="sl"><span class="stat" id="anim-est" style="grid-column:1/-1"></span></div>
+    <div class="sl"><span class="stat" id="anim-cost" style="grid-column:1/-1" data-i18n="anim.cost">Rendering can take a long while and holds the whole film in memory until it saves &mdash; width, frame rate and length all multiply.</span></div>
     <div class="expprog" id="animprog" hidden><div class="expbar" id="animbar"><i id="animfill"></i></div><div class="exprow"><span class="stat" id="animstat"></span><button id="anim-stop" type="button" class="mini" data-i18n="btn.anim-stop">Stop</button></div></div>
   </div></details>
   <details class="sec" data-mat-only="stone"><summary data-i18n="sec.how-the-tools-read">How the tools read</summary><div class="body">
@@ -947,6 +951,7 @@ window.SA_I18N = (() => {
   "exp.pool.graft": "a wood graft",
   "exp.pool.grow": "a line still being drawn",
   "sec.animate": "Animate",
+  "anim.cost": "Rendering can take a long while and holds the whole film in memory until it saves \u2014 width, frame rate and length all multiply.",
   "note.animate": "Ramp the coat and the light over time and save it as a <b>video</b>. Pick the controls to move, where each starts and ends, and how long the film runs; the browser encodes it and the file downloads when it is done. The slab is put back exactly as you left it. <b>Leave this tab in front</b> \u2014 a hidden page is throttled and a long film will crawl.",
   "a11y.animate": "Animate",
   "a11y.anim-width": "Film width (px)",
@@ -966,8 +971,13 @@ window.SA_I18N = (() => {
   "anim.failed": "The film stopped: {why}",
   "anim.frame": "frame {i} of {n}",
   "anim.done": "{n} frames \u2014 saved",
-  "anim.est": "{n} frames, {secs}s \u2014 about {mins} to render",
-  "anim.measuring": "measuring one frame\u2026",
+  "anim.est": "{n} frames, {secs}s of film",
+  "lbl.anim-kind": "Film",
+  "opt.anim-light": "The light",
+  "opt.anim-creation": "How it was made",
+  "sl.anim-per": "Frames a mark",
+  "anim.nomarks": "This slab has no marks to replay yet.",
+  "note.anim-creation": "Every mark replayed in the order it was drawn. Veins <b>grow</b> \u2014 they get five times the frames, because a vein is structure and the only mark with a growth worth watching; everything else appears whole and holds. The length comes from the slab, not from a slider, so the estimate below is the film.",
   "exp.pool.backlight": "the back light",
   "exp.pool.window": "a reality window — an island with Show through on",
   "exp.pool.noworkers": "no workers on this engine",
@@ -1957,7 +1967,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.285';
+  const BUILD = '2026.10.31.287';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13268,7 +13278,8 @@ self.onmessage = async (e) => {
   // STONE ONLY FOR NOW, and the restriction is ONE attribute on the box - data-mat-only="stone".
   // Nothing below names a material: a track is a control, a range and a span, and the coat it
   // ramps is something every material has. Extending it later is removing that attribute.
-  const ANIM = { secs: 8, fps: 30, w: 1024, stagger: false, tracks: [] };
+  const ANIM = { kind: 'light', secs: 8, fps: 30, w: 1024, stagger: false, tracks: [],
+                 perMark: 6, moonSecs: 2 };
 
   // A TIMELINE IS A FUNCTION OF THE FRAME INDEX AND NOTHING ELSE. That is what makes a frame
   // reproducible: re-render i and you get i, which is how a lost frame was recovered exactly when
@@ -13286,30 +13297,107 @@ self.onmessage = async (e) => {
     });
   }
 
-  // WHAT THE RAMP COSTS IS MEASURED, NOT GUESSED. One frame is rendered and timed at the chosen
-  // width, and the estimate is that times the frame count. Guessing it from pixels was wrong by 2x
-  // the last time a number here was reasoned rather than measured.
-  let animCal = { w: 0, ms: 0, bytes: 0 };
-  function animCalibrate() {
-    const keep = COAT_TOKENS.map(t => [t.key, coatCurrent(t.key)]);
-    try {
-      for (const v of animAt(0, Math.max(2, ANIM.secs * ANIM.fps))) coatSet(v.key, v.value);
-      const t0 = performance.now();
-      const c = renderTiled(ANIM.w);
-      const ms = performance.now() - t0;
-      c.width = 1; c.height = 1;
-      animCal = { w: ANIM.w, ms, bytes: 0 };
-    } finally { for (const [k, v] of keep) coatSet(k, v); }
-    return animCal;
+  // ---- REPLAYING HOW A SLAB WAS MADE -----------------------------------------------------------
+  //
+  // A slab is rebuilt from its marks oldest-first because that is what makes it deterministic, so
+  // the order a film needs is the order the renderer already uses. Nothing had to be invented.
+  //
+  // THE BASE ADVANCES, IT NEVER REBUILDS, and that is the difference between a film that takes
+  // minutes and one that takes hours. build()'s incremental branch is exactly the right operation -
+  // clone the geometry, applyMark the newest, stamp - but it fires only when the array is ONE mark
+  // longer than the last build. Six frames of one mark at rising growth leave the length unchanged,
+  // so frames two through six would fall through to fullBuild: measured at 512, ~4,810 ms against
+  // ~1 ms to fold a finished mark into the base. So the base is held here and the growing mark is
+  // re-applied on top of it.
+  //
+  // THE CLONE SHAPE IS COPIED FROM THAT BRANCH VERBATIM. A shallower one lets a frame mutate the
+  // base, and the corruption accumulates down the film rather than failing.
+  const animSnap = g => ({ ...g, lines: g.lines.slice(), byId: new Map(g.byId), web: g.web.slice(),
+                           specks: g.specks.map(q => ({ ...q })), fog: g.fog.map(q => ({ ...q })),
+                           guides: g.guides.slice(), styl: g.styl.slice(), drusy: g.drusy.slice() });
+  let animMarks = [], animBase = null;
+
+  // ONE full build for the starting point, then the base only ever gains a mark.
+  function animStart(all) {
+    animMarks = all;
+    marks.length = 0;
+    GROW_ID = null; GROW_T = 1;
+    size(); build();
+    animBase = animSnap(geo);
   }
+  // Mark k part-drawn, on top of the base. The base is untouched, which is why the clone matters.
+  function animAtMark(k, t) {
+    const m = animMarks[k];
+    GROW_ID = m.id; GROW_T = t;
+    const out = animSnap(animBase);
+    if (marks[marks.length - 1] !== m) marks.push(m);   // stampLayers looks the layer up by mark id
+    applyMark(m, out);
+    stampLayers(out);
+    geo = out;
+    stoneReady = false;
+  }
+  // And mark k is finished: fold it in, so mark k+1 grows on top of it.
+  function animFold(k) {
+    const m = animMarks[k];
+    GROW_ID = null; GROW_T = 1;
+    const out = animSnap(animBase);
+    if (marks[marks.length - 1] !== m) marks.push(m);
+    applyMark(m, out);
+    stampLayers(out);
+    animBase = out; geo = out; stoneReady = false;
+  }
+  // ONLY vein AND branch REACH lineGeom, so only they can grow; every other mark appears whole and
+  // holds for its frames, which is what gives the film its pacing.
+  const animGrows = k => k === 'vein' || k === 'branch';
 
   // CHANGING G DOES NOT REBUILD THE GEOMETRY - renderTiled applies the coat from G at render time -
   // and that is the whole reason a ramp is ~20x cheaper per frame than replaying a slab's marks.
   // So this must never call build(): G is hashed wholesale into build()'s signature, and one call
   // would turn every frame into a full rebuild.
+  // A FILM IS A FRAME COUNT AND A FUNCTION THAT PREPARES FRAME i. The light ramp's is pure and can
+  // be sampled in any order; the creation replay's advances a base and can only be walked FORWARDS,
+  // which is said here rather than left for someone to discover by sampling it backwards.
+  function animLightFilm() {
+    const n = Math.max(2, Math.round(ANIM.secs * ANIM.fps));
+    return { n, random: true, at: i => { for (const v of animAt(i, n)) coatSet(v.key, v.value); } };
+  }
+
+  // THE PLAN IS LAID OUT BEFORE ANYTHING RENDERS, and the estimate reads the SAME function, so the
+  // two cannot disagree about how long the film is. A mark that grows gets five times the frames of
+  // one that appears whole - veins are the structure and the only thing with a growth to watch.
+  function animPlan(all) {
+    const per = Math.max(1, ANIM.perMark), grow = per * 5;
+    const plan = [];
+    all.forEach((m, k) => {
+      const f = animGrows(m.kind) ? grow : per;
+      for (let j = 1; j <= f; j++) plan.push({ k, t: j / f, last: j === f, grows: animGrows(m.kind) });
+    });
+    for (let j = 0; j < Math.max(1, Math.round(ANIM.fps / 2)); j++) plan.push({ k: all.length - 1, t: 1, hold: true });
+    return plan;
+  }
+
+  function animCreationFilm() {
+    const all = marks.map(m => m);
+    const plan = animPlan(all);
+    let started = false, at = -1;
+    return {
+      n: plan.length, random: false, marks: all,
+      at: i => {
+        if (!started) { animStart(all); started = true; }
+        const step = plan[i];
+        if (step.hold) return;
+        // FORWARDS ONLY: a mark is folded in once, when its last frame has been rendered.
+        if (step.k !== at) { if (at >= 0) animFold(at); at = step.k; }
+        animAtMark(step.k, step.t);
+        if (step.last) { animFold(step.k); at = -1; }
+      },
+    };
+  }
+
   async function animRender() {
     if (exporting) return;
-    if (!ANIM.tracks.length) { hint(TR('anim.none')); return; }
+    if (ANIM.kind === 'light' && !ANIM.tracks.length) { hint(TR('anim.none')); return; }
+    if (ANIM.kind === 'creation' && !marks.length) { hint(TR('anim.nomarks')); return; }
     if (typeof VideoEncoder === 'undefined') { hint(TR('anim.noencoder')); return; }
     // NO SEAL, AND THAT IS DECLARED RATHER THAN OMITTED. The device seal protects the identity
     // written into a MASTER's metadata; a film has no metadata block at all - no expMeta, no UA, no
@@ -13320,7 +13408,8 @@ self.onmessage = async (e) => {
     const restore = COAT_TOKENS.map(t => [t.key, coatCurrent(t.key)]);
     let enc = null;
     try {
-      const N = Math.max(2, Math.round(ANIM.secs * ANIM.fps));
+      const film = ANIM.kind === 'creation' ? animCreationFilm() : animLightFilm();
+      const N = film.n;
       const chunks = [];
       enc = new VideoEncoder({
         output: c => { const d = new Uint8Array(c.byteLength); c.copyTo(d);
@@ -13331,7 +13420,7 @@ self.onmessage = async (e) => {
                       bitrate: Math.round(ANIM.w * ANIM.w * H * ANIM.fps * 0.08), framerate: ANIM.fps });
       for (let i = 0; i < N; i++) {
         if (animStop) break;
-        for (const v of animAt(i, N)) coatSet(v.key, v.value);
+        film.at(i);
         const c = renderTiled(ANIM.w);
         const vf = new VideoFrame(c, { timestamp: Math.round(i * 1e6 / ANIM.fps),
                                        duration: Math.round(1e6 / ANIM.fps) });
@@ -13355,6 +13444,14 @@ self.onmessage = async (e) => {
       // THE SLAB IS PUT BACK. A ramp writes the controls on its way through, so leaving them where
       // the last frame left them would hand the author a different picture than they started with.
       for (const [k, v] of restore) coatSet(k, v);
+      // A CREATION REPLAY TRUNCATES `marks` AS IT WALKS, so the coat alone is not enough to put the
+      // slab back: without this the author is left holding whatever prefix the film stopped at.
+      if (ANIM.kind === 'creation' && animMarks.length) {
+        marks.length = 0; for (const m of animMarks) marks.push(m);
+        GROW_ID = null; GROW_T = 1;
+        animMarks = []; animBase = null;
+        build();
+      }
       try { if (enc && enc.state !== 'closed') enc.close(); } catch (_) {}
       animStop = false;
       exporting = false; wakeOff();
@@ -13432,12 +13529,34 @@ self.onmessage = async (e) => {
     }
     const res = document.getElementById('anim-res');
     if (res) { res.value = String(ANIM.w);
-      res.addEventListener('change', () => { ANIM.w = +res.value; animCal = { w: 0, ms: 0, bytes: 0 }; animEstimate(); }); }
+      res.addEventListener('change', () => { ANIM.w = +res.value; animEstimate(); }); }
     const fps = document.getElementById('anim-fps');
     if (fps) { fps.value = String(ANIM.fps);
       fps.addEventListener('change', () => { ANIM.fps = +fps.value; animEstimate(); }); }
     const st = document.getElementById('anim-stagger');
     if (st) st.addEventListener('change', () => { ANIM.stagger = st.checked; });
+    // THE TWO KINDS SHOW THEIR OWN ROWS AND NOTHING ELSE. Leaving a ramp's track list visible under
+    // a creation film invites setting controls that the film will never read.
+    const showKind = () => {
+      for (const el of document.querySelectorAll('[data-anim-kind]'))
+        el.hidden = el.getAttribute('data-anim-kind') !== ANIM.kind;
+      for (const [id, k] of [['anim-kind-light', 'light'], ['anim-kind-creation', 'creation']]) {
+        const b = document.getElementById(id);
+        if (b) b.setAttribute('aria-pressed', String(ANIM.kind === k));
+      }
+    };
+    for (const [id, k] of [['anim-kind-light', 'light'], ['anim-kind-creation', 'creation']]) {
+      const b = document.getElementById(id);
+      if (b) b.addEventListener('click', () => { ANIM.kind = k; showKind(); animEstimate(); });
+    }
+    const per = document.getElementById('anim-per');
+    if (per) {
+      per.value = ANIM.perMark;
+      const showP = () => { const o = document.getElementById('anim-perV'); if (o) o.textContent = ANIM.perMark; };
+      showP();
+      per.addEventListener('input', () => { ANIM.perMark = +per.value; showP(); animEstimate(); });
+    }
+    showKind();
     const go = document.getElementById('anim-go');
     if (go) go.addEventListener('click', () => { animRender(); });
     const stop = document.getElementById('anim-stop');
@@ -13453,16 +13572,25 @@ self.onmessage = async (e) => {
 
   // WHAT IT COSTS IS MEASURED. One frame is rendered at the chosen width and timed; the estimate is
   // that times the count. A number reasoned from pixels was out by 2x the last time one was.
+  // NO TIME ESTIMATE, RULED 2026-10-31. Frames and duration are EXACT - they come from the same
+  // plan the film walks - and the render time is not predicted at all.
+  //
+  // THAT IS NOT A SHRUG, IT IS WHAT THREE WRONG ANSWERS COST. Pricing a creation frame as a render
+  // was 2.4x under; adding the base clone but measuring a vein as the plain case was 1.7x over;
+  // measuring the right kinds on an empty base was 3.6x under. The film runs ~246 ms a frame where
+  // render plus clone is ~87 - the rest is the encoder, its backpressure and the loop's yields,
+  // and no probe that does not itself encode can see them. A number arrived at by a fourth guess
+  // would be the same mistake wearing a different coefficient.
   function animEstimate() {
     const el = document.getElementById('anim-est');
     if (!el) return;
-    const N = Math.max(2, Math.round(ANIM.secs * ANIM.fps));
-    if (!ANIM.tracks.length) { el.textContent = TR('anim.none'); return; }
-    if (animCal.w !== ANIM.w) { el.textContent = TR('anim.measuring'); animCalibrate(); }
-    const ms = animCal.ms * N;
-    const mins = ms < 60000 ? Math.max(1, Math.round(ms / 1000)) + ' s' : (ms / 60000).toFixed(1) + ' min';
-    el.textContent = TR('anim.est', { n: N, secs: ANIM.secs, mins });
+    if (ANIM.kind === 'creation' && !marks.length) { el.textContent = TR('anim.nomarks'); return; }
+    if (ANIM.kind === 'light' && !ANIM.tracks.length) { el.textContent = TR('anim.none'); return; }
+    const n = ANIM.kind === 'creation' ? animPlan(marks.map(m => m)).length
+                                       : Math.max(2, Math.round(ANIM.secs * ANIM.fps));
+    el.textContent = TR('anim.est', { n, secs: (n / ANIM.fps).toFixed(1) });
   }
+
   // PROGRESS THAT SAYS WHAT IT IS DOING. A long render blocks the main thread for minutes, and the
   // only thing worse than a slow film is one that looks like a hung page. Mirrors the export bar.
   function animProgress(done, total, finished) {
