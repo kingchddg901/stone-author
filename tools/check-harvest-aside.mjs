@@ -17,6 +17,7 @@
 //   3  a master with no light figure is left alone rather than guessed at
 //   4  the `lit40` clause is load-bearing — ablate it and the case it catches walks through
 //   5  the `mean === 0` clause is still load-bearing and still wins the label it always won
+//   6  `noGeometry` fires on stone only — ablate the material gate and a glass master is miscalled
 //
 //   node tools/check-harvest-aside.mjs
 import { readFileSync } from 'fs';
@@ -44,13 +45,23 @@ const codeOf = m => { const v = verdict(m); return v && v.code.trim(); };
 
 // REAL FIXTURES, copied off real sidecars rather than invented. `.claude/` is not committed, so they
 // are pasted here; every number below was read out of a master's own metadata block.
-const GPU_WOOD   = { w: 16384, marks: 666,  lines: 70,  cracks: 232, specks: 8050, light: { mean: 23.33, lit40: 0,     every: 100 } };
-const BLACK      = { w: 16384, marks: 666,  lines: 70,  cracks: 232, specks: 8050, light: { mean: 0,     lit40: 0,     every: 100 } };
-const MOON_ONLY  = { w: 32768, marks: 1224, lines: 361, cracks: 0,   specks: 0,    light: { mean: 1.29,  lit40: 0.94,  every: 100 } };
-const GOOD_WOOD  = { w: 16384, marks: 666,  lines: 70,  cracks: 232, specks: 8050, light: { mean: 54.9,  lit40: 87.86, every: 100 } };
-const GOOD_STONE = { w: 65535, marks: 1224, lines: 361, cracks: 0,   specks: 0,    light: { mean: 69.6,  lit40: 76.99, every: 100 } };
-const NO_LIGHT   = { w: 65535, marks: 666,  lines: 70,  cracks: 232, specks: 8050 };
-const GLASS      = { w: 32768, marks: 14,   lines: 0,   cracks: 0,   specks: 0,    light: { mean: 129.63, lit40: 100,  every: 100 } };
+// `material` CARRIES A CLAUSE NOW, so every fixture states it. The values are the ones the archive
+// actually pairs with these counts: 16384/666/70/232/8050 appears under all three materials, and the
+// wood rows below are the wood ones. A fixture without `material` would exercise the un-judged path
+// and nothing else, so NO_MAT exists to do exactly that and the rest are explicit.
+const GPU_WOOD   = { material: 'wood',  w: 16384, marks: 666,  lines: 70,  cracks: 232, specks: 8050, light: { mean: 23.33, lit40: 0,     every: 100 } };
+const BLACK      = { material: 'stone', w: 16384, marks: 666,  lines: 70,  cracks: 232, specks: 8050, light: { mean: 0,     lit40: 0,     every: 100 } };
+const MOON_ONLY  = { material: 'stone', w: 32768, marks: 1224, lines: 361, cracks: 0,   specks: 0,    light: { mean: 1.29,  lit40: 0.94,  every: 100 } };
+const GOOD_WOOD  = { material: 'wood',  w: 16384, marks: 666,  lines: 70,  cracks: 232, specks: 8050, light: { mean: 54.9,  lit40: 87.86, every: 100 } };
+const GOOD_STONE = { material: 'stone', w: 65535, marks: 1224, lines: 361, cracks: 0,   specks: 0,    light: { mean: 69.6,  lit40: 76.99, every: 100 } };
+const NO_LIGHT   = { material: 'stone', w: 65535, marks: 666,  lines: 70,  cracks: 232, specks: 8050 };
+const GLASS      = { material: 'glass', w: 32768, marks: 14,   lines: 0,   cracks: 0,   specks: 0,    light: { mean: 129.63, lit40: 100,  every: 100 } };
+// THE ONE REAL EMPTY STONE IN THE ARCHIVE, and the only master the narrowed clause still fires on:
+// slab `stone`, build 2026.10.17.130, four marks and no lines, cracks or specks. It is lit — mean
+// 229.52, lit40 100 — so neither of the other two clauses sees it, which is why this one exists.
+const EMPTY_STONE = { material: 'stone', w: 1024, marks: 4, lines: 0, cracks: 0, specks: 0, light: { mean: 229.52, lit40: 100, every: 100 } };
+// Same counts as GLASS, but from a build before `material` was written. Must be left alone.
+const NO_MAT     = { w: 32768, marks: 14,   lines: 0,   cracks: 0,   specks: 0,    light: { mean: 143.80, lit40: 100,  every: 100 } };
 
 // ---- 1: each clause fires on the thing it is for -------------------------------------------------
 ok('a flat frame that is not black -> NOTHING LIT', codeOf(GPU_WOOD) === 'NOTHING LIT', codeOf(GPU_WOOD));
@@ -92,18 +103,33 @@ if (BODY.includes(MEANCLAUSE)) {
      !!without(BLACK) && without(BLACK).code.trim() === 'NOTHING LIT');
 }
 
-// ---- the noGeometry clause, pinned rather than endorsed ------------------------------------------
-// `noGeometry` is `marks > 0 && !lines && !cracks && !specks`, and `lines`, `cracks` and `specks` are
-// STONE vocabulary. A glass or wood slab authored without stone marks satisfies it by construction.
-// Measured against the archive on 2026-10-30: 224 masters match it and ALL 224 are real pictures —
-// lit40 62.50 to 100.00, not one of them at zero. 212 glass, 4 wood, 1 stone.
+// ---- 6: the noGeometry clause is narrowed to stone, and the gate is load-bearing -----------------
+// THE PIN ABOVE DID ITS JOB. It read: "the decision to narrow the clause to stone has not been made,
+// and when it is, this assertion goes red and whoever changed it reads this comment." It went red on
+// 2026-11-01 and the comment was read. **The decision was made that day**, after a dry harvest over
+// the whole Downloads tree set ten `Glass Master Source` masters aside in one pass — the first time
+// it bit, because until then those slabs mostly never matched the harvester's PREFIX.
 //
-// It has not bitten because those slabs mostly never matched the harvester's PREFIX, which is the same
-// symptomless gap that hid two earlier failures. This row therefore PINS the current behaviour rather
-// than approving it: the decision to narrow the clause to stone has not been made, and when it is,
-// this assertion goes red and whoever changed it reads this comment.
-ok('PINNED (known false positive): a glass master matches noGeometry',
-   codeOf(GLASS) === 'EMPTY STONE', codeOf(GLASS));
+// The 2026-10-30 enumeration in that pin was reproduced independently before the change: 224 masters
+// match the material-blind test, 212 glass, 4 wood, 1 stone, lit40 62.50 to 100.00 and not one at
+// zero. Narrowing releases 216 of them, every one a real picture, and `blackFrame` and `nothingLit`
+// stay material-blind so a non-stone render that painted nothing is still caught.
+ok('a glass master is no longer called an empty stone', verdict(GLASS) === null, codeOf(GLASS));
+ok('a real empty stone still fires', codeOf(EMPTY_STONE) === 'EMPTY STONE', codeOf(EMPTY_STONE));
+ok('a master with no material is left alone rather than guessed at',
+   verdict(NO_MAT) === null, codeOf(NO_MAT));
+
+// ABLATION. Strip the material gate and the glass master must come back as EMPTY STONE, because a
+// narrowing that changes nothing when removed is not the thing doing the work.
+const MATGATE = "const noGeometry = m.material === 'stone' && m.marks > 0 && !m.lines && !m.cracks && !m.specks;";
+ok('the material gate is where this gate thinks it is', BODY.includes(MATGATE));
+if (BODY.includes(MATGATE)) {
+  const without = lift(BODY.replace(MATGATE, 'const noGeometry = m.marks > 0 && !m.lines && !m.cracks && !m.specks;'));
+  ok('ablated: the glass master is called an empty stone again',
+     !!without(GLASS) && without(GLASS).code.trim() === 'EMPTY STONE', without(GLASS));
+  ok('ablated: the real empty stone is unaffected either way',
+     !!without(EMPTY_STONE) && without(EMPTY_STONE).code.trim() === 'EMPTY STONE');
+}
 
 console.log(fails ? '\ncheck-harvest-aside: ' + fails + ' FAILED' : '\ncheck-harvest-aside: ok');
 process.exit(fails ? 1 : 0);

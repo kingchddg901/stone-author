@@ -187,7 +187,27 @@ function record(p) {
 function asideVerdict(m) {
   if (!m) return null;
   const light = m.light;
-  const noGeometry = m.marks > 0 && !m.lines && !m.cracks && !m.specks;
+  // `lines`, `cracks` and `specks` are STONE counters. A glass or wood slab legitimately reports none
+  // of them, so written material-blind this test called every correct glass master EMPTY. It set ten
+  // aside in a single dry run on 2026-11-01 - all `Glass Master Source`, including a 4.57 GB 262,144.
+  // Kept rather than deleted, so nothing was lost; but a master set aside is a master that never
+  // enters the ledger, and glass would have stopped entering it entirely.
+  //
+  // ENUMERATED AGAINST THE ARCHIVE, the same way the `lit40` widening above was. Of 1,316 masters
+  // carrying a marks count, **224 tripped the material-blind test and 212 of those were glass** -
+  // 186 of the 187 harvested `Glass Master Source` masters among them.
+  //
+  // NARROWING RATHER THAN WIDENING, so the question is what it stops protecting: 216 change verdict
+  // and NOT ONE is empty by any other measure. `light.mean` across them runs 51.58 to 170.19 and
+  // `lit40` 62.50 to 100, with no light figure missing. `blackFrame` and `nothingLit` below stay
+  // material-blind and still catch a non-stone render that painted nothing, which is the case that
+  // actually matters.
+  //
+  // A MASTER WITH NO `material` IS NOT JUDGED, exactly as one with no light figure is not judged by
+  // the two clauses below - an unreadable field is left alone rather than guessed at. Every build
+  // since 2026.10.16.89 writes it; the seven in this archive without it are all slab `glass` at mean
+  // 143.80, so flagging them would be wrong in every case that exists.
+  const noGeometry = m.material === 'stone' && m.marks > 0 && !m.lines && !m.cracks && !m.specks;
   const blackFrame = !!(light && light.mean === 0);
   const nothingLit = !!(light && light.lit40 === 0);
   if (!noGeometry && !blackFrame && !nothingLit) return null;
