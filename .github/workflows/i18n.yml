@@ -89,6 +89,10 @@ jobs:
         run: node tools/check-gpu-uni.mjs
       - name: ... and that check can go red
         run: node tools/check-gpu-uni.mjs --ablate
+      - name: The muxer round-trips every frame as it went in
+        run: node tools/check-webm.mjs
+      - name: ... and that check can go red
+        run: node tools/check-webm.mjs --ablate
       - name: The GPU’s finishers are actually reached
         run: node tools/check-gpu-finish.mjs
       - name: A faulted GPU stops writing tiles
