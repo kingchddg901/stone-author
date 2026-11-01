@@ -133,6 +133,54 @@ function of the frame index: 581 is mark 19 at growth 0.4, and re-rendering it t
 a single missing frame puts every later frame at the wrong time — a fault that looks like bad pacing
 rather than a missing file.
 
+## The same film, made by the app
+
+[`gallery/creation-in-app.webm`](../gallery/creation-in-app.webm) is the two-part film — the slab
+built mark by mark, then the light brought up over the finished stone — made entirely inside the
+page: 12,210 frames at 512 × 320, 3:23.5 at 60 fps, 26.0 MB of VP9.
+
+Everything above was assembled by hand; a hooked build wrote the PNGs and `ffmpeg` turned them into a
+file. This one never left the tab. `VideoEncoder` encoded the frames, the app's own muxer wrote the
+container, the download fired when it was done, and it ran for an hour and a half without being
+touched.
+
+| | |
+|---|---|
+| frames | 12,210 — 20 veins × 30, 645 marks × 6, moon 510, hold 30, then 7,200 of light |
+| wall time | **91:21 at the outside** — 26.9× realtime |
+| lost frames | **0**, and no gap in the timestamps |
+| file | 26.0 MB, 1.02 Mbit/s, 102 clusters |
+| its own record | the container's `WritingApp` reads `Material Author 2026.10.31.289` |
+
+**That last row is the only thing a film records about its own making.** It has no metadata block at
+all — no export record, no device identity, just VP9 in a WebM — which is why `animRender` declares
+the device seal absent rather than calling it, and why the wall time above is *bounded rather than
+read*: it is the gap between this file's mtime and the previous film's, and the render cannot have
+started before that one saved.
+
+### A moon frame costs the same at 512 as it does at 2048
+
+Two progress readings 665 s apart, with 135 moon frames between them, give **4.93 s a frame** —
+which is what the 2048 run measured. `fullBuild` and `warpGeo` both walk geometry rather than
+pixels, so cutting the output to a sixteenth of the area bought nothing:
+
+| | 2048, PNG pipeline | 512, in the app |
+|---|---|---|
+| a moon frame | ~4.9 s | **4.93 s** |
+
+**516 of the 12,210 frames — 4.2% — took 46% of the run**: the moon and the one mark after it, each
+one a full rebuild. The two cheap stretches are not alike either. An incremental creation frame cost
+**431 ms at the outside** against **140 ms** for a frame of light ramp, because a ramp frame clones
+no geometry at all — it writes the coat and draws.
+
+### The file is its own evidence
+
+The container was walked with an EBML reader rather than trusted: 12,210 blocks in 102 clusters,
+timestamps contiguous from 0.000 to 203.483 s. Frames sampled back out of it show the two halves
+doing what they claim — light mean 44.5 on the near-empty slab, rising as the marks accrete,
+near-flat in the mean through the moon (which warps the picture rather than lighting it), then
+**49.7 → 96.3 across the ramp**.
+
 For the concurrency lesson behind that single failure — six upload workers lost 278 frames of 1,800
 where one worker lost none — see [the tiled floor](tiled-floor.md), which records the same shape of
 mistake in a different place.

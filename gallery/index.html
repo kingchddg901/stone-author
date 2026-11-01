@@ -422,6 +422,31 @@
           was made, and what it cost</p>
       </figcaption>
     </figure>
+
+    <p class="note"><b>And then the app made one by itself.</b> The film above was assembled by hand
+      &mdash; a hooked build wrote 22.1 GB of PNGs and <code>ffmpeg</code> turned them into a file.
+      The one below never left the browser: the page encoded every frame, wrote the container itself
+      and downloaded the result. It is 512 px where the other is 1280, and it ran for an hour and a
+      half without being touched.</p>
+
+    <figure>
+      <video src="creation-in-app.webm" controls preload="metadata" playsinline width="512" height="320"
+             style="width:100%;height:auto;display:block;border-radius:2px"
+             aria-label="The same kind of slab assembling itself and then being lit: veins grow across dark rock, hundreds of small marks accrete the grain, a dragged lens warps the whole picture, and then the subsurface glow and the specular highlight rise as the light swings through 180 degrees."></video>
+      <figcaption class="cap">
+        <span class="idx">06 &middot; unattended &nbsp;<span class="badge pure">pure render</span></span>
+        <h2>12,210 frames, made in the tab <span class="light">&mdash; 3:23.5 at 60 fps, 26.0 MB</span></h2>
+        <p>Two films joined end to end: 83.5 s of the slab being built mark by mark, then 120 s of
+          light ramped over it &mdash; subsurface, specular and the light's angle all moving at once,
+          on geometry that has stopped changing. The browser's own encoder wrote the VP9 and the app
+          wrote the WebM around it, so nothing outside the page touched the file.</p>
+        <p>Walked back afterwards with an EBML reader: <b>12,210 blocks in 102 clusters, no gap in the
+          timestamps</b> &mdash; nothing lost across an hour and a half unattended. The container
+          carries the build that made it, <code>Material Author 2026.10.31.289</code>.</p>
+        <p class="meta"><a href="../docs/creation-film.md">docs/creation-film.md</a> &nbsp;— what it
+          cost, and why a moon frame costs the same at 512 as at 2048</p>
+      </figcaption>
+    </figure>
   </section>
 
   <footer>
