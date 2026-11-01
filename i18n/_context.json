@@ -597,9 +597,21 @@
     "terms": [],
     "where": "the other button: a film of the slab being built, every mark replayed in the order it was drawn. in the \"Animate\" box, which renders a film of a stone slab. Stone only."
   },
+  "sl.anim-moon": {
+    "terms": [],
+    "where": "how many seconds of film one moon pass takes. A moon is a dragged warp; the film grows it by replaying a longer and longer prefix of its path, and every frame of it is a full rebuild, so this is the most expensive control in the box. Only shown when the slab has a moon. In the Animate box, creation film. Stone only."
+  },
   "sl.anim-per": {
     "terms": [],
     "where": "how many frames each mark of the slab holds for. A mark that grows (a vein) gets five times this. in the \"Animate\" box, which renders a film of a stone slab. Stone only."
+  },
+  "lbl.anim-then": {
+    "terms": [],
+    "where": "the label before a toggle that adds a second part to the film. One word, and it reads straight into the toggle beside it: \"Then | ramp the light on the finished slab\". in the \"Animate\" box, on the creation film. Stone only."
+  },
+  "lbl.anim-then-light": {
+    "terms": [],
+    "where": "the toggle itself, which continues the sentence started by the label before it. When on, the film first builds the slab mark by mark and then ramps the chosen light controls over the finished stone. in the \"Animate\" box, on the creation film. Stone only."
   },
   "anim.nomarks": {
     "terms": [],
