@@ -1920,7 +1920,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.276';
+  const BUILD = '2026.10.31.277';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -13171,12 +13171,21 @@ self.onmessage = async (e) => {
   // THE FLOOR, at export resolution. The same painter the preview uses, pointed at an export canvas
   // with the frame mapped straight onto it: a floor is the slab rearranged, so there is nothing new
   // to paint here, only a resolution to stop assuming.
+  // A FLOOR IS A SLAB WITH LINES ON IT, on this path too. This is what expCompleted and
+  // renderTiledStepped reach - the PNG and the kit - and it used to paint the slab into an offscreen
+  // capped at FLOOR_SRC_MAX and blit pieces out of it. renderStoneOffscreen calls paintContent and
+  // NEVER applyCoat, so a PNG of a floor came back with no subsurface, no specular, no emission
+  // bloom and no lens, while the TIFF beside it had all four.
+  //
+  // renderTiled is the whole pipeline and has no floor branch of its own - it reads layTiles only to
+  // decide the back light - so it renders the slab and the cut goes over it, the same order
+  // renderFloorTile and the studio preview both use now.
+  //
+  // IT ALSO DROPS THE CAP. The blit source was min(W, 8192), so a floor above that was pieces
+  // enlarged out of an 8,192 picture; there is no source to cap any more.
   function renderFloor(W) {
-    renderStoneOffscreen(Math.min(W, FLOOR_SRC_MAX));
-    const c = expCanvas(W), cx = c.getContext('2d');
-    cx.setTransform(W, 0, 0, W, 0, 0);                   // frame units (1 wide, H tall) onto the output
-    drawTilesTo(null, cx, 1 / W);
-    stoneReady = false;                                  // the preview's own offscreen was replaced
+    const c = renderTiled(W);
+    cutOverlay(c, c.getContext('2d'), W, 0, 0);
     return c;
   }
   function expCompleted(W) {                              // the finished slab — FULL pipeline, tiled so a huge export stays bounded in memory (matches renderFull, back light falls back to it)

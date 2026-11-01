@@ -219,11 +219,11 @@ CPU painter and the field under both.
   arena and one uniform** for the shader. Refuses two things rather than shipping them: a declared
   field that nothing supplies — the struct names it, the shader reads it, and it would be quietly zero
   for the life of the port — and more features than the shader's scratch array holds, which the CPU
-  painter has no limit on. *(17127)*
+  painter has no limit on. *(17136)*
 - `woodSource(GW)` — assembles wood's WGSL. **Assembled, not concatenated**: it borrows `woodAtan2`,
   `woodHash` and `fbm2` from the glass blocks rather than keeping unverified copies of each, and closes
   over the call sites rather than listing them, because `fbm2` calls `vnoise` and `vnoise` calls `nz`
-  and neither name appears anywhere in wood's own text. *(17753)*
+  and neither name appears anywhere in wood's own text. *(17762)*
 
 ## Glass — a lay-up, then a forming process
 
@@ -938,25 +938,25 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
   central directory, and the EOCD by hand. *(11898)*
 - `toU8(canvas)` — a canvas as PNG bytes (`toBlob` → `Uint8Array`). *(13156)*
 - `expCanvas(W)` / `polyPath(cx, pts)` — an off-screen slab-ratio canvas; a polyline subpath. *(2314/2315)*
-- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(13182)*
+- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(13191)*
 - `expBaseMask(W)` — the base composite (ground + breccia + clouds + bands) flattened to luminance:
-  the greyscale value map for the `base` bucket. *(13189)*
+  the greyscale value map for the `base` bucket. *(13198)*
 - `expCoverage(kind, W)` — white-on-black coverage for a consumer bucket (`major` / `minor` / `micro`
-  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(13200)*
+  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(13209)*
 - `expBucket(bucketKey, W)` — one bucket in colour, transparent elsewhere, by gating layers to that
-  bucket — the layer PNGs inside the `.ora`. *(13210)*
+  bucket — the layer PNGs inside the `.ora`. *(13219)*
 - `expIdT(W)` — the rich pair: a vein-**id** map (each line an rgb-encoded index) and an
-  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(13218)*
+  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(13227)*
 - `pathsJSON()` — the vectors as data: slab size in feet, then each line's `id / major / parent / at`,
-  its points, and its per-sample widths. *(13227)*
-- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(13228)*
+  its points, and its per-sample widths. *(13236)*
+- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(13237)*
 - `buildOraFrom(merged, buckets, order, W)` — an OpenRaster `.ora` assembled from already-encoded
   PNG bytes: a nested zip with `mimetype` stored first, a `stack.xml` (top child = top layer), the
   bucket layers under `data/`, and a `mergedimage` + thumbnail. Opens in Krita / GIMP / Photoshop.
-  Takes the encoded bytes rather than rendering them, so the encode happens once. *(13273)*
+  Takes the encoded bytes rather than rendering them, so the encode happens once. *(13282)*
 - `exportAll(W)` — assemble `render.png`, `masks/{base,major,minor,micro,web}.png`,
   `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, and
-  `slab.ora` into one zip and hand it to the viewer. *(13451)*
+  `slab.ora` into one zip and hand it to the viewer. *(13460)*
 
 ## Large renders — what a canvas can hold, and what to do past it
 
@@ -989,10 +989,10 @@ it reports the size asked for and leaves the far end unwritten. See
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
   family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(11832)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(14448)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(14457)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(14473)*
+  actually on offer, not a probe's answer to a different question. *(14482)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(14550)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(21239)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(14559)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(21248)*
