@@ -1921,7 +1921,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.282';
+  const BUILD = '2026.10.31.283';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2287,6 +2287,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // message is the expansion if a pooled animation is ever wanted; the seam is the init message and
   // nothing else here would change.
   let GROW_ID = null, GROW_T = 1;
+  // HOW MUCH OF THE PARENT A CHILD TAKES TO APPEAR. A minor does not exist until the pen has
+  // reached the point it grows out of, and then it comes in over this much of the parent's length.
+  const GROW_WIN = 0.18;
   // Pristine defaults, captured before any edit. deserialize() resets to these before applying a slab, so a
   // load is a PURE FUNCTION of the slab: a key absent from the save falls to its default, never a leftover from
   // whatever was loaded before. Without this, loading a partial/older slab into a dirtied session renders differently.
@@ -2918,12 +2921,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const n = Math.max(pts.length - 1, 1);
     // HOW FAR THIS LINE IS DRAWN. 1 for everything except the one mark an animation is growing.
     //
-    // WHICH MARK A LINE BELONGS TO: ids are built as 'L<mark>', 'L<mark>e<seg>' (en-echelon),
-    // '<parent>.<k>' (minors, recursively) and 'B<mark>' (branches), so the mark id is the leading
-    // integer after the first character. Parsed NUMERICALLY, never matched as a string prefix:
-    // 'L70' starts with 'L7' and is a different mark, and a prefix test would grow both.
-    const gcut = GROW_ID === null ? 1
-               : (parseInt(String(id).slice(1), 10) === GROW_ID ? GROW_T : 1);
+    // IT ASKS THE CALLER RATHER THAN THE ID. `extra.mark` is the mark id and every one of the five
+    // lineGeom call sites passes it - the main line, en-echelon segments, minors, dendritic
+    // sub-branches and the Branch tool - so parsing it back out of the id string, which is what
+    // this did first, was reconstructing something already in hand. It was also the fragile half:
+    // 'L70' starts with 'L7', so a prefix test grows two marks and a numeric parse was needed to
+    // avoid it. Neither problem exists now.
+    //
+    // AND A CHILD WAITS FOR THE PEN. `extra.at` is a child's fraction along its parent, carried by
+    // the minor, the sub-branch and the Branch tool since long before any of this: so a minor at
+    // 0.3 is absent until the parent is 30% drawn, then arrives over GROW_WIN of the parent. The
+    // main line has no `at` and simply grows along itself.
+    //
+    // GROW_T >= 1 SHORT-CIRCUITS TO 1 for every line, which is what makes "finished is untouched"
+    // structural rather than arithmetical - a child attached at 0.95 would otherwise still be
+    // mid-window when the parent was done.
+    const gcut = (GROW_ID === null || GROW_T >= 1 || extra.mark !== GROW_ID) ? 1
+               : extra.at == null ? GROW_T
+               : Math.max(0, Math.min(1, (GROW_T - extra.at) / Math.min(GROW_WIN, 1 - extra.at + 1e-9)));
     const [, gw] = sub(seed, 11, salt), [, gg] = sub(seed, 12, salt);
     const sw = smooth1d(n, Math.max(6, n / 3), gw);
     let mx = 1e-9; for (const v of sw) mx = Math.max(mx, Math.abs(v));
@@ -3014,7 +3029,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       for (let s = 0; s < segs; s++) {
         const i0 = Math.floor(s / segs * (n - 1)), i1 = Math.max(i0 + 1, Math.floor((s + 0.72) / segs * (n - 1)));
         const seg = dense.slice(i0, i1 + 1); if (seg.length < 2) continue;
-        add(out, lineGeom('L' + m.id + 'e' + s, offsetSeg(seg, 0.018 * M.varAmt * (s % 2 ? 1 : -1)), gauge, F, M, m.seed, s, { ...extra }));
+        // `at` SO THEY COME IN ALONG THE ROUTE, not all at once. An echelon vein is one route cut
+        // into offset segments and it carries no family minors, so without this the whole variant
+        // appeared in a single frame while every other vein grew. Read only by the growth gate and
+        // by the anchor pass at `if (L.parent)`, which these have none of, so nothing else moves.
+        add(out, lineGeom('L' + m.id + 'e' + s, offsetSeg(seg, 0.018 * M.varAmt * (s % 2 ? 1 : -1)), gauge, F, M, m.seed, s, { ...extra, at: i0 / Math.max(1, n - 1) }));
       }
       return;                                           // en-echelon carries no family minors
     }
@@ -6061,7 +6080,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // GROW_ID/GROW_T are read by lineGeom, which this core carries. The pool REFUSES while a growth
     // is set, so these are always the no-growth pair here - declared rather than assumed, because a
     // free variable in a worker throws on read and that would turn a refused case into a crash.
-    s += `var GROW_ID=null,GROW_T=1;\n`;
+    s += `var GROW_ID=null,GROW_T=1;const GROW_WIN=0.18;\n`;
     // MATERIAL is what paintContent forks on, and it was never declared here at all - a free
     // variable in a worker throws on read, so this core could paint NO material, not just not
     // glass. marks and _wmask travel for the same reason: the glass painter reads the mark list

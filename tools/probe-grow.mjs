@@ -1,27 +1,29 @@
 /**
  * A LINE STILL BEING DRAWN: the growth gate, pinned.
  *
- * The creation animation grows one mark at a time, and `lineGeom` does it by dropping segments past
- * `gcut` from `keep` - NOT by handing the function a shorter path. The comment in the app claims
- * that distinction matters. This is that claim, made falsifiable:
+ * The creation animation grows one mark at a time. `lineGeom` does it by dropping segments past
+ * `gcut` from `keep` - never by being handed a shorter path - and a child line waits for the pen to
+ * reach the point it grows out of. Five claims, each run against its own ablation; a claim whose
+ * ablation still passes is reported as decoration rather than a test.
  *
- *   a normal render is UNTOUCHED      gcut is 1 for every line when GROW_ID is null, and `s` is a
- *                                    midpoint fraction so `s > 1` is false for every segment. Not
- *                                    "almost the same" - the same bytes.
- *   grow = 1 is the same no-op       even on the mark being grown.
- *   a growing line is the FINISHED    at grow 0.5 the segments still drawn must have exactly the
- *   line with its tail undrawn       widths they will have when the line is done.
- *   the mark id is parsed, not        ids are 'L<mark>', 'L<mark>e<seg>', '<parent>.<k>', 'B<mark>'.
- *   prefix-matched                   'L70' starts with 'L7' and is a different mark.
+ *   a normal render is UNTOUCHED     GROW_ID null, or GROW_T >= 1, or another mark: gcut is 1 and
+ *                                   `s > 1` is false for every segment, `s` being a midpoint
+ *                                   fraction. Not "almost the same" - the same bytes.
+ *   only the grown mark moves        the family is chosen by `extra.mark`, which all five call
+ *                                   sites pass.
+ *   a growing line is the FINISHED   at grow 0.5 the segments still drawn carry exactly the widths
+ *   line with its tail undrawn      they will have when the line is done.
+ *   a child waits for the pen        `extra.at` is its fraction along the parent: absent before,
+ *                                   arriving over GROW_WIN, whole after.
  *
- * THE THIRD CLAIM IS THE ONE WITH TEETH, and its ablation is the implementation that was nearly
- * written instead: truncate `pts`. That renormalises `total`, so `s` rescales and the swing, the
- * break threshold and the tapers all move - the part already on screen writhes as the line grows,
- * and the cut end pinches out because `tE` tapers any line that ends inside the slab. The ablation
- * runs that version and the claim must catch it.
+ * THE SHAPE CLAIM'S ABLATION IS THE IMPLEMENTATION NEARLY WRITTEN INSTEAD: truncate `pts`. That
+ * renormalises `total`, so `s` rescales and the swing, the break threshold and both tapers move -
+ * the part already on screen writhes as the line grows, and the cut end pinches out because `tE`
+ * tapers any line ending inside the slab.
  *
- * Every claim is run against its own ablation: a claim whose ablation still passes is reported as
- * decoration rather than a test.
+ * THE CHILD CLAIM'S ABLATION IS THE FIRST VERSION OF THIS FILE'S SUBJECT: ignore `extra.at` and
+ * give every line in the family the same GROW_T. Minors then grow at a fraction of their OWN length
+ * regardless of where they attach, so a minor near the tip finishes before the pen arrives.
  *
  *   node tools/probe-grow.mjs
  */
@@ -47,24 +49,30 @@ const liftConst = re => {
   return m[0];
 };
 
+const MARK = 7;
+const SEL = '(GROW_ID === null || GROW_T >= 1 || extra.mark !== GROW_ID) ? 1';
+const GATE = 'if (s > gcut) keep[i] = 0;';
+const CHILD = ': extra.at == null ? GROW_T';
+
 // lineGeom and the four things it reaches. LIFTED, not restated: a probe carrying its own copy of
-// the width/taper arithmetic would agree with itself while the renderer moved.
+// the width and taper arithmetic would agree with itself while the renderer moved. mix is a
+// FUNCTION and gaussOf a one-liner - a `const mix = ` regex matches a LOCAL twelve thousand lines
+// away in a colour helper, and a greedy gaussOf swallows the real mix with it.
 function build(ablate) {
   let geom = lift('lineGeom');
-  if (ablate === 'null-cuts-everything') {
-    geom = geom.replace('const gcut = GROW_ID === null ? 1', 'const gcut = GROW_ID === null ? 0');
-  }
-  if (ablate === 'no-gate') geom = geom.replace('if (s > gcut) keep[i] = 0;', '');
-  // Cuts at just under gcut, so grow = 1 stops being a no-op. 'null-cuts-everything' cannot test
-  // that claim - it only perturbs the GROW_ID === null branch, and the claim sets a real id, so it
-  // came back STILL CLEAN: an ablation that does not reach the code under test proves nothing.
-  if (ablate === 'cut-just-under') geom = geom.replace('if (s > gcut) keep[i] = 0;', 'if (s > gcut * 0.99) keep[i] = 0;');
+  const must = (a, b) => {
+    if (!geom.includes(a)) throw new Error('probe is stale: lineGeom no longer contains ' + a);
+    geom = geom.replace(a, b);
+  };
+  if (ablate === 'ungrown-cuts-everything') must(SEL, SEL.replace('? 1', '? 0'));
+  if (ablate === 'cut-just-under') must(GATE, 'if (s > gcut * 0.99) keep[i] = 0;');
+  if (ablate === 'any-mark-grows') must(SEL, '(GROW_ID === null || GROW_T >= 1) ? 1');
+  if (ablate === 'ignore-at') must(CHILD, ': true ? GROW_T');   // every line takes GROW_T, `at` unread
+  if (ablate === 'no-gate') must(GATE, '');
   const body = [
     'const H = 0.625;',
     'let GROW_ID = null, GROW_T = 1;',
-    // mix is a FUNCTION and gaussOf a one-liner. A `const mix = ` regex matches a LOCAL twelve
-    // thousand lines away inside a colour helper, and a greedy gaussOf swallows the real mix with
-    // it - so each is lifted by the shape it actually has, not the shape it looks like it has.
+    liftConst(/const GROW_WIN = [^\n]*/),
     lift('mix'),
     lift('mulberry32'),
     liftConst(/const gaussOf = [^\n]*/),
@@ -72,7 +80,7 @@ function build(ablate) {
     lift('smooth1d'),
     liftConst(/const inside = [^\n]*/),
     geom,
-    'return { lineGeom, setGrow: (id, t) => { GROW_ID = id; GROW_T = t; } };',
+    'return { lineGeom, GROW_WIN, setGrow: (id, t) => { GROW_ID = id; GROW_T = t; } };',
   ].join('\n');
   return new Function(body)();
 }
@@ -82,10 +90,13 @@ function build(ablate) {
 const PTS = Array.from({ length: 61 }, (_, i) => [0.18 + 0.0095 * i, 0.26 + 0.055 * Math.sin(i / 7)]);
 const F = { swing: 0.6, breaks: 0.25 };
 const M = { breaks: 1 };
-const ARGS = ['L7', PTS, 0.004, F, M, 12345, 0, {}];
+const main = x => ['L7', PTS, 0.004, F, M, 12345, 0, { mark: MARK, ...x }];
 
-const run = (E, id, t) => { E.setGrow(id, t); return E.lineGeom(...ARGS); };
 const A = build(null);
+const REF = build('no-gate');
+const whole = (() => { REF.setGrow(null, 1); return REF.lineGeom(...main()); })();
+const run = (E, id, t, x) => { E.setGrow(id, t); return E.lineGeom(...main(x)); };
+const drawn = L => Array.from(L.keep).filter(Boolean).length;
 
 let bad = 0;
 const rows = [];
@@ -93,88 +104,76 @@ function claim(title, ablation, fn) {
   const real = fn(A), abl = fn(build(ablation));
   const ok = real.n === 0, bites = abl.n > 0;
   if (!ok || !bites) bad++;
-  rows.push('  ' + (ok ? (bites ? 'ok  ' : 'DECO') : 'FAIL') + '  ' + title.padEnd(50) +
+  rows.push('  ' + (ok ? (bites ? 'ok  ' : 'DECO') : 'FAIL') + '  ' + title.padEnd(48) +
     (ok ? 'clean of ' + real.of : real.n + ' of ' + real.of + ' BAD  ' + real.eg) +
     '   | ablated(' + ablation + '): ' + (bites ? abl.n + ' caught' : 'STILL CLEAN - the check cannot fail'));
 }
-
-// 1. a normal render is untouched. The reference is a build with the gate line DELETED.
-claim('GROW_ID null is the gate deleted, byte for byte', 'null-cuts-everything', E => {
-  const ref = build('no-gate'); ref.setGrow(null, 1);
-  const base = ref.lineGeom(...ARGS), got = run(E, null, 1);
+const sameAsWhole = L => {
   let n = 0, of = 0, eg = '';
-  for (let i = 0; i < base.keep.length; i++) {
+  for (let i = 0; i < whole.keep.length; i++) {
     of++;
-    if (base.keep[i] !== got.keep[i] || base.w[i] !== got.w[i]) { n++; if (!eg) eg = 'seg ' + i; }
+    if (whole.keep[i] !== L.keep[i] || whole.w[i] !== L.w[i]) { n++; if (!eg) eg = 'seg ' + i; }
   }
   return { n, of, eg };
-});
+};
 
-// 2. and grow = 1 on the grown mark itself is the same no-op, because s is a midpoint fraction.
-claim('grow = 1 on the grown mark is also a no-op', 'cut-just-under', E => {
-  const ref = build('no-gate'); ref.setGrow(null, 1);
-  const base = ref.lineGeom(...ARGS), got = run(E, 7, 1);
-  let n = 0, of = 0, eg = '';
-  for (let i = 0; i < base.keep.length; i++) {
-    of++;
-    if (base.keep[i] !== got.keep[i] || base.w[i] !== got.w[i]) { n++; if (!eg) eg = 'seg ' + i; }
-  }
-  return { n, of, eg };
-});
+claim('not growing is the gate deleted, byte for byte', 'ungrown-cuts-everything',
+  E => sameAsWhole(run(E, null, 1)));
 
-// 3. THE CLAIM WITH TEETH. At grow 0.5 the drawn segments carry the widths of the FINISHED line.
-// The ablation is the implementation this replaced: hand lineGeom a truncated path instead.
+claim('grow = 1 on the grown mark is a no-op too', 'cut-just-under',
+  E => sameAsWhole(run(E, MARK, 1)));
+
+claim('another mark is untouched while this one grows', 'any-mark-grows',
+  E => sameAsWhole(run(E, MARK + 1, 0.4)));
+
+// THE CLAIM WITH TEETH: the drawn part carries the FINISHED widths.
 claim('a growing line keeps the finished line\'s shape', 'truncate-pts', E => {
-  const ref = build('no-gate'); ref.setGrow(null, 1);
-  const whole = ref.lineGeom(...ARGS);
   let got;
-  if (E === A) { got = run(E, 7, 0.5); }
+  if (E === A) got = run(E, MARK, 0.5);
   else {
-    // the ablation: cut the PATH at half its arc length and build from that
     const cum = [0];
     for (let i = 1; i < PTS.length; i++) cum.push(cum[i - 1] + Math.hypot(PTS[i][0] - PTS[i - 1][0], PTS[i][1] - PTS[i - 1][1]));
-    const half = cum[cum.length - 1] / 2;
-    const k = cum.findIndex(c => c > half);
-    const short = PTS.slice(0, k);
-    got = E.lineGeom('L7', short, 0.004, F, M, 12345, 0, {});
+    const k = cum.findIndex(c => c > cum[cum.length - 1] / 2);
+    got = E.lineGeom('L7', PTS.slice(0, k), 0.004, F, M, 12345, 0, { mark: MARK });
   }
-  // compare only the segments the growing line actually draws
   let n = 0, of = 0, eg = '';
-  for (let i = 0; i < got.w.length; i++) {
-    if (E === A && !got.keep[i]) continue;              // undrawn tail is not part of the claim
-    if (i >= whole.w.length) break;
+  for (let i = 0; i < got.w.length && i < whole.w.length; i++) {
+    if (E === A && !got.keep[i]) continue;              // the undrawn tail is not part of the claim
     of++;
     if (Math.abs(got.w[i] - whole.w[i]) > 1e-12) {
-      n++;
-      if (!eg) eg = 'seg ' + i + ' w ' + got.w[i].toFixed(6) + ' vs finished ' + whole.w[i].toFixed(6);
+      n++; if (!eg) eg = 'seg ' + i + ' w ' + got.w[i].toFixed(6) + ' vs finished ' + whole.w[i].toFixed(6);
     }
   }
   return { n, of, eg };
 });
 
-// 4. the id family, which decides whether the right lines grow together.
-{
-  const markOf = id => parseInt(String(id).slice(1), 10);
-  const want = [['L7', 7], ['L7e2', 7], ['L7.3', 7], ['L7.3.1', 7], ['B7', 7], ['L70', 70], ['L700', 700]];
-  const wrong = want.filter(([id, m]) => markOf(id) !== m);
-  const prefixWouldCollide = 'L70'.startsWith('L7');
-  const ok = wrong.length === 0;
-  if (!ok || !prefixWouldCollide) bad++;
-  rows.push('  ' + (ok ? 'ok  ' : 'FAIL') + '  ' + 'the mark id is parsed, not prefix-matched'.padEnd(50) +
-    (ok ? want.length + ' ids resolve' : 'WRONG: ' + JSON.stringify(wrong)) +
-    '   | a prefix test WOULD collide (L70 starts with L7): ' + prefixWouldCollide);
-}
+// A CHILD WAITS FOR THE PEN. At `at` = 0.5 it is absent at 0.5, part-drawn inside the window, and
+// whole once the pen is GROW_WIN past it. The ablation is the version that ignored `extra.at`.
+claim('a child waits for the pen to reach it', 'ignore-at', E => {
+  const at = 0.5, W = E.GROW_WIN;
+  const cases = [
+    ['before',  0.30, g => g === 0],
+    ['at it',   0.50, g => g === 0],
+    ['inside',  at + W / 2, g => g > 0 && g < drawn(whole)],
+    ['past it', at + W + 0.01, g => g === drawn(whole)],
+    ['done',    1.00, g => g === drawn(whole)],
+  ];
+  let n = 0, of = 0, eg = '';
+  for (const [name, t, want] of cases) {
+    of++;
+    const g = drawn(run(E, MARK, t, { at, parent: 'L7', taperStart: false }));
+    if (!want(g)) { n++; if (!eg) eg = name + ' @ grow ' + t.toFixed(2) + ' drew ' + g + ' of ' + drawn(whole); }
+  }
+  return { n, of, eg };
+});
 
-// 5. and the gate has to actually drop something, or claim 3 is comparing nothing.
+// and the gate has to actually drop something, or the shape claim compares nothing
 {
-  const got = run(A, 7, 0.5);
-  const drawn = Array.from(got.keep).filter(Boolean).length;
-  const ref = build('no-gate'); ref.setGrow(null, 1);
-  const full = Array.from(ref.lineGeom(...ARGS).keep).filter(Boolean).length;
-  const ok = drawn > 0 && drawn < full;
+  const half = drawn(run(A, MARK, 0.5)), full = drawn(whole);
+  const ok = half > 0 && half < full;
   if (!ok) bad++;
-  rows.push('  ' + (ok ? 'ok  ' : 'FAIL') + '  ' + 'grow 0.5 draws some of the line, not all'.padEnd(50) +
-    drawn + ' of ' + full + ' segments kept   | a gate that dropped none or all would make claim 3 vacuous');
+  rows.push('  ' + (ok ? 'ok  ' : 'FAIL') + '  ' + 'grow 0.5 draws some of the line, not all'.padEnd(48) +
+    half + ' of ' + full + ' segments kept   | none or all would make the shape claim vacuous');
 }
 
 console.log('A LINE STILL BEING DRAWN - the growth gate\n');
