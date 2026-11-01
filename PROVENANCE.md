@@ -109,10 +109,10 @@ continuous conversation, and every session in it opens seconds after the last on
 |---|---|---|---|
 | `698bc007-76d7-4c9f-8f93-ad00bf28ca5c` | 2026-09-20T20:03:43Z → 09-23T06:55:12Z | 41 | **complete** |
 | `28da307f-5ea7-4449-815d-ae43b7b0ba89` | 2026-09-23T06:55:35Z → 10-01T07:34:30Z | 255 | **complete** |
-| `737db4ea-f00e-4813-9c88-318db85d6fab` | 2026-10-01T07:36:19Z → 10-11T20:05:57Z | 91 | not yet |
-| `cabd461f-55fa-425c-80ca-5f8c1d6f80c7` | 2026-10-11T20:06:16Z → 10-17T03:57:11Z | 124 | not yet |
-| `4a8d2045-4cd6-4ebb-ac6e-043e2e5d5369` | 2026-10-17T03:57:32Z → 10-18T08:06:38Z | 33 | not yet |
-| `1ac6f3a3-b809-4883-8d66-66ea6ad56959` | 2026-10-18T08:07:26Z → 10-19T04:21:57Z | 7 | not yet |
+| `737db4ea-f00e-4813-9c88-318db85d6fab` | 2026-10-01T07:36:19Z → 10-11T20:05:57Z | 91 | **complete** |
+| `cabd461f-55fa-425c-80ca-5f8c1d6f80c7` | 2026-10-11T20:06:16Z → 10-17T03:57:11Z | 124 | **complete** |
+| `4a8d2045-4cd6-4ebb-ac6e-043e2e5d5369` | 2026-10-17T03:57:32Z → 10-18T08:06:38Z | 33 | **complete** |
+| `1ac6f3a3-b809-4883-8d66-66ea6ad56959` | 2026-10-18T08:07:26Z → 10-19T04:21:57Z | 7 | **complete** |
 | `04a48e69-bc78-4cd7-8215-7d16bde8a113` | 2026-10-19T04:22:17Z → 10-26T07:24:40Z | 179 | **complete** |
 | `c0060eab-6f05-43e2-a66a-39273ecc4ede` | 2026-10-26T07:24:54Z → **open** | 83 | prefix only |
 
@@ -171,9 +171,35 @@ bytes the archive holds, and it must be re-cut once the session closes.
 | Archive | `…c0060eab-6f05-43e2-a66a-39273ecc4ede.PARTIAL-capture-2026-11-01T0813Z.tar.xz` — 55,667,916 bytes |
 | SHA-256 | `529935cdd659b78bfefd01e83a3c759a5468856c5630316aaa6a3c42a8475525` |
 
-**Four sessions in the middle of the chain remain unarchived** — `737db4ea`, `cabd461f`, `4a8d2045`
-and `1ac6f3a3`, 255 commits between them. They are closed and can be cut at any time; that they have
-not been is a stated condition of this record rather than something left to be discovered.
+#### The four in the middle
+
+All four are closed, so all four are archived complete. Each was checked both ways before it was
+cut — every sidecar referenced by its transcript, and nothing referenced that is not present.
+
+| session | transcript | calls | sidecars | archive |
+|---|---|---|---|---|
+| `737db4ea` | 108,081,706 B, 18,516 lines | 2,308 | 39 of 39 | 33,636,892 B |
+| `cabd461f` | 120,608,876 B, 21,664 lines | 2,413 | 9 of 9 | 28,640,532 B |
+| `4a8d2045` | 70,599,454 B, 12,844 lines | 1,732 | 1 of 1 | 11,925,884 B |
+| `1ac6f3a3` | 10,573,400 B, 1,923 lines | 251 | none | 1,776,080 B |
+
+SHA-256, in the same order:
+
+```
+737db4ea  64e43c8f846e7d55f1453efde3d79acc3c0a6e03dc35a2810852440da666ddce
+cabd461f  2d2c88eadae0ae8b33fcc1bd0dc5cb4e19c41dd5f1bd4610dc20d328556bb142
+4a8d2045  f79264ea6a1d090f1d31f27dd148e7df70e24808f7d326a3e5ea24bddb71fd92
+1ac6f3a3  7382f435b1e3b8c1974109f1e488294e7b644d5385261ced2b4570b640c5d8ff
+```
+
+**These four are mixed sessions, and their archives are not purely this project.** They are filed
+under a `eufy-vacuum-manager` key because that is where they opened, and they do carry real work for
+that repo alongside this one. By working directory the split runs 9,728/1,129, 11,848/1,481,
+6,237/2,606 and 748/680 — so the last of them is close to half another project's subject. Said here
+because an archive named for this one should not quietly contain a different one.
+
+**Every session in the chain is now archived except the open one**, which can only ever be a prefix
+until it closes.
 
 What that period built is the part of the program this record does not otherwise describe: wood and
 glass returning as the second and third material paths behind a single fork, the GPU renderers beside
