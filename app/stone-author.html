@@ -433,7 +433,7 @@
     <output id="sec-count"></output>
   </div>
   <div id="sec-list" class="tk" style="grid-column:1/-1"></div>
-  <div id="tile-locked" class="lbl" style="grid-column:1/-1;opacity:0.8" hidden data-i18n="note.tile-locked">Pattern, size and kerf are fixed while a cut is held — a cut is a box measured against them. Clear the sections to change them.</div>
+  <div id="tile-locked" class="lbl" style="grid-column:1/-1;opacity:0.8" hidden data-i18n="note.tile-locked">Pattern, size and mitre angle are fixed while a cut is held — a cut is a box measured against them. Clear the sections to change them.</div>
   <div id="sec-setter" class="tk" style="grid-column:1/-1" hidden></div>
   <div class="sliders" data-mat-only="wood">
     <div class="sl"><label for="wood-graft"><span data-i18n="sl.wood-graft">Graft branch from</span> <output id="wood-graftV"></output></label><input id="wood-graft" type="range" min="0" max="8" step="1"></div>
@@ -1222,7 +1222,7 @@ window.SA_I18N = (() => {
   "op.press": "Press",
   "opt.source-auto": "Choose for me",
   "note.sections-need-two": "One section, so every tile comes from it \u2014 keep a second and you can set which tile comes from which.",
-  "note.tile-locked": "Pattern, size and kerf are fixed while a cut is held \u2014 a cut is a box measured against them. Clear the sections to change them.",
+  "note.tile-locked": "Pattern, size and mitre angle are fixed while a cut is held \u2014 a cut is a box measured against them. Clear the sections to change them.",
   "ui.op-press-note": "the roller pass you drew",
   "sec.unnamed": "Section",
   "sec.kept-cut": "Kept cut",
@@ -1920,7 +1920,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.280';
+  const BUILD = '2026.10.31.281';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those

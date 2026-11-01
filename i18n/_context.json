@@ -2055,8 +2055,6 @@
   "note.lay-tiles": {
     "terms": [
       "chip",
-      "grout",
-      "kerf",
       "slab"
     ],
     "where": "in the \"Tile options\" group/panel, under the \"tiles-and-floor\" section"
