@@ -428,10 +428,40 @@ every material paired on a single build**, which is why it is the one that shows
 | stone | 1/1 | 121.36 s | 32.70 s | **3.71× slower** |
 | stone, subsurface | 1/2 | 176.75 s | 35.93 s | **4.92× slower** |
 
-**The iPhone has no pair and so has no figure here.** Its five GPU masters are all build
-`2026.10.24.187` and its CPU masters at `.171`, so every comparison available for it measures the
-GPU and a build gap together. **Both tablets have none and never will** — they predate WebGPU, and no
-2 GB device in this archive has ever recorded a GPU render. See [`glass-gpu.md`](glass-gpu.md).
+### iPhone 14 Pro — WebKit, 4 hc, A16 Bionic
+
+Added 2026-11-01, hours after this section first said the iPhone had no pair. It now has exactly one,
+and it is the cleanest in the set — **16 of 17 configuration fields identical**.
+
+| build | cell | n GPU/CPU | GPU | CPU | GPU is |
+| --- | --- | --- | --- | --- | --- |
+| `.31.289` | glass 65,535, subsurface 2 | 1/1 | 26.10 s | 463.91 s | **17.77×** |
+
+The one field that differs is **`workers`: 1 on the GPU against 4 on the CPU.** That is not a
+mismatched pair, it is what choosing the GPU *means* — a pool is many queues into one card, so the
+GPU path runs one. It is listed because a reader checking the pair would otherwise find the
+difference and not know which it was.
+
+**Not comparable to the S23 rows above on subsurface**, which ran `G.subsurface` 1 against this
+pair's 2.
+
+**Both tablets have none and never will** — they predate WebGPU, and no 2 GB device in this archive
+has ever recorded a GPU render. See [`glass-gpu.md`](glass-gpu.md).
+
+### A device can serve a stale build, and only the master says so
+
+Of sixteen masters pulled off the iPhone on 2026-11-01, **thirteen were build `2026.10.24.187`** — a
+week old — including every one rendered during the night of the 31st, while the S23 was rendering the
+same slab on `.289`. The phone was reported as "acting odd, running kinda slow" at the time and this
+is the likeliest reason. The two `.289` masters above arrived only the following morning, after the
+cache turned over.
+
+**So a fleet comparison has to read `build` from each master and not from the day it was made.** Of
+the three glass-with-subsurface GPU masters on that phone, the `.187` one took **28.2 minutes** and
+the `.289` one **26.1 seconds** — which is *not* a build speedup: the older render carried
+`sigma` 524, `bleed` **1577** and one window against the newer one's 0, 4 and none. Different work
+entirely. The comparison that looks most dramatic here is the one that means least, and only the
+record distinguishes them.
 
 ### No single multiple describes this renderer
 
