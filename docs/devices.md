@@ -381,6 +381,97 @@ the set is under a second, and the tablets stay scrollable throughout.
 three times its own median. No other device in the set comes within an order of magnitude of that
 consistency.
 
+## The GPU against the CPU, build and configuration held fixed
+
+Measured 2026-11-01 from the masters' own records. **Only pairs that share a build *and* a complete
+configuration are listed**, because both confound this comparison badly and in opposite directions:
+six CPU changes took a 65,535 from 7.645 min to 4.743 over the period these records cover, so a GPU
+master from one build against a CPU master from another measures the GPU and five weeks of CPU work
+at once. The configuration matters just as much — a first pass of this table keyed only on material,
+size, light and tile, and it got three rows wrong, one of them by **sign**. `bloomDraw`, `windows`
+and `sigma` all change the work and all now sit in the key.
+
+What survives is 22 pairs on two devices.
+
+### Desktop — Blink, 12 hc, RX 6500 XT
+
+| build | cell | n GPU/CPU | GPU | CPU | GPU is |
+| --- | --- | --- | --- | --- | --- |
+| `.24.186` | glass 32,768 | 1/1 | 31.87 s | 89.16 s | 2.80× |
+| `.25.215` | glass 32,768 | 1/1 | 5.40 s | 133.07 s | 24.64× |
+| `.25.216` | glass 32,768 | 2/5 | 4.16 s | 105.04 s | 25.23× |
+| `.25.218` | glass 32,768 | 5/3 | 4.54 s | 112.72 s | 24.85× |
+| `.25.221` | glass 32,768 | 2/1 | 4.06 s | 223.32 s | **54.96×** |
+| `.31.284` | glass 32,768 | 1/1 | 3.25 s | 67.20 s | 20.68× |
+| `.31.284` | glass 32,768, 4096 tile | 1/1 | 7.66 s | 79.62 s | 10.39× |
+| `.24.186` | glass 65,535 | 2/1 | 104.62 s | 357.91 s | 3.42× |
+| `.25.211` | glass 65,535 | 2/2 | 11.21 s | 248.05 s | 22.14× |
+| `.31.271` | stone 4,096, subsurface | 1/1 | 0.70 s | 13.00 s | 18.65× |
+| `.31.272` | stone 4,096, subsurface | 2/2 | 0.78 s | 14.41 s | 18.42× |
+| `.31.275` | stone 4,096, subsurface, **one window** | 1/1 | 0.98 s | 1.28 s | 1.31× |
+| `.30.251` | stone 4,096, subsurface, 4096 tile | 3/1 | 1.24 s | 9.77 s | 7.86× |
+| `.29.234` | stone 16,384, subsurface | 1/1 | 3.36 s | 131.79 s | 39.18× |
+| `.31.253` | stone 16,384, subsurface | 1/1 | 2.37 s | 97.14 s | **40.99×** |
+| `.29.238` | stone 32,768, subsurface, 4096 tile | 1/1 | 27.32 s | 471.61 s | 17.26× |
+| `.29.234` | stone 16,384 **UV, halo moved** | 3/1 | 5.14 s | 4.39 s | **1.17× slower** |
+| `.29.247` | wood 16,384 | 3/3 | 1.15 s | 7.94 s | 6.88× |
+
+### S23 Ultra — Blink, 8 hc, Snapdragon 8 Gen 2
+
+All four on build `2026.10.31.289`, all 65,535 on a 2048 tile. **The only device in the archive with
+every material paired on a single build**, which is why it is the one that shows the next finding.
+
+| cell | n GPU/CPU | GPU | CPU | GPU is |
+| --- | --- | --- | --- | --- |
+| glass | 2/2 | 42.82 s | 511.04 s | **11.93×** |
+| wood | 1/1 | 18.17 s | 208.29 s | **11.46×** |
+| stone | 1/1 | 121.36 s | 32.70 s | **3.71× slower** |
+| stone, subsurface | 1/2 | 176.75 s | 35.93 s | **4.92× slower** |
+
+**The iPhone has no pair and so has no figure here.** Its five GPU masters are all build
+`2026.10.24.187` and its CPU masters at `.171`, so every comparison available for it measures the
+GPU and a build gap together. **Both tablets have none and never will** — they predate WebGPU, and no
+2 GB device in this archive has ever recorded a GPU render. See [`glass-gpu.md`](glass-gpu.md).
+
+### No single multiple describes this renderer
+
+One cell — glass, 32,768, daylight, 2048 tile, desktop, identical configuration — returns **2.80×,
+20.68×, 24.64×, 24.85×, 25.23× and 54.96×** on six builds. That is a **19.6× spread in the ratio
+itself**, and the two legs move independently: the GPU figure ranges 3.25 s to 31.87 s and the CPU
+figure 67.2 s to 223.3 s across the same six. `.24.186` is the GPU's first shipping build and is the
+2.80×.
+
+So a GPU multiple quoted for this renderer is a statement about one build, one device, one material,
+one size and one window count simultaneously. The earlier proxy estimate of 1.3–1.9× in
+[`glass-gpu.md`](glass-gpu.md) is below every figure in both tables; that page records why.
+
+### The sign is not constant, and the S23 is where it shows
+
+Glass and wood go to the GPU by about 11.5× on the S23. **Stone goes the other way on the same
+device, same build, same size — 3.71× slower, and 4.92× slower with subsurface.** The desktop wins
+17–41× on stone *with* subsurface, so this is not a property of the material alone.
+
+**What is not held fixed is the width.** Every S23 row is 65,535 and every desktop stone row is
+4,096 to 32,768, so the divergence is device, size, or both, and these records cannot separate them.
+A desktop stone-with-subsurface pair at 65,535 exists but spans builds `.237`–`.253` on the GPU side
+against `.231` on the CPU side, which is exactly the confound this section excludes.
+
+### UV on the shader is measured, and it is not a win
+
+`uvMode && BLOOM_DRAW` refuses the shader, because under a spectrum the drawn halo *is* the picture
+and the shader reads one pixel. `?bloom=blur` moves that halo into `applyCoat` after the shader hands
+its face back, and the shader then accepts the slab. Those three desktop UV masters are that path —
+`bloomDraw` absent, `sigma` 131 — and they are **1.17× slower than the CPU**, 5.14 s against 4.39 s.
+The GPU leg spreads 40% (4.40, 4.55, 6.48 s) against a single CPU record, so read it as *no
+measurable gain* rather than as a precise loss. It is the only measurement of this path there is.
+
+### One window collapsed the advantage
+
+`.31.275` returns 1.31× where `.31.271` and `.31.272` return 18.65× and 18.42× — same material,
+size, tile and subsurface, on three consecutive builds, differing in `windows`. One record against
+two, on a field nothing else here varies deliberately. Named because it is in the data, not
+concluded.
+
 ## The machines
 
 ### Desktop — AMD Ryzen 5 5500, Radeon RX 6500 XT
@@ -479,6 +570,11 @@ half-second medians.
 **Four Blink devices agree to 0.41%** at 65535 under black light — 61.33, 61.50, 61.58, 61.59 — across
 x86 and three generations of ARM, from 2 GB to 16 GB, one of them throttled. The per-engine correction is
 genuinely a property of the engine and not of the machine.
+
+**The GPU's advantage is not one number, and not even one sign.** Same renderer, same device, same
+configuration: 2.80× to 54.96× across six builds of one cell. And on the S23 glass and wood go to the
+GPU by 11.5× while stone goes the other way by 3.71×. Any figure for "what the GPU buys" is a
+statement about a build, a device, a material and a size at once.
 
 **Reported capability figures are unreliable in every direction.** Core counts are threads. Memory is
 rounded down, clamped at 8, and describes installed rather than available. `MAX_TEXTURE_SIZE` bounds the
