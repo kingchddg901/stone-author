@@ -296,9 +296,9 @@ distributed by guess.
 
 | | |
 |---|---|
-| Renders | **1,356** |
-| Pixels | **15,967,605,867,050** |
-| | **14.52 × 2^40** |
+| Renders | **1,416** |
+| Pixels | **16,132,687,602,275** |
+| | **14.67 × 2^40** |
 | Tebipixels crossed | **14**, the last on 2026-10-27T06:58:14.342Z |
 
 The census still reproduces the published first crossing exactly — 768 renders and
@@ -306,11 +306,18 @@ The census still reproduces the published first crossing exactly — 768 renders
 
 **Eleven of the fourteen crossings were made by a single 1,048,576-wide render.** At 687.2 Gpx each
 that is 62.5% of a tebipixel on its own, so the line is jumped rather than approached: the fourteenth
-went 1365.434% → 1427.934% in one picture. Two more were crossed by a 262,144, and only the first by
-a 65,535 — the width the whole of the first ten days was built on.
+went 1366.776% → 1429.276% in one picture. Of the other three, one was crossed by a 262,144, one by
+a 131,072, and only the first by a 65,535 — the width the whole of the first ten days was built on.
+
+**Which render crosses a line is not a fixed fact, and this table is the demonstration.** Every
+figure here is recomputed from the whole corpus in date order, so adding renders *earlier* in the
+sequence shifts what was crossing when. Between the two harvests of 2026-11-01 the ninth crossing
+moved from 899.130% → 903.037% to 896.323% → 900.229%, and the thirteenth stopped being a 262,144
+and became a 131,072. Nothing was edited to make that happen; the census simply had more of the
+record to read. A crossing is a property of the corpus, not of the picture that happened to make it.
 
 The reconstruction line is unchanged at 44 renders and 195,622,920,205 pixels, still reported apart
-from the rest rather than folded into it. It was 6.1% of the total when it was recorded and is 1.23%
+from the rest rather than folded into it. It was 6.1% of the total when it was recorded and is 1.21%
 now, which is the shape a stated gap should have: it does not grow, and the record around it does.
 
 **Those figures moved the same day, by a harvest.** 88 masters were read, recorded and deleted —
@@ -323,6 +330,25 @@ a slab name it has not been told about produces masters it will not touch — an
 renamed since the list was last extended. It said so for every one of them, naming the prefix to add,
 which is the whole point of the warning net being wider than the delete net. Before that net existed
 the same situation twice produced silence and an hour of masters accumulating unseen.
+
+**A second harvest the same day took the rest of it.** 49 masters, **24.03 GB**, read, recorded and
+deleted — the whole of the five-device set that filled `docs/devices.md`, from a desktop, an S23
+Ultra, an iPhone 14 Pro and both tablets. Nothing was refused and nothing was set aside.
+
+That sweep is also the first on which the harvester's own empty-stone test was **narrowed to stone**.
+Written material-blind it asked `marks > 0 && !lines && !cracks && !specks`, and lines, cracks and
+specks are stone counters — so a correct glass master satisfied it by construction. A dry run set ten
+aside, including a 4.57 GB 262,144; across the archive **224 of 1,316 masters matched it and 212 were
+glass**. They were kept rather than deleted, so nothing was lost, but a master set aside never enters
+this ledger, and glass would have stopped entering it entirely.
+
+**One master was held back from that harvest deliberately, and it is the interesting one.** A GPU
+render whose CPU twin differs in no configuration field at all drew a different picture: over half
+its pixels are literally R=G=B, because it dropped the colour in the fog and the moon while keeping
+it on the marks. Its `light.mean` reads 59.10 and its `lit40` 61.89, so it passes every guard this
+harvester has — it would have been recorded as good and removed, leaving a sidecar with no field
+that records the defect. Its pixels are counted in the figures above; the file itself is kept,
+because no number in the record says what is wrong with the picture.
 
 **The films are not in any of this, and cannot be.** This program now writes video as well as masters,
 and a video has no sidecar path — nothing reads a WebM back into the ledger. The creation film alone
