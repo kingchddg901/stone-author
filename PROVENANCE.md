@@ -1,7 +1,9 @@
 # Provenance
 
-Stone Author's **build** — the code, the commits, the published artifact, and the design as it was actually
-worked out — was done with **Claude Code**, directed by Chris. Alongside it, Chris used a separate **ChatGPT**
+Material Author's **build** — the code, the commits, the published artifact, and the design as it was
+actually worked out — was done with **Claude Code**, directed by Chris. It was called **Stone Author**
+while the two archived sessions below ran, and this file keeps that name wherever it is describing that
+period rather than the program as it stands. Alongside it, Chris used a separate **ChatGPT**
 conversation as a **sounding board**: a place to pressure-test an idea and head off side-quest distractions
 before committing it to the build, while Claude implemented. The same topics (the layer-transfer optical
 model, the Fresnel-lens-as-refraction-relief primitive, the semantic-grid spotlight, the CPU/GPU split)
@@ -55,7 +57,8 @@ movable light, light temperature, black light and the condition-agnostic spectru
 and the layer-aware back-light fold), the layer system (Fog, layer delete, render order decoupled from kind,
 layer-select sculpt, protected warp islands, the Mask tool), the two-pane workbench, the gallery heroes,
 `renderFull` and `renderTiled`, off-thread PNG encode, strips, the large render tiers, the whole tiled-BigTIFF
-master path with its export guards, and the refactor that removed Wood and made this stone-only.
+master path with its export guards, and the refactor that removed Wood and made this stone-only — a
+decision later reversed, which is why the program is Material Author again.
 
 Its last day is the render calibration, and most of it is wrong answers corrected by measurement. The image-space bloom was found to reach 2.41%
 of the image width per side — 1,577 px against a 2,048 px tile at 65535, which made a black-light master
@@ -95,6 +98,51 @@ session then ran on for another four days. Before the complete archive replaced 
 against the closed transcript and found byte-exact — 233,296,031 of 469,200,088 bytes, ending cleanly at line
 38,557 of 75,146. Both prefixes are kept beside the archives they preceded, renamed `.PARTIAL-…`, so either
 swap can be re-checked rather than taken on trust.
+
+### The build since the archives — 2026-11-01
+
+The two sessions above are no longer the whole build. **This repo holds 812 commits; the archives
+cover 296 of them.** Where the rest were made is only partly recorded here:
+
+| window | commits | session | archived |
+|---|---|---|---|
+| → 2026-10-01 | 296 | `698bc007…`, `28da307f…` | **yes** — both complete, hashed above |
+| 2026-10-01 → 10-19 | **255** | — | **no record** |
+| 2026-10-19 → 10-26 | 179 | `04a48e69-bc78-4cd7-8215-7d16bde8a113` | not yet |
+| 2026-10-26 → 11-01 | 82 | `c0060eab-6f05-43e2-a66a-39273ecc4ede` | open, still running |
+
+**That 255-commit window is a gap in this record rather than a quiet stretch**, and it is close to a
+third of the repo. It holds the work the corpus section below reports, the second tebipixel among it.
+No transcript for it is in the project folder, and none sits in the archive directory beside the two
+`.tar.xz` files. Whether it was archived elsewhere or lost, this file cannot say — and saying that is
+better than leaving the impression the two archives cover everything.
+
+The two later sessions chain the way the first two did: `04a48e69` closes at 2026-10-26T07:24:40.155Z
+and `c0060eab` opens **fourteen seconds after it**.
+
+| | `04a48e69…` | `c0060eab…` |
+|---|---|---|
+| Span | 2026-10-19T04:22:17.929Z → 2026-10-26T07:24:40.155Z | 2026-10-26T07:24:54.358Z → **open** |
+| Transcript | 267.6 MB, 58,284 lines | 349.5 MB, 66,038 lines, still growing |
+| Tool calls | 7,132 | 9,069 |
+| Commits here | 179 | 82 |
+
+Tool *results* are deliberately not listed. The inline count disagrees with the call count in both of
+these sessions in a way the first two do not, the cause has not been established, and a number whose
+derivation is not understood does not belong on this page.
+
+**Neither is captured, and the second cannot be.** By this file's own standard a capture taken while a
+session runs is a prefix and not a record — the lesson the two swaps above paid for twice. That
+right-hand column was read at 2026-11-01T07:57Z with the session still open, and it will be wrong by
+the time the session closes.
+
+A further, small transcript exists for a worktree session (`9ab59a3e…`, 2.7 MB, 2026-10-27); its
+commits fall inside the windows above and are counted there.
+
+What that period built is the part of the program this record does not otherwise describe: wood and
+glass returning as the second and third material paths behind a single fork, the GPU renderers beside
+the CPU ones, the interface in fifteen languages, and the film pipeline in
+[`docs/creation-film.md`](docs/creation-film.md).
 
 ## The corpus
 
@@ -181,6 +229,27 @@ excluded from the count, because the count is of pictures. A further 38 renders 
 carrying an `engine` field and cannot be attributed to a machine; they are counted in the total and
 excluded from the per-engine table above, where they appear as their own row rather than being
 distributed by guess.
+
+### Thirty-one days on — 2026-11-01
+
+| | |
+|---|---|
+| Renders | **1,291** |
+| Pixels | **15,941,849,547,300** |
+| | **14.50 × 2^40** |
+| Tebipixels crossed | **14**, the last on 2026-10-27T06:58:14.342Z |
+
+The census still reproduces the published first crossing exactly — 768 renders and
+1,107,051,880,835 pixels — before it reports anything current, and exits non-zero if it cannot.
+
+**Eleven of the fourteen crossings were made by a single 1,048,576-wide render.** At 687.2 Gpx each
+that is 62.5% of a tebipixel on its own, so the line is jumped rather than approached: the fourteenth
+went 1365.434% → 1427.934% in one picture. Two more were crossed by a 262,144, and only the first by
+a 65,535 — the width the whole of the first ten days was built on.
+
+The reconstruction line is unchanged at 44 renders and 195,622,920,205 pixels, still reported apart
+from the rest rather than folded into it. It was 6.1% of the total when it was recorded and is 1.23%
+now, which is the shape a stated gap should have: it does not grow, and the record around it does.
 
 ## Design — ChatGPT
 
