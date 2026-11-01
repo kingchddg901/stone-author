@@ -16,6 +16,11 @@
 // are absolute; a SimpleBlock's is a SIGNED 16-bit offset from its own cluster, which is why
 // clusters are cut before that offset can overflow rather than at a frame count.
 //
+// ERRORS ARE SLUGS, NOT SENTENCES. Everything thrown here is developer-facing and must not read
+// as prose: the i18n gate holds the app to routing every user-facing string through a pack, and a
+// sentence in a throw is indistinguishable from one that should have been routed. 'webm:' names
+// the source, '@' carries the offending value.
+//
 // WHAT THIS DOES NOT DO, said plainly rather than left to look covered: no audio, no lacing, no
 // seeking metadata beyond Cues at keyframes, no live/unknown-size segment. It writes a finished
 // file from frames it has all of.
@@ -45,7 +50,7 @@ const u8 = a => (a instanceof Uint8Array ? a : new Uint8Array(a));
 // because it means "unknown" - a size of 127 in one byte would be 0xFF, which is that reserved
 // pattern, so it takes two bytes instead.
 export function vint(n) {
-  if (!Number.isInteger(n) || n < 0) throw new Error('vint: ' + n);
+  if (!Number.isInteger(n) || n < 0) throw new Error('webm:vint-negative@' + n);
   for (let len = 1; len <= 8; len++) {
     const max = Math.pow(2, 7 * len) - 1;              // the reserved all-ones value
     if (n < max) {
@@ -56,7 +61,7 @@ export function vint(n) {
       return out;
     }
   }
-  throw new Error('vint too large: ' + n);
+  throw new Error('webm:vint-too-large@' + n);
 }
 
 const uintBytes = n => {
@@ -91,7 +96,7 @@ const cat = parts => {
  * seeks wrongly, which is the kind of wrong that looks like a player bug.
  */
 export function simpleBlock(track, relMs, keyframe, data) {
-  if (relMs < -32768 || relMs > 32767) throw new Error('block offset out of range: ' + relMs);
+  if (relMs < -32768 || relMs > 32767) throw new Error('webm:block-offset@' + relMs);
   const t = vint(track);
   const out = new Uint8Array(t.length + 3 + data.length);
   out.set(t, 0);
@@ -118,13 +123,13 @@ const header = () => el(ID.EBML, cat([
  */
 export function mux({ frames, width, height, codec = 'V_VP9', codecPrivate = null,
                       frameRate = 30, writingApp = 'Material Author' }) {
-  if (!frames.length) throw new Error('mux: no frames');
+  if (!frames.length) throw new Error('webm:no-frames');
   for (let i = 1; i < frames.length; i++) {
     if (frames[i].timestampUs < frames[i - 1].timestampUs) {
-      throw new Error('mux: frame ' + i + ' goes backwards in time');
+      throw new Error('webm:time-reversed@' + i);
     }
   }
-  if (!frames[0].keyframe) throw new Error('mux: the first frame must be a keyframe');
+  if (!frames[0].keyframe) throw new Error('webm:first-frame-not-key');
 
   const ms = us => Math.round(us / 1000);
   const TRACK = 1;

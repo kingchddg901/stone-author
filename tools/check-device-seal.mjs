@@ -20,8 +20,30 @@ if (entries.length < 3) fail.push(`found ${entries.length} export entr${entries.
 // It STARTS the seal and does not wait for it. Awaiting here yielded to the event loop before the export
 // disabled its own controls, so the width menu stayed live on a render already under way — caught by the
 // browser harness, not by this gate, which is why the harness owns the ordering and this owns the wiring.
+// AN ENTRY MAY DECLARE THAT IT HAS NOTHING TO SEAL, and exactly one does: the film path writes a
+// WebM with no metadata block - no expMeta, no UA, no device record - so sealing there would make
+// the seal decoration, which is failure 2 above. The exemption is BOUNDED (one entry, by marker)
+// and PROVED (that path must not reach expMeta), so it cannot spread by being copied.
+const EXEMPT = 'no master: nothing to seal';
+const exempt = entries.filter(l => l.includes(EXEMPT));
+if (exempt.length > 1) fail.push(`${exempt.length} export entries claim "${EXEMPT}" — the exemption is for the one path that writes no metadata`);
 for (const [i, line] of entries.entries())
-  if (!/sealing = sealDevice\(\)/.test(line)) fail.push(`export entry ${i + 1} does not start the device seal: ${line.trim()}`);
+  if (!/sealing = sealDevice\(\)/.test(line) && !line.includes(EXEMPT))
+    fail.push(`export entry ${i + 1} does not start the device seal: ${line.trim()}`);
+// and the exempt path must really write none: animRender is the only caller that may skip the seal,
+// so its body is read and must not reach expMeta or sealDevice at all.
+if (exempt.length === 1) {
+  const at = app.indexOf('async function animRender(');
+  const body = at < 0 ? null : app.slice(at, app.indexOf('\n  let animStop', at));
+  if (body === null) fail.push('the exempt entry is declared but animRender() was not found to check it');
+  else {
+    // COMMENTS STRIPPED FIRST. The exemption's own explanation names sealDevice and expMeta to say
+    // why it does not call them, and a gate that reads prose as code fails on the sentence that
+    // explains it - which it did, on the first run.
+    const code = body.replace(/^\s*\/\/.*$/gm, '');
+    if (/expMeta|sealDevice/.test(code)) fail.push('animRender() claims no metadata but reaches expMeta/sealDevice');
+  }
+}
 if (/await sealDevice\(\)/.test(app)) fail.push('an export awaits sealDevice() inline: that yields before the controls lock');
 // and every metadata build must have waited for it, or the block is missing from that master
 const metaCalls = (app.match(/expMeta\(\{/g) || []).length;

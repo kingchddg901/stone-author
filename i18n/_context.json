@@ -502,6 +502,109 @@
     "terms": [],
     "where": "why the worker pool was refused: a line is part-drawn for the creation animation, and a worker would paint it whole"
   },
+  "sec.animate": {
+    "terms": [],
+    "where": "the \"Animate\" section heading in the left panel. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "a11y.animate": {
+    "terms": [],
+    "where": "the accessible name of the Animate button group. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "note.animate": {
+    "terms": ["slab"],
+    "where": "the explainer under the Animate heading. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "btn.animate": {
+    "terms": [],
+    "where": "the button that starts rendering the film. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "btn.anim-stop": {
+    "terms": [],
+    "where": "stops a film part way; the frames already encoded are discarded. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "sl.anim-secs": {
+    "terms": [],
+    "where": "how many seconds the finished film runs. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "lbl.anim-add": {
+    "terms": [],
+    "where": "the label beside the control picker: what the film will ramp. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "lbl.anim-stagger": {
+    "terms": [],
+    "where": "a toggle: on, each chosen control moves in its own stretch of the film one after another; off, they all move together across the whole film. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "a11y.anim-width": {
+    "terms": [],
+    "where": "the accessible name of the film width menu, in pixels. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "a11y.anim-fps": {
+    "terms": [],
+    "where": "the accessible name of the frame rate menu. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "a11y.anim-add": {
+    "terms": [],
+    "where": "the accessible name of the menu that adds a control to the film. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.pick": {
+    "terms": [],
+    "where": "the first, empty entry of that menu - a prompt, not a control name. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.from": {
+    "terms": [],
+    "where": "the label on the first of two number boxes: the value a control STARTS at. Very short; it sits inline beside the number. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.to": {
+    "terms": [],
+    "where": "the label on the second number box: the value a control ENDS at. Very short. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.remove": {
+    "terms": [],
+    "where": "removes one control from the film. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.none": {
+    "terms": [],
+    "where": "shown where the estimate would be when nothing has been chosen yet. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.noencoder": {
+    "terms": [],
+    "where": "shown when the browser cannot encode video at all. Chrome and Edge can; the point is that everything else about the app still works. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.failed": {
+    "terms": [],
+    "placeholders": {
+      "why": "the error text, usually from the video encoder and usually in English"
+},
+    "where": "{why} is the error text, usually from the video encoder and usually English. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.frame": {
+    "terms": [],
+    "placeholders": {
+      "i": "the frame just finished",
+      "n": "how many frames the film has in total"
+},
+    "where": "progress while rendering: {i} is the frame just finished, {n} the total. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.done": {
+    "terms": [],
+    "placeholders": {
+      "n": "how many frames were rendered"
+},
+    "where": "shown when the film has been saved. {n} is the frame count. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.est": {
+    "terms": [],
+    "placeholders": {
+      "n": "how many frames the film will have",
+      "secs": "how many seconds the finished film runs",
+      "mins": "an already-formatted duration such as \"40 s\" or \"2.5 min\" - do not reformat it"
+},
+    "where": "the estimate before rendering. {n} frames, {secs} seconds of film, {mins} an already-formatted duration like \"40 s\" or \"2.5 min\". in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
+  "anim.measuring": {
+    "terms": [],
+    "where": "shown for a moment while one frame is rendered and timed to price the film. in the \"Animate\" box, which renders a ramp of the coat and light controls as a video. Stone only."
+  },
   "exp.pool.backlight": {
     "terms": [],
     "where": "why the worker pool was refused: the back light forces the whole-image path"

@@ -15,9 +15,63 @@
  *   node tools/check-webm.mjs
  *   node tools/check-webm.mjs --ablate
  */
+import { readFileSync, writeFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { mux, vint, el, simpleBlock } from './lib/webm.mjs';
 
 const ABLATE = process.argv.includes('--ablate');
+const SYNC = process.argv.includes('--sync');
+
+// ---- the app's inlined copy ----------------------------------------------------------------------
+// The app is one HTML file and cannot import a module, so it carries a copy. Same bargain as the GPU
+// block: generate it, and fail the build when the two differ. --sync writes it, bare checks it.
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const APP = join(ROOT, 'app', 'stone-author.html');
+const MOD = join(ROOT, 'tools', 'lib', 'webm.mjs');
+const NL = String.fromCharCode(10), CRLF = String.fromCharCode(13) + NL;
+const OPEN = '  // <<<WEBM-SYNC: generated from tools/lib/webm.mjs - edit there, not here';
+const CLOSE = '  // >>>WEBM-SYNC';
+
+// `export` is the only thing that cannot survive the move into an IIFE. Nothing else is rewritten,
+// so a diff between the module and the block is a real difference rather than a transform artefact.
+function generate() {
+  const mod = readFileSync(MOD, 'utf8').split(CRLF).join(NL);
+  const body = mod
+    .split(NL)
+    .filter(l => !l.startsWith('export { '))
+    .map(l => (l.startsWith('export ') ? l.slice(7) : l))
+    .map(l => (l.length ? '  ' + l : l))
+    .join(NL);
+  return OPEN + NL + body + NL + CLOSE;
+}
+
+function appBlock(src) {
+  const a = src.indexOf(OPEN);
+  if (a < 0) return null;
+  const b = src.indexOf(CLOSE, a);
+  if (b < 0) return null;
+  return src.slice(a, b + CLOSE.length);
+}
+
+if (SYNC) {
+  const raw = readFileSync(APP, 'utf8');
+  const crlf = raw.includes(CRLF);
+  const src = crlf ? raw.split(CRLF).join(NL) : raw;
+  const have = appBlock(src);
+  const gen = generate();
+  let out;
+  if (have) out = src.replace(have, gen);
+  else {
+    // FIRST INSERTION goes beside the other file-format writers, before zipOneStored.
+    const at = src.indexOf('  function zipOneStored(');
+    if (at < 0) { console.log('webm-sync: cannot find the insertion point'); process.exit(2); }
+    out = src.slice(0, at) + gen + NL + src.slice(at);
+  }
+  writeFileSync(APP, crlf ? out.split(NL).join(CRLF) : out);
+  console.log('webm-sync: wrote ' + gen.split(NL).length + ' lines into app/stone-author.html');
+  process.exit(0);
+}
 
 // ---- an independent EBML reader ------------------------------------------------------------------
 function readVint(b, i, keepMarker) {
@@ -201,6 +255,17 @@ claim(vint(127).length === 2 && vint(126)[0] === 0xFE && vint(0)[0] === 0x80, fa
         ok = d.frames.length === sparse.length; detail = d.clusters + ' cluster(s) for 60 s with ONE keyframe';
   } catch (e) { detail = 'threw: ' + e.message; }
   claim(ok, false, 'a 60 s single-keyframe run still muxes', detail);
+}
+
+// ---- and the app's copy is this module -----------------------------------------------------------
+{
+  const raw = readFileSync(APP, 'utf8');
+  const src = raw.includes(CRLF) ? raw.split(CRLF).join(NL) : raw;
+  const have = appBlock(src), want = generate();
+  claim(have !== null && have === want, false, 'the app carries this exact module',
+        have === null ? 'NO <<<WEBM-SYNC block - run --sync'
+          : have === want ? (want.split(NL).length) + ' lines, identical'
+          : 'the app\'s copy DIFFERS - run --sync, and never hand-edit the block');
 }
 
 console.log('THE MUXER ROUND-TRIPS, OR IT IS NOT A MUXER' + (ABLATE ? '  [ABLATED: one cluster timecode +1]' : '') + '\n');
