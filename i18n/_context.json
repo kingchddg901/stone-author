@@ -3923,6 +3923,24 @@
     "terms": [],
     "where": "label on the per-layer Metal slider in the Selected bar, beside Pass and Scatter"
   },
+  "ui.deselect-all": {
+    "where": "button in the \"Selected\" bar, beside the colour swatch and \"no colour\". Lower case like its neighbours. It empties the whole selection — every layer box AND every artifact tapped with Tune — which until 2026-11-02 took one click per item and was impossible for an artifact with no row in the layer list"
+  },
+  "hint.nothing-was-selected": {
+    "where": "status line, after pressing deselect-all with an empty selection. Says nothing happened, rather than claiming a clear that cleared nothing"
+  },
+  "hint.selection-cleared": {
+    "terms": [
+      "island"
+    ],
+    "where": "status line, after deselect-all emptied a selection. The two halves matter: LAYERS are the rows with boxes, ARTIFACTS are individual veins, web cracks and seams tapped with the Tune tool. Saying both is the point — the artifact half is the one a reader cannot see a control for"
+  },
+  "tip.deselect-everything-layers-and": {
+    "terms": [
+      "island"
+    ],
+    "where": "the title/tooltip on the deselect-all button. \"Tune\" is the TOOL name — use whatever you called tool.tune in this pack"
+  },
   "ui.selected": {
     "where": "button or label in a generated panel, under Layers"
   },
