@@ -1977,7 +1977,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.292';
+  const BUILD = '2026.10.31.293';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14970,12 +14970,16 @@ self.onmessage = async (e) => {
     sel.addEventListener('change', () => SA_I18N.setLang(sel.value));
     // The panels the studio GENERATES (layers, folders, the colour editor) hold no markup to re-label,
     // so they are rebuilt rather than patched.
+    // `stat()` IS IN THE HANDLER BELOW because the counts line became translatable on 2026-11-01 and
+    // nothing else redraws it: it is written on render, and switching language does not render.
+    // Before that it was an English template literal, so there was nothing to refresh and no bug to
+    // have. Caught by switching the running app through four languages and watching the pen readout
+    // change while this line stayed in English.
+    //
+    // THE COMMENT LIVES OUT HERE, NOT INSIDE. check-panel-tokens reads a fixed 600-character window
+    // after `SA_I18N.onChange(` and requires `registerLayerGroup` in it; five lines of comment inside
+    // the handler pushed that call out of the window and turned the gate red with the code correct.
     SA_I18N.onChange(() => {
-    // `stat()` IS IN HERE because the counts line became translatable on 2026-11-01 and nothing else
-    // redraws it: it is written on render, and switching language does not render. Before that it was
-    // an English template literal, so there was nothing to refresh and no bug to have. Caught by
-    // switching to four languages in the running app and watching the pen readout change while this
-    // line stayed in English.
     fill(); buildLayerUI(); syncUI(); stat();
     if (coatKit) registerCoatGroup();
     for (const e of [ed, coatEd]) if (e) e.labels = tkLabels();   // the setter rebuilds, and keeps the values
