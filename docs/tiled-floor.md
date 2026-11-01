@@ -3,14 +3,21 @@
 A floor is the slab cut into a repeating pattern and laid. Three paths reach pixels and only one of
 them was expensive, which is why this went unnoticed: the studio feels fine.
 
-| path | how it gets pixels | paid the cost below |
+| path | how it got pixels, as written | paid the cost below |
 | --- | --- | --- |
 | studio preview | `drawTiles` → `drawTilesTo` with no callback → blit from the painted offscreen | no |
-| PNG and kit export | `renderFloor` → paint the slab once at `min(W, FLOOR_SRC_MAX)` = 8,192, then blit | no |
+| PNG and kit export | `renderFloor` → paint the slab once at `min(W, 8192)`, then blit | no |
 | **TIFF master** | `exportTiff` → `renderFloorTile` → **paint once per piece** | **yes** |
 
 `drawTilesTo(F, tc, px, direct, only)` takes the per-piece painter as its fourth argument, and
 `renderFloorTile` is the only caller that passes one. The other two blit out of a slab painted once.
+
+> **SUPERSEDED IN PART, 2026-10-31.** Every path in that table built the floor **piece by piece**,
+> which is what all three did when this was written. An ordered floor is no longer built that way: it
+> is a cut pattern stroked over a finished slab tile, cheaper than any number below and not the same
+> picture. What still describes live code is the pool, the canvas kind and the instruments. The
+> windowing and one-paint sections are how it got here, kept because the measurements are the
+> argument. **The live answer is the last section: [the cut](#and-then-the-cut-replaced-all-of-it).**
 
 ## The cost was a law, not a number
 
@@ -148,7 +155,8 @@ Two things fell out of reading the path rather than from the goal:
 - **`drawScaleBar` was called at the end of `drawTilesTo`, unconditionally.** It draws into the
   studio's `ctx`, not into the target beside it, so it was repainting the studio's own scale bar as a
   side effect of writing a file — and it reads `Wc`, `V.z` and `dpr`, none of which exist in a worker.
-  It belongs to `drawTiles`, the path that is drawing the studio, and is now there.
+  It belongs to the path that is drawing the studio, and is now there — in `drawTiles`, which has
+  since gone with the per-piece floor, and after it in `draw` itself.
 - **`stoneSource` painted a 1,600 px slab offscreen even when every piece is painted directly.** That
   is work nobody collects, and it is what dragged `renderStoneOffscreen`, `syncBuild` and
   `holdingBuild` behind it. Now conditional on something actually reading `stoneC`.
@@ -214,8 +222,8 @@ piece would come back softened. Rounding keeps the material crisp and puts the f
 under a pixel — sub-pixel on a 70 px spread at 65,535.
 
 **It is guarded on area, not on mode.** The margin grows with the grout and with the render while the
-tile does not, so the one-paint path is taken only while the grown box stays under `ONE_PAINT_MAX`
-(1.5×) of the tile. The per-piece walk costs about 2× a single paint of the same area — 730 ms
+tile does not, so the one-paint path is taken only while the grown box stays under **1.5×** the area
+of the tile. The per-piece walk costs about 2× a single paint of the same area — 730 ms
 against a slab tile's 370 — so the guard sits below where it stops paying rather than at it.
 
 ### What it bought
@@ -256,25 +264,22 @@ in one session, and both times the zero was too clean to be believed.
 
 ## What this did NOT change
 
-**`exp.gpu.floor` is no longer a flat refusal.** A floor tile under `guide` is one paint of one
-rectangle — the same shape `renderOneTile` hands the shader — so the clause now reads
-`layTiles && !floorOnePaint()`, and only the floors that are *not* one paint are turned away: shuffle
-and stack, whose assembly plan moves a piece anywhere in the slab, and a graft or a cut section,
-which takes it off another board entirely.
+**`exp.gpu.floor` is no longer a flat refusal.** An ordered floor tile is one paint of one rectangle
+— the same shape `renderOneTile` hands the shader — so the clause reads `layTiles && !floorAsCut()`,
+and only the floors that are not a cut are turned away: a graft or a cut section, which takes the
+piece off another board entirely, and a floor laid over more than one stage.
 
-`floorOnePaint()` has **three readers and one copy**: `gpuWhyNot` to decide whether to offer the
-shader, `gpuPool` to size its slot buffers by `floorMargin`, and `renderFloorTile` to lay the pieces
-out of the box. That is deliberate — `poolWhyNot` and `corePaintsThis` are a documented twin pair and
-a clause was added to one and not the other earlier the same day, five lines apart, and a harness
-caught it rather than a person.
+`floorAsCut()` has **two readers and one copy**: `gpuWhyNot`, to decide whether to offer the shader,
+and `renderFloorTile`, to decide whether this tile is a slab tile with lines on it. It had a third —
+`gpuPool`, which sized its slot buffers by the margin the grout opened — and that reader went with
+the grout, because the box the shader fills is now the tile and its bleed and nothing more. One copy
+is deliberate: `poolWhyNot` and `corePaintsThis` are a documented twin pair, a clause was added to one
+and not the other earlier the same day, five lines apart, and a harness caught it rather than a
+person.
 
-The pool's buffers grow by `floorMargin` and every dispatch origin steps back by it. That margin is
-**0** for anything that is not a one-paint floor, which is what keeps a slab render allocating
-exactly what it always did — `uv-pool` and `tiff` still read 0 differing bytes.
-
-`renderFloorTile` **throws** `floor/paint:no-one-paint-path` if it is handed a painter it cannot use.
-Of everything here that could go wrong, a CPU-painted tile inside a master that records `gpu` is the
-only one that would not look like a failure, so it is the one made loud.
+`renderFloorTile` **throws** `floor/paint:not-a-cut` if a painter reaches the per-piece walk. Of
+everything here that could go wrong, a CPU-painted tile inside a master that records `gpu` is the only
+one that would not look like a failure, so it is the one made loud.
 
 > **THE GPU BRANCH HAS NEVER EXECUTED.** Every gate above exercises the CPU path, because the machine
 > this was written on reports `exp.gpu.noadapter` — WebGPU's API present, no adapter — so a shader
@@ -312,3 +317,67 @@ number was the flattering one, which is how it survived being read.
   as "only a graft reaches it"; `drawTilesTo` and `stageN` then started reaching it and the status
   stayed `known`. The gate *did* print the new callers beside the name — nothing compares a recorded
   reason against the callers it was written for.
+
+## And then the cut replaced all of it
+
+Everything above makes a floor tile cheaper to **build piece by piece**. A master then came back flat
+acid green, and the reason was that a floor built that way is not the slab it was cut from at all.
+
+Measured on `storm treeline v21 green test` at W 512, cairo 36in, square edge, against the same slab
+rendered whole:
+
+| | saturation | luma |
+| --- | --- | --- |
+| slab, subsurface 0 | 1.9 | 44.9 |
+| floor, subsurface 0 | 6.3 | 72.8 |
+| slab, subsurface 2 | 12.6 | 51.7 |
+| floor, subsurface 2 | **124.7** | 121.6 |
+
+**With the subsurface off the floor was already 62% brighter than the slab**, so the per-piece walk
+never produced the slab's picture; the subsurface is a high-pass and multiplied that gap eleven-fold.
+Neither the piece count (58 pieces and ~1,000 both read ~124) nor the edge finish (tumbled 124.4,
+square 124.7) moved it, which is what ruled out the seams and the chamfer in turn. Two other
+mechanisms were proposed and measured **wrong** first: coating before the cut made it worse
+(122.9 → 135.8) and the bevel made no difference at all.
+
+**The fix was the author's own model of the thing** — *"it's a cut pattern on a slab"*. Render the
+slab tile, the whole pipeline, ground and content and coat; then stroke the cut geometry over what
+comes back. The pieces fit, so there is nothing to spread, nothing to displace, nothing to re-sample
+and nothing to coat twice, and the floor's subsurface is the slab's **by construction** rather than by
+agreement. `renderFloorTile` opens on `floorAsCut()` and hands an ordered floor straight to
+`renderOneTile`; `cutOverlay` strokes every piece polygon as a hairline and finishes its edge.
+
+Saturation on that cell: **124.7 → 16.4**, against the slab's own 12.6.
+
+**What went with it, as settings and not only as code paths:** grout, kerf, shuffle and off-the-stack.
+Shuffle and the stack were the only reason a piece's material ever came from somewhere else, which is
+what made a floor a separately-built picture; grout and kerf were the only reason a piece was ever
+laid anywhere but where it was cut. A slab saved with any of them loads and renders as an ordered cut
+— the fields are simply not read. The joint is a hairline at 1/32 in, floored at one device pixel so
+it never vanishes, which is what the preview always fell back to when grout went sub-pixel anyway.
+
+Two paths were coating-blind and are fixed in the same pass, because a cut is only cheap if the thing
+under it is finished: the studio preview returned before `applyCoat` whenever tiles were laid, and the
+PNG and kit path blitted out of `renderStoneOffscreen`, which calls `paintContent` and never
+`applyCoat`. A PNG of a floor came back with no subsurface, no specular, no emission bloom and no
+lens while the TIFF beside it had all four.
+
+### What this made dead, and what finding it cost
+
+| gone | was |
+| --- | --- |
+| `floorOnePaint`, `floorMargin`, `ONE_PAINT_MAX`, `FLOOR_SRC_MAX` | the one-paint machinery above |
+| `assemblyPlan`, `drawTiles`, `tools/probe-assembly.mjs` | the assembly, and the probe that held it |
+| `t.shift` | still produced, and now identically zero in every pattern |
+
+That last row is why `probe-cut-section.mjs` had to change rather than simply pass. Thirteen of its
+seventeen claims turn on the shift, and with the shift zero every one of their ablations came back
+**STILL CLEAN — the check cannot fail**, which is the sound a dead check makes. They run against a
+built contrast now: `spread`, which pushes `floorPitch` off 1 the way a grout used to, so what they
+assert is that the `poly - shift` subtraction is present and correct the moment a floor is laid
+anywhere but on its own cut. All seventeen bite again, 47 to 6,142 caught per ablation.
+
+**That probe is also how a red CI went unnoticed for three commits.** It is a CI step and not a
+`check-*.mjs`, so the sweep this repo's own `CLAUDE.md` recommended — a glob over `tools/check-*.mjs`
+— could not see it, and it had been failing since the settings were removed. The gate list is the
+named `run:` steps, which is what the sweep in `CLAUDE.md` now reads.

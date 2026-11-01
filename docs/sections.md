@@ -76,7 +76,8 @@ measured, **0 of 333 edge pairs** share a section.
 
 ## A cut fixes the geometry it was measured against
 
-Order of operations. Tile type, size and kerf are interchangeable and may be set in any order. But a
+Order of operations. Tile type, size and chevron angle are interchangeable and may be set in any
+order. But a
 section was cut from a *particular* geometry, so once a cut is selected that geometry is locked: a cut
 carried from a rhombus into a different tile would warp the data it was measured against, silently,
 and produce a plausible floor that is wrong.

@@ -77,14 +77,24 @@ were left out of CI by the person who wrote them. **A new `check-*.mjs` is not w
 for f in tools/check-*.mjs; do node "$f" >/dev/null 2>&1 || echo "RED: $f"; done
 ```
 
-**Four come back RED from that sweep and are not failures — they are tools with no argument.**
+**And that sweep is not the CI set either — `check-*` is not all of it.** CI runs `tools/probe-*.mjs`
+steps too, and some take a flag. `probe-cut-section` sat RED in CI for three commits on 2026-10-31
+because the glob above cannot see a `probe-`, and the push before each one was gated on a green sweep.
+Read the names out of the workflow and run those:
+
+```
+grep -oE 'node tools/[a-z0-9.-]+\.mjs( --[a-z-]+)?' .github/workflows/i18n.yml | sort -u | while read -r c; do $c >/dev/null 2>&1 || echo "RED: $c"; done
+```
+
+**Four come back RED from the `check-*` glob and are not failures — they are tools with no argument.**
 `geometry`, `placement`, `same-image` and `seam` each take a `master.tif` and analyse it (*is there
 actually a stone in this file?*, *does every tile sit where it says it does?*, and so on). This repo
 deliberately does not commit masters, so run bare they print a usage line and exit 1 or 2. Do not go
 chasing them as something a change just broke. One of the four is not like the others: **`same-image` has
 a working `--selftest` that CI already runs**, so it is green in CI and red in the sweep only because the
-sweep does not pass the flag. `seam`'s `--self-test` is a mode applied to a master, not a substitute for
-one, and `geometry` and `placement` have no self-test at all.
+sweep does not pass the flag, and the workflow-derived sweep above passes it. The other three are not
+CI steps at all, so they never appear in that one. `seam`'s `--self-test` is a mode applied to a
+master, not a substitute for one, and `geometry` and `placement` have no self-test at all.
 
 **`check-build` cannot see your working tree, so it can only go red AFTER you commit.** It diffs
 `HEAD~1..HEAD` — the last two COMMITS — and asks whether `app/stone-author.html` moved while `BUILD` did

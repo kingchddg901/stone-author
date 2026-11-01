@@ -49,7 +49,7 @@ const res = await page.evaluate(async ({ W, TS }) => {
   // A FLOOR OF PIECES THAT CAME FROM SOMEWHERE ELSE. kerf 0 against a grout, so the lattice carries a
   // real shift as well - the two are independent and a gate that fixed both would be testing neither.
   sa.layTiles = true;
-  Object.assign(sa.T, { pattern: 'rhombus', sizeIn: 17, groutIn: 0.03125, kerfIn: 0, edge: 'square',
+  Object.assign(sa.T, { pattern: 'rhombus', sizeIn: 17, edge: 'square',
                         joints: true });
   sa.render();
   const pieces = sa.tileInstances().length;

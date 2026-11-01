@@ -59,7 +59,7 @@ async function cell(page, c, wantPixels) {
     const plan = await sa.tiffPlan(W);
     const ts = plan.ts, bleed = plan.bleed;
     sa.layTiles = true;
-    Object.assign(sa.T, { pattern: c.pattern, sizeIn: 17, groutIn: 0.03125, kerfIn: 0,
+    Object.assign(sa.T, { pattern: c.pattern, sizeIn: 17,
                           edge: 'square', joints: true, assembly: 'guide', shuffle: c.shuffle });
     sa.render();
     const gx = Math.floor(plan.rAcross / 2), gy = Math.floor(plan.rDown / 2);

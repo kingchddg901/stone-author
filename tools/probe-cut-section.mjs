@@ -11,6 +11,14 @@
  *                        and it must lie inside the slab - a window render cannot wrap, and outside
  *                        the slab rectangle the painter has nothing to say, so an unclamped box
  *                        comes back as bare background.
+ *
+ * THE FLOOR NO LONGER SPREADS, so the first of those cannot be caught by watching the shipped
+ * build: floorPitch is 1, every piece is laid exactly where it was cut, `shift` is identically
+ * zero and the subtraction is arithmetic on nothing. Both claims that turn on it came back
+ * "STILL CLEAN - the check cannot fail", which is the sound a dead check makes. They are run
+ * against a BUILT contrast instead - `spread`, the pitch pushed off 1 - so what they assert is
+ * that the subtraction is there and correct the moment a floor is laid anywhere but on its own
+ * cut. That is the seam grout and kerf used to drive and a future setting may again.
  *   cutScale             the painted box must FIT the band it is given, however long and thin.
  *   coverSrc             a cut can land on a tile of another shape, so it must crop, never stretch,
  *                        and never sample outside the box it has.
@@ -63,9 +71,12 @@ const PAT_SRC = SRC.slice(i0, j0);   // versailles is gone, so there is nothing 
 // cutBoxFromInstance / cutScale / coverSrc, and tileInstances to feed them. ABLATE lets one claim
 // be re-run with a single piece of the real thing swapped out.
 function build(ablate) {
+  // ABLATIONS COMPOSE, joined by '+': `spread` is a BASE the others are stacked on rather than an
+  // alternative to them, because a claim about the shift has to be run on a build that has one.
+  const has = k => String(ablate || '').split('+').includes(k);
   const body = [
     'const H = 0.625, IN = 8 * 12, inFr = v => v / IN;',
-    "const T = { pattern: 'square', sizeIn: 12, groutIn: 0.125, kerfIn: 0.0625, chevAngle: 45 };",
+    "const T = { pattern: 'square', sizeIn: 12, chevAngle: 45 };",   // grout and kerf are not settings any more
     liftConst(/const polyCentroid = [^\n]*/),
     CAIRO, lift('cairoCell'), PAT_SRC,                       // circlePoly went with penny/fishscale
     // LIFTED FROM THE APP, not restated: tileInstances reaches the table through this one lookup, so
@@ -73,26 +84,32 @@ function build(ablate) {
     liftConst(/const patternOf = .*/),                       // `.` already stops at the line end
     'const plankInstances = () => [];',
     lift('tileInstances'),
-    ablate === 'no-shift'
+    has('no-shift')
       ? lift('cutBoxFromInstance').replace('x0 -= t.shift[0]; x1 -= t.shift[0]; y0 -= t.shift[1]; y1 -= t.shift[1];', '')
-      : ablate === 'no-clamp'
+      : has('no-clamp')
         ? lift('cutBoxFromInstance').replace('Math.min(wrap(x0, 1), 1 - w), Math.min(wrap(y0, H), H - h)', 'wrap(x0, 1), wrap(y0, H)')
         : lift('cutBoxFromInstance'),
-    ablate === 'scale-max' ? liftConst(/const cutScale = [^\n]*/).replace('Math.min', 'Math.max')
-                           : liftConst(/const cutScale = [^\n]*/),
-    ablate === 'cover-max' ? lift('coverSrc').replace('Math.min(sw / dw, sh / dh)', 'Math.max(sw / dw, sh / dh)')
-                           : lift('coverSrc'),
-    // The blade comes off the piece now, so the lattice insets every tile by kerf/2 and needs this.
+    has('scale-max') ? liftConst(/const cutScale = [^\n]*/).replace('Math.min', 'Math.max')
+                     : liftConst(/const cutScale = [^\n]*/),
+    has('cover-max') ? lift('coverSrc').replace('Math.min(sw / dw, sh / dh)', 'Math.max(sw / dw, sh / dh)')
+                     : lift('coverSrc'),
+    // The lattice insets every tile before culling, by nothing now that the blade is gone, and it
+    // still calls this to do it.
     lift('insetPoly'),
-    // jointIn lives BEHIND the material fork, because how wide a joint is depends on the material -
-    // a floor of boards has none. It cannot be lifted and it should not be: the cut geometry under
-    // test is material-agnostic, so the probe answers for a material that has grout and the claims
-    // below must hold whatever that answer is. That is what the fork is for.
-    'const jointIn = () => T.groutIn;',
-    // floorPitch decides how far apart the floor lays what the slab gave it, and tileInstances asks it.
-    // LIFTED, not restated: the pitch is the whole relationship between kerf, grout and where a piece
-    // lands, and a probe carrying its own copy would agree with itself while the floor moved.
-    liftArrow('floorPitch'),
+    // jointIn lives BEHIND the material fork, because whether there is a joint at all depends on
+    // the material - a floor of unglazed boards has none. It cannot be lifted and it should not be:
+    // the cut geometry under test is material-agnostic, so the probe answers for a material that
+    // shows a joint and the claims below must hold whatever that answer is. Nothing in the lifted
+    // geometry reads it since the joint became a hairline drawn ON the seam, which is exactly why it
+    // is pinned here: if a pitch ever asks for it again, this is the value it will get.
+    'const jointIn = () => 1 / 32;',
+    // floorPitch decides how far apart the floor lays what the slab gave it, and tileInstances asks
+    // it. LIFTED, not restated: the pitch is the whole relationship between a piece's cut position
+    // and where it lands, and a probe carrying its own copy would agree with itself while the floor
+    // moved. It returns 1 today - the floor IS the slab - and `spread` is the one-token ablation
+    // that pushes it off, which is what gives the shift claims something to catch.
+    has('spread') ? liftArrow('floorPitch').replace('void un;', 'void un; return 1.02;')
+                  : liftArrow('floorPitch'),
     // The board-driven patterns ask the floor for its plank, which the app computes from WOOD. The
     // probe is about CUT GEOMETRY, not about wood, so a fixed plank is enough - and leaving them out
     // is how chevron went in and left this file throwing a ReferenceError instead of making a claim.
@@ -121,8 +138,8 @@ let bad = 0;
 const rows = [];
 // Run one claim on the real build and on its ablation. The ablation MUST fail; if it passes, the
 // claim is reported as decoration, because nothing about it is being held in place.
-function claim(title, ablation, run) {
-  const real = run(A), abl = run(build(ablation));
+function claim(title, ablation, run, base) {
+  const real = run(base ? build(base) : A), abl = run(build(base ? base + '+' + ablation : ablation));
   const ok = real.n === 0, bites = abl.n > 0;
   if (!ok || !bites) bad++;
   rows.push('  ' + (ok ? (bites ? 'ok  ' : 'DECO') : 'FAIL') + '  ' + title.padEnd(52) +
@@ -132,7 +149,7 @@ function claim(title, ablation, run) {
 
 console.log('A TILE, TAKEN AS A SECTION - ' + PATS.length + ' patterns x ' + SIZES.length + ' sizes\n');
 
-claim('the box is the SLAB position, not the floor position', 'no-shift', E => {
+claim('box is the SLAB position, not the floor (spread)', 'no-shift', E => {
   let n = 0, of = 0, eg = '';
   sweep(E, (t, p, s) => {
     const b = bbox(t.poly), want = [b[0] - t.shift[0], b[1] - t.shift[1]];
@@ -145,7 +162,7 @@ claim('the box is the SLAB position, not the floor position', 'no-shift', E => {
     }
   });
   return { n, of, eg };
-});
+}, 'spread');
 
 claim('every box lies inside the slab', 'no-clamp', E => {
   let n = 0, of = 0, eg = '';
@@ -216,50 +233,64 @@ claim('laid on its own shape, the whole cut is used', 'nudge-dest', E => {
 
 // THE PROPERTY THE WHOLE FEATURE IS, stated on geometry rather than pixels: for one tile shape, a
 // cut's source rectangle is the SAME for every lattice position, which is what makes every tile
-// show the same piece - while the ordinary path's shift is different for every one of them, which
-// is what makes the floor walk across the slab. No ablation: the second half IS the contrast.
-// The ablation is the ORDINARY path: fold the tile's own shift into the source offset, which is
-// exactly what makes an uncut floor walk across the slab, and the check must catch every pattern.
+// show the same piece - while a floor laid anywhere but on its own cut takes a different piece for
+// every one of them, which is what makes it walk across the slab.
+//
+// THAT SECOND HALF IS NOW BUILT RATHER THAN OBSERVED. An ordered floor is a cut over a slab, laid
+// where it was cut, so the shipped build has no walk left to contrast against and folding its shift
+// back in changes nothing: this came back STILL CLEAN for all twelve patterns. `S` is the same
+// geometry with floorPitch pushed off 1, which is what a grout or a kerf used to do, and folding
+// ITS shift in must take a different piece for every position.
+//
 // Tolerance is 1e-6 of a ~700 px source rectangle, because two tiles of the same shape differ in
 // their widths at float noise and a stricter comparison measures that instead of the claim.
 {
-  const cw = 700, bandPx = cw * A.H, TOL = 1e-6;
+  const cw = 700, TOL = 1e-6;
+  const S = build('spread');
+  const run = (E, p, fold) => {
+    E.T.pattern = p; E.T.sizeIn = 14;
+    const inst = E.tileInstances();
+    if (!inst.length) return null;
+    const bandPx = cw * E.H;
+    const cut = E.cutBoxFromInstance(inst[(inst.length / 2) | 0]);
+    const kz = E.cutScale(cw, bandPx, cut), sw = cut[2] * kz, sh = cut[3] * kz;
+    const byShape = new Map(); let varies = 0;
+    for (const t of inst) {
+      const b = bbox(t.poly), dw = b[2] - b[0], dh = b[3] - b[1];
+      const key = Math.round(dw * 1e6) + 'x' + Math.round(dh * 1e6);
+      const src = E.coverSrc(sw, sh, dw, dh);
+      if (fold) { src[0] += t.shift[0] * kz; src[1] += t.shift[1] * kz; }
+      if (!byShape.has(key)) byShape.set(key, src);
+      else if (byShape.get(key).some((v, i) => Math.abs(v - src[i]) > TOL)) varies++;
+    }
+    return { shapes: byShape.size, varies, flat: inst.every(t => t.shift[0] === 0 && t.shift[1] === 0) };
+  };
   for (const p of PATS) {
-    A.T.pattern = p; A.T.sizeIn = 14;
-    const inst = A.tileInstances();
+    const real = run(A, p, false), abl = run(S, p, true);
     // A pattern that lays NO tile is a finding, not a stack trace. This file crashed on it rather than
     // naming it, which is how a broken pattern would reach a user as a TypeError in the console.
-    if (!inst.length) { console.log(`  FAIL  ${p}: lays no tile at all`); fails++; continue; }
-    const cut = A.cutBoxFromInstance(inst[(inst.length / 2) | 0]);
-    const kz = A.cutScale(cw, bandPx, cut), sw = cut[2] * kz, sh = cut[3] * kz;
-    const run = withShift => {
-      const byShape = new Map(); let varies = 0;
-      for (const t of inst) {
-        const b = bbox(t.poly), dw = b[2] - b[0], dh = b[3] - b[1];
-        const key = Math.round(dw * 1e6) + 'x' + Math.round(dh * 1e6);
-        const src = A.coverSrc(sw, sh, dw, dh);
-        if (withShift) { src[0] += t.shift[0] * kz; src[1] += t.shift[1] * kz; }
-        if (!byShape.has(key)) byShape.set(key, src);
-        else if (byShape.get(key).some((v, i) => Math.abs(v - src[i]) > TOL)) varies++;
-      }
-      return { shapes: byShape.size, varies };
-    };
-    const real = run(false), abl = run(true);
-    // WHERE THE ABLATION CANNOT APPLY, AND WHY. An overlapping pattern is never pushed apart
-    // (noSpread), so its shift is identically zero and every tile ALREADY samples one position -
-    // there is nothing to fold back in. That is a property of the pattern, so it is asserted
-    // rather than waved through: all-zero shifts in a pattern that DOES spread would be the
-    // interesting failure, and it still fails here.
-    const flat = inst.every(t => t.shift[0] === 0 && t.shift[1] === 0);
-    const na = flat && !!A.PATTERNS[p](14).overlap;
+    if (!real || !abl) { console.log('  FAIL  ' + p + ': lays no tile at all'); bad++; continue; }
+    // WHERE THE ABLATION CANNOT APPLY, AND WHY. An overlapping pattern is never pushed apart - by
+    // floorPitch's own first line, not by the pitch being 1 - so its shift stays zero even under the
+    // spread and every tile ALREADY samples one position: there is nothing to fold back in. That is
+    // a property of the pattern, so it is asserted rather than waved through, and a flat shift in a
+    // pattern that DOES spread still fails here.
+    const na = abl.flat && !!A.PATTERNS[p](14).overlap;
     const ok = real.varies === 0, bites = abl.varies > 0 || na;
     if (!ok || !bites) bad++;
     rows.push('  ' + (ok ? (bites ? (na ? 'n/a ' : 'ok  ') : 'DECO') : 'FAIL') + '  ' + ('one piece, every position: ' + p).padEnd(52) +
       (ok ? real.shapes + ' tile shape(s) -> ' + real.shapes + ' source rect(s), position-free'
           : real.varies + ' tiles took a different piece') +
-      '   | ' + (na ? 'overlapping pattern: shift is already zero everywhere, so it cannot be ablated'
-                   : 'ablated(fold the shift back in): ' + (bites ? abl.varies + ' caught' : 'STILL CLEAN')));
+      '   | ' + (na ? 'overlapping pattern: it refuses the spread, so there is no shift to fold back in'
+                   : 'ablated(spread, then fold the shift back in): ' + (bites ? abl.varies + ' caught' : 'STILL CLEAN')));
   }
+  // NO PATTERN IN THIS BUILD OVERLAPS - penny and fishscale went - so the n/a branch above is
+  // PREPARED, not exercised, and a branch nothing reaches reads as coverage if it is left silent.
+  // floorPitch still carries the `overlap` clause it pairs with, so the pair is kept and said out
+  // loud rather than removed.
+  const over = PATS.filter(q => !!A.PATTERNS[q](14).overlap);
+  rows.push('  note  ' + (over.length ? 'patterns that refuse the spread: ' + over.join(', ')
+    : 'no pattern overlaps in this build, so the n/a branch above is prepared and never taken'));
 }
 
 console.log(rows.join('\n'));

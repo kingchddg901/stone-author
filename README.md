@@ -30,7 +30,7 @@ Nobody believes the rest came from that, so here is the lineage.
    you draw where the line goes, and the family decides what it becomes. Your line is the route;
    the family is the character.
 
-4. **Then it kept growing.** A pour brush. A tile engine with real grout and kerf. Pen
+4. **Then it kept growing.** A pour brush. A tile engine that cuts a real floor out of the slab. Pen
    pressure and tilt. Gravity and magnet brushes. A layer model. Marble primitives — clouds,
    banding, breccia, drusy, stylolites. Vein-structure variants. Each addition was small; the sum
    outgrew the dashboard builder it lived in.
@@ -66,14 +66,13 @@ path that taking one small want seriously actually produced.
   windows), Light, Move. Pen pressure and tilt (opt-in). **Lay tiles**
   cuts the authored slab into a repeating floor — 13 patterns (square, rectangle, subway, hexagon,
   Cairo, diagonal, herringbone, basketweave, triangle, rhombus, octagon, plus **plank run** and
-  **chevron** for wood), with grout, kerf, edge finish and per-tile chipping. Sizes are real, on an
-  8×5 ft slab, and a floorboard is **sized** and cut from the mother board rather than the floor
-  being divided into a set number of boards. Assembly is **in order**, **off the stack** or
-  **shuffled**: the first keeps the grain running across joints, the last cuts each piece from
-  anywhere on the slab, and a piece is only offered where its whole shape is on the material — an
-  offcut is not stock. Wood has no grout, because a floor of boards has no mortar and the line you
-  see is the saw — unless a **glaze** turns it into printed ceramic. The floor exports at any size
-  through the same tiled path as a slab. Marble **primitives** (clouds,
+  **chevron** for wood), with edge finish and per-tile chipping. Sizes are real, on an 8×5 ft slab,
+  and a floorboard is **sized** and cut from the mother board rather than the floor being divided
+  into a set number of boards. **A floor is a cut pattern on a slab**: the stone is the slab's own,
+  the cut is a set of lines over it, and the pieces fit — so the veins run on across every joint and
+  the joint itself is a hairline that shows you the shape. Wood with no glaze shows no joint at all,
+  because boards butt and the line you see is the saw; a **glaze** turns it into printed ceramic and
+  gives it one. The floor exports at any size through the same tiled path as a slab. Marble **primitives** (clouds,
   banding, breccia, drusy, stylolites) and per-line **vein variants** (sinuous, dendritic,
   en-echelon, boudinage, halo). A **layer** model (eye / solo / opacity, blend, glow) and a
   **colour layer** — colour decoupled from the family, edited through the vendored token-theme-kit

@@ -42,7 +42,7 @@ const REPS = argOf('reps', 5), DROP = 2;   // the first tile is 215% of its own 
 const SLAB = JSON.parse(readFileSync(join(root, 'gallery', 'slabs', 'Hero_Psyker.json'), 'utf8'));
 const BUILDS = [['full painter', 'stone-author.hooked.html'],
                 ['painter ablated', 'stone-author.paint-ablated.html']];
-const FLOOR = { pattern: 'rhombus', sizeIn: 17, groutIn: 0.03125, kerfIn: 0,
+const FLOOR = { pattern: 'rhombus', sizeIn: 17,
                 edge: 'square', joints: true, assembly: 'guide', shuffle: false };
 
 const med = a => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };

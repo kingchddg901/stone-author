@@ -159,9 +159,14 @@ for (const path of paths) {
   if (m.lay) {
     const L = m.lay;
     const size = L.pieceIn ? `${L.pieceIn[0]} x ${L.pieceIn[1]} in boards` : `${L.sizeIn} in`;
-    const joint = L.kerfIn === L.groutIn
-      ? `kerf = grout ${L.groutIn} in, so the floor reassembles the slab`
-      : `grout ${L.groutIn} in, kerf ${L.kerfIn} in`;
+    // A MASTER WRITTEN BEFORE 2026-10-31 CARRIES ITS GROUT AND KERF, and one written after has
+    // neither: the floor fits, and the joint is a hairline drawn on the seam. Both still read, which
+    // is the whole point of reading a master's own record rather than today's defaults.
+    const joint = L.groutIn === undefined
+      ? 'a hairline on the seam; the pieces fit'
+      : L.kerfIn === L.groutIn
+        ? `kerf = grout ${L.groutIn} in, so the floor reassembles the slab`
+        : `grout ${L.groutIn} in, kerf ${L.kerfIn} in`;
     console.log(`  floor    ${L.pattern}${L.chevAngle != null ? ` at ${L.chevAngle} deg` : ''}, ${size}, set ${L.setting}`);
     console.log(`           ${joint}${L.joints ? '' : ', joints not drawn'}, ${L.edge} edge${L.grouping ? `, grouping ${L.grouping}` : ''}`);
   } else if (m.tiled || m.tile) {

@@ -1920,7 +1920,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.277';
+  const BUILD = '2026.10.31.280';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -3893,7 +3893,6 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function tileInstances() {
     if (T.pattern === 'plank') return plankInstances();       // not a lattice; it generates itself
     const u = T.sizeIn, pat = patternOf(u);
-    const noSpread = !!pat.overlap;                                   // scales overlap - never pushed apart
     // A pattern sized from the board rather than from u says so, and the joint spreads by ITS size.
     // Scaling a 5in plank's grout by a 13in tile size opens a quarter-inch joint and calls it 1/16.
     const floorS = floorPitch(pat, u), slabS = 1;
@@ -4350,58 +4349,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return res;
   }
   const GROUT = '#20222a';
-  // WHICH PIECE FILLS WHICH SLOT. Every instance whose centre lands on the board IS a piece; the rest
-  // are slots the board has to be stretched over. Both lists are ordered the same way - down the rows,
-  // then along - which is the order a machine cuts in and the order a floor is laid in.
-  //
-  // Keyed by `pi` because a module's polygons are not interchangeable: a chevron's two planks are
-  // mirror images, and handing one slot the other's piece would be handing an installer a plank that
-  // does not fit. That compatibility was already in the data and cost nothing to honour.
-  function assemblyPlan(inst, shuffled) {
-    const byPi = new Map();
-    for (const t of inst) {
-      let g = byPi.get(t.pi); if (!g) byPi.set(t.pi, g = { slots: [], pieces: [] });
-      g.slots.push(t);
-      // A LEGAL PIECE IS WHOLLY ON THE BOARD. Testing the CENTRE let a tile hanging half off the
-      // edge count as a full one, and handing that to an interior slot does not leave a gap - the
-      // sample runs past the slab and the wrap fills it from the far side, so the floor shows a
-      // plausible tile made of two unrelated parts of the board. An offcut passed off as stock.
-      // poly - shift is the piece in SLAB space, which is the same identity Snag keeps.
-      let whole = true;
-      for (const q of t.poly) {
-        const sx = q[0] - t.shift[0], sy = q[1] - t.shift[1];
-        if (sx < -1e-9 || sx > 1 + 1e-9 || sy < -1e-9 || sy > H + 1e-9) { whole = false; break; }
-      }
-      if (whole) g.pieces.push(t);
-    }
-    // ALONG THE GRAIN. Wood's grain runs down the board's length, which is x, so ordering by row and
-    // then along the row hands out pieces that continue one another. The stack was already doing this
-    // and nothing said so - flip the two terms and the floor would cross the grain every piece.
-    const order = (a, b) => (a.ctr[1] - b.ctr[1]) || (a.ctr[0] - b.ctr[0]);
-    const plan = new Map();
-    for (const [, g] of byPi) {
-      g.slots.sort(order); g.pieces.sort(order);
-      const n = g.pieces.length; if (!n) continue;          // nothing of this shape is on the board
-      // SHUFFLED: any whole piece of the same shape and orientation, which is what `pi` already means.
-      // Seeded from the shape alone, so the floor is a pure function of the slab - the gallery gates
-      // on two renders of one slab being byte-identical, and an unseeded shuffle would break it.
-      if (shuffled) {
-        const r = mulberry32(0x5EED + g.pieces[0].pi * 7919);
-        for (let i = n - 1; i > 0; i--) { const j = (r() * (i + 1)) | 0; const t = g.pieces[i]; g.pieces[i] = g.pieces[j]; g.pieces[j] = t; }
-      }
-      for (let i = 0; i < g.slots.length; i++) {
-        // STACK: take the next one off the pile, wrapping when the board runs out - which is what
-        // running short of material actually looks like, and is worth seeing rather than hiding.
-        const p = g.pieces[i % n], sl = g.slots[i];
-        // The piece, not just the offset: which BOARD it was cut from is a property of the piece and
-        // has to travel with it. Keeping only the offset left the board to be chosen from the slot's
-        // own coordinates, so a slot got a piece from one place out of a board picked somewhere else.
-        // back to frame units: shift is a frame-space offset, ctr is inches
-        plan.set(sl.key, { d: [inFr(p.ctr[0] - sl.ctr[0]), inFr(p.ctr[1] - sl.ctr[1])], piece: p });
-      }
-    }
-    return plan;
-  }
+  // assemblyPlan is GONE with shuffle and the stack: nothing moves a piece any more.
   // The tile painter, pointed at a target rather than at the live canvas. `px` is one device
   // pixel in frame units, and `cover` is the rectangle the grout fills under everything.
   // `direct`, when given, PAINTS each piece from the field instead of blitting it out of the
@@ -4444,18 +4392,16 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     if (pat.overlap) inst.sort((a, b) => b.ctr[1] - a.ctr[1]);       // lower scales first, upper cover their tops
     const rng = mulberry32(1234567);
     // Built once, not per piece: it has to sort every instance to know what order they come in.
-    const plan = (T.shuffle || T.assembly === 'stack') ? assemblyPlan(inst, T.shuffle) : null;
     for (const t of inst) {
       if (!seen(t)) continue;                              // nothing of it reaches this target
       let poly = t.poly;                                   // nothing is inset: the pieces fit
       if (T.edge === 'tumbled') poly = insetPoly(poly, inFr(0.04 * T.sizeIn));
       const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
       let shift = t.shift;
-      // THE ASSEMBLY. Guide is the absent case on purpose: the piece a slot is handed is the one cut
-      // at that slot, the delta is zero, and the floor is the board. Nothing to add and nothing to
-      // drift. Only a mode that moves a piece has anything to say here.
-      let from = t;                                        // which instance the content is cut from
-      if (plan) { const a = plan.get(t.key); if (a) { from = a.piece; shift = [shift[0] + a.d[0], shift[1] + a.d[1]]; } }
+      // ONE PIECE, CUT WHERE IT LIES. The assembly could hand a slot a piece from somewhere else;
+      // with shuffle and the stack gone there is no such thing, so `from` is always the instance
+      // itself and the only displacement left is the spacing, which is now zero.
+      const from = t;
       // WHICH BOARD THIS PIECE CAME OFF. One board width is H in slab units, so adding k*H to the
       // shift moves the sample a whole board down the cant. In order, k follows the lattice ROW, so
       // the floor walks down the log the way a flitch is stacked and neighbouring rows are
@@ -4519,16 +4465,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         tc.beginPath(); poly.forEach((q, i) => (i ? tc.lineTo(q[0], q[1]) : tc.moveTo(q[0], q[1]))); tc.closePath(); tc.stroke(); } }
     tc.restore();                                        // the slab clip opened before the tiles
   }
-  // The live preview is one caller of it, with the view's own transform.
-  function drawTiles(F) {
-    stoneSource();
-    drawTilesTo(F, ctx, 1 / (Wc * V.z));
-    // THE SCALE BAR IS A STUDIO OVERLAY and it draws into `ctx`, never into the target it was called
-    // beside. Sitting at the end of drawTilesTo it therefore ran on every EXPORT as well, repainting
-    // the studio's own bar as a side effect of writing a file; and it reads Wc, V.z and dpr, none of
-    // which exist in a worker. It belongs to the path that is drawing the studio, which is this one.
-    drawScaleBar();
-  }
+  // drawTiles is GONE. It blitted pieces out of an uncoated offscreen for the studio, and the
   // Edge finish: a lit chamfer. Edges facing the shared light (G.lightAngle) catch it; those facing away fall dark.
   function edgeFinish(poly, px, tc) {
     if (T.edge === 'square') return;
@@ -5654,32 +5591,23 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // The fallback is for a browser with no OffscreenCanvas, which also has no pool - so there is no
   // second path on that machine to disagree with.
-  // CAN THIS FLOOR BE PAINTED ONCE PER TILE? Three readers ask it and they have to agree: gpuWhyNot
-  // decides whether to offer the shader at all, gpuPool sizes its buffers from the margin, and
-  // renderFloorTile lays the pieces out of the box. A clause added to one copy and not the others is
-  // a tile painted on the CPU while the master records a GPU render - so there is one copy.
-  // Only a floor laid from SECTIONS still walks piece by piece, and a section's material is on
-  // another slab, so no single box holds it. This is false there and the walk paints each window.
-  const floorOnePaint = () => false;
-  // AND HOW FAR OUTSIDE THE TILE ITS MATERIAL REACHES, in device pixels, or 0 when the floor is not
-  // one of those. The spacing is the whole displacement under guide, so the largest one over every
-  // instance bounds the lot; bleed rides on top because the coat still wants its own margin.
-  function floorMargin(W, bleed) {
-    if (!floorOnePaint()) return 0;
-    let mx = 0;
-    for (const t of tileInstances()) {
-      const m = Math.max(Math.abs(t.shift[0]), Math.abs(t.shift[1]));
-      if (m > mx) mx = m;
-    }
-    return Math.ceil(mx * W) + bleed;
-  }
+  // ONE PAINT PER TILE IS GONE WITH THE SPREAD IT SERVED. floorOnePaint and floorMargin were how
+  // the per-piece walk painted one source box per tile and blitted each piece out of it, the box
+  // grown by the furthest the grout had pushed any piece from where it was cut. With grout, kerf,
+  // shuffle and the stack gone nothing is displaced, so there is no box to grow and no blit to make:
+  // an ordered floor is a cut over a slab tile that renderOneTile paints whole.
+  //
+  // WHAT STILL WALKS is a floor laid from SECTIONS, or over more than one stage - there a piece's
+  // material really is on another slab or another board down the cant, and no single box holds the
+  // tile's material. That walk paints each piece's own WINDOW, which is what the one-paint path was
+  // an optimisation over and is still correct without it.
   const floorCanvas = (w, h) => {
     if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
     const el = document.createElement('canvas'); el.width = w; el.height = h; return el;
   };
-  // `paint` REPLACES THE CONTENT STEP, exactly as it does in renderOneTile, and it is only ever
-  // offered the ONE-PAINT path below: a caller that paints a tile for us cannot be asked to paint
-  // it seventeen times in pieces. Absent, which is every caller today, it is paintContent.
+  // `paint` REPLACES THE CONTENT STEP, exactly as it does in renderOneTile, and only the CUT path
+  // below can take one: a caller that paints a tile for us cannot be asked to paint it seventeen
+  // times in pieces. Absent, which is every CPU caller, it is paintContent.
   // AN ORDERED FLOOR IS A CUT PATTERN ON A SLAB, and for `guide` that is literally all it is: a set
   // of geometric lines laid over a finished tile. Nothing is re-rendered, nothing is sampled at a
   // shift, nothing is coated twice - the tile IS a slab tile, so its subsurface is the slab's by
@@ -5755,54 +5683,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     cx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round';
     const STAGE = stageN();
     const only = [ex0 / finalW, ey0 / finalW, (ex0 + ew) / finalW, (ey0 + eh) / finalW];
-    // ONE PAINT FOR THE WHOLE TILE, WHEN THE PIECES ONLY MOVED A LITTLE.
+    // WHAT REACHES HERE. The ordered cut returned at the top, so what is left is a floor laid from
+    // SECTIONS or over more than one stage: the piece a slot is handed was cut somewhere else, and
+    // no one box holds the tile's material.
     //
-    // Under `guide` the floor IS the slab, pushed apart by the grout, and drawTilesTo says so in its
-    // own words: "Guide is the absent case on purpose: the piece a slot is handed is the one cut at
-    // that slot, the delta is zero". So every piece's material is the slab's material a bounded
-    // distance away, and that distance is the spacing alone. Measured over every instance, as a
-    // share of the render width: 0.106% at grout 1/32, 0.846% at grout 1/4, 0.297% at 6in tiles -
-    // 9, 70 and 25 pixels at 8,192.
-    //
-    // So paint the tile ONCE over a box grown by that much, and let each piece be a BLIT of it at
-    // its own offset. Seventeen paints become one, which is where the floor's remaining 2x over a
-    // slab tile lives - and it hands the tile back the shape renderOneTile has, which is the shape a
-    // shader already paints.
-    //
-    // SHUFFLE AND STACK ARE NOT THIS. There the assembly plan adds a delta that can reach anywhere
-    // in the slab, so no bounded box holds the material and the per-piece walk below still runs.
-    // A graft or a cut section is the same: the piece comes off another board or another slab.
-    //
-    // THE OFFSET IS ROUNDED TO A WHOLE PIXEL, and that is the one thing this changes about the
-    // picture. A fractional translate applied to vector drawing is exact; applied to a raster it
-    // RESAMPLES, and every piece would come back softened. Rounding keeps the material crisp and
-    // puts the floor's spacing out by less than a pixel - sub-pixel on a 70 px spread at 65,535.
-    //
-    // AND IT IS GUARDED ON AREA, because the margin grows with the grout and with the render while
-    // the tile does not. The per-piece walk costs about 2x a single paint of the same area, measured
-    // at 730 ms against a slab tile's 370; so one paint pays while the grown box stays under that,
-    // and ONE_PAINT_MAX is set below it rather than at it.
-    const ONE_PAINT_MAX = 1.5;
-    let src = null, srcM = 0;
-    const fm = floorMargin(finalW, bleed);
-    if (fm) {
-      const m = fm, sw = ew + 2 * m, sh = eh + 2 * m;
-      // A CALLER THAT SUPPLIES `paint` TAKES THIS PATH WHATEVER THE AREA. The guard prices the CPU's
-      // choice between one paint and seventeen; a shader paints the box in one dispatch either way,
-      // and a `paint` that was never called would leave the tile CPU-painted while the master
-      // recorded a GPU render - the one failure here that would not look like one.
-      if (paint || sw * sh <= ONE_PAINT_MAX * ew * eh) {
-        srcM = m;
-        src = floorCanvas(sw, sh);
-        const sc = src.getContext('2d');
-        sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1;
-        sc.setTransform(finalW, 0, 0, finalW, -(ex0 - m), -(ey0 - m));
-        sc.lineCap = 'round'; sc.lineJoin = 'round';
-        const pg = g2d; g2d = sc;
-        try { if (paint) paint(sc, sw, sh, ex0 - m, ey0 - m); else paintContent(false, false); }
-        finally { g2d = pg; }
-      }
-    }
     // THROUGH A SCRATCH CANVAS, BECAUSE putImageData IGNORES THE CLIP.
     //
     // paintContent writes the material as an ImageData band, and by specification putImageData is
@@ -5816,6 +5700,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // master: the pass joins jumped 350x (stack) and 415x (shuffle) over any other column, while the
     // same floor exported as a single-canvas PNG was correct - that path BLITS the piece out of a
     // pre-rendered slab with drawImage, which does respect the clip.
+    //
+    // SHUFFLE AND THE STACK ARE GONE as settings; the measurement above was taken under them and is
+    // kept because the defect is not. A SECTION carries a piece from elsewhere in exactly the same
+    // way, and a section is what reaches this walk now.
     //
     // So do what the blit path does: paint into a scratch canvas of the same size and transform,
     // then drawImage it through the clip, where it is confined to the piece. One scratch for the
@@ -5842,21 +5730,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // tighter box would drop a blur that reaches in from a mark the box does not contain.
     const scr = floorCanvas(1, 1);
     const sx = scr.getContext('2d');
-    // FAIL CLOSED. floorOnePaint is what gpuWhyNot consults before offering the shader, so reaching
-    // here with a painter and no source means those two have drifted apart - and the quiet version of
-    // that bug is a CPU-painted tile in a master that says gpu.
-    if (paint && !src) throw new Error('floor/paint:no-one-paint-path');
+    // FAIL CLOSED. floorAsCut is what gpuWhyNot consults before offering the shader, and the cut
+    // returns at the top of this function, so a painter cannot reach the walk unless those two have
+    // drifted apart - and the quiet version of that bug is a CPU-painted tile in a master that says
+    // gpu. The walk has no `paint` hook to give it: a shader paints a rectangle, and a section's
+    // pieces are not one.
+    if (paint) throw new Error('floor/paint:not-a-cut');
     drawTilesTo(null, cx, 1 / finalW, (tc, shiftNoBand, band, bx0, by0, bx1, by1) => {
-      // THE BLIT. Source pixel s shows at tile pixel d when s = d + srcM - shift*finalW, so drawing
-      // the source at (round(shift*finalW) - srcM) puts every piece's own material under its own
-      // clip. No scale change, so nothing resamples once the offset is whole.
-      if (src) {
-        tc.save(); tc.setTransform(1, 0, 0, 1, 0, 0);
-        tc.drawImage(src, Math.round(shiftNoBand[0] * finalW) - srcM,
-                          Math.round(shiftNoBand[1] * finalW) - srcM);
-        tc.restore();
-        return;
-      }
       const px0 = Math.max(0, Math.floor(bx0 * finalW - ex0) - bleed);
       const py0 = Math.max(0, Math.floor(by0 * finalW - ey0) - bleed);
       const px1 = Math.min(ew, Math.ceil(bx1 * finalW - ex0) + bleed);
@@ -5881,7 +5761,6 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // which is the same honesty the blit path had.
       tc.save(); tc.setTransform(1, 0, 0, 1, 0, 0); tc.drawImage(scr, px0, py0); tc.restore();
     }, only);
-    if (src) { src.width = 1; src.height = 1; src = null; }   // hand the allocation back before the coat
     applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true },
               { ox: ex0, oy: ey0, fw: finalW, fh: Math.round(W * H) });
     g2d = prevG;
@@ -6073,8 +5952,8 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       drawTilesTo, renderFloorTile, tileInstances, patternOf, plankInstances, floorPitch, chipMap, floorCanvas,
       // AN ORDERED FLOOR IS A SLAB TILE WITH LINES ON IT, so the core needs renderOneTile itself
       // now - renderFloorTile delegates to it and then strokes the cut over the result.
-      floorOnePaint, floorMargin, floorAsCut, cutOverlay, renderOneTile, JOINT_IN,
-      assemblyPlan, cantBand, stageN, insetPoly, polyCentroid, cairoCell, jointIn, picking,
+      floorAsCut, cutOverlay, renderOneTile, JOINT_IN,
+      cantBand, stageN, insetPoly, polyCentroid, cairoCell, jointIn, picking,
       plankWidthIn, plankLenIn, boardsAvailable, chipEdge, edgeFinish, inFr };
     // stoneSource is NOT carried. It paints the slab offscreen that the BLIT paths read, and a
     // worker always supplies `direct`, so nothing in a pooled tile reaches it - which is what
@@ -13163,17 +13042,12 @@ self.onmessage = async (e) => {
   });
   const expCanvas = W => { const c = document.createElement('canvas'); c.width = W; c.height = Math.round(W * H); return c; };
   const polyPath = (cx, pts) => { cx.beginPath(); cx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) cx.lineTo(pts[i][0], pts[i][1]); };
-  // THE SLAB THE FLOOR IS CUT FROM, at most. Two canvases are alive while a floor renders - this one
-  // and the output - so the second is capped below the first: 8192 is 168 MB on top of the output's
-  // own. A floor wider than this is cut from an 8192 slab, which is a 2x magnification where the
-  // preview's fixed 1600 is a tenfold one.
-  const FLOOR_SRC_MAX = 8192;
   // THE FLOOR, at export resolution. The same painter the preview uses, pointed at an export canvas
   // with the frame mapped straight onto it: a floor is the slab rearranged, so there is nothing new
   // to paint here, only a resolution to stop assuming.
   // A FLOOR IS A SLAB WITH LINES ON IT, on this path too. This is what expCompleted and
   // renderTiledStepped reach - the PNG and the kit - and it used to paint the slab into an offscreen
-  // capped at FLOOR_SRC_MAX and blit pieces out of it. renderStoneOffscreen calls paintContent and
+  // capped at 8,192 and blit pieces out of it. renderStoneOffscreen calls paintContent and
   // NEVER applyCoat, so a PNG of a floor came back with no subsurface, no specular, no emission
   // bloom and no lens, while the TIFF beside it had all four.
   //
@@ -19098,11 +18972,11 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     // answers that master was written under.
     const mat = currentMaterial(), M = GPU_MAT[mat];
     if (!M) return 'exp.gpu.nomaterial';
-    // THE FLOOR IS NO LONGER A FLAT REFUSAL. Under guide a tile is ONE paint of one rectangle - the
-    // same shape renderOneTile hands the shader - so the only floors still refused are the ones that
-    // are not: shuffle and stack, whose assembly plan moves a piece anywhere in the slab, and a graft
-    // or a cut section, which takes it off another board entirely. floorOnePaint is that question,
-    // asked in one place so this clause and renderFloorTile cannot disagree.
+    // THE FLOOR IS NO LONGER A FLAT REFUSAL. An ordered floor is a cut over a slab tile - the same
+    // shape renderOneTile hands the shader - so the only floors still refused are the ones that are
+    // not: a graft or a cut section, which takes a piece off another board entirely, and a floor laid
+    // over more than one stage. floorAsCut is that question, asked in one place so this clause and
+    // renderFloorTile cannot disagree.
     if (layTiles && !floorAsCut()) return 'exp.gpu.floor';
     // SPECTRUM IS A COLOUR DIFFERENCE - UNTIL THE HALO IS DRAWN, AND BY DEFAULT IT IS.
     //
@@ -19205,12 +19079,11 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const M = GPU_MAT[currentMaterial()];
     const mod = cap.mods.get(currentMaterial()).mod;
     if (!M.uni) { console.warn('gpu: no uniform size'); return null; }
-    // THE BOX THE SHADER FILLS. A floor tile's pieces read material up to floorMargin outside the
-    // tile, so the slot buffers cover that too and every origin below steps back by it. It is 1.3% of
-    // a 2,048 tile at 8,192 with grout 1/32, and it is zero for everything that is not a one-paint
-    // floor, which is what keeps a slab render allocating exactly what it always did.
-    const fmar = floorMargin(W, p.bleed);
-    const ew = p.ts + 2 * p.bleed + 2 * fmar;
+    // THE BOX THE SHADER FILLS, which is the tile and its bleed and nothing else. It used to grow
+    // by the distance the grout had pushed the pieces apart, because a floor tile read material from
+    // outside itself; an ordered floor is now a cut over a slab tile of exactly this size, and the
+    // floors that still walk piece by piece never reach the shader at all - gpuWhyNot refuses them.
+    const ew = p.ts + 2 * p.bleed;
 
     // BANDS, SIZED TO WHAT THIS DEVICE WILL BIND. The f32 intermediate is twelve bytes a pixel, so
     // a 4096 px export tile plus bleed wants 202 MB against a 128 MiB storage binding limit - and
@@ -19779,7 +19652,7 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     const start = (i, slot) => {
       const gx = i % p.rAcross, gy = (i / p.rAcross) | 0;
       const f = texOn ? paintTex : paintOne;
-      return f(gx * p.ts - p.bleed - fmar, gy * p.ts - p.bleed - fmar, set[slot]);
+      return f(gx * p.ts - p.bleed, gy * p.ts - p.bleed, set[slot]);
     };
 
     // QUEUE ONE TILE, IF IT IS NOT QUEUED ALREADY. The draw joins the chain, so the GPU still does
@@ -19931,12 +19804,10 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
           // here and there would leave every later CPU render on this page missing its bloom.
           coatBloomDone = bloomReady;
           try {
-          // A FLOOR TAKES THE SAME PAINTER. renderFloorTile paints its one source box and then lays
-          // the pieces out of it, so the shader's output lands in exactly the place paintContent
-          // would have written - the callback below needs no edit, because it asks woodRect() where
-          // the slab is in whatever context it is handed, and that context is now the source box.
-          // The box is larger than the tile by floorMargin, which is why `ew` and every origin above
-          // already carry it.
+          // A FLOOR TAKES THE SAME PAINTER. renderFloorTile hands an ordered floor straight to
+          // renderOneTile and strokes the cut over what comes back, so the shader's output lands in
+          // exactly the place paintContent would have written - the callback below needs no edit,
+          // because it asks woodRect() where the slab is in whatever context it is handed.
           const one = layTiles ? renderFloorTile : renderOneTile;
           return one(W, gx * p.ts, gy * p.ts, p.ts, p.ts, p.bleed, cx => {
             // ONLY WHERE THE SLAB IS. paintGlassContent writes through

@@ -75,8 +75,10 @@ Butt-join difference across a seam, measured on the same eight pieces:
 (Only two true pairs in that set, so treat 6.55 as indicative; the 53 is over 54 pairs.)
 
 With a joint, the hairline break is the licence and any face goes against any face — no search. That
-is why shuffled floors read correctly, and it was measured independently: shuffle pass-joins at
-0.0156 against control columns at 0.0132, indistinguishable. Without a joint, 8.1× is the gap an
+is why a floor whose pieces came from anywhere read correctly, and it was measured independently
+while shuffle was still a setting: shuffle pass-joins at 0.0156 against control columns at 0.0132,
+indistinguishable. An ordered cut does not need the licence at all — every face meets the face it was
+cut against — but the measurement is what says the hairline alone was enough. Without a joint, 8.1× is the gap an
 edge-matching search would have to close, and **6.55 is its floor, not zero** — adjacent columns of
 real texture differ by that much.
 

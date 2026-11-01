@@ -99,8 +99,9 @@ buttons at the bottom.
 changing "Major veins" changes every major vein at once.
 
 **Tiles & floor** — cuts the slab you have drawn into a repeating pattern and lays it on a floor. Fifteen
-patterns, real sizes on an 8 × 5 ft slab, with grout, saw kerf and edge treatment. *In order* keeps the
-veins continuous tile to tile; *Shuffled* cuts each tile at a random point.
+patterns, real sizes on an 8 × 5 ft slab, with edge treatment and per-tile chipping. The cut is a set
+of lines over the stone you already have, so the veins run on across every joint and the tiles fit; the
+joint itself is a hairline that shows you the shape.
 
 **Coat & light** — subsurface, specular and polish, the movable light, temperature, and:
 

@@ -133,8 +133,6 @@ jobs:
         run: node tools/check-writer-worker.mjs
       - name: A killed render picks up where it stopped, or refuses to
         run: node tools/probe-resume.mjs
-      - name: Tiles assemble into the picture they were cut from
-        run: node tools/probe-assembly.mjs
       - name: The pool sheds workers under pressure and never below its floor
         run: node tools/probe-pool-strain.mjs
       - name: The pool picks a width the device can actually carry

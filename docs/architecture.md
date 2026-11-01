@@ -59,7 +59,9 @@ Loose coupling on purpose: no cross-repo build. This repo makes files; consumers
   **boudinage**, **halo**. Chosen on the vein tool; each line keeps its own.
 - **Tiles** — cut the slab into a repeating floor: 13 patterns (square, rectangle, subway,
   hexagon, Cairo, diagonal, herringbone, basketweave, triangle, rhombus, octagon, and plank run
-  and chevron for wood), with grout, kerf, edge finish, per-tile chipping.
+  and chevron for wood), with edge finish and per-tile chipping. A floor is a **cut pattern on a
+  slab** — the slab tile rendered whole, then the cut geometry stroked over it — so the pieces fit
+  and the joint is a hairline on the seam rather than a gap opened for it.
   Real sizes on an 8×5 ft slab. A tile can also be **kept as a section** — its shape together with
   the place on the slab it was cut from — and a floor laid out of sections drawn from any material;
   see [sections](sections.md).
