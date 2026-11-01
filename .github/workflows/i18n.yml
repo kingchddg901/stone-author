@@ -45,6 +45,10 @@ jobs:
           node-version: '20'
       - name: Check every user-facing string is routed and every pack matches English
         run: node tools/check-i18n.mjs
+      - name: ...and the app's inline copy of every pack matches i18n/
+        run: node tools/check-i18n-sync.mjs
+      - name: ...and that comparison can actually fail
+        run: node tools/check-i18n-sync.mjs --ablate
       - name: The build marker must move when the app does
         run: node tools/check-build.mjs
       - name: Nothing that scales the coat may measure the window

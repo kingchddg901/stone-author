@@ -65,7 +65,7 @@ node tools/check-draft-gate.mjs    # an unreviewed translation is offered, never
 The browser harness (`harness/*.mjs`) needs Playwright and runs in CI; it cannot spawn locally here, so CI
 is its first run.
 
-**That list is not the CI set, and CI is not `tools/**`.** There are **46** `tools/check-*.mjs` and the
+**That list is not the CI set, and CI is not `tools/**`.** There are **47** `tools/check-*.mjs` and the
 block above names 16. `tools/**` in `i18n.yml` is the **trigger** — it decides *when* the workflow runs,
 not *what* it runs. The workflow then executes an **explicit list of named `run:` steps**, so a check that
 is not in that list gates nothing, however green it is locally. Corrected 2026-10-30: this used to say the
