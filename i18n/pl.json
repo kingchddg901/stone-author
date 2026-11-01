@@ -125,6 +125,7 @@
  "exp.pool.forced": "wymuszona praca po kolei",
  "exp.pool.floor": "podłoga z płytek",
  "exp.pool.graft": "przeszczep w drewnie",
+ "exp.pool.grow": "linia, która jest jeszcze rysowana",
  "exp.pool.backlight": "podświetlenie",
  "exp.pool.window": "okno na rzeczywistość — wyspa z włączonym Prześwitem",
  "exp.pool.noworkers": "brak wątków roboczych w tym silniku",

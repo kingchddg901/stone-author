@@ -498,6 +498,10 @@
     "terms": [],
     "where": "why the worker pool was refused: a wood graft is set"
   },
+  "exp.pool.grow": {
+    "terms": [],
+    "where": "why the worker pool was refused: a line is part-drawn for the creation animation, and a worker would paint it whole"
+  },
   "exp.pool.backlight": {
     "terms": [],
     "where": "why the worker pool was refused: the back light forces the whole-image path"

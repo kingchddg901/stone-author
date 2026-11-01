@@ -122,6 +122,7 @@
  "exp.pool.forced": "강제로 차례대로",
  "exp.pool.floor": "타일을 깐 바닥",
  "exp.pool.graft": "나무 접붙이기",
+ "exp.pool.grow": "아직 그리는 중인 선",
  "exp.pool.backlight": "역광",
  "exp.pool.window": "현실의 창 — 비쳐 보이기가 켜진 섬",
  "exp.pool.noworkers": "이 엔진에는 워커가 없습니다",

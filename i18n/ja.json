@@ -122,6 +122,7 @@
  "exp.pool.forced": "強制的に逐次",
  "exp.pool.floor": "タイル敷きの床",
  "exp.pool.graft": "木の接ぎ木",
+ "exp.pool.grow": "描いている途中の線",
  "exp.pool.backlight": "逆光",
  "exp.pool.window": "現実の窓 — 透けて見せるが有効な島",
  "exp.pool.noworkers": "このエンジンにワーカーがありません",

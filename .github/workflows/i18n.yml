@@ -172,6 +172,8 @@ jobs:
         run: node tools/probe-chevron.mjs
       - name: A cut section exposes the material it was cut from
         run: node tools/probe-cut-section.mjs
+      - name: A growing line is the finished line with its tail undrawn
+        run: node tools/probe-grow.mjs
       - name: A rosette closes on itself
         run: node tools/probe-rosette.mjs
       - name: The calibrator reports back the pen it was handed

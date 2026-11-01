@@ -931,6 +931,7 @@ window.SA_I18N = (() => {
   "exp.pool.forced": "forced sequential",
   "exp.pool.floor": "a tiled floor",
   "exp.pool.graft": "a wood graft",
+  "exp.pool.grow": "a line still being drawn",
   "exp.pool.backlight": "the back light",
   "exp.pool.window": "a reality window — an island with Show through on",
   "exp.pool.noworkers": "no workers on this engine",
@@ -1920,7 +1921,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.281';
+  const BUILD = '2026.10.31.282';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2275,6 +2276,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               chipIn: 0.6, units: 'in', joints: true, slotTest: false, chevAngle: 45,
               grouping: null, slotMap: {}, seedMap: {} };   // null = the pattern's first grouping, so an old slab lands where it always did
   let layTiles = false;
+  // A LINE STILL BEING DRAWN, for the creation animation. GROW_ID is the MARK id whose lines are
+  // partly drawn and GROW_T how far along, 0..1; null means every line is whole, which is every
+  // render but an animation frame. SESSION STATE ON PURPOSE - a slab that saved "veins 40% grown"
+  // would reopen as a half-finished picture, so this is never serialised.
+  //
+  // THE POOL REFUSES WHILE IT IS SET (poolWhyNot / corePaintsThis, both), because a worker builds
+  // its own geometry and would paint the vein WHOLE: the result is a tile that disagrees with its
+  // neighbours, which looks like a renderer bug rather than a setting. Making it travel in the init
+  // message is the expansion if a pooled animation is ever wanted; the seam is the init message and
+  // nothing else here would change.
+  let GROW_ID = null, GROW_T = 1;
   // Pristine defaults, captured before any edit. deserialize() resets to these before applying a slab, so a
   // load is a PURE FUNCTION of the slab: a key absent from the save falls to its default, never a leftover from
   // whatever was loaded before. Without this, loading a partial/older slab into a dirtied session renders differently.
@@ -2904,6 +2916,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // A line: points, per-segment width, breaks, arc length. Its id is its identity for good.
   function lineGeom(id, pts, gauge, F, M, seed, salt, extra) {
     const n = Math.max(pts.length - 1, 1);
+    // HOW FAR THIS LINE IS DRAWN. 1 for everything except the one mark an animation is growing.
+    //
+    // WHICH MARK A LINE BELONGS TO: ids are built as 'L<mark>', 'L<mark>e<seg>' (en-echelon),
+    // '<parent>.<k>' (minors, recursively) and 'B<mark>' (branches), so the mark id is the leading
+    // integer after the first character. Parsed NUMERICALLY, never matched as a string prefix:
+    // 'L70' starts with 'L7' and is a different mark, and a prefix test would grow both.
+    const gcut = GROW_ID === null ? 1
+               : (parseInt(String(id).slice(1), 10) === GROW_ID ? GROW_T : 1);
     const [, gw] = sub(seed, 11, salt), [, gg] = sub(seed, 12, salt);
     const sw = smooth1d(n, Math.max(6, n / 3), gw);
     let mx = 1e-9; for (const v of sw) mx = Math.max(mx, Math.abs(v));
@@ -2926,6 +2946,19 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       if (extra.press) w[i] *= extra.press(s);
       if (extra.wmod) w[i] *= extra.wmod(s);             // boudinage: pinch-and-swell along the line
       keep[i] = gp[i] > thr ? 1 : 0;
+      // A GROWING LINE IS THE FINISHED LINE WITH ITS TAIL NOT DRAWN YET, which is why the cut is
+      // here and not on `pts`. Everything above - `cum`, `total`, `s`, the swing noise, the break
+      // threshold, both tapers - is computed from the WHOLE path, so the part already on screen is
+      // byte-identical to how it will look when the line is done.
+      //
+      // TRUNCATING THE PATH INSTEAD WAS THE OBVIOUS VERSION AND IT IS WRONG TWICE: `total` would
+      // shrink, renormalising `s` so the swing, breaks and boudinage all RESCALE and the drawn part
+      // writhes as the line grows; and the truncation point is a line ending inside the slab, which
+      // `tE` pinches out - so the growing tip would render as a finished vein end.
+      //
+      // `s > gcut` is FALSE for every segment when gcut is 1 (s is a midpoint fraction, never above
+      // 1), so a normal render is untouched rather than merely similar. probe-grow.mjs holds that.
+      if (s > gcut) keep[i] = 0;
     }
     const lean = extra.lean ? Float64Array.from({ length: n }, (_, i) => extra.lean((cum[i] + (cum[i + 1] ?? cum[i])) / 2 / total)) : null;
     return { id, pts, w, keep, cum, total, gauge, ...extra, lean };
@@ -6025,6 +6058,10 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
 `;
     s += `var FAM=${JSON.stringify(FAM)};\n`;
     s += `var geo,G,COL,OVR,OVR_uv,perItem,fam,layers,soloLay,uvMode,view,lightSpectrum,spotOn,hidden,ssC,lensC,g2d,__cl,__bd,__br,coatBloomDone,layTiles,T,workC,emitC,__bkW,__bkH,__backlit;\n`;
+    // GROW_ID/GROW_T are read by lineGeom, which this core carries. The pool REFUSES while a growth
+    // is set, so these are always the no-growth pair here - declared rather than assumed, because a
+    // free variable in a worker throws on read and that would turn a refused case into a crash.
+    s += `var GROW_ID=null,GROW_T=1;\n`;
     // MATERIAL is what paintContent forks on, and it was never declared here at all - a free
     // variable in a worker throws on read, so this core could paint NO material, not just not
     // glass. marks and _wmask travel for the same reason: the glass painter reads the mark list
@@ -15542,6 +15579,7 @@ self.onmessage = async (e) => {
   // THE FLOOR CLAUSE IS NOW A SECTIONS CLAUSE, and it has to read the same here as in
   // poolWhyNot below: a plain floor pools, a floor laid from cut sections does not.
   const corePaintsThis = () => !(layTiles && sectionList().length) && !(WOOD.graft > 0) &&
+    GROW_ID === null &&                                 // the growth clause, same as poolWhyNot
     typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
   // WHICH CLAUSE SAID NO, in the same order corePaintsThis evaluates them. A predicate that answers
   // only true or false is fine for the code and useless to a person: a render that silently never
@@ -15571,6 +15609,9 @@ self.onmessage = async (e) => {
     // specific than the clause it reports; renaming it is fifteen packs of work, not yet done.
     if (layTiles && sectionList().length) return 'exp.pool.floor';
     if (WOOD.graft > 0) return 'exp.pool.graft';
+    // A LINE MID-GROWTH. The core builds its own geometry and has no growth, so a pooled tile would
+    // paint the vein whole while its neighbours paint it partly - a seam that reads as a bug.
+    if (GROW_ID !== null) return 'exp.pool.grow';
     // THE BACK LIGHT CAME OFF THIS LIST on 2026-10-29. It refused because the fold was whole-slab
     // and rebuilt per call; it is built once now and travels to each worker as two bitmaps. The
     // key stays in the strings because masters written while it refused still carry it.
