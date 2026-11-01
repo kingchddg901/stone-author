@@ -2673,6 +2673,42 @@
   "sl.warpDepth": {
     "where": "under the \"clouds-and-warp\" section"
   },
+  "stat.stone": {
+    "terms": [
+      "vein",
+      "slab"
+    ],
+    "placeholders": {
+      "marks": "how many marks the author has drawn on this slab",
+      "lines": "how many vein LINES those marks produced — one stroke can carry several",
+      "cracks": "web cracks",
+      "specks": "specks, the granite grain",
+      "zoom": "the preview zoom, e.g. 1.0"
+    },
+    "where": "the counts line under the slab, saying what the picture is made of. STONE ONLY — wood and glass each have their own line, because lines, cracks and specks are stone things and a wood board read \"0 cracks · 0 specks\" until 2026-11-01. The 8 × 5 ft is the slab and is the same for every material"
+  },
+  "stat.wood": {
+    "terms": [
+      "wood"
+    ],
+    "placeholders": {
+      "cut": "the angle of the saw plane through the log, in degrees",
+      "pos": "how far the cut falls from the pith — the same quantity the \"Cut\" slider shows, so use the word you used for sl.wood-plane. It has no fixed range: the slider is rescaled to the log, so a big tree gives a wider span. Shown as a bare number, as the slider shows it",
+      "zoom": "the preview zoom, e.g. 1.0"
+    },
+    "where": "the counts line under the slab, WOOD version. A board is described by its cut rather than by vein and speck counts: the angle the saw took through the log, and where that cut stands relative to the pith. Same place on screen and same slab size as the stone line"
+  },
+  "stat.glass": {
+    "terms": [
+      "glass",
+      "slab"
+    ],
+    "placeholders": {
+      "marks": "how many marks the author has drawn on this sheet",
+      "zoom": "the preview zoom, e.g. 1.0"
+    },
+    "where": "the counts line under the slab, GLASS version. Glass has marks but no veins, cracks or specks, so it reports only what it has. Deliberately shorter than the stone line — those counters are absent, not zero"
+  },
   "sl.wood-plane": {
     "terms": [
       "wood"

@@ -1571,6 +1571,9 @@ window.SA_I18N = (() => {
   "sl.varAmt": "Variant amount",
   "sl.warp": "Warp",
   "sl.warpDepth": "Deep drift",
+  "stat.stone": "{marks} marks · {lines} vein lines · {cracks} cracks · {specks} specks · 8 × 5 ft · {zoom}×",
+  "stat.wood": "cut {cut}° · position {pos} · 8 × 5 ft · {zoom}×",
+  "stat.glass": "{marks} marks · 8 × 5 ft · {zoom}×",
   "tile.edge.bevel": "Bevel",
   "tile.edge.pillow": "Pillow",
   "tile.edge.square": "Square",
@@ -1972,7 +1975,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.289';
+  const BUILD = '2026.10.31.290';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -9619,8 +9622,30 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   let needBuild = false;
   const statEl = document.getElementById('stat');
+  // WHAT THIS SLAB IS, IN ITS OWN VOCABULARY. `lines`, `cracks` and `specks` are STONE counters, so
+  // every wood board used to read "0 cracks · 0 specks" and every glass sheet three zeroes - the line
+  // never asked what material it was on. Reported 2026-11-01; the same mistake, the same week, as the
+  // harvester's `noGeometry` calling every correct glass master an empty stone.
+  //
+  // check-i18n COULD NOT HAVE CAUGHT THIS, and that is the part worth keeping. Its prose rule reads
+  // the MARKUP for user-facing text without a key; this string was assembled in JavaScript and was
+  // never a translatable string at all, which is how four English stone words reached fifteen locales.
+  // There were exactly two such literals in the app - this and the pen readout at `penlive`.
+  //
+  // WOOD'S OWN THREE, his words: cut angle, cut position, size. `cutAngle` is the saw's angle through
+  // the log in degrees; `plane` is how far off the pith the cut falls, which IS the board's position
+  // in the trunk; the size is the slab's and is the one part all three materials share.
+  //
+  // GLASS KEEPS ONLY WHAT IS TRUE OF IT. Its marks are real - a sheet carries a dozen or so - and the
+  // three stone counters are zero by construction, so they go. He has not said what else glass should
+  // report, so nothing is invented here.
   function stat() {
-    statEl.textContent = `${marks.length} marks · ${geo.lines.length} vein lines · ${geo.web.length} cracks · ${geo.specks.length} specks · 8 × 5 ft · ${V.z.toFixed(1)}×`;
+    const zoom = V.z.toFixed(1), mat = currentMaterial();
+    statEl.textContent =
+      mat === 'wood'  ? TR('stat.wood',  { cut: Math.round(WOOD.cutAngle), pos: WOOD.plane.toFixed(2), zoom })
+    : mat === 'glass' ? TR('stat.glass', { marks: marks.length, zoom })
+    :                   TR('stat.stone', { marks: marks.length, lines: geo.lines.length,
+                                           cracks: geo.web.length, specks: geo.specks.length, zoom });
     prevNote();
   }
   // THE ROW BESIDE THE SWITCH SAYS WHY, when the switch is on and the preview is not taking it.
