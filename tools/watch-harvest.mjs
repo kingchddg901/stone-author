@@ -61,7 +61,12 @@ if (!DIR || !META) {
 // it appends a real tail TO THE PREFIX ITSELF, which makes any well-formed prefix match its own
 // synthetic name whether or not a slab by that name has ever rendered. A dead entry is green.
 const PREFIX = ['stone', 'HERO-MASTER', 'Glass Master Source', 'regression test',
-                'universal master all three materials'];
+                'universal master all three materials',
+                // Added 2026-11-01, each one named by the tool's own "no prefix matches" line rather
+                // than noticed by hand - which is the symptom this list grew a warning net for. The
+                // longer storm name sits before the shorter: both match either way because the
+                // alternation backtracks to satisfy SHAPED, but reading order should not depend on it.
+                'storm treeline v21 green test', 'storm treeline v21', 'tree export'];
 // ESCAPED, because these are slab names a person typed rather than patterns. A slab called
 // `glass (v2)` would otherwise build an invalid regex and take the tool down at startup - or, worse,
 // a `.` in a name would quietly match any character.

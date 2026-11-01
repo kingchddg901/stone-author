@@ -296,9 +296,9 @@ distributed by guess.
 
 | | |
 |---|---|
-| Renders | **1,291** |
-| Pixels | **15,941,849,547,300** |
-| | **14.50 × 2^40** |
+| Renders | **1,356** |
+| Pixels | **15,967,605,867,050** |
+| | **14.52 × 2^40** |
 | Tebipixels crossed | **14**, the last on 2026-10-27T06:58:14.342Z |
 
 The census still reproduces the published first crossing exactly — 768 renders and
@@ -312,6 +312,22 @@ a 65,535 — the width the whole of the first ten days was built on.
 The reconstruction line is unchanged at 44 renders and 195,622,920,205 pixels, still reported apart
 from the rest rather than folded into it. It was 6.1% of the total when it was recorded and is 1.23%
 now, which is the shape a stated gap should have: it does not grow, and the record around it does.
+
+**Those figures moved the same day, by a harvest.** 88 masters were read, recorded and deleted —
+5.57 GB off the disk — which is the discipline described above working rather than a change of mind.
+65 of the 88 were new to the ledger and the other 23 already had records; the sweep added
+25,756,319,750 pixels and crossed nothing, since none of it was large enough to land on a boundary.
+
+Most of them were nearly missed. `watch-harvest` deletes, so what it matches is deliberately narrow —
+a slab name it has not been told about produces masters it will not touch — and three slabs had been
+renamed since the list was last extended. It said so for every one of them, naming the prefix to add,
+which is the whole point of the warning net being wider than the delete net. Before that net existed
+the same situation twice produced silence and an hour of masters accumulating unseen.
+
+**The films are not in any of this, and cannot be.** This program now writes video as well as masters,
+and a video has no sidecar path — nothing reads a WebM back into the ledger. The creation film alone
+is 12,210 frames at 512 × 320, a little over 2.0 Gpx of rendering the corpus does not count. Every
+figure in this section is therefore a count of **masters**, not of everything this program has drawn.
 
 ## Design — ChatGPT
 
