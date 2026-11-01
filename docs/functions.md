@@ -219,11 +219,11 @@ CPU painter and the field under both.
   arena and one uniform** for the shader. Refuses two things rather than shipping them: a declared
   field that nothing supplies — the struct names it, the shader reads it, and it would be quietly zero
   for the life of the port — and more features than the shader's scratch array holds, which the CPU
-  painter has no limit on. *(17853)*
+  painter has no limit on. *(17899)*
 - `woodSource(GW)` — assembles wood's WGSL. **Assembled, not concatenated**: it borrows `woodAtan2`,
   `woodHash` and `fbm2` from the glass blocks rather than keeping unverified copies of each, and closes
   over the call sites rather than listing them, because `fbm2` calls `vnoise` and `vnoise` calls `nz`
-  and neither name appears anywhere in wood's own text. *(18479)*
+  and neither name appears anywhere in wood's own text. *(18525)*
 
 ## Glass — a lay-up, then a forming process
 
@@ -507,7 +507,7 @@ Each pattern is a fundamental cell of polygons plus two lattice vectors, in inch
 - `applySlabState(o)` — everything that IS a slab, and nothing that is the screen. Split out of
   `deserialize` so something other than a *load* can put a slab into the engine. The loader keeps the
   half that fills the name field, arms Move, un-presses UV and remounts panels — none of which may
-  happen while a tile is being baked. *(10882)*
+  happen while a tile is being baked. *(10924)*
 - `withSlab(rec, fn)` / `withSlabs(recs, each)` — **paint something that is not the current slab, and
   leave no trace.** The snapshot goes through `serialize()` because that is already the complete
   definition of what a slab is — anything it forgets is a bug in *saving*, one place, rather than a
@@ -908,7 +908,7 @@ every `lcm(sections, slots)` cells.
   a drusy pocket is the group, its crystals the variants).
 - `tuneId(id, bucket)` — the Tune tool's action: give a vein a per-item colour token that follows its
   layer until changed (reset returns it).
-- `mountEditor()` — (re)create the `<theme-kit-editor>` so its inputs reflect `OVR`. *(10142)*
+- `mountEditor()` — (re)create the `<theme-kit-editor>` so its inputs reflect `OVR`. *(10184)*
 
 ## Interaction
 
@@ -922,7 +922,7 @@ every `lcm(sections, slots)` cells.
 - `serialize()` — the stone source: `{v:1, fam, tool, view, layTiles, guidesOn, G, T, NEXT, nextId,
   layers[{key,label,bucket,on,op,warp,field,density,size,seed,haze,transmit,scatter}], soloLay,
   activeLayer, OVR, OVR_uv, perItem, hidden[], folders[], marks[]}`. It persists **`OVR`, not `COL`** —
-  `COL` is derived (`recolour()`), so only the overrides travel; the resolved values rebuild on load. *(10830)*
+  `COL` is derived (`recolour()`), so only the overrides travel; the resolved values rebuild on load. *(10872)*
 - `deserialize(o)` — restore a source (guards `v === 1`), then rebuild. It is written so that **a load is a
   pure function of the slab**, not of whatever was loaded before: it **hard-resets `G`/`T`/`NEXT` to their
   captured pristine defaults `G0`/`T0`/`NEXT0` *before* applying the saved values** (a key absent from the
@@ -932,44 +932,44 @@ every `lcm(sections, slots)` cells.
   reset `activeLayer`), reset the default granite + fog planes, re-create + reorder saved layers, run the
   migrations, clear + reload `OVR`/`OVR_uv`/`perItem`/`hidden`/`folders`, reseed + `recolour`, re-mount the
   editor, and redraw. Always opens in daylight (`lightSpectrum = 0`, uv/spot off). The harness renders each
-  hero twice from a fresh `deserialize` precisely to exercise this determinism. *(10838)*
+  hero twice from a fresh `deserialize` precisely to exercise this determinism. *(10880)*
 - `writeLocal()` / `saveLocal()` / `tryLoadLocal()` — autosave (debounced + flush on hide), and
   restore on load. *(2132/2133/2138)*
-- `syncUI()` — push all state into the controls after a load. *(11492)*
-- `showGround()` — show/hide the family-specific ground panel. *(10752)*
+- `syncUI()` — push all state into the controls after a load. *(11534)*
+- `showGround()` — show/hide the family-specific ground panel. *(10794)*
 - `download(name, text)` — a Blob download for Save (falls back when the `downloads` capability is
-  absent). *(11517)*
+  absent). *(11559)*
 
 ## Export — one zip: masks, render, the rich set, `.ora`, SVG, source
 
 `exportAll(W)` renders everything at `W` pixels wide (the slab keeps its 8×5 ratio) and packs it into a
 single store-only zip. It prefers the `downloads` capability and falls back to `download()`.
 
-- `crc32(u8)` — CRC-32 over a byte array (the zip checksum). *(11535)*
+- `crc32(u8)` — CRC-32 over a byte array (the zip checksum). *(11577)*
 - `zipStore(files)` — a store-only (uncompressed) zip `Blob` from `[{name, data}]`. PNGs are already
   compressed and `.ora` requires stored entries, so nothing is deflated. Writes local headers, a
-  central directory, and the EOCD by hand. *(11972)*
-- `toU8(canvas)` — a canvas as PNG bytes (`toBlob` → `Uint8Array`). *(13854)*
+  central directory, and the EOCD by hand. *(12014)*
+- `toU8(canvas)` — a canvas as PNG bytes (`toBlob` → `Uint8Array`). *(13896)*
 - `expCanvas(W)` / `polyPath(cx, pts)` — an off-screen slab-ratio canvas; a polyline subpath. *(2314/2315)*
-- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(13884)*
+- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(13926)*
 - `expBaseMask(W)` — the base composite (ground + breccia + clouds + bands) flattened to luminance:
-  the greyscale value map for the `base` bucket. *(13891)*
+  the greyscale value map for the `base` bucket. *(13933)*
 - `expCoverage(kind, W)` — white-on-black coverage for a consumer bucket (`major` / `minor` / `micro`
-  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(13902)*
+  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(13944)*
 - `expBucket(bucketKey, W)` — one bucket in colour, transparent elsewhere, by gating layers to that
-  bucket — the layer PNGs inside the `.ora`. *(13912)*
+  bucket — the layer PNGs inside the `.ora`. *(13954)*
 - `expIdT(W)` — the rich pair: a vein-**id** map (each line an rgb-encoded index) and an
-  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(13920)*
+  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(13962)*
 - `pathsJSON()` — the vectors as data: slab size in feet, then each line's `id / major / parent / at`,
-  its points, and its per-sample widths. *(13929)*
-- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(13930)*
+  its points, and its per-sample widths. *(13971)*
+- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(13972)*
 - `buildOraFrom(merged, buckets, order, W)` — an OpenRaster `.ora` assembled from already-encoded
   PNG bytes: a nested zip with `mimetype` stored first, a `stack.xml` (top child = top layer), the
   bucket layers under `data/`, and a `mergedimage` + thumbnail. Opens in Krita / GIMP / Photoshop.
-  Takes the encoded bytes rather than rendering them, so the encode happens once. *(13975)*
+  Takes the encoded bytes rather than rendering them, so the encode happens once. *(14017)*
 - `exportAll(W)` — assemble `render.png`, `masks/{base,major,minor,micro,web}.png`,
   `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, and
-  `slab.ora` into one zip and hand it to the viewer. *(14153)*
+  `slab.ora` into one zip and hand it to the viewer. *(14195)*
 
 ## Large renders — what a canvas can hold, and what to do past it
 
@@ -980,14 +980,14 @@ it reports the size asked for and leaves the far end unwritten. See
 [`capabilities.md`](capabilities.md) for the measured ladder and what it costs.
 
 - `canvasFits(w, h, n)` — can this machine hold `n` canvases of `w × h`? Writes the **far corner** and
-  reads it back, because a silently clamped canvas passes every other test. *(11061)*
+  reads it back, because a silently clamped canvas passes every other test. *(11103)*
 - `exportCeiling()` — the direct export's ceiling: probes 2048→16384 for `EXP_PEAK` (2) canvases, cached
-  per device signature. This is the ceiling of the *non-streamed* path only. *(11083)*
+  per device signature. This is the ceiling of the *non-streamed* path only. *(11125)*
 - `sideCap()` — the widest single canvas this **build** can allocate, by bisecting `1 × N`, cached. Not a
   constant: CI measures Gecko and WebKit clamping to 32767 while a desktop Firefox writes a true 65535, so
-  the cap belongs to the build rather than the engine. *(11105)*
+  the cap belongs to the build rather than the engine. *(11147)*
 - `applyExportCeiling()` — disables the plain sizes past `exportCeiling()`, leaves the tier sizes to
-  `applyTiers()`, and re-runs it so the ceiling line matches the armed tiers. *(11139)*
+  `applyTiers()`, and re-runs it so the ceiling line matches the armed tiers. *(11181)*
 - `stripPlan(W, opts)` — band geometry: band height from a 900 MB budget (reduced by
   `navigator.deviceMemory`, which is Chromium-only), bleed capped at 256, then **probed** with
   `canvasFits` and halved until a band actually holds a written pixel. *(5678)*
@@ -998,14 +998,14 @@ it reports the size asked for and leaves the far end unwritten. See
 - `renderStreamedPNG(W, meta, onStrip, opts)` — the strip engine: band → filter byte 0 → a
   `CompressionStream('deflate')`, whose output is exactly the zlib stream IDAT wants. Refuses past
   `sideCap()`, and **refuses if the scanline byte count does not match the plan**, because a band written
-  twice or skipped is invisible to every decoder. Returns `{blob, plan, msRender, bytes}`. *(11565)*
+  twice or skipped is invisible to every decoder. Returns `{blob, plan, msRender, bytes}`. *(11607)*
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
-  family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(11906)*
+  family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(11948)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(15169)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(15215)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(15194)*
+  actually on offer, not a probe's answer to a different question. *(15240)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(15271)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(21974)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(15317)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(22020)*

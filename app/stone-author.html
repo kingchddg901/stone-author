@@ -2019,7 +2019,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.295';
+  const BUILD = '2026.10.31.296';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -2581,7 +2581,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     purgeLayerTokens(key);
     build(); gcOrphans();                                       // rebuild geo SYNCHRONOUSLY (redraw defers build to rAF) so gcOrphans sees the survivors, then sweep the now-dead ids
     stoneReady = false; redraw(false);
-    registerSpeckGroups(); registerSelectedColours(); recolour(); if (typeof ed !== 'undefined' && ed) ed.values = { ...OVR };
+    registerSpeckGroups(); registerSelectedColours(); recolour(); if (typeof ed !== 'undefined' && ed) ed.values = edValues();
     buildLayerUI(); saveLocal();
     return ids.size;
   }
@@ -7387,7 +7387,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const s = SPECIES[k]; if (!s) return;
     for (const key in s) if (key !== 'early' && key !== 'late_' && key !== 'heart') WOOD[key] = s[key];
     OVR.woodEarly = s.early; OVR.woodLate = s.late_; OVR.woodHeart = s.heart;
-    recolour(); if (ed) ed.values = { ...OVR };
+    recolour(); if (ed) ed.values = edValues();
     syncWood(); redraw(true); saveLocal();
   }
   // `cfg` asks for the field of ANOTHER tree - a kept cut, a scion - rather than the live one.
@@ -9947,7 +9947,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const pick = cand[0] && cand[0].d < 26 ? cand[0] : null;
       if (pick) {                                        // toggle it in the selection (id stays internal)
         if (selected.has(pick.key)) selected.delete(pick.key); else selected.add(pick.key);
-        registerSelectedColours(); if (ed) ed.values = { ...OVR }; syncLayerUI(); redraw(false);
+        registerSelectedColours(); if (ed) ed.values = edValues(); syncLayerUI(); redraw(false);
         hint(selected.size ? TR('hint.n-selected-editor', { n: selected.size }) : TR('hint.deselected', { what: pick.what }));
       } else hint(TR('hint.tap-a-vein-web-crack-or'));
     } else if (g.type === 'draw' && tool === 'magnet') {
@@ -10050,10 +10050,52 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     }) });
     registerSpeckGroups();
     registerSelectedColours();   // per-id + per-layer colour tokens register on selection ("selected for display")
-    kit.setAdapter({ load: async () => ({ ...OVR }), save: async v => { for (const k in OVR) delete OVR[k]; Object.assign(OVR, v); recolour(); saveLocal(); redraw(true); } });
+    // WHAT THE PANEL SHOWS IS NOT ALWAYS `OVR`. Under black light a colour is an EMISSION at the light
+    // you are standing under - a list of {v,c} in OVR_uv - so the panel has to resolve the entry at
+    // `lightSpectrum` and offer that one. Until 2026-11-02 it read and wrote OVR under both lights, so
+    // in black light every swatch here set the DAYLIGHT colour while the renderer read OVR_uv: the
+    // control worked, wrote a real value, and changed nothing anybody could see. Reported as "UV does
+    // not let me change UV color". The `Selected` bar's swatch had the uvMode branch all along; this
+    // panel never did, and two colour controls disagreeing is worse than one.
+    //
+    // THE SPLIT IS ON THE TOKEN'S DECLARED TYPE, never on the shape of its key: a colour and its
+    // adjustments differ only by a suffix (`lay:fog` against `lay:fog:blur`), so parsing keys would
+    // divert `blur` into the emission list the first time somebody renamed one. Adjustments are not
+    // colours and stay in OVR under both lights - a blur is the same blur under any spectrum.
+    kit.setAdapter({ load: async () => edValues(), save: async v => {
+      if (uvMode) {
+        // ONLY WHAT CHANGED. The kit hands back the WHOLE map every save, defaults included, so
+        // writing it wholesale would mint an OVR_uv entry at this spectrum for every registered
+        // colour - every layer suddenly authored as glowing UV_DARK, and the slab would go dark the
+        // moment you touched one swatch. Diffing against what load() would return is the fix.
+        const cur = edValues();
+        for (const k in v) {
+          const t = kit.tokens.get(k);
+          if (!t || t.type !== 'color') { OVR[k] = v[k]; continue; }   // adjustments keep their home
+          if (v[k] === cur[k]) continue;
+          const arr = OVR_uv[k] || (OVR_uv[k] = []), en = arr.find(x => Math.abs(x.v - lightSpectrum) <= SPX_TOL);
+          if (en) en.c = v[k]; else arr.push({ v: lightSpectrum, c: v[k] });
+        }
+        saveLocal(); redraw(true); return;
+      }
+      for (const k in OVR) delete OVR[k]; Object.assign(OVR, v); recolour(); saveLocal(); redraw(true); } });
     TTK.defineThemeKitEditor();
     recolour();
     mountEditor();
+  }
+  // THE ONE READER for the editor's values, so a restore, a light move and a swatch cannot disagree
+  // about what the panel is showing. Daylight is OVR unchanged; black light resolves every COLOUR
+  // token to its emission at the current spectrum, and leaves everything else where it was.
+  // UV_DARK for a token with no entry here is honest: that is exactly what the renderer paints it.
+  function edValues() {
+    if (!uvMode || !kit) return { ...OVR };
+    const out = { ...OVR };
+    for (const [k, t] of kit.tokens) {
+      if (!t || t.type !== 'color') continue;
+      const arr = OVR_uv[k], en = arr && arr.find(x => Math.abs(x.v - lightSpectrum) <= SPX_TOL);
+      out[k] = en ? en.c : UV_DARK;
+    }
+    return out;
   }
   // Per-id colour: each tuned vein gets a colour token that INHERITS its layer (major/minor) until you
   // change it. Re-registering the group rebuilds the editor; resetting the token returns it to the layer.
@@ -14945,6 +14987,10 @@ self.onmessage = async (e) => {
     lightSpectrum = v; uvMode = v !== 0;
     document.getElementById('uv-toggle').setAttribute('aria-pressed', uvMode);
     syncCoat();                                            // whatever moved the light, the panel agrees with it
+    // AND THE SWATCHES AGREE WITH IT TOO. A colour token under black light is the emission at THIS
+    // spectrum, so moving the light changes what every swatch in the panel is showing - without this
+    // they keep the previous stop's colours and invite you to edit the wrong one.
+    if (typeof ed !== 'undefined' && ed) ed.values = edValues();
     if (uvMode && view !== 'stone') { view = 'stone'; press('[data-view]', document.getElementById('v-stone')); }
     saveLocal();     // HERE, not at each call site: three routes move the light and only one of them saved
   }
