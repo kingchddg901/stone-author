@@ -98,7 +98,7 @@ function opRow(op, wi, ri, si, H) {
   a[13] = (op.S && wi >= 0) ? wi + 1 : 0;
   // THE ROLLER'S OWN HEIGHT AND TOTAL, in the two floats this record has never used. They are the
   // only per-roller quantities that are not grid data, and carrying them here rather than in a new
-  // arena part is what keeps the Env struct and the 304-byte uniform exactly as they were. The
+  // arena part is what keeps the Env struct and the uniform exactly as they were. The
   // uniform's RLH and RLtotal stay roller 0's, which is what the probe pages pass.
   a[14] = op.B ? (op.B.H || H) : 0;
   a[15] = op.B ? (op.B.total || 0) : 0;
@@ -145,7 +145,7 @@ export function packReal(F, extra) {
 
   // THEY MUST STILL AGREE ON THEIR DIMENSIONS, and that is the whole of what is left of the old
   // refusal. One stride indexes the lot - grid w starts at w * nx * ny - which is what lets nx, ny
-  // and WPH stay single fields in a 304-byte uniform and leaves the Env struct untouched. Grids of
+  // and WPH stay single fields in the glass uniform and leaves the Env struct untouched. Grids of
   // two sizes would need a per-grid table and a wider uniform; no document has produced one.
   //
   // SHORT PIECES ON PURPOSE. This file is inlined into the app, where check-i18n reads every
@@ -230,7 +230,7 @@ export function packReal(F, extra) {
   const IN = [
     FORMI[F.form] || 4, F.MR ? 1 : 0, F.MB ? 1 : 0, (F.MC && F.MC.length) || 0,
     stamp.n, (S && S.nx) || 0, (S && S.ny) || 0, (B && B.nx) || 0,
-    // THE TWO PADS BECOME THE METADATA BASES. Nothing grew: these were already in the 304 bytes,
+    // THE TWO PADS BECOME THE METADATA BASES. Nothing grew: these were already in the uniform,
     // and a reader that leaves them at zero gets the single-entry behaviour it had before, because
     // WU is first in PART_NAMES so a real base can never BE zero.
     (B && B.ny) || 0, (B && B.R && B.R.pr.length) || 0, offs.RMETA, offs.SMETA,

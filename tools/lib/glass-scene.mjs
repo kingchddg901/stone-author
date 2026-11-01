@@ -28,7 +28,7 @@ const FORM = { spun: 1, poured: 2, blown: 3, rolled: 4, flattened: 5 };
 // The op chain is compiled by the APP's own compileOps - buildChain takes it as an argument - so the
 // records cannot drift from what the walk expects.
 //
-// envUni packs the uniform: 40 floats then 36 integers, 304 bytes, which the uniform address space
+// envUni packs the uniform: 40 floats, 36 integers and the relief slope's four, 320 bytes, which the uniform address space
 // needs to be a multiple of sixteen. allArrays packs the twelve arrays, the spin table and the op
 // records into the single arena the shader reads through its offset accessors.
 

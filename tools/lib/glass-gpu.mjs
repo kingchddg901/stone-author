@@ -33,7 +33,7 @@ struct Env {
   form: i32, MR: i32, MB: i32, MCn: i32,
   STn: i32, WPnx: i32, WPny: i32, RLnx: i32,
   // oRMETA and oSMETA WERE pad3 AND pad4. Nothing grew to carry them: they were already inside the
-  // 304 bytes, and glass-real.mjs packs them at the same index - that pair is a replica and moves
+  // uniform as it stood, and glass-real.mjs packs them at the same index - that pair is a replica and moves
   // together. ZERO MEANS ABSENT, which is safe because WU is first in PART_NAMES so a real base is
   // never zero; a caller that builds its own uniform gets the single-entry behaviour it had.
   RLny: i32, RLn: i32, oRMETA: i32, oSMETA: i32,
@@ -815,7 +815,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
 // THE BAND OFFSET IS ITS OWN UNIFORM. PX holds one band at a time - a 4096 tile plus bleed wants
 // 202 MB of f32 against a 128 MiB binding - while the texture is the whole tile, so the pack needs
 // to know which rows it is writing. It goes in a buffer of its own rather than in a spare field of
-// the 304-byte uniform, because that struct and glass-real.mjs's packer are a replica pair and a
+// the glass uniform, because that struct and glass-real.mjs's packer are a replica pair and a
 // new meaning for a pad word would have to be reconciled in both.
 WGSL.tex = `
 struct Band { y0: i32, pad1: i32, pad2: i32, pad3: i32 }

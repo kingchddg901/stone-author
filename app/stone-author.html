@@ -1921,7 +1921,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.283';
+  const BUILD = '2026.10.31.284';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15782,7 +15782,7 @@ struct Env {
   form: i32, MR: i32, MB: i32, MCn: i32,
   STn: i32, WPnx: i32, WPny: i32, RLnx: i32,
   // oRMETA and oSMETA WERE pad3 AND pad4. Nothing grew to carry them: they were already inside the
-  // 304 bytes, and glass-real.mjs packs them at the same index - that pair is a replica and moves
+  // uniform as it stood, and glass-real.mjs packs them at the same index - that pair is a replica and moves
   // together. ZERO MEANS ABSENT, which is safe because WU is first in PART_NAMES so a real base is
   // never zero; a caller that builds its own uniform gets the single-entry behaviour it had.
   RLny: i32, RLn: i32, oRMETA: i32, oSMETA: i32,
@@ -16564,7 +16564,7 @@ fn pack(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
   // THE BAND OFFSET IS ITS OWN UNIFORM. PX holds one band at a time - a 4096 tile plus bleed wants
   // 202 MB of f32 against a 128 MiB binding - while the texture is the whole tile, so the pack needs
   // to know which rows it is writing. It goes in a buffer of its own rather than in a spare field of
-  // the 304-byte uniform, because that struct and glass-real.mjs's packer are a replica pair and a
+  // the glass uniform, because that struct and glass-real.mjs's packer are a replica pair and a
   // new meaning for a pad word would have to be reconciled in both.
   WGSL.tex = `
 struct Band { y0: i32, pad1: i32, pad2: i32, pad3: i32 }
@@ -16695,7 +16695,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     a[13] = (op.S && wi >= 0) ? wi + 1 : 0;
     // THE ROLLER'S OWN HEIGHT AND TOTAL, in the two floats this record has never used. They are the
     // only per-roller quantities that are not grid data, and carrying them here rather than in a new
-    // arena part is what keeps the Env struct and the 304-byte uniform exactly as they were. The
+    // arena part is what keeps the Env struct and the uniform exactly as they were. The
     // uniform's RLH and RLtotal stay roller 0's, which is what the probe pages pass.
     a[14] = op.B ? (op.B.H || H) : 0;
     a[15] = op.B ? (op.B.total || 0) : 0;
@@ -16742,7 +16742,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
     // THEY MUST STILL AGREE ON THEIR DIMENSIONS, and that is the whole of what is left of the old
     // refusal. One stride indexes the lot - grid w starts at w * nx * ny - which is what lets nx, ny
-    // and WPH stay single fields in a 304-byte uniform and leaves the Env struct untouched. Grids of
+    // and WPH stay single fields in the glass uniform and leaves the Env struct untouched. Grids of
     // two sizes would need a per-grid table and a wider uniform; no document has produced one.
     //
     // SHORT PIECES ON PURPOSE. This file is inlined into the app, where check-i18n reads every
@@ -16827,7 +16827,7 @@ fn fblit(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     const IN = [
       FORMI[F.form] || 4, F.MR ? 1 : 0, F.MB ? 1 : 0, (F.MC && F.MC.length) || 0,
       stamp.n, (S && S.nx) || 0, (S && S.ny) || 0, (B && B.nx) || 0,
-      // THE TWO PADS BECOME THE METADATA BASES. Nothing grew: these were already in the 304 bytes,
+      // THE TWO PADS BECOME THE METADATA BASES. Nothing grew: these were already in the uniform,
       // and a reader that leaves them at zero gets the single-entry behaviour it had before, because
       // WU is first in PART_NAMES so a real base can never BE zero.
       (B && B.ny) || 0, (B && B.R && B.R.pr.length) || 0, offs.RMETA, offs.SMETA,
@@ -18838,7 +18838,19 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     },
     glass: {
       code: () => Object.values(WGSL).join(String.fromCharCode(10)),
-      uni: 304,
+      // 320, NOT 304, AND IT IS COUNTED RATHER THAN REMEMBERED. struct Env is 80 scalars, and the
+      // GPU computes minBindingSize from the struct itself - so a buffer sized from a number that
+      // the struct has outgrown is refused outright: "Binding size (304) ... is smaller than the
+      // minimum binding size (320)", and EVERY glass GPU export failed, not only a relieved one,
+      // because the shader declares that minimum whatever the scene holds.
+      //
+      // WHAT GREW IT: the relief port appended REL, LX, LY and a pad after the ints - bytes 304-319.
+      // glass-real.mjs followed (it allocates 320 and packs REL at 304); this line did not, and
+      // check-gpu-sync could not see it. That gate regenerates the app's inlined COPY of
+      // glass-gpu.mjs and glass-real.mjs and diffs it, so it is exact about everything inside that
+      // block - and this is app-only glue OUTSIDE it. The number that sizes the buffer was the one
+      // thing not being compared. check-gpu-uni.mjs now counts the struct and compares all three.
+      uni: 320,
       // THE THREE FIELDS THE POOL PATCHES PER BAND, as byte offsets into that uniform. Glass's
       // layout is positional so these are written down beside it; wood's names its own slots and
       // gets asked, which is the difference that stopped this being a third copy of a layout.
