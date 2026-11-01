@@ -17,6 +17,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 class NoCache(http.server.SimpleHTTPRequestHandler):
+    # HTTP/1.1, SO A CLIENT GETS KEEP-ALIVE. The default is 1.0, which answers `Connection: close`
+    # on every response - fine for a page load, and the reason a 1,800-frame render opened ~2,000
+    # separate TCP connections to this server and left 61 of them in TIME_WAIT at once. With 1.1 the
+    # six uploading workers hold six connections for the whole run.
+    #
+    # SAFE ONLY BECAUSE EVERY RESPONSE HERE SENDS AN ACCURATE Content-Length: SimpleHTTPRequestHandler
+    # does for a file and for send_error, and do_PUT sends 0 explicitly. A response without one
+    # desynchronises a kept-alive connection instead of closing it, which is a hang rather than an
+    # error.
+    protocol_version = 'HTTP/1.1'
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store, must-revalidate")
         super().end_headers()
@@ -84,6 +95,14 @@ class Serve(http.server.ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
     timeout = 10
+    # THE ACCEPT BACKLOG, WHICH WAS socketserver's DEFAULT OF 5 AND IS THE REASON THIS IS HERE.
+    # Six workers uploading 4096-wide frames in parallel offer six connections at once; the sixth
+    # overflowed the queue, Windows dropped the SYN with no RST, and the client sat in TCP's SYN
+    # retry schedule. Measured on a 1,800-frame render: the write stream stalled for 58 s roughly
+    # every 108 s, with this server idle, the disk queue at 0 and the CPU at 7% - a hang that looks
+    # exactly like a slow disk from the client's side, and 278 frames were lost to it because their
+    # upload exhausted its retries inside one stall. Nothing here is slow; it was never accepting.
+    request_queue_size = 64
 
 
 NoCache.timeout = 10                       # a connection that sends nothing is closed, not waited on
