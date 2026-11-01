@@ -71,6 +71,8 @@
  "btn.pen-pressure": "Druk",
  "btn.pen-tilt": "Helling",
  "btn.penlive": "houd de pen boven de plaat om hem uit te lezen",
+ "pen.live": "druk {p} · helling {deg}°",
+ "pen.live-rest": "druk {p} · helling {deg}° · greep {rest}°",
  "btn.reroll": "Laatste opnieuw",
  "btn.reset": "herstellen",
  "btn.reset-all": "Alles terug naar de standaardwaarden",

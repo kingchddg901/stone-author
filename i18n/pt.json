@@ -71,6 +71,8 @@
  "btn.pen-pressure": "Pressão",
  "btn.pen-tilt": "Inclinação",
  "btn.penlive": "mantém a caneta sobre a chapa para a ler",
+ "pen.live": "pressão {p} · inclinação {deg}°",
+ "pen.live-rest": "pressão {p} · inclinação {deg}° · pega {rest}°",
  "btn.reroll": "Relançar a última",
  "btn.reset": "repor",
  "btn.reset-all": "Repor tudo nos valores predefinidos",

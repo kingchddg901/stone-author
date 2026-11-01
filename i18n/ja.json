@@ -71,6 +71,8 @@
  "btn.pen-pressure": "筆圧",
  "btn.pen-tilt": "傾き",
  "btn.penlive": "ペンをスラブの上にかざすと読み取ります",
+ "pen.live": "筆圧 {p} · 傾き {deg}°",
+ "pen.live-rest": "筆圧 {p} · 傾き {deg}° · 持ち方 {rest}°",
  "btn.reroll": "直前を振り直す",
  "btn.reset": "リセット",
  "btn.reset-all": "すべて既定値に戻す",

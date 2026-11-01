@@ -71,6 +71,8 @@
  "btn.pen-pressure": "Presión",
  "btn.pen-tilt": "Inclinación",
  "btn.penlive": "mantén el lápiz sobre la tabla para leerlo",
+ "pen.live": "presión {p} · inclinación {deg}°",
+ "pen.live-rest": "presión {p} · inclinación {deg}° · agarre {rest}°",
  "btn.reroll": "Rehacer el último",
  "btn.reset": "restablecer",
  "btn.reset-all": "Restablecer todo a sus valores por defecto",

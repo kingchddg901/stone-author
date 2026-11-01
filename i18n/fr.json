@@ -71,6 +71,8 @@
  "btn.pen-pressure": "Pression",
  "btn.pen-tilt": "Inclinaison",
  "btn.penlive": "tiens le stylet au-dessus de la dalle pour le lire",
+ "pen.live": "pression {p} · inclinaison {deg}°",
+ "pen.live-rest": "pression {p} · inclinaison {deg}° · prise {rest}°",
  "btn.reroll": "Relancer le dernier",
  "btn.reset": "réinitialiser",
  "btn.reset-all": "Tout remettre aux valeurs par défaut",

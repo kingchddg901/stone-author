@@ -71,6 +71,8 @@
  "btn.pen-pressure": "Basınç",
  "btn.pen-tilt": "Eğim",
  "btn.penlive": "okumak için kalemi plakanın üzerinde tut",
+ "pen.live": "basınç {p} · yatıklık {deg}°",
+ "pen.live-rest": "basınç {p} · yatıklık {deg}° · tutuş {rest}°",
  "btn.reroll": "Sonuncuyu yeniden at",
  "btn.reset": "sıfırla",
  "btn.reset-all": "Tümünü varsayılana döndür",

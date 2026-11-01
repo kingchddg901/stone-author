@@ -71,6 +71,8 @@
  "btn.pen-pressure": "Tekanan",
  "btn.pen-tilt": "Kemiringan",
  "btn.penlive": "tahan pena di atas lempengan untuk membacanya",
+ "pen.live": "tekanan {p} · kemiringan {deg}°",
+ "pen.live-rest": "tekanan {p} · kemiringan {deg}° · pegangan {rest}°",
  "btn.reroll": "Acak ulang yang terakhir",
  "btn.reset": "setel ulang",
  "btn.reset-all": "Setel ulang semua ke bawaan",

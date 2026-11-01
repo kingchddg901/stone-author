@@ -71,6 +71,8 @@
  "btn.pen-pressure": "筆壓",
  "btn.pen-tilt": "傾斜",
  "btn.penlive": "把筆懸在石板上方即可讀取",
+ "pen.live": "壓力 {p} · 傾角 {deg}°",
+ "pen.live-rest": "壓力 {p} · 傾角 {deg}° · 握法 {rest}°",
  "btn.reroll": "重擲上一個",
  "btn.reset": "重設",
  "btn.reset-all": "全部回復預設值",

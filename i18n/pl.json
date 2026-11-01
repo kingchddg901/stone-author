@@ -71,6 +71,8 @@
  "btn.pen-pressure": "Nacisk",
  "btn.pen-tilt": "Nachylenie",
  "btn.penlive": "przytrzymaj pióro nad płytą, aby je odczytać",
+ "pen.live": "nacisk {p} · nachylenie {deg}°",
+ "pen.live-rest": "nacisk {p} · nachylenie {deg}° · chwyt {rest}°",
  "btn.reroll": "Przelosuj ostatnie",
  "btn.reset": "zeruj",
  "btn.reset-all": "Przywróć wszystko do domyślnych",

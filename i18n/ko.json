@@ -71,6 +71,8 @@
  "btn.pen-pressure": "필압",
  "btn.pen-tilt": "기울기",
  "btn.penlive": "펜을 슬래브 위에 대고 있으면 읽습니다",
+ "pen.live": "필압 {p} · 기울기 {deg}°",
+ "pen.live-rest": "필압 {p} · 기울기 {deg}° · 쥐는 법 {rest}°",
  "btn.reroll": "마지막 것 다시 굴리기",
  "btn.reset": "초기화",
  "btn.reset-all": "모두 기본값으로 되돌리기",

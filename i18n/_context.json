@@ -284,6 +284,29 @@
     ],
     "where": "in the \"Pen\" group/panel"
   },
+  "pen.live": {
+    "terms": [
+      "pressure",
+      "tilt"
+    ],
+    "placeholders": {
+      "p": "the pressure this sample reports, 0 to 1 at two decimals",
+      "deg": "how far the pen is leaned over right now, in degrees"
+    },
+    "where": "replaces btn.penlive in the same slot the moment a pen is held over the slab, and updates on every pointer move. Use the same words for pressure and lean that you used in cal.live — it is the same two quantities, read live instead of during calibration"
+  },
+  "pen.live-rest": {
+    "terms": [
+      "pressure",
+      "tilt"
+    ],
+    "placeholders": {
+      "p": "the pressure this sample reports, 0 to 1 at two decimals",
+      "deg": "how far the pen is leaned over right now, in degrees",
+      "rest": "the GRIP BASELINE — the lean this hand habitually holds, measured from the live grip, then recent hover, then the saved calibration. It is the same quantity cal.row.lean calls \"Grip\", so use that word rather than a word for sleep or repose"
+    },
+    "where": "the same live pen readout as pen.live, shown instead of it once a grip baseline is known. Keep the two consistent: this one only adds a third reading on the end"
+  },
   "btn.penlive": {
     "terms": [
       "slab"

@@ -66,6 +66,8 @@
  "btn.pen-pressure": "Pressione",
  "btn.pen-tilt": "Inclinazione",
  "btn.penlive": "tieni la penna sopra la lastra per leggerla",
+ "pen.live": "pressione {p} · inclinazione {deg}°",
+ "pen.live-rest": "pressione {p} · inclinazione {deg}° · impugnatura {rest}°",
  "btn.reroll": "Rilancia l'ultima",
  "btn.reset": "azzera",
  "btn.reset-all": "Azzera tutto ai valori predefiniti",

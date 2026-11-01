@@ -71,6 +71,8 @@
  "btn.pen-pressure": "Druck",
  "btn.pen-tilt": "Neigung",
  "btn.penlive": "Halte den Stift über die Platte, um ihn auszulesen",
+ "pen.live": "Druck {p} · Neigung {deg}°",
+ "pen.live-rest": "Druck {p} · Neigung {deg}° · Griff {rest}°",
  "btn.reroll": "Letztes neu würfeln",
  "btn.reset": "zurücksetzen",
  "btn.reset-all": "Alles auf Standard zurücksetzen",

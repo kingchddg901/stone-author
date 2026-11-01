@@ -71,6 +71,8 @@
  "btn.pen-pressure": "Tlak",
  "btn.pen-tilt": "Sklon",
  "btn.penlive": "podrž pero nad deskou, aby se dalo načíst",
+ "pen.live": "tlak {p} · sklon {deg}°",
+ "pen.live-rest": "tlak {p} · sklon {deg}° · držení {rest}°",
  "btn.reroll": "Přehodit poslední",
  "btn.reset": "resetovat",
  "btn.reset-all": "Resetovat vše na výchozí hodnoty",

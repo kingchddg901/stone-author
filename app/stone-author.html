@@ -899,6 +899,8 @@ window.SA_I18N = (() => {
   "btn.pen-pressure": "Pressure",
   "btn.pen-tilt": "Tilt",
   "btn.penlive": "hold the pen over the slab to read it",
+  "pen.live": "pressure {p} · lean {deg}°",
+  "pen.live-rest": "pressure {p} · lean {deg}° · rest {rest}°",
   "btn.reroll": "Reroll last",
   "btn.reset": "reset",
   "btn.reset-all": "Reset all to defaults",
@@ -1975,7 +1977,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.10.31.290';
+  const BUILD = '2026.10.31.292';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14969,7 +14971,12 @@ self.onmessage = async (e) => {
     // The panels the studio GENERATES (layers, folders, the colour editor) hold no markup to re-label,
     // so they are rebuilt rather than patched.
     SA_I18N.onChange(() => {
-    fill(); buildLayerUI(); syncUI();
+    // `stat()` IS IN HERE because the counts line became translatable on 2026-11-01 and nothing else
+    // redraws it: it is written on render, and switching language does not render. Before that it was
+    // an English template literal, so there was nothing to refresh and no bug to have. Caught by
+    // switching to four languages in the running app and watching the pen readout change while this
+    // line stayed in English.
+    fill(); buildLayerUI(); syncUI(); stat();
     if (coatKit) registerCoatGroup();
     for (const e of [ed, coatEd]) if (e) e.labels = tkLabels();   // the setter rebuilds, and keeps the values
     for (const p of LAYER_PANELS) { registerLayerGroup(p.id); const e = layerKits.get(p.id); if (e && e.el) e.el.labels = tkLabels(); }
@@ -14992,7 +14999,17 @@ self.onmessage = async (e) => {
     if (e.buttons === 0) { const t = performance.now(); hoverLean.push({ t, v }); hoverLean = hoverLean.filter(h => t - h.t < 1500); }
     else { gripLean.push(v); if (gripLean.length > 900) gripLean.splice(0, gripLean.length - 900); }
     const r = restLean();
-    penlive.textContent = `pressure ${e.pressure.toFixed(2)} · lean ${Math.round(v * 90)}°` + (r != null ? ` · rest ${Math.round(r * 90)}°` : '');
+    // ROUTED 2026-11-01, and it is the SECOND half of the stat-line fix. This element is
+    // `data-i18n="btn.penlive"` in the markup, so check-i18n's prose rule looked at it, found a key
+    // and was satisfied - then this line replaced its contents with three English words at runtime.
+    // A routed element is not a routed string; the gate can only see what the markup declares.
+    //
+    // `rest` is the GRIP BASELINE restLean() returns, which is the same quantity cal.row.lean calls
+    // "Grip / laid over" - so every pack translates it with the grip word it already uses there,
+    // and pressure and lean come from cal.live, which has said both in fifteen languages all along.
+    penlive.textContent = r != null
+      ? TR('pen.live-rest', { p: e.pressure.toFixed(2), deg: Math.round(v * 90), rest: Math.round(r * 90) })
+      : TR('pen.live',      { p: e.pressure.toFixed(2), deg: Math.round(v * 90) });
   });
   const lt = document.getElementById('laytiles');
   lt.addEventListener('click', () => { layTiles = !layTiles; lt.setAttribute('aria-pressed', layTiles); showSetCount(); redraw(false); });
