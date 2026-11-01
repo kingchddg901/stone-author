@@ -381,9 +381,63 @@ the set is under a second, and the tablets stay scrollable throughout.
 three times its own median. No other device in the set comes within an order of magnitude of that
 consistency.
 
+## The set: material × settings × device × renderer
+
+The matrix this page exists to fill. A **cell** is a material with its settings — subsurface,
+window, light — at one size on one slab; each cell wants both renderers on each device. GPU and CPU
+are **different paths**, not two timings of one thing: they do not draw the same picture and carry
+different render signatures, so a cell holding both compares *paths*, and the same cell on two
+devices compares *devices*. A tablet cell has no GPU half and is complete with one.
+
+Cut 2026-11-01 on build `2026.10.31.289`, every device, 65,535 × 40,959, universal master.
+
+| | desktop | S23 Ultra | iPhone 14 Pro | A7 Lite | Tab A 8.0 |
+|---|---|---|---|---|---|
+| **glass** GPU | 21.6 s | 42.8 s | 25.7 s | — | — |
+| **glass** CPU | 257.3 s | 511.0 s | 409.4 s | 2,236 s | **7,485 s** |
+| *GPU is* | 11.89× | 11.93× | **15.95×** | no GPU | no GPU |
+| **wood** GPU | 11.3 s | 18.2 s | 25.2 s | — | — |
+| **wood** CPU | 109.6 s | 208.3 s | 141.5 s | 1,430 s | 3,665 s |
+| *GPU is* | 9.68× | 11.46× | **5.62×** | no GPU | no GPU |
+| **stone**, one window, GPU | 28.7 s | 121.4 s | 150.7 s | — | — |
+| **stone**, one window, CPU | 25.8 s | 32.7 s | 69.4 s | 726 s | 886 s |
+| *GPU is* | **1.11× slower** | **3.71× slower** | **2.17× slower** | no GPU | no GPU |
+| CPU vs this desktop | 1.00× | 1.27–1.99× | 1.29–2.69× | 8.69–28.17× | **29.09–34.38×** |
+
+**Both tablets are CPU-only by hardware** — they predate WebGPU, and no 2 GB device in this archive
+has ever recorded a GPU render. See [`glass-gpu.md`](glass-gpu.md).
+
+### Every row carries a validity check, and one row fails it
+
+A GPU and a CPU master of one cell should draw the same picture. `light.mean` says whether they did:
+
+| cell | desktop | S23 | iPhone |
+| --- | --- | --- | --- |
+| glass | **0.00** | **0.00** | **0.00** |
+| wood | **0.00** | **0.00** | **0.00** |
+| stone, one window | 1.00 | 0.63 | **17.03** |
+
+Glass and wood agree to the second decimal on every device that has both paths, so those ratios time
+one picture against the same picture. **The iPhone's stone pair does not**, and 17.03 is not a
+rounding difference — the median across all 33 paired cells in this archive is **0.273**. That one
+figure should be read as *two different pictures timed against each other* until it is looked at.
+See "both renderers can be wrong" below.
+
+### The weakest device is a flat multiple; the next one up is not
+
+The Tab A 8.0 runs **29.09×, 33.45× and 34.38×** the desktop across the three materials — nearly
+constant. The A7 Lite runs **8.69×, 13.05× and 28.17×** — a 3.2× swing over the same three. Two
+2 GB tablets, and only one of them degrades uniformly. They differ elsewhere too: the Tab A is the
+only device in the fleet with a **4096 texture ceiling**, it is the only one that needed a **1024
+tile** for anything (wood, 2,560 tiles, 61 min, where every other device-material pair took 2048),
+and it is the only one that cannot load `storm treeline v21` — while the A7 can.
+
+**Glass on the Tab A is the longest render in the set**: 2 h 04 m for a 29 MB file. The material the
+GPU likes most is the one the weakest CPU likes least.
+
 ## The GPU against the CPU, build and configuration held fixed
 
-Measured 2026-11-01 from the masters' own records. **Only pairs that share a build *and* a complete
+The wider evidence behind the three rows above. Measured 2026-11-01 from the masters' own records. **Only pairs that share a build *and* a complete
 configuration are listed**, because both confound this comparison badly and in opposite directions:
 six CPU changes took a 65,535 from 7.645 min to 4.743 over the period these records cover, so a GPU
 master from one build against a CPU master from another measures the GPU and five weeks of CPU work
@@ -475,11 +529,17 @@ So a GPU multiple quoted for this renderer is a statement about one build, one d
 one size and one window count simultaneously. The earlier proxy estimate of 1.3–1.9× in
 [`glass-gpu.md`](glass-gpu.md) is below every figure in both tables; that page records why.
 
-### The sign is not constant, and the S23 is where it shows
+### The sign is not constant, and it turns on the cell rather than the material
 
-Glass and wood go to the GPU by about 11.5× on the S23. **Stone goes the other way on the same
-device, same build, same size — 3.71× slower, and 4.92× slower with subsurface.** The desktop wins
-17–41× on stone *with* subsurface, so this is not a property of the material alone.
+Glass and wood go to the GPU by 5.6–16× on every device that has one. **The stone cell with a
+window goes the other way on all three — 1.11×, 2.17× and 3.71× slower.** But stone *without* a
+window wins 7.8–41× on the desktop, so the material is not what decides it; the cell is. A window
+composites over a finished tile (`stone-author.html`, the `compositeWindow` call in the tile path),
+which is CPU work the shader cannot take, and the GPU path runs **one worker** against the CPU
+path's four to twelve — so the un-accelerable part runs single-threaded on the GPU side.
+
+That mechanism is read from the code and consistent with the figures; it has not been isolated by
+ablation, and the window pairs are few. Stated as the leading explanation, not a measured one.
 
 **What is not held fixed is the width.** Every S23 row is 65,535 and every desktop stone row is
 4,096 to 32,768, so the divergence is device, size, or both, and these records cannot separate them.
@@ -501,6 +561,56 @@ measurable gain* rather than as a precise loss. It is the only measurement of th
 size, tile and subsurface, on three consecutive builds, differing in `windows`. One record against
 two, on a field nothing else here varies deliberately. Named because it is in the data, not
 concluded.
+
+### A ratio across devices is partly a ratio of worker counts
+
+**The GPU path runs exactly one worker on every device** — measured on all three that have one. The
+CPU path runs 4 to 12. So a GPU/CPU ratio is one GPU against *N* CPU workers, and *N* differs:
+
+| device | CPU workers | glass ratio | CPU worker-seconds |
+| --- | --- | --- | --- |
+| desktop | 8 | 11.89× | 2,058 |
+| S23 Ultra | 8 | 11.93× | 4,088 |
+| iPhone 14 Pro | **4** | **15.95×** | **1,638** |
+| A7 Lite | 8 | no GPU | 17,890 |
+
+The iPhone's ratio is the fleet's highest on glass because it has the least parallelism to
+surrender, not because its shader is better. Normalise it away and the order changes: per CPU
+worker-second the iPhone is the **fastest machine here**, which independently reproduces this page's
+earlier finding that its deficit is Safari's four-worker cap rather than its silicon. On the GPU
+path, where everyone runs one worker, the three land within 2× of each other.
+
+**But the correction does not generalise either.** On wood the iPhone's ratio is **5.62×, the
+fleet's lowest**, with the same four workers. The denominator did not move and the answer inverted,
+because its GPU is 1.19× the desktop's on glass and 2.23× on wood. Worker count explains one cell
+and fails on the next — which is the argument for the whole matrix rather than a headline number.
+
+### Both renderers can be wrong, and the one that looks right did less
+
+On the iPhone's `storm treeline v21` cell, every configuration field is identical except `gpu`
+itself — and the two renders disagree by **48.76** of mean. Read from the stored pixels with
+[`thumb-master.mjs`](../tools/thumb-master.mjs):
+
+| | pixels exactly R=G=B | mean channel spread | `light.mean` | `lit40` |
+| --- | --- | --- | --- | --- |
+| GPU | **54.6%** | 2.78 | 59.10 | 61.89 |
+| CPU | 11.9% | 8.47 | 107.86 | 87.88 |
+
+**The GPU dropped the colour** in the fog and the moon — over half the picture is literally R=G=B —
+while keeping it on the marks. **The CPU applied it and shattered**: stepped concentric banding
+through the moon, hard-edged rectangles at sub-tile scale, washed out. One declined the work and one
+broke doing it, and the one that declined is the one that looks correct.
+
+**The GPU master passes every guard the harvester has.** `blackFrame` wants `light.mean === 0`; it
+reads 59.10. `nothingLit` wants `lit40 === 0`; it reads 61.89. It would be recorded as good and the
+master deleted — the same shape as the three wood masters at mean 23.33 that `lit40 === 0` was added
+for, except this one does not trip that guard either, because the picture *is* lit. It simply is not
+coloured. A greyscale-share figure separates them cleanly: 54.6% against 11.9%.
+
+**And the scale of the look decided the answer.** At `--cell=64` each cell is the mean of a 64×64
+block, which turned the CPU's blockiness into smoothness and made the broken render read as the
+clean one. The defect only appeared at `--cell=256` over a region. A mean finds candidates to look
+at; the looking has to happen at the scale of the artifact.
 
 ## The machines
 
