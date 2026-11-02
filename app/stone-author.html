@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.301';
+  const BUILD = '2026.11.02.302';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5578,13 +5578,53 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // content-heavy canvas falls back to CPU, and that benchmarking an export on a trivial slab measures
   // the browser's storage heuristics rather than this app. So the 11.59 s baseline may itself contain
   // CPU-side subsurface and specular, and 1.72x is then a FLOOR on that project rather than a ceiling.
+  // BOTH HALVES OF THAT WERE THEN MEASURED and it is neither - see AND THEN IT WAS MEASURED below,
+  // which supersedes this paragraph's arithmetic rather than refining it.
   //
-  // WHAT THIS CANNOT SAY, written down so it is not read as having said it. The ablation holds the
-  // ARRANGEMENT fixed while a GPU coat chain would change it, so the share it found belongs to the
-  // arrangement that change destroys. Nothing here shows whether a tile canvas is GPU-backed at all on
-  // a content-heavy slab, so nothing here shows the lens costs the subsurface anything. What answers it
-  // is the subsurface and specular ablations at 32,768 on this same picture: their shares are what a
-  // GPU coat would be competing for. Three renders of twenty seconds. Not done.
+  // AND THEN IT WAS MEASURED, 2026-11-02, the same picture and slab at 32,768, one stage at a time
+  // against the 19.91 s baseline. An ablation holds the ARRANGEMENT fixed, so every line carries how
+  // clean it was rather than only its number:
+  //
+  //   lens          8.33 s   41.8%   clean - bleed 201 on both sides
+  //   subsurface    1.21 s    6.1%   clean - 18.70 s at ss 0, bleed and sigma unchanged
+  //   specular     ~0.9 s    ~4.6%   ESTIMATED, and the raw arm is confounded - see below
+  //   two glows    ~1.56 s   ~7.8%   inferred - 11.59 -> 10.03 s at lens 0
+  //   the rest     ~7.9 s     ~40%   ground, marks, veins, specks, encode, write
+  //
+  // SUBSURFACE IS 6.1%, which retires the premise this paragraph used to carry. It said the ablation
+  // could not see what the lens costs the subsurface; the answer is that the subsurface is not where
+  // the time is. The lens alone is larger than the whole rest of the coat put together.
+  //
+  // THE SPECULAR ARM IS CONFOUNDED AND ITS RAW NUMBER IS NOT A SHARE. Setting specular to 0 takes
+  // sigma 66 -> 0 and bleed 201 -> 88, so every tile paints 2224 square instead of 2450 - 0.823x the
+  // pixels, everywhere, in every other stage too. The raw 15.48 s reads as 22%, but 19.91 x 0.823 =
+  // 16.39 s is what to expect with the stage ALREADY free, and the observed 15.48 leaves about 0.9 s
+  // for the arithmetic. SPECULAR'S COST IS THE MARGIN IT DEMANDS, not the stage: roughly 3.5 s of
+  // bleed against 0.9 s of work, which is the same shape as the lens paying for its own bleed.
+  //
+  // THE GPU PATH IS A NET LOSS ON THIS SLAB AS ARRANGED: 19.58 s with the GPU taken against 17.42 s on
+  // the CPU pool, the same picture but for the painter, and three CPU runs of that configuration came
+  // in at 17.42 / 17.50 / 18.27 s - a 5% floor with the GPU outside it. THE SHADER IS NOT WHERE THE
+  // TIME WENT. gpuOwn sums 69 ms over all 160 tiles (draw 34.8, sub 18.1, wait 10.7, bitmap 5.2),
+  // 0.35% of the render. What changes is the pipeline: workers 1 against 8, per-tile median 12 ms
+  // against 3, because the GPU paints one tile at a time where the pool paints eight - and the COAT
+  // runs in the CPU finishers either way. The GPU buys the content paint, pays seven-eighths of the
+  // paint parallelism for it, and never touches the 41.8%.
+  //
+  // WHICH IS THE ARGUMENT FOR A GPU LENS, and it is not the one above. Not that the lens's arithmetic
+  // would go free - that the coat coming off the GPU is why the GPU path cannot win at all. As arranged
+  // the shader could be infinitely fast and this render would still lose, because the chain breaks at
+  // the coat and hands the work back to the CPU. The 1.72x above prices the arithmetic, which is the
+  // wrong quantity; what a GPU lens would buy is the chain staying whole.
+  //
+  // AND IT IS GATED TWICE OVER before any of that, both in gpuWhyNot and in this order: a layer blend
+  // mode that is not 'normal', then a layer glow above zero. This slab had both - majorGlow 0.8 and
+  // webGlow 0.2 behind a non-normal blend - so the first refusal said blend and said nothing about the
+  // glow, because blend is checked first. Clearing both is what let the GPU be taken at all.
+  //
+  // ONE THING NOT ACCOUNTED FOR: that GPU run recorded err: 5, five errored draws of 160, with no
+  // gpuDetail because that is only populated for an outright exp.gpu.failed. Whether those five tiles
+  // fell back or came out wrong is OPEN; same-image can compare the two masters directly.
   //
   // ONE THING UNATTRIBUTED, recorded so a fresh walk does not have to find it twice: at 16,384 the same
   // picture took 4.73 s on build 296 and 6.51 / 6.76 s on 300. TWO changes sit between those builds -
@@ -7087,6 +7127,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         const bl = COL[fxk + 'Blend'];
         if (bl && bl !== 'normal') return 'exp.gpu.stone.blend';
         if ((COL[fxk + 'Glow'] || 0) > 0) return 'exp.gpu.stone.glow';
+        // THE ORDER IS THE ORDER A SLAB MEETS THEM IN, and it matters to anyone reading a refusal: a
+        // blend refusal is silent about the glow behind it, because blend is tested first. Measured
+        // 2026-11-02 on a slab carrying majorGlow 0.8 and webGlow 0.2 behind a non-normal blend, both
+        // had to go before the GPU could be taken at all. And worth knowing before chasing it: with
+        // both cleared and the GPU taken, that render came in 12.4% SLOWER than the CPU pool, because
+        // the GPU paints one tile at a time where the pool paints eight and the coat runs in the CPU
+        // finishers either way. The numbers are beside lensTable.
       }
       // DRUSY. A filled disc has no joint, no cap and no per-item adjustment, so its layer filter is
       // the only thing left that the collapse cannot take.
