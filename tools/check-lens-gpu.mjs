@@ -126,7 +126,11 @@ const APP = readFileSync(join(HERE, '..', 'app', 'stone-author.html'), 'utf8');
 const defers = [...APP.matchAll(/deferLens:\s*true/g)].map(m => m.index);
 if (!defers.length) fail('nothing defers the lens - the dispatch is unreachable');
 else {
-  const unpaid = defers.filter(i => !/lensApply\s*\(/.test(APP.slice(i, i + 1200)));
+  // EITHER SPELLING HONOURS IT. The two main-thread paths call lensApply, which tries the dispatch
+  // and falls back; the worker cannot - lensApply reaches gpuCapability and gpuModule and neither
+  // exists in a worker - so it calls __lensGpu and falls back to applyLens itself. Both are a paid
+  // deferral; what this still catches is a deferral with neither beside it.
+  const unpaid = defers.filter(i => !/lensApply\s*\(|__lensGpu\s*\(/.test(APP.slice(i, i + 1200)));
   if (unpaid.length) fail(`${unpaid.length} of ${defers.length} deferral(s) never call lensApply`);
   else ok(`all ${defers.length} deferral(s) run lensApply`);
 }

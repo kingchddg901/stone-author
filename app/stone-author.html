@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.308';
+  const BUILD = '2026.11.02.310';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6715,7 +6715,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // still runs synchronously to completion exactly as before - an async function only yields at its
     // first await, and that path never reaches one.
     s += `self.onmessage=async function(e){var d=e.data;\n`;
-    s += `if(d.type==='init'){setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;layTiles=!!d.layTiles;T=d.T||T;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;workC=d.bk||null;emitC=d.em||null;__bkW=d.bkW|0;__bkH=d.bkH|0;__backlit=!layTiles&&G.backlight>0&&!!workC;coatField=d.cf?{w:d.cfw,h:d.cfh,K:d.cfK,cv:fieldCanvas(d.cfw,d.cfh,d.cf),bytes:d.cf,at:d.cfAt|0}:null;self.postMessage({type:'ready'});return;}\n`;
+    s += `if(d.type==='init'){__lensWgsl=d.lensWgsl||null;setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;layTiles=!!d.layTiles;T=d.T||T;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;workC=d.bk||null;emitC=d.em||null;__bkW=d.bkW|0;__bkH=d.bkH|0;__backlit=!layTiles&&G.backlight>0&&!!workC;coatField=d.cf?{w:d.cfw,h:d.cfh,K:d.cfK,cv:fieldCanvas(d.cfw,d.cfh,d.cf),bytes:d.cf,at:d.cfAt|0}:null;self.postMessage({type:'ready'});return;}\n`;
     // THE ACK IS THE ONLY WAY TO TELL A QUEUE FROM A STALL. A bitmap arriving late can mean the
     // worker painted for a minute or that it sat holding a message it had not been scheduled to
     // read, and the completion time cannot distinguish them. Posted from the top of the handler,
@@ -6772,7 +6772,66 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `if(WB){tcx.save();tcx.setTransform(1,0,0,1,0,0);` + NL;
     s += `tcx.drawImage(d.glass,WB.x0,WB.y0,WB.bw,WB.bh,WB.x0,WB.y0,WB.bw,WB.bh);tcx.restore();}` + NL;
     s += `d.glass.close();}else if(__backlit){backlitPlace(__bkW,__bkH);backlitBloom(tc,d.bs);}else{paintContent(false,false);}` + NL;
-    s += `applyCoat(tc,tcx,d.bs,{ident:false,uvMode:uvMode,backlit:__backlit,tiled:true},{ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH});\n`;
+    // THE LENS, ON THIS WORKER'S OWN DEVICE. applyCoat defers and the gather runs here, which is
+    // possible at all only because self.onmessage above is already async - the main thread's nine
+    // call sites each needed a seam opened for them and this one came with it.
+    //
+    // THE PACKER STAYS ON THE MAIN THREAD. The uniform is twelve scalars whose order lives in
+    // lens-real.mjs and is read by lens-gpu.mjs to generate the struct; a second copy of that order
+    // in here would be the one thing those two files exist to prevent. So the main thread packs it
+    // per tile from the geometry it already posts - ex0, ey0, ew, eh, finalW, finalH - and the
+    // worker writes 48 bytes to a buffer without knowing what is in them. The dispatch triple
+    // travels the same way rather than a workgroup size being spelled twice.
+    //
+    // A DEVICE PER WORKER, which is the cost of this arrangement and is stated rather than hidden:
+    // eight adapters, eight pipelines, and three tile-sized buffers each - about 61 MB a worker at
+    // 16,384 and 72 at 32,768. The alternative was one device on the main thread, which would have
+    // meant the painted tile crossing back as an ImageBitmap, a readback to get its pixels and an
+    // upload to return them - 40 MB of traffic a tile to save an allocation.
+    //
+    // __lensOff LATCHES. A device that is lost, refuses an adapter, or raises an uncaptured error
+    // does not get asked again by this worker: every tile after it takes the CPU lens, which is
+    // slower and correct. A render that half-fails on the GPU is not a render anybody can use.
+    s += `var __lensWgsl=null,__lensDev=null,__lensPipe=null,__lensBuf=null,__lensOff=false;` + NL;
+    s += `async function __lensGpu(cv,cx,vp,uni,dis){` + NL;
+    s += `if(__lensOff||!__lensWgsl||!uni||!dis)return false;` + NL;
+    s += `if(typeof navigator==='undefined'||!navigator.gpu)return false;` + NL;
+    s += `var w=cv.width,h=cv.height,bytes=w*h*4;` + NL;
+    s += `try{` + NL;
+    s += `if(!__lensDev){var ad=await navigator.gpu.requestAdapter();if(!ad){__lensOff=true;return false;}` + NL;
+    s += `__lensDev=await ad.requestDevice();if(!__lensDev){__lensOff=true;return false;}` + NL;
+    s += `__lensDev.lost.then(function(){__lensOff=true;});` + NL;
+    s += `__lensDev.onuncapturederror=function(){__lensOff=true;};}` + NL;
+    s += `var dev=__lensDev;if(bytes>dev.limits.maxStorageBufferBindingSize)return false;` + NL;
+    s += `if(!__lensPipe){__lensPipe=await dev.createComputePipelineAsync({layout:'auto',` + NL;
+    s += `compute:{module:dev.createShaderModule({code:__lensWgsl}),entryPoint:'lensGather'}});}` + NL;
+    s += `if(!__lensBuf||__lensBuf.bytes!==bytes){if(__lensBuf){__lensBuf.src.destroy();__lensBuf.dst.destroy();` + NL;
+    s += `__lensBuf.rb.destroy();__lensBuf.uni.destroy();}var U=GPUBufferUsage;` + NL;
+    s += `__lensBuf={bytes:bytes,src:dev.createBuffer({size:bytes,usage:U.STORAGE|U.COPY_DST}),` + NL;
+    s += `dst:dev.createBuffer({size:bytes,usage:U.STORAGE|U.COPY_SRC}),` + NL;
+    s += `rb:dev.createBuffer({size:bytes,usage:U.MAP_READ|U.COPY_DST}),` + NL;
+    s += `uni:dev.createBuffer({size:uni.byteLength,usage:U.UNIFORM|U.COPY_DST})};}` + NL;
+    s += `var B=__lensBuf;dev.queue.writeBuffer(B.uni,0,uni);` + NL;
+    s += `var img=cx.getImageData(0,0,w,h);dev.queue.writeBuffer(B.src,0,img.data);` + NL;
+    s += `var grp=dev.createBindGroup({layout:__lensPipe.getBindGroupLayout(0),entries:[` + NL;
+    s += `{binding:0,resource:{buffer:B.uni}},{binding:1,resource:{buffer:B.src}},` + NL;
+    s += `{binding:2,resource:{buffer:B.dst}}]});` + NL;
+    s += `var enc=dev.createCommandEncoder(),ps=enc.beginComputePass();` + NL;
+    s += `ps.setPipeline(__lensPipe);ps.setBindGroup(0,grp);` + NL;
+    s += `ps.dispatchWorkgroups(dis[0],dis[1],dis[2]);ps.end();` + NL;
+    s += `enc.copyBufferToBuffer(B.dst,0,B.rb,0,bytes);dev.queue.submit([enc.finish()]);` + NL;
+    s += `await B.rb.mapAsync(GPUMapMode.READ);` + NL;
+    s += `new Uint8Array(img.data.buffer).set(new Uint8Array(B.rb.getMappedRange()));B.rb.unmap();` + NL;
+    s += `if(__lensOff)return false;cx.putImageData(img,0,0);return true;` + NL;
+    s += `}catch(err){__lensOff=true;return false;}}` + NL;
+    // ONE PREDICATE HERE TOO, and the CPU lens is the fallback rather than an alternative: if the
+    // dispatch declines for any reason the stage still runs, because applyCoat deferred it and a
+    // tile with no refraction is a tile that is simply wrong.
+    s += `var __coatF={ident:false,uvMode:uvMode,backlit:__backlit,tiled:true,deferLens:true};` + NL;
+    s += `var __vp={ox:d.ex0,oy:d.ey0,fw:d.finalW,fh:d.finalH};` + NL;
+    s += `applyCoat(tc,tcx,d.bs,__coatF,__vp);` + NL;
+    s += `var __lg=0;if(lensWanted(__coatF)){` + NL;
+    s += `if(await __lensGpu(tc,tcx,__vp,d.lensUni,d.lensDis)){__lg=1;}else{applyLens(tc,tcx,__vp);__lg=2;}}\n`;
     s += `}` + NL;                                 // closes the layTiles branch
     // THE WINDOWS, after the coat and only for tiles a disc actually reaches - the same order and
     // the same skip test renderOneTile uses, because a window composites over a FINISHED tile and a
@@ -6830,11 +6889,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `    var z=await deflateBytes(rgbFromRGBA(px));\n`;
     s += `    parts.push({idx:ty*d.across+tx,z:z});xfer.push(z.buffer);\n`;
     s += `  }}\n`;
-    s += `  self.postMessage({i:d.i,fin:true,painted:okP,parts:parts,marked:mk,litSum:lS,litUp:lU,litN:lN},xfer);\n`;
+    s += `  self.postMessage({i:d.i,fin:true,lensG:__lg,painted:okP,parts:parts,marked:mk,litSum:lS,litUp:lU,litN:lN},xfer);\n`;
     s += `  return;\n`;
     s += `}\n`;
     s += `var out=tc;if(!d.keepBleed){out=new OffscreenCanvas(d.tileW,d.tileH);out.getContext('2d').drawImage(tc,d.bleed,d.bleed,d.tileW,d.tileH,0,0,d.tileW,d.tileH);}\n`;
-    s += `var bmp=out.transferToImageBitmap();self.postMessage({i:d.i,tx0:d.tx0,ty0:d.ty0,bmp:bmp},[bmp]);};`;
+    s += `var bmp=out.transferToImageBitmap();self.postMessage({i:d.i,tx0:d.tx0,ty0:d.ty0,lensG:__lg,bmp:bmp},[bmp]);};`;
     return s;
   }
   async function renderTiledParallel(W, opts) {
@@ -21737,6 +21796,7 @@ fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 
   async function tilePool(W, p) {
+    lensOn = null;                                         // this path defers in the worker; it owns the flag
     const n = poolWidthFor(p.budgetMB, p.tileMB);
     if (!n) return null;
     const bs = W / COAT_REF, finalW = W, finalH = p.FH;
@@ -21764,7 +21824,11 @@ fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
         await new Promise((res, rej) => {
           w.onmessage = e => { if (e.data.type === 'ready') res(); };
           w.onerror = e => rej(new Error('render worker: ' + (e.message || 'failed to start')));
-          w.postMessage({ type: 'init', ...state, cl, bd, br, bk, em }, [cl, bd, br, bk, em].filter(Boolean));
+          // THE SHADER ONCE PER WORKER, and only when this render has a lens to refract with. A
+          // slab at lens 0 posts nothing extra and the worker never asks for an adapter.
+          w.postMessage({ type: 'init', ...state, cl, bd, br, bk, em,
+                          lensWgsl: lensWanted({ ident: false }) ? LENS_SRC() : undefined },
+                        [cl, bd, br, bk, em].filter(Boolean));
         });
         // AN IDENTITY THAT OUTLIVES THE ARRAY. Shedding splices this array, so a worker's position
         // in it is not a name - index 3 before a shed and index 3 after are different workers. The
@@ -21935,6 +21999,8 @@ fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
           else poolSettle(q, tr.s ? tr.f - tr.s : tr.f - t0);
           // In finish mode the pass IS the record - parts, counts and the painted flag - and there is
           // no bitmap to hand over. One pool is in one mode for its whole life, set by p.fin.
+          if (e.data.lensG === 2) lensOn = 'cpu';
+          else if (e.data.lensG === 1 && lensOn !== 'cpu') lensOn = 'gpu';
           res(e.data.fin ? e.data : e.data.bmp);
         };
         q.w.onerror = e => { q.busy = false; rej(new Error('render worker: ' + (e.message || 'threw'))); };
@@ -21947,6 +22013,19 @@ fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
                           ey0: gy * p.ts - p.bleed, bleed: p.bleed, bs, finalW, finalH,
                           fin: !!p.fin, gx, gy, k: p.k, store: p.store, across: p.across, down: p.down,
                           markSig: p.markSig || 0,
+                          // THE LENS UNIFORM, PACKED HERE. Twelve scalars whose order is declared
+                          // once in lens-real.mjs and read by lens-gpu.mjs to generate the struct -
+                          // so the worker is handed 48 bytes and the dispatch triple, and never a
+                          // second copy of that order. Absent at lens 0, where the worker's
+                          // __lensGpu declines on the missing field and applyCoat never defers.
+                          lensUni: lensWanted({ ident: false })
+                            ? LENS_PACK(lensField(finalW, finalH),
+                                        { w: p.ts + 2 * p.bleed, h: p.ts + 2 * p.bleed,
+                                          vx: gx * p.ts - p.bleed, vy: gy * p.ts - p.bleed,
+                                          fw: finalW, fh: finalH })
+                            : undefined,
+                          lensDis: lensWanted({ ident: false })
+                            ? LENS_DISPATCH(p.ts + 2 * p.bleed, p.ts + 2 * p.bleed) : undefined,
                           // ONE FIELD OR THE OTHER, never both: d.bmp short-circuits the whole
                           // composite and d.glass runs it, so a message carrying both would take
                           // the first branch and silently drop the ground, coat and windows.
