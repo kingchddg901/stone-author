@@ -216,6 +216,8 @@ jobs:
       # Two of them were written the same day as the defects they catch.
       - name: Only a render the planner chose may write the remembered tile
         run: node tools/check-plan-memory.mjs
+      - name: A forced tile overrides the ladder's choice, not its memory test
+        run: node tools/check-forced-peak.mjs
       - name: The studio asks once whether the GPU drew this frame
         run: node tools/check-preview-face.mjs
       - name: A master that painted one flat colour is kept, not recorded as good and deleted

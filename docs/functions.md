@@ -219,11 +219,11 @@ CPU painter and the field under both.
   arena and one uniform** for the shader. Refuses two things rather than shipping them: a declared
   field that nothing supplies — the struct names it, the shader reads it, and it would be quietly zero
   for the life of the port — and more features than the shader's scratch array holds, which the CPU
-  painter has no limit on. *(18441)*
+  painter has no limit on. *(18474)*
 - `woodSource(GW)` — assembles wood's WGSL. **Assembled, not concatenated**: it borrows `woodAtan2`,
   `woodHash` and `fbm2` from the glass blocks rather than keeping unverified copies of each, and closes
   over the call sites rather than listing them, because `fbm2` calls `vnoise` and `vnoise` calls `nz`
-  and neither name appears anywhere in wood's own text. *(19067)*
+  and neither name appears anywhere in wood's own text. *(19100)*
 
 ## Glass — a lay-up, then a forming process
 
@@ -1007,4 +1007,4 @@ it reports the size asked for and leaves the far end unwritten. See
   actually on offer, not a probe's answer to a different question. *(15782)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
   whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(15859)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(22868)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(22915)*

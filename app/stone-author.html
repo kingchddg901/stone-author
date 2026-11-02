@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.312';
+  const BUILD = '2026.11.02.313';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -16771,6 +16771,7 @@ self.onmessage = async (e) => {
     const proven = forcedTile() ? 0 : provenTile(W);
     const died = forcedTile() ? [] : diedAt(W);          // sizes this machine started and never came back from
     let ts = Math.min(W, TILE_MAX);
+    let poolMax = null;                   // set only by the forced branch, where the ladder cannot choose
     // WHY the plan chose what it chose. The outcome was recorded and the reasoning was not, so a tablet
     // that silently halved its tile after an OS update could not be explained without the device in hand.
     // There are exactly two gates and they mean different things: the BUDGET is arithmetic on
@@ -16796,6 +16797,25 @@ self.onmessage = async (e) => {
       // light survived. Overriding a refusal is a choice; not knowing the outcome is not.
       const bloom = probeSigma > 0 ? (canvasFits(ew, ew, 1, probeSigma) ? 'bloom ok' : 'BLOOM LOST at ' + Math.round(sigma) + 'px') : 'no blur';
       trail.push(ts + '/' + ew + '=' + Math.round(ew * ew * 4 / 1e6) + 'MB:forced, ' + bloom);
+      // AND WHAT EIGHT OF THEM WEIGH, by the same arithmetic the ladder below uses to choose. Forcing
+      // a tile overrides the ladder's CHOICE, which is the point; it was also silently overriding the
+      // ladder's only memory test, which is not - and that is the shoulder just past the guard's
+      // window, where the guard reads as complete because it exists.
+      //
+      // THE BLEED IS A FRACTION OF THE PICTURE, NOT OF THE TILE, which is what makes this reachable
+      // at all: a forced 2048 is 2254px and 20MB at 16,384, and 14,640px and 857MB at 1,048,576,
+      // where a specular coat asks 6,296px of margin and 86% of the canvas is bleed. Eight of those
+      // live at once is 6,856MB - 12.8x the 536MB that POOL_MAX's own note says is 'the whole tile
+      // footprint the pool can reach', a sentence written when a tile was its own size.
+      //
+      // THE TILE STAYS EXACTLY AS FORCED. The POOL is what gives way, because the width was never his
+      // choice - and when it IS his, by `?pool=N`, this leaves it alone like every other force.
+      const wide = widthOf(ts), tmb = tileMBof(ts), peak = wide * tmb;
+      if (wide > 1 && !poolForced() && navigator.deviceMemory > 0 && peak > MEM_EASY * budgetMB) {
+        poolMax = Math.floor(MEM_EASY * budgetMB / Math.max(1, tmb));
+        trail.push('pool ' + wide + 'x' + tmb + 'MB=' + peak + 'MB over the ' +
+                   Math.round(MEM_EASY * budgetMB) + 'MB half-ceiling, narrowed to ' + poolMax);
+      }
     } else {
       // MEASURE, DO NOT PREDICT. Every candidate is rendered for real, once, and judged on what came
       // back. There is no memory veto any more: the only refusal before an attempt is a single canvas
@@ -16935,7 +16955,7 @@ self.onmessage = async (e) => {
              across, down, tiles: across * down,                  // the STORED grid, what the file declares
              rAcross: Math.ceil(W / ts), rDown: Math.ceil(FH / ts),
              renders: Math.ceil(W / ts) * Math.ceil(FH / ts),      // the unit of work, and of the progress line
-             tileMB: tileMBof(ts) };
+             tileMB: tileMBof(ts), poolMax };
   }
   // WHAT THE SERIALISED CORE REPRODUCES EXACTLY, and nothing else. Measured, not assumed: with
   // these three false the parallel and sequential paths differ by zero bytes.
@@ -17073,6 +17093,12 @@ self.onmessage = async (e) => {
   // HOW MANY WORKERS AT MOST. Declared as a plain constant on purpose: check-bleed requires it, and
   // probe-pool-width and probe-pool-strain both LIFT it to assert which of the three constraints binds
   // and that POOL_MAX x tileMBof(4096) = 536 MB is the whole tile footprint the pool can reach.
+  // AND THAT BOUND HOLDS ONLY WHILE THE BLEED IS SMALL AGAINST THE TILE, which is the assumption in
+  // the sentence above rather than a property of the constant. tileMBof is (ts + 2 * bleed)^2 and the
+  // bleed is a fraction of the PICTURE, so a forced 2048 at 1,048,576 is a 14,640 px canvas - 857 MB,
+  // 86% of it margin - and eight of those is 6,856 MB, 12.8x the figure named above, from a tile four
+  // times SMALLER than the one the strain note calls the operator's worst case. The ladder never meets
+  // this because it scores peaks before it chooses; the forced branch could not, and now does.
   const POOL_MAX = 8;
   // `?pool=N` IS THE USER OVERRIDING THAT BOUND, the same way ?tile=256 reaches below the ladder. Ten
   // workers at a 4096 tile is 670 MB, past what the constant above otherwise guarantees - so it takes a
@@ -17085,6 +17111,13 @@ self.onmessage = async (e) => {
       const v = +new URLSearchParams(location.search).get('pool');
       return v >= 2 && v <= 64 ? v : POOL_MAX;
     } catch (_) { return POOL_MAX; }
+  };
+  // AND WHETHER THE WIDTH IS HIS. `?pool=N` is a force in exactly the sense `?tile=N` is, so the
+  // planner's narrowing below leaves it alone - the same reason the forced tile is never refused.
+  // Asked here rather than inside poolCap because that one answers "how wide may we go", and this
+  // answers "did somebody say so", which are different questions with the same input.
+  const poolForced = () => {
+    try { return +new URLSearchParams(location.search).get('pool') >= 2; } catch (_) { return false; }
   };
   function poolWidthFor(budgetMB, tileMB) {
     if (EXP_FORCE_SEQ || !corePaintsThis()) return 0;
@@ -21818,7 +21851,14 @@ fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
   async function tilePool(W, p) {
     lensOn = null;                                         // this path defers in the worker; it owns the flag
     lensWhy = '';
-    const n = poolWidthFor(p.budgetMB, p.tileMB);
+    const want = poolWidthFor(p.budgetMB, p.tileMB);
+    // A FORCED TILE CANNOT STEP DOWN, SO THE POOL DOES. Without this a forced 2048 at 1,048,576 put
+    // eight 857MB canvases live at once and the THIRD render tile came back with a backing that never
+    // allocated - which tilePainted catches, retries once on this thread, and then refuses the master.
+    // `n < 2 -> 0` is re-applied because one worker is slower than no worker, exactly as poolWidthFor
+    // says: a cap of 1 means sequential, not a pool of one.
+    const capped = p.poolMax != null && want > p.poolMax ? p.poolMax : want;
+    const n = capped < 2 ? 0 : capped;
     if (!n) return null;
     const bs = W / COAT_REF, finalW = W, finalH = p.FH;
     // THE FOLD IS ALREADY BUILT - exportTiff does it once before the pool exists - so this only
@@ -21888,7 +21928,9 @@ fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
     //
     // AND THE FOOTPRINT IT WAS DEFENDING IS NOW BOUNDED. With 8192 off the tile ladder the pool can hold
     // at most POOL_MAX x tileMBof(4096) = 536 MB in any configuration the PLANNER can choose (a typed
-    // `?tile=8192` reaches 2.15 GB, and that is the operator's footprint, not the fleet's); every shed above
+    // `?tile=8192` reaches 2.15 GB - and a typed `?tile=2048` at 1,048,576 reaches 6,856 MB, because the
+    // bleed scales with the PICTURE and not the tile, so the operator's worst case is a SMALL forced tile
+    // at a huge width and not a large one; tiffPlan narrows the pool there); every shed above
     // happened between 32 MB and that ceiling. The three hours of paging this was built for happened at
     // 8192, which no longer exists.
     //
@@ -22520,7 +22562,12 @@ fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (tilePainted(c)) break;
             c.width = 1; c.height = 1;                     // hand the failed allocation back first
           }
-          if (attempt >= 2) { forgetTile(W); throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders })); }
+          // WITH THE PLAN ATTACHED, because this throw is the one failure that writes NO MASTER - so
+          // the trail, which is otherwise only ever read out of a finished file, is lost exactly when
+          // it is the only thing that could say why. The message blames memory as a fixed guess; the
+          // trail carries the tile, the canvas, the peak and the pool that were actually chosen.
+          if (attempt >= 2) { forgetTile(W); throw new Error(TR('exp.err.blank', { n: n + 1, total: p.renders }) +
+                                                             '  [' + p.trail.join('  ') + ']'); }
           expStat(TR('exp.tiles', { done: n + 1, total: p.renders, px: W }), 0.92 * n / p.renders);
           await breathe();                                 // a retry costs one tile; a hole costs the master
         }

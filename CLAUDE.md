@@ -60,6 +60,7 @@ node tools/check-coat-field.mjs    # one predicate decides both the subsurface f
 node tools/check-fmt-vocab.mjs     # a slider readout that prints a word routes it; the prose rule cannot see one
 node tools/check-i18n-fallback.mjs # a routed element inline fallback still says what its dictionary entry says
 node tools/check-draft-gate.mjs    # an unreviewed translation is offered, never imposed on a matching browser
+node tools/check-forced-peak.mjs   # a forced tile overrides the ladder's choice, not its memory test
 ```
 
 The browser harness (`harness/*.mjs`) needs Playwright and **does** run locally, through

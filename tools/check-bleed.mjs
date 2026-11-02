@@ -260,8 +260,17 @@ if (!/const wallOf = c => c\.est \/ widthOf\(c\.ts\)/.test(plan))
   if (!/[^.\w]return POOL_MAX;/.test(cap))
     fail.push('poolCap does not fall back to POOL_MAX, so the declared cap is decorative and the footprint bound rests on nothing');
 }
-if (!/const n = poolWidthFor\(p\.budgetMB, p\.tileMB\)/.test(app))
+// THE PLANNER MAY NARROW IT, AND NOTHING ELSE MAY. tilePool stopped being a bare
+// `const n = poolWidthFor(...)` on 2026-11-02, when the forced branch gained the peak test it had
+// never run: `?tile=N` cannot step down, so the plan carries a width cap and the pool honours it. The
+// property guarded here is UNCHANGED - the width the planner chose against is the width it gets - so
+// the anchor is updated rather than loosened, the third time this check has had to do that, and it is
+// now two assertions where it was one: a pool that narrows by anything other than the plan's own
+// poolMax is the same defect in a new place.
+if (!/const want = poolWidthFor\(p\.budgetMB, p\.tileMB\)/.test(app))
   fail.push('tilePool no longer asks poolWidthFor, so the width the planner chose against is not the width it gets');
+if (!/const capped = p\.poolMax != null && want > p\.poolMax \? p\.poolMax : want;/.test(app))
+  fail.push("tilePool narrows its width by something other than the plan's own poolMax, so the planner predicts a width it does not get");
 if (!/const tileMBof = t => Math\.round\(\(t \+ 2 \* bleed\) \*\* 2 \* 4 \/ 1e6\)/.test(plan) || !/tileMB: tileMBof\(ts\)/.test(plan))
   fail.push('the tile figure the planner scores against is not the one the plan returns, so poolWidthFor is asked two different questions');
 // An unknown ceiling is not a generous one. deviceMemory is Chromium-only, so Safari and Gecko fall back
