@@ -106,6 +106,16 @@ Missed twice in a row on 2026-10-29, both times by running the gates, seeing gre
 **A derived CI expectation from `.github/workflows/*.yml` alone undercounts.** `pages build and deployment`
 is GitHub-managed and is not one of those files, so a push that changes the app fires three runs, not two.
 
+**And it is not the app that fires it — every push to `master` does.** Measured across six pushes on
+2026-11-01: it ran for one that changed `app/` + `tools/` + `docs/`, one that changed `app/` + `docs/`,
+two that changed `harness/` + `docs/`, one that changed **only** `docs/`, and one that changed **only**
+`harness/`. So the derivation is *the workflows whose `paths:` match, plus one*, always. Getting that
+wrong is not cosmetic in either direction: expect too many and a clean CI reads as inconclusive, too
+few and a run you never looked at reads as green. Derive the workflow part from each file's own
+`on.push.paths` rather than from habit — `engines.yml` wants `harness/engines|compare|png|hero.mjs`
+specifically and sits out almost everything, and `i18n.yml` does **not** list `harness/`, so a
+harness-only push fires gallery and pages and nothing else.
+
 ## Facts that bite
 
 - **This repo is public.** `.claude/` is gitignored and stays that way — private tooling and notes live
