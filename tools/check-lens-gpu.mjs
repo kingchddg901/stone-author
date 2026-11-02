@@ -118,5 +118,21 @@ else ok(`all ${declared.length} declared part(s) are in PARTS`);
 if (PARTS.indexOf('lensEnv') !== 0) fail('lensEnv must come first - it declares L');
 else ok('lensEnv is first, so L exists before it is read');
 
+// 7. EVERY DEFERRAL IS HONOURED. applyCoat skips the lens when a caller sets deferLens, which means
+// the caller owes one - and a render that never pays looks perfectly well, because a slab without
+// refraction is just a slab. So every `deferLens: true` in the app must have a lensApply beside it.
+// This is the defect the whole deferral introduces and the only one with no other witness.
+const APP = readFileSync(join(HERE, '..', 'app', 'stone-author.html'), 'utf8');
+const defers = [...APP.matchAll(/deferLens:\s*true/g)].map(m => m.index);
+if (!defers.length) fail('nothing defers the lens - the dispatch is unreachable');
+else {
+  const unpaid = defers.filter(i => !/lensApply\s*\(/.test(APP.slice(i, i + 1200)));
+  if (unpaid.length) fail(`${unpaid.length} of ${defers.length} deferral(s) never call lensApply`);
+  else ok(`all ${defers.length} deferral(s) run lensApply`);
+}
+if (!/const lensWanted = f => !f\.ident && G\.lens > 0;/.test(APP))
+  fail('lensWanted is not the single predicate any more');
+else ok('lensWanted is the one predicate both readers ask');
+
 console.log(bad ? `\nlens-gpu: ${bad} FAILURE(S)` : '\nlens-gpu: OK');
 process.exit(bad ? 1 : 0);

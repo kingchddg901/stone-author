@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.305';
+  const BUILD = '2026.11.02.306';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5117,7 +5117,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // UNDER BLACK LIGHT TOO. The two assembled-canvas passes guarded on `!uvMode` and this line never
     // did, so the studio and renderFull have always put a lens on a UV slab while the tiled paths took
     // it off again. One call site cannot disagree with itself.
-    if (!f.ident && G.lens > 0) applyLens(tcv, tx, vp);
+    // ONE PREDICATE, TWO READERS - the shape check-coat-field already holds for the subsurface
+    // field. applyCoat asks lensWanted whether to run the stage itself; a caller that DEFERS it asks
+    // the same function whether it OWES one. A second copy of `!f.ident && G.lens > 0` is exactly how
+    // a deferred lens goes missing on one path and not another, and a lens-less render looks fine.
+    if (lensWanted(f) && !f.deferLens) applyLens(tcv, tx, vp);
   }
   // ---- the subsurface, from a field instead of from neighbours -------------------------------------
   // ADD THIS TILE'S PIECE OF THE WHOLE-PICTURE ENVELOPE. No blur, no difference, no scratch canvas:
@@ -5748,6 +5752,102 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // The field is closed form and its arguments are picture coordinates, so there is nothing to
   // snapshot: evaluate it where the pixel actually is, and gather at the resolution being written.
+  // WHETHER THIS RENDER HAS A LENS AT ALL. Read by applyCoat to decide whether to draw it, and by
+  // every caller that defers the stage to decide whether it has one to run. `ident` is the identity
+  // view, which carries no coat.
+  const lensWanted = f => !f.ident && G.lens > 0;
+
+  // WHICH PATH DREW THE LAST LENS, 'gpu' or 'cpu', for the master's own record. A master that does
+  // not say is a master whose pixels cannot be accounted for later - the same reason the trail
+  // records which painter drew the content.
+  let lensOn = null;
+
+  // THE LENS, WHEREVER IT CAN RUN. The GPU first, the CPU if anything at all is in the way: no
+  // device, no shader, a buffer the device will not bind, or a throw. A refracted picture is not
+  // optional, so this never fails - it only gets slower.
+  async function lensApply(tcv, tx, vp) {
+    if (await lensGpu(tcv, tx, vp)) { lensOn = 'gpu'; return 'gpu'; }
+    applyLens(tcv, tx, vp); lensOn = 'cpu'; return 'cpu';
+  }
+
+  // THE LENS ON THE GPU, AND WHY IT CANNOT RUN FROM INSIDE applyCoat. A dispatch and its readback are
+  // async and applyCoat is synchronous on every path - the main thread's nine call sites and the
+  // pool's generated worker alike. So applyCoat defers and the caller awaits this.
+  //
+  // IT DOES NOT ASK gpuWhyNot, AND THAT IS THE POINT. That predicate refuses the CONTENT shader for
+  // things it would have to DRAW: a blend mode that is not 'normal', a layer glow above zero, a drusy
+  // blur. This kernel draws no layers - it reads a finished tile and refracts it. gpuCapability's own
+  // comment carries the principle for the material modules ("a wood module that will not build on
+  // some device would have refused GLASS there too, which is a refusal for a reason that is not
+  // true") and the lens is a third consumer of that same device.
+  //
+  // SO THE RENDER RUNS SPLIT, deliberately: eight CPU workers painting content, the GPU refracting.
+  // That is the arrangement the measurements want. The GPU painter was 12.4% SLOWER at 32,768
+  // because it traded eight-wide painting for one-wide while the coat stayed on the CPU; the device
+  // meanwhile sits at 47.6% mean through a 65,535 render, 0 of 33 samples at or above 80%. The
+  // person's own toggle still governs - gpuPrefGet is asked first - because it means "use my GPU".
+  //
+  // DECLARED BEFORE gpuCapability AND GPU_MAT, which are far below. Function declarations hoist and
+  // the const is read at CALL time, long after both are initialised.
+  let lensPipe = null, lensBuf = null;
+  async function lensGpu(tcv, tx, vp) {
+    if (!gpuPrefGet()) return false;
+    const w = tcv.width, h = tcv.height, bytes = w * h * 4;
+    try {
+      const cap = await gpuCapability();
+      if (!cap || !cap.ok || cap.fault) return false;
+      const M = await gpuModule('lens');
+      if (!M || !M.mod) return false;
+      const dev = cap.dev;
+      // A BUFFER THE DEVICE WILL NOT BIND IS NOT AN ERROR, it is a strip too tall for this adapter -
+      // a streamed PNG at 65,535 is 67 MB a strip and the limit is usually far above that, but the
+      // limit is READ rather than assumed, and the CPU takes the ones that do not fit.
+      if (bytes > dev.limits.maxStorageBufferBindingSize) return false;
+      if (!lensPipe) lensPipe = await dev.createComputePipelineAsync({
+        layout: 'auto', compute: { module: M.mod, entryPoint: 'lensGather' } });
+      // RE-ALLOCATED ONLY WHEN THE SIZE MOVES. A streamed render's strips are all one size but the
+      // last, and a tiled one's tiles are all one size but the edges, so this allocates twice.
+      if (!lensBuf || lensBuf.bytes !== bytes) {
+        if (lensBuf) for (const k of ['src', 'dst', 'rb', 'uni']) lensBuf[k].destroy();
+        const U = GPUBufferUsage;
+        lensBuf = { bytes,
+          src: dev.createBuffer({ size: bytes, usage: U.STORAGE | U.COPY_DST }),
+          dst: dev.createBuffer({ size: bytes, usage: U.STORAGE | U.COPY_SRC }),
+          rb:  dev.createBuffer({ size: bytes, usage: U.MAP_READ | U.COPY_DST }),
+          uni: dev.createBuffer({ size: LENS_UNI_BYTES, usage: U.UNIFORM | U.COPY_DST }) };
+      }
+      const fw = vp ? vp.fw : w, fh = vp ? vp.fh : h, vx = vp ? vp.ox : 0, vy = vp ? vp.oy : 0;
+      // THE SAME lensField THE CPU PATH READS, not a second copy of the arithmetic. If the shader
+      // were handed a different k or a different centre the two pictures would differ for a reason
+      // that has nothing to do with the gather, and the comparison would measure the wrong thing.
+      dev.queue.writeBuffer(lensBuf.uni, 0, LENS_PACK(lensField(fw, fh), { w, h, vx, vy, fw, fh }));
+      const img = tx.getImageData(0, 0, w, h);
+      dev.queue.writeBuffer(lensBuf.src, 0, img.data);
+      const grp = dev.createBindGroup({ layout: lensPipe.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: lensBuf.uni } },
+        { binding: 1, resource: { buffer: lensBuf.src } },
+        { binding: 2, resource: { buffer: lensBuf.dst } }] });
+      const enc = dev.createCommandEncoder();
+      const pass = enc.beginComputePass();
+      pass.setPipeline(lensPipe); pass.setBindGroup(0, grp);
+      const d = LENS_DISPATCH(w, h); pass.dispatchWorkgroups(d[0], d[1], d[2]); pass.end();
+      enc.copyBufferToBuffer(lensBuf.dst, 0, lensBuf.rb, 0, bytes);
+      dev.queue.submit([enc.finish()]);
+      await lensBuf.rb.mapAsync(GPUMapMode.READ);
+      new Uint8Array(img.data.buffer).set(new Uint8Array(lensBuf.rb.getMappedRange()));
+      lensBuf.rb.unmap();
+      // AND A FAULT RAISED WHILE THIS WAS IN FLIGHT DISCARDS IT. onuncapturederror records on the
+      // capability, which outlives any one dispatch - so a tile drawn by a device that has since
+      // said it went wrong is thrown away here rather than written.
+      if (cap.fault) return false;
+      tx.putImageData(img, 0, 0);
+      return true;
+    } catch (e) {
+      console.warn('gpu: the lens would not run', e);
+      return false;
+    }
+  }
+
   function applyLens(tcv, tx, vp) {
     const w = tcv.width, h = tcv.height;
     const fw = vp ? vp.fw : w, fh = vp ? vp.fh : h, vx = vp ? vp.ox : 0, vy = vp ? vp.oy : 0;
@@ -6026,7 +6126,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
              // gate on a later pass: it would newly refuse desktop PNGs that work today.
              peakMB: Math.round(live * FW * (stripH + 2 * bleed) * 4 / 1e6) };
   }
-  function renderStrip(W, y0, h, bleed, wins) {
+  // ASYNC BECAUSE THE LENS CAN BE A DISPATCH, and the stage has to land in the right place. The
+  // documented order is coat -> lens -> reality windows, and the window loop below is in this
+  // function - so deferring the lens to the CALLER would move it AFTER the windows. One pixel of
+  // difference on every slab that has both a lens and a window, and nothing to see on any other.
+  async function renderStrip(W, y0, h, bleed, wins) {
     const finalW = W, finalH = Math.round(W * H), bs = W / COAT_REF, prevG = g2d; glowPx = BLOOM_DRAW ? 16 * bs : 0;
     const ey0 = y0 - bleed, eh = h + 2 * bleed;
     const c = document.createElement('canvas'); c.width = finalW; c.height = eh;
@@ -6037,7 +6141,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const tile = { ox: 0, oy: ey0, fw: finalW, fh: finalH };
     cx.setTransform(finalW, 0, 0, finalW, 0, -ey0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx;
     paintContent(false, false);
-    applyCoat(c, cx, bs, { ident: false, uvMode, backlit: false, tiled: true }, tile);
+    const coatF = { ident: false, uvMode, backlit: false, tiled: true, deferLens: true };
+    applyCoat(c, cx, bs, coatF, tile);
+    if (lensWanted(coatF)) await lensApply(c, cx, tile);
     g2d = prevG;
     for (const win of wins)
       compositeWindow(cx, win, finalW, eh, [finalW, 0, 0, finalW, 0, -ey0], bs, win.x * finalW, win.y * finalW - ey0, finalW, tile);
@@ -11992,7 +12098,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         let c = null, wrote = 0;                           // rows of THIS band already handed to the writer
         try {
           if (failFirst > 0) { failFirst--; throw new Error('forced band failure (harness)'); }
-          c = renderStrip(W, y, h, p.bleed, near);
+          c = await renderStrip(W, y, h, p.bleed, near);
           // A canvas past a cap does not throw: it reports the size asked for and leaves the far end
           // unwritten, so the size it came back as is the thing to check.
           if (c.width !== p.FW) throw new Error('band canvas clamped to ' + c.width + ' of ' + p.FW);
@@ -15849,7 +15955,7 @@ self.onmessage = async (e) => {
     // parsed as names (it reported a function called blur that does not exist), and a closing brace
     // anywhere in a comment above it ends the body early, which hid the three names below entirely.
     // Both happened on the way to this line; neither is visible in a syntax check.
-    return { renderSlabTo, compositeWindow, newSurface,
+    return { renderSlabTo, compositeWindow, newSurface, lensWanted,
              coatReachAt, coatReach, coatRadius, lensReach, lensField, lensTable, blurReach, shadowReach, maxAdjBlur, maxGlow,
              coatFieldWhyNot, coatFieldUsable, fieldSubsurface, fieldCanvas };
   }
@@ -20271,6 +20377,19 @@ fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
       // TILE AND BAND ORIGIN ZERO HERE, as glass does: the pool patches tileX, tileY and tileH per
       // band through off() above, and packing them would be a second answer to the same question.
       pack: (ew, W) => STONE_PACK(stoneScene(), { tileW: ew, tileH: ew, tileX: 0, tileY: 0, fullW: W }),
+    },
+    // THE LENS, WHICH IS NOT A MATERIAL AND HAS NO why(). The three entries around it each own a way
+    // of painting CONTENT and each refuses a slab whose layers it cannot draw. This one draws no
+    // layers: it reads a finished tile. So it never refuses on the slab's account, which is what lets
+    // a render run SPLIT - the content on the CPU pool, the refraction on the GPU.
+    //
+    // NO off() AND NO pack(ew, W) EITHER. Those exist because the materials pack a scene once per
+    // render and patch a few numbers per band. The lens's uniform is twelve scalars and is rewritten
+    // whole for every tile, so there is nothing to patch and nothing to hoist.
+    lens: {
+      code: () => LENS_SRC(),
+      uni: LENS_UNI_BYTES,
+      why: () => null,
     },
     glass: {
       code: () => Object.values(WGSL).join(String.fromCharCode(10)),

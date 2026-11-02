@@ -146,8 +146,14 @@ for (const type of ['fresnel', 'reeded', 'water']) {
 
 // ---- and the lens must still be IN the coat, not bolted on after it ---------------------------------
 if (!ABLATE) {
-  if (!/if \(!f\.ident && G\.lens > 0\) applyLens\(tcv, tx, vp\);/.test(APP))
+  if (!/applyLens\(tcv, tx, vp\);/.test(APP))
     say('applyCoat no longer calls applyLens with its viewport — a tile would centre its own rings');
+  // AND ON ONE PREDICATE. The stage can now be DEFERRED - applyCoat skips it and the caller runs it,
+  // because a GPU dispatch is async and applyCoat is not. That is only safe while both readers ask
+  // the SAME question: a second copy of `!f.ident && G.lens > 0` is how a deferred lens goes missing
+  // on one path and not another, and a render with no lens looks perfectly well.
+  if (!/if \(lensWanted\(f\) && !f\.deferLens\) applyLens\(tcv, tx, vp\);/.test(APP))
+    say('applyCoat no longer gates the lens on lensWanted(f) and f.deferLens');
   if (/applyLens\(fc, fx\)/.test(APP))
     say('something still runs the lens over an assembled canvas as well as per tile, which refracts it twice');
   if (!/shadowReach\(6 \* maxGlow\(\)\), lensReach\(bs\)\)/.test(APP))

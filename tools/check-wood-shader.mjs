@@ -293,12 +293,20 @@ console.log('  put them in different places. That needs both running on the same
     ['blmix', 'lays the dither main skipped when the bloom runs; stone-only'],
     ['bltrans', 'the tiled transpose that keeps both blur axes coalesced; stone-only'],
   ]);
+  // AND ONE THAT IS NO MATERIAL'S AT ALL. STONE_ONLY's sentence is "built inside
+  // `if (currentMaterial() === 'stone')`", which is not true of the lens: its pipeline is built
+  // without asking what the slab is made of, because the kernel reads a finished tile and refracts
+  // it. Requiring wood's module to declare it would be requiring wood to carry a coat stage.
+  const NOT_A_MATERIAL = new Map([
+    ['lensGather', 'the last coat pass as a gather; no material owns it, and it reads a finished tile'],
+  ]);
   ok('and every stone-only exemption says why', [...STONE_ONLY.values()].every(r => r.length > 30));
-  const inApp = [...STONE_ONLY.keys()].filter(n => all.indexOf(n) < 0);
+  ok('and so does every not-a-material one', [...NOT_A_MATERIAL.values()].every(r => r.length > 30));
+  const inApp = [...STONE_ONLY.keys(), ...NOT_A_MATERIAL.keys()].filter(n => all.indexOf(n) < 0);
   ok('every exemption names an entry point the app still creates', inApp.length === 0,
      'GONE FROM THE APP: ' + inApp.join(', '));
 
-  const want = all.filter(n => !STONE_ONLY.has(n));
+  const want = all.filter(n => !STONE_ONLY.has(n) && !NOT_A_MATERIAL.has(n));
   const code = woodSource(GLASS).code;
   const missing = want.filter(n => code.indexOf('fn ' + n + '(') < 0);
   ok('the wood module declares every one', missing.length === 0, 'MISSING: ' + missing.join(', '));
