@@ -59,6 +59,14 @@ export function generate() {
   // stops parsing.
   const stoneReal = strip('stone-real.mjs', []);
   const stoneGpu = strip('stone-gpu.mjs', [/^const WGSL = \{\};\s*$/m]);
+  // AND THE LENS, WHICH IS NOT A MATERIAL. It gets the SAME drop list as glass and stone, and that
+  // is deliberate rather than copied: the regex removes a BARE `const WGSL = {}` and leaves an
+  // exported one, so with it in place the exported spelling in lens-gpu.mjs is load-bearing exactly
+  // as it is there - bare, and the lens's parts would land in glass's registry. Passing [] here
+  // instead made that impossible, which quietly turned check-gpu-block's leak check into a claim
+  // that could not fail. Ablated: with this list the bare spelling goes red.
+  const lensReal = strip('lens-real.mjs', []);
+  const lensGpu = strip('lens-gpu.mjs', [/^const WGSL = \{\};\s*$/m]);
 
   const body = [
     OPEN,
@@ -123,6 +131,33 @@ export function generate() {
     '    STONE_UNI_OFF = uniOffset;',
     '    STONE_UNI_BYTES = UNI_BYTES;',
     '    STONE_COLLAPSE = collapseFilter;',
+    '  }',
+    '',
+    '  // ---- AND THE LENS, WHICH IS NOT A MATERIAL. The three blocks above each own a way of',
+    '  // painting CONTENT; this one owns the LAST COAT PASS, and it reads the coated tile without',
+    '  // knowing or caring what drew it. That is why it is here rather than inside stone: a',
+    '  // material-agnostic stage living in a material\'s module is a stage that only works for that',
+    '  // material, and check-material-fork is what would have to answer for it.',
+    '  //',
+    '  // IT CAN BE A KERNEL BECAUSE IT IS A GATHER - one input pixel per output pixel, at a position',
+    '  // computed from the output pixel\'s own coordinates. The rest of the coat is twelve box-blur',
+    '  // passes and stays where it is.',
+    '  //',
+    '  // IN A BLOCK, like the two above, because it declares a WGSL and an LF of its own. It needs no',
+    '  // capture of GLASS_WGSL: nothing in it reaches into another block, so there is no temporal',
+    '  // dead zone to walk into here.',
+    '  let LENS_SRC = null, LENS_PACK = null, LENS_UNI_BYTES = 0, LENS_DISPATCH = null;',
+    '  {',
+    indent2(lensReal),
+    '',
+    indent2(lensGpu),
+    '',
+    '    // LAZY for the same reason the materials are: a slab with no lens never compiles it, and',
+    '    // gpuModule memoises the compiled module after the first call.',
+    '    LENS_SRC = () => lensCode();',
+    '    LENS_PACK = packLens;',
+    '    LENS_UNI_BYTES = UNI_BYTES;',
+    '    LENS_DISPATCH = dispatchFor;',
     '  }',
     CLOSE,
   ].join(NL);

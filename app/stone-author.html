@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.304';
+  const BUILD = '2026.11.02.305';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -19945,6 +19945,277 @@ fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) nw
     STONE_UNI_OFF = uniOffset;
     STONE_UNI_BYTES = UNI_BYTES;
     STONE_COLLAPSE = collapseFilter;
+  }
+
+  // ---- AND THE LENS, WHICH IS NOT A MATERIAL. The three blocks above each own a way of
+  // painting CONTENT; this one owns the LAST COAT PASS, and it reads the coated tile without
+  // knowing or caring what drew it. That is why it is here rather than inside stone: a
+  // material-agnostic stage living in a material's module is a stage that only works for that
+  // material, and check-material-fork is what would have to answer for it.
+  //
+  // IT CAN BE A KERNEL BECAUSE IT IS A GATHER - one input pixel per output pixel, at a position
+  // computed from the output pixel's own coordinates. The rest of the coat is twelve box-blur
+  // passes and stays where it is.
+  //
+  // IN A BLOCK, like the two above, because it declares a WGSL and an LF of its own. It needs no
+  // capture of GLASS_WGSL: nothing in it reaches into another block, so there is no temporal
+  // dead zone to walk into here.
+  let LENS_SRC = null, LENS_PACK = null, LENS_UNI_BYTES = 0, LENS_DISPATCH = null;
+  {
+    // THE LENS'S PARAMETERS, PACKED. The companion to lens-gpu.mjs, and the only place the uniform's
+    // field order is written down.
+    //
+    // WHY THIS IS NOT PART OF A MATERIAL. stone-real, wood-real and glass-real each pack a material: the
+    // ground, the modulators, the content layers. The lens packs none of that, because the lens does not
+    // know what is underneath it. It is the LAST coat pass - after the subsurface and the specular - and
+    // all it ever reads is the coated tile that came out of applyCoat. So it sits beside the materials
+    // rather than inside one, and tools/check-material-fork.mjs stays quiet: there is no stone/wood/X
+    // branch here to put at a seam, because there is no branch.
+    //
+    // WHAT IT DOES NOT CARRY, which is the interesting half:
+    //
+    //   NO RADIAL TABLE. applyLens tabulates amp*sin(kr)/r and 1+amp*k*cos(kr) because a sin and a cos
+    //   cost about 40 ns each in a scalar loop and the sqrt costs 2. On the GPU they are hardware
+    //   instructions and a table would be a buffer read, so the kernel computes the field directly. That
+    //   makes the shader STRICTLY MORE ACCURATE than the CPU path, which carries up to LENS_TAB_ERR of
+    //   interpolated displacement - so the two renderers cannot agree bit for bit, by construction and
+    //   not by accident. docs/stone-gpu.md already sets the bar for that: new against OLD judged by eye,
+    //   new against ITSELF judged in bytes.
+    //
+    //   NO ARENA, NO CELL TABLES, NO PER-LAYER FILTERS. One uniform of twelve scalars and two pixel
+    //   buffers is the whole binding set. stone's arena is 103.8 MB at 32,768; this is 48 bytes.
+    //
+    // THE PIXELS GO AS u32, ONE PER PIXEL, because that is what a canvas hands over: getImageData gives
+    // RGBA bytes, and a Uint32Array view of them is exactly what unpack4x8unorm reads on a little-endian
+    // machine. Keeping them packed means the gather indexes whole pixels rather than channels, which is
+    // the same arithmetic applyLens does with `(sy * w + sx) << 2` and one less multiply.
+
+    // THE FIELD ORDER, AND THE SHADER'S STRUCT IS GENERATED FROM IT. Written once here; lens-gpu.mjs
+    // imports both lists and builds the struct, so a field added in the middle cannot leave the shader
+    // reading the next one along. stone-gpu.mjs's header records what that defect looked like when the
+    // indices were written by hand: every layer read its grid out of its own padding and drew nothing.
+    const LENS_FLOAT_NAMES = [
+      'k',      // the field's angular frequency, 2*PI / pitch in draw px
+      'amp',    // displacement amplitude in px; amp*k is PI*lens whatever the pitch
+      'caus',   // the brightness gain, G.lens * 0.35
+      'cx',     // the picture's centre, in PICTURE pixels and not the tile's
+      'cy',
+      'vx',     // this tile's top-left in picture pixels - whole numbers, always
+      'vy',
+      'fwm1',   // fw - 1 and fh - 1, precomputed because the clamp wants the limit and not the size
+      'fhm1',
+    ];
+    const LENS_INT_NAMES = [
+      'w',      // the tile's own width and height, in pixels, bleed included
+      'h',
+      'kind',   // 0 fresnel, 1 reeded, 2 water - see KINDS
+    ];
+
+    // THE TYPE GOES AS A NUMBER, and the mapping lives here rather than in the shader so one table
+    // answers for both halves. A string would be a branch on a string in a per-pixel kernel.
+    const KINDS = { fresnel: 0, reeded: 1, water: 2 };
+
+    // A UNIFORM IS PADDED TO 16 BYTES, and the padding is DERIVED rather than written. Twelve scalars is
+    // 48 bytes and needs none today; the thirteenth would need twelve bytes of it, and a hand-written
+    // `_pad` is the kind of thing that stays at the old size when the list grows.
+    const UNI_SCALARS = LENS_FLOAT_NAMES.length + LENS_INT_NAMES.length;
+    const UNI_PAD = (16 - ((UNI_SCALARS * 4) % 16)) % 16 / 4;      // in scalars, not bytes
+    const UNI_BYTES = (UNI_SCALARS + UNI_PAD) * 4;
+
+    // PACK ONE TILE'S CALL. `f` is lensField's return - the same object applyLens reads, so the two
+    // paths cannot disagree about what the field IS - plus the tile's own geometry.
+    //
+    // EVERY NUMBER HERE IS ALSO READ BY THE CPU PATH. That is deliberate: if the shader is handed a
+    // different k or a different centre than applyLens would use, the two pictures differ for a reason
+    // that has nothing to do with the gather, and the fidelity comparison measures the wrong thing.
+    function packLens(f, tile) {
+      const { w, h, vx, vy, fw, fh } = tile;
+      const kind = KINDS[f.type];
+      if (kind === undefined) throw new Error('lens-real: unknown lens type ' + f.type);
+      const buf = new ArrayBuffer(UNI_BYTES);
+      const fv = new Float32Array(buf), iv = new Int32Array(buf);
+      const vals = { k: f.k, amp: f.amp, caus: f.caus, cx: f.cx, cy: f.cy, vx, vy, fwm1: fw - 1, fhm1: fh - 1 };
+      const ints = { w, h, kind };
+      // FAIL CLOSED ON A NAME NOBODY SUPPLIED. An Int32Array coerces undefined to 0 IN SILENCE and a
+      // Float32Array to NaN, so a field added to a list above and not to a map here writes a plausible
+      // zero or a poison that only shows up as a black tile. The struct cannot catch this - it is
+      // GENERATED from these same lists, so it grows with them and the two can never disagree, which
+      // makes any struct-against-packer check an identity. This is the thing that can actually fail.
+      for (const [names, map] of [[LENS_FLOAT_NAMES, vals], [LENS_INT_NAMES, ints]])
+        for (const n of names)
+          if (!Number.isFinite(map[n])) throw new Error('lens-real: no finite value for ' + n);
+      LENS_FLOAT_NAMES.forEach((n, i) => { fv[i] = vals[n]; });
+      LENS_INT_NAMES.forEach((n, i) => { iv[LENS_FLOAT_NAMES.length + i] = ints[n]; });
+      return buf;
+    }
+
+    // THE DISPATCH SHAPE, here rather than at the call site so the kernel's workgroup size is stated
+    // once. 8x8 because the gather's neighbours are its own neighbours: a workgroup covering a square
+    // block reads a square block of source, which is the best locality a displacement field allows.
+    const WG = 8;
+    const dispatchFor = (w, h) => [Math.ceil(w / WG), Math.ceil(h / WG), 1];
+
+    // THE LENS AS A COMPUTE SHADER — the last coat pass, and the first coat stage to leave the CPU.
+    //
+    // WHAT IT OWNS. One pixel of the coated tile. applyCoat has already laid the ground, the content, the
+    // bloom, the subsurface and the specular; this reads that picture and refracts it. It owns nothing
+    // else and knows nothing about the material underneath - see lens-real.mjs for why that keeps it out
+    // of stone-gpu.mjs.
+    //
+    // WHY IT CAN BE A KERNEL AT ALL, when the rest of the coat cannot. docs/stone-gpu.md puts it plainly:
+    // "applyCoat is twelve box-blur passes and a per-pixel shader cannot do those in one". The lens is
+    // not a box blur. It is a GATHER: every output pixel reads exactly one input pixel, at a position it
+    // computes from its own coordinates and nothing else. That is the one shape a per-pixel kernel is
+    // perfect for, and it is why this stage moves while the subsurface stays.
+    //
+    // MEASURED BEFORE IT WAS WRITTEN, which is the only reason it exists: the lens is 41.8% of a 32,768
+    // render (8.33 s of 19.91 s, by ablation), the subsurface 6.1%, and the GPU is at 47.6% mean while a
+    // 65,535 render runs - 0 of 33 samples at or above 80%, against a 4.3% idle floor. So the expensive
+    // stage is this one and the device has room for it. Had the GPU been pegged - as it is on a fog-heavy
+    // slab, where Skia's coat blur holds it at 87% - this would have been the wrong thing to build.
+    //
+    // NEAREST NEIGHBOUR, BY TRUNCATION, AND NOT A SAMPLER. This is the line to read twice. applyLens ends
+    //
+    //     const pX = fX | 0, pY = fY | 0;
+    //
+    // which is a truncation, so the stage is nearest-neighbour. A WGSL `sampler` with linear filtering is
+    // the obvious thing to reach for here and it would be WRONG - visibly softer everywhere the lens
+    // displaces, on every pixel, in a way no mean would flag as a defect because the mean barely moves.
+    // There is no sampler in this file. The source is a storage buffer and the gather indexes it, which
+    // is the same arithmetic the CPU does and cannot filter by accident.
+    //
+    // AND THE TRUNCATION HAPPENS IN THE PICTURE'S FRAME, BEFORE THE TILE'S ORIGIN COMES OFF. Also from
+    // applyLens, which carries the defect in its own comment: `(fX - vx) | 0` is the same geometry and
+    // not the same pixel. At column 0, row 64 of a 384px test picture the displacement is 1e-14 and fY
+    // lands on 63.99999999999999, which truncates to 63 - but add the bleed first and the sum has no
+    // double nearer than 70.0, so the tile reads row 64. One pixel, on one row, only where a tile
+    // boundary falls: the shape of a renderer that looks non-deterministic. vx and vy are whole pixels,
+    // so taking them off AFTERWARDS is exact.
+    //
+    // TWO BUFFERS, BECAUSE A GATHER CANNOT WRITE ITS OWN SOURCE. applyLens solves this with a band
+    // buffer; a kernel has no ordering at all, so the output is a second buffer and there is no band.
+
+
+    // EXPORTED AT THE DECLARATION, AND THAT IS NOT A STYLE CHOICE - the same note stone-gpu.mjs carries.
+    // sync-gpu's strip() runs its drop regexes BEFORE it takes the export keyword off, so a bare
+    // `const WGSL = {}` is removed and this one survives, which is the difference between this block
+    // having its own registry and writing into glass's.
+    //
+    // IT ONLY BITES BECAUSE sync-gpu PASSES THIS FILE THAT DROP REGEX. It was first wired with an empty
+    // drop list, where the bare spelling would have been harmless - and check-gpu-block's leak check was
+    // therefore a claim that could not fail. The list is there now and the ablation goes red.
+    const WGSL = {};
+    const LF = String.fromCharCode(10);
+
+    // THE UNIFORM, GENERATED FROM THE PACKER'S OWN LISTS, so the struct and the packer cannot drift. The
+    // pad comes from the list lengths too: a thirteenth scalar needs twelve bytes of padding, and a
+    // hand-written `_pad` is exactly the thing that stays at the old size when the list grows.
+    const pad = UNI_PAD ? LF + Array.from({ length: UNI_PAD }, (_, i) => `  _pad${i}: f32,`).join(LF) : '';
+    WGSL.lensEnv = `
+struct LensEnv {
+${LENS_FLOAT_NAMES.map(n => `  ${n}: f32,`).join(LF)}
+${LENS_INT_NAMES.map(n => `  ${n}: i32,`).join(LF)}${pad}
+};
+@group(0) @binding(0) var<uniform> L: LensEnv;
+@group(0) @binding(1) var<storage, read> LSRC: array<u32>;
+@group(0) @binding(2) var<storage, read_write> LDST: array<u32>;
+`;
+
+    // THE BRIGHTNESS, WHICH IS WHERE THE CAUSTIC COMES FROM. A ray bundle that converges carries the same
+    // light through less area, so the Jacobian of the displacement is a brightness: 1/|jac|, floored so a
+    // fold does not divide by nothing, and capped at 2.
+    //
+    // THE FLOOR AND THE CAP ARE BOTH REACHABLE AND BOTH MATTER. max(0.3, |jac|) puts a KINK in b, which
+    // is why folding this into the CPU's radial table was priced and rejected - across a kink linear
+    // interpolation is wrong to first order where the sinusoid is wrong to second. None of that applies
+    // here: there is no table, so b is evaluated exactly and the kink costs nothing. The cap cannot fire
+    // from the UI - it needs lens >= 1.224 against a slider that stops at 1 - but a loaded file reaches
+    // it, so it is kept and tools/check-lens-table.mjs pins the slider's range against it.
+    WGSL.lensBright = `
+fn lensBright(j: f32) -> f32 {
+  let m = 1.0 / max(0.3, abs(j));
+  let b = 1.0 + L.caus * max(0.0, m - 1.0);
+  return select(b, 2.0, b > 2.0);
+}
+`;
+
+    // THE FIELD. Three profiles, and the shapes are the reason fresnel is the expensive one:
+    //
+    //   reeded   displacement is a function of x ALONE, so the CPU lays it down as an array once per
+    //            tile and pays nothing per pixel. 17.9 ns/px measured.
+    //   water    a function of x and of y SEPARATELY, so two arrays - and the axes CROSS, dx comes from
+    //            y and dy from x. Not a transcription slip: applyLens reads `dx = dyr[y]; dy = dxc[x]`.
+    //   fresnel  a function of the DISTANCE from the centre, which is both coordinates at once and
+    //            cannot be an array. That is what cost a sin, a cos and two divides in every pixel.
+    //
+    // On the GPU all three cost about the same, which is the point: the profile that could not be
+    // precomputed is the one that stops needing to be.
+    //
+    // THE `r == 0.0` SUBSTITUTION IS THE SHIPPED BEHAVIOUR, kept rather than tidied. At the exact centre
+    // rx/r is 0/0; applyLens writes `|| 1` and so reads the field at r = 1 instead. Both displacements
+    // are multiplied by rx = ry = 0 and vanish either way, so the only thing that substitution decides is
+    // jac - and evaluating jac at r = 1 is what the CPU does, so it is what happens here.
+    WGSL.lensField = `
+fn lensField(x: f32, y: f32) -> vec3<f32> {      // dx, dy, jac
+  if (L.kind == 1) {
+    let p = (x + L.vx) * L.k;
+    return vec3<f32>(L.amp * sin(p), 0.0, 1.0 + L.amp * L.k * cos(p));
+  }
+  if (L.kind == 2) {
+    return vec3<f32>(L.amp * sin((y + L.vy) * L.k), L.amp * sin((x + L.vx) * L.k), 1.0);
+  }
+  let rx = x + L.vx - L.cx;
+  let ry = y + L.vy - L.cy;
+  var r = sqrt(rx * rx + ry * ry);
+  if (r == 0.0) { r = 1.0; }
+  let sr = L.amp * sin(r * L.k) / r;
+  return vec3<f32>(sr * rx, sr * ry, 1.0 + L.amp * L.k * cos(r * L.k));
+}
+`;
+
+    // THE GATHER. One invocation a pixel, and every clamp in the order applyLens does them.
+    //
+    // CLAMPED AT THE PICTURE'S EDGE FIRST, THEN AT THE TILE'S. The first is the lens's own behaviour and
+    // is identical on every path - it is what the stage does at the edge of the slab. The second can only
+    // bite when the bleed is short of lensReach, where it smears rather than reading a pixel the tile was
+    // never given, so if the two ever disagree it is the bleed that is wrong and not this.
+    //
+    // THE ALPHA IS NOT LIT. applyLens writes `o[oi + 3] = src[si + 3]` - the source alpha, untouched by
+    // b. A caustic brightens the light coming through, not the glass's coverage, and multiplying alpha
+    // here would make a refracted edge opaque.
+    WGSL.lensGather = `
+@compute @workgroup_size(8, 8)
+fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let w = u32(L.w);
+  if (gid.x >= w || gid.y >= u32(L.h)) { return; }
+  let x = f32(gid.x);
+  let y = f32(gid.y);
+  let f = lensField(x, y);
+  let fX = clamp(x + L.vx + f.x, 0.0, L.fwm1);
+  let fY = clamp(y + L.vy + f.y, 0.0, L.fhm1);
+  let sx = clamp(i32(floor(fX) - L.vx), 0, L.w - 1);
+  let sy = clamp(i32(floor(fY) - L.vy), 0, L.h - 1);
+  let src = unpack4x8unorm(LSRC[u32(sy) * w + u32(sx)]);
+  let lit = min(src.rgb * lensBright(f.z), vec3<f32>(1.0));
+  LDST[gid.y * w + gid.x] = pack4x8unorm(vec4<f32>(lit, src.a));
+}
+`;
+
+    // ONE MODULE, ASSEMBLED IN DEPENDENCY ORDER. The env declares L before lensBright reads L.caus and
+    // before lensField reads L.k, and WGSL has no forward declarations for module-scope variables.
+    const PARTS = ['lensEnv', 'lensBright', 'lensField', 'lensGather'];
+    function lensCode() {
+      const missing = PARTS.filter(p => !WGSL[p]);
+      if (missing.length) throw new Error('lens-gpu: unplaced part(s) ' + missing.join(', '));
+      return PARTS.map(p => WGSL[p]).join(LF);
+    }
+
+    // LAZY for the same reason the materials are: a slab with no lens never compiles it, and
+    // gpuModule memoises the compiled module after the first call.
+    LENS_SRC = () => lensCode();
+    LENS_PACK = packLens;
+    LENS_UNI_BYTES = UNI_BYTES;
+    LENS_DISPATCH = dispatchFor;
   }
   // GPU-SYNC>>>
 

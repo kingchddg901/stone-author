@@ -42,7 +42,11 @@ import { LENS_FLOAT_NAMES, LENS_INT_NAMES, UNI_PAD } from './lens-real.mjs';
 // EXPORTED AT THE DECLARATION, AND THAT IS NOT A STYLE CHOICE - the same note stone-gpu.mjs carries.
 // sync-gpu's strip() runs its drop regexes BEFORE it takes the export keyword off, so a bare
 // `const WGSL = {}` is removed and this one survives, which is the difference between this block
-// having its own registry and writing into another material's.
+// having its own registry and writing into glass's.
+//
+// IT ONLY BITES BECAUSE sync-gpu PASSES THIS FILE THAT DROP REGEX. It was first wired with an empty
+// drop list, where the bare spelling would have been harmless - and check-gpu-block's leak check was
+// therefore a claim that could not fail. The list is there now and the ablation goes red.
 export const WGSL = {};
 const LF = String.fromCharCode(10);
 

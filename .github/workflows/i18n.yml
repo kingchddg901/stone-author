@@ -155,6 +155,8 @@ jobs:
         run: node tools/tiff-meta.mjs --selftest
       - name: The lens kernel gathers nearest-neighbour, in the picture's frame, with the alpha unlit
         run: node tools/check-lens-gpu.mjs
+      - name: The generated shader block runs, and no block writes into another's registry
+        run: node tools/check-gpu-block.mjs
       - name: The directory lands after the tile data, whatever order the tiles arrived in
         run: node tools/probe-tiff-offsets.mjs
       - name: The writer worker carries every name it reaches for
