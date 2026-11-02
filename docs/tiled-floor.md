@@ -183,13 +183,40 @@ all of them pass, because `renderOneTile` sets no clip and the two kinds then ag
 
 **That is true of the tiles those three check, and not of every tile.** Measured 2026-11-01 while
 adding `lens-pool`: walking all 40 tiles of a 256px grid at 2048, with the bleed the app's own
-`coatReach` asks for (54px), **39 agree exactly and one does not** — about 30 channels at up to 2
-levels, and *which* tile it is moves with the seed, because `render()` builds a fresh slab per load.
-So it is not a property of a position in the grid. It is small, it predates the lens, and the lens
-makes it *smaller* rather than larger (16 channels at 2 with glass on, against 30 without), which is
-why `lens-pool` asks a **differential** question instead of a byte-identity one: every tile the two
-paths agree on without glass must still agree with it. A gate that demanded byte-identity across the
-whole grid would be red today for a reason that has nothing to do with what it is testing.
+`coatReach` asks for (54px), **38 or 39 agree exactly and one or two do not** — a few dozen channels
+at up to 4 levels, on tiles 2 and 8 of that grid. It is small, it predates the lens, and the lens
+does not make it worse; it is why `lens-pool` asks a **differential** question instead of a
+byte-identity one: every tile the two paths agree on *without* glass must still agree *with* it. A
+gate demanding byte-identity across the whole grid would be red today for a reason that has nothing
+to do with what it tests.
+
+**It survives the cleanest measurement available.** On a freshly loaded page, with every sequential
+render taken before any pool exists and the pooled tiles asked for in ascending order with none
+skipped, one tile still differs (16 channels at 2 levels). The magnitude wobbles between runs — the
+same tile read 0 and then 83 channels on consecutive runs — so whatever it is, it is timing-sensitive
+rather than a fixed arithmetic difference. **Not yet attributed.** Ruled out by measurement, not by
+argument: it is not the lens (it is there at lens 0, and the lens leaves it alone or shrinks it), and
+it is not the modulator bitmaps the pool ships to its workers (it persists with clouds, bands and
+breccia all at 0).
+
+**THREE WAYS TO MEASURE THIS WRONG, each of which cost a wrong answer on the way to `lens-pool`.**
+Any future pooled-against-sequential comparison meets all three:
+
+- **Ask for tiles in ascending order from 0, skipping none.** The pool answers no other order. Ask it
+  for tile 3 before 0..2 and it returns no bitmap, so the caller dies inside `drawImage`; ask for
+  tile 0 and then tile 2, skipping 1, and tile 2 comes back **59 channels different at 4 levels**
+  from both the sequential render and from a pool asked for tile 2 *alone*, while 0,1,2 in order is
+  exact. A gate that sampled a few tile indices would be measuring the pool's bookkeeping rather than
+  its painting. `po.tile(i)` is also one-shot per index: asking twice throws.
+- **Take every sequential render before any pool is built.** A main-thread `renderOneTile` taken
+  straight after pool activity can come back **59 channels different at 4 levels**, where the render
+  after *that* heals back to the value every render before the pool gave — so the pooled tile was
+  right and the sequential one beside it was the odd one out. It did not reproduce on demand, so it
+  is a timing interaction rather than a deterministic fault.
+- **`FH` must be `round(W * H)`, and the tile size must divide both.** See `harness/lens-pool.mjs`'s
+  header: mismatched heights put the lens's centre in two places and every pixel differs (99.99%,
+  maxErr 188) on a sound build, and a partial last row makes the pool return a full-height canvas
+  against the sequential path's clipped one.
 
 `floorCanvas(w, h)` now hands both threads an OffscreenCanvas, falling back to a DOM canvas only
 where there is none — and a browser without `OffscreenCanvas` has no pool either, so there is no
