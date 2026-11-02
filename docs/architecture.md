@@ -319,8 +319,13 @@ coat** at 2048 and 1.6 hours at 1,048,576. Since 2026-11-01 the trig is a **radi
 function of `r` alone, so `lensTable` tabulates `amp·sin(kr)/r` and `1 + amp·k·cos(kr)` against radius and the
 loop interpolates between two entries — which takes the two divides with it as well, because the displacement
 *is* that first number times `rx` and `ry`. The `sqrt` stays: one hardware instruction, about 2 ns. The loop
-measured **56.7 → 29.3 ns/px (1.94×)** and the whole render of one slab at 2048 **344 → 244 ms**; reeded and
-water came out 1.03× and 1.00×, which is the control. It is not free of consequence — linear interpolation of a
+measured **56.7 → 29.3 ns/px (1.94×)** at 2048 and the whole render of one slab there **344 → 244 ms**; reeded
+and water came out 1.03× and 1.00×, which is the control. Across five picture widths and four tile shapes the
+gain runs **1.6× to 2.0×**, stable to 0.03 between two reads but with no monotone story in it — not the table
+outgrowing a cache (30 KB at 16,384 against 32 KB at 2048, because the length follows the caller and a tile
+tabulates only the radii it reaches), and a 1024² tile of a 2048 picture breaks any account based on picture
+size or working set at 1.34×. Read it as **1.7× in the middle, 1.6× for an export**, with the spread
+unexplained: the lens at 1,048,576 goes from about 1.6 h to about 1 h. It is not free of consequence — linear interpolation of a
 sinusoid is wrong by at most `amp·(k·dr)²/8`, so the step is sized from the error it is allowed to make and
 **0.59% of channels move, by a median of one** (mean |d| 0.0161/255, against the 0.96/255 tiling already costs).
 `tools/check-lens-table.mjs` measures the real error against the trig, and found the first version of that bound

@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.01.298';
+  const BUILD = '2026.11.01.299';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5523,14 +5523,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // trig's 40 - so this buys most of the stage rather than all of it, and buys it on every engine
   // rather than only where a GPU is reachable.
   //
-  // WHAT IT BOUGHT, measured 2026-11-01 rather than predicted: the loop went 56.7 -> 29.3 ns/px, 1.94x,
-  // on the same arithmetic lifted out of this file and run against a fake context - and reeded and
-  // water came out 1.03x and 1.00x, which is the control, because neither reads the table. The whole
-  // render of his slab at 2048 went 344 -> 244 ms over nine reps, consistent with halving a stage the
-  // per-stage ablation had priced at 181 ms. NOT the 4x this was pitched at: 29.3 is still well above
-  // reeded's 17.9, and the rest is the sqrt, the two lerps and bright()'s own divide. Folding bright()
-  // into the table would take fresnel BELOW reeded, and is not done here - the brightness curve has a
-  // kink where the Jacobian clamps at 0.3, so it needs its own error bound rather than this one.
+  // WHAT IT BOUGHT, measured rather than predicted: at 2048 the loop went 56.7 -> 29.3 ns/px, 1.94x, on
+  // this file's own arithmetic lifted out and run against a fake context - and reeded and water came
+  // out 1.03x and 1.00x, which is the control, because neither reads the table. One slab's whole render
+  // at 2048 went 344 -> 244 ms over nine reps, consistent with halving a stage the per-stage ablation
+  // had priced at 181 ms.
+  //
+  // IT IS NOT ONE NUMBER, AND THE SPREAD IS NOT ATTRIBUTED. Over five picture widths and four tile
+  // shapes, measured twice and stable to 0.03 between the two reads, the gain runs 1.6x to 2.0x with no
+  // monotone story in it. It is NOT the table outgrowing a cache: 32 KB at 2048 against 30 KB at 16,384
+  // for nearly the same gain, and 242 KB at 1,048,576 - the length follows the CALLER, so a tile only
+  // ever tabulates the radii it reaches, and a far-from-centre tile of a huge picture needs a short
+  // table rather than a long one. Holding the tile at 2048x1280 and moving only fw gives 1.90x then
+  // 1.66x, which looks like a picture-size effect until a 1024x1024 tile of a 2048 picture comes back
+  // at 1.34x with a 42.9 ns/px new arm against 28-32 in every other cell. So: 1.7x is the middle, 1.6x
+  // is what an export should expect, and the rest is unexplained rather than explained badly. The lens
+  // at 1,048,576 goes from about 1.6 h to about 1 h, not to the 0.8 h a flat 1.94x would promise.
+  //
+  // NOT the 4x this was pitched at either: 29.3 is still well above reeded's 17.9, and what remains is
+  // the sqrt, the two lerps and bright()'s own divide. Folding bright() into the table would take
+  // fresnel BELOW reeded, and is not done here - the brightness curve has a kink where the Jacobian
+  // clamps at 0.3, so it needs its own error bound rather than this one.
   //
   // THE STEP IS A FUNCTION OF THE PICTURE; THE LENGTH IS A FUNCTION OF THE CALLER. That split is what
   // the tiling check rests on. A corner tile reads further from the centre than a middle one, so the
