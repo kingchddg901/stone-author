@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.310';
+  const BUILD = '2026.11.02.311';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5762,6 +5762,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // records which painter drew the content.
   let lensOn = null;
 
+  // AND WHY, WHEN IT WAS THE CPU. The worker's console is not reachable from the main thread and a
+  // master that says 'cpu' with no reason attached is a render nobody can fix - which cost one TIFF
+  // pair and a guess. Cleared with lensOn, by the same paths.
+  let lensWhy = '';
+
   // THE LENS, WHEREVER IT CAN RUN. The GPU first, the CPU if anything at all is in the way: no
   // device, no shader, a buffer the device will not bind, or a throw. A refracted picture is not
   // optional, so this never fails - it only gets slower.
@@ -6419,6 +6424,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // Same plan, same order, a yield between tiles so the caller can say where it has got to.
   async function renderTiledStepped(W, onTile) {
     lensOn = null;                                         // this path defers, so it owns the flag
+    lensWhy = '';
     // THE FLOOR IS THE PICTURE when tiles are laid, and this is what makes render.png. Wiring it
     // into expCompleted alone put it in the .ora merged thumbnail and nowhere else: the kit and
     // the render-only path both come through here, and both were still exporting the slab.
@@ -6792,17 +6798,23 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // __lensOff LATCHES. A device that is lost, refuses an adapter, or raises an uncaptured error
     // does not get asked again by this worker: every tile after it takes the CPU lens, which is
     // slower and correct. A render that half-fails on the GPU is not a render anybody can use.
-    s += `var __lensWgsl=null,__lensDev=null,__lensPipe=null,__lensBuf=null,__lensOff=false;` + NL;
+    s += `var __lensWgsl=null,__lensDev=null,__lensPipe=null,__lensBuf=null,__lensOff=false,__lensWhy='';` + NL;
     s += `async function __lensGpu(cv,cx,vp,uni,dis){` + NL;
-    s += `if(__lensOff||!__lensWgsl||!uni||!dis)return false;` + NL;
-    s += `if(typeof navigator==='undefined'||!navigator.gpu)return false;` + NL;
+    s += `if(__lensOff)return false;` + NL;
+    s += `if(!__lensWgsl){__lensWhy='no shader in the init';return false;}` + NL;
+    s += `if(!uni){__lensWhy='no uniform on the tile';return false;}` + NL;
+    s += `if(!dis){__lensWhy='no dispatch on the tile';return false;}` + NL;
+    s += `if(typeof navigator==='undefined'||!navigator.gpu){__lensWhy='no navigator.gpu in the worker';return false;}` + NL;
     s += `var w=cv.width,h=cv.height,bytes=w*h*4;` + NL;
     s += `try{` + NL;
-    s += `if(!__lensDev){var ad=await navigator.gpu.requestAdapter();if(!ad){__lensOff=true;return false;}` + NL;
-    s += `__lensDev=await ad.requestDevice();if(!__lensDev){__lensOff=true;return false;}` + NL;
+    s += `if(!__lensDev){var ad=await navigator.gpu.requestAdapter();` + NL;
+    s += `if(!ad){__lensOff=true;__lensWhy='no adapter';return false;}` + NL;
+    s += `__lensDev=await ad.requestDevice();` + NL;
+    s += `if(!__lensDev){__lensOff=true;__lensWhy='no device';return false;}` + NL;
     s += `__lensDev.lost.then(function(){__lensOff=true;});` + NL;
     s += `__lensDev.onuncapturederror=function(){__lensOff=true;};}` + NL;
-    s += `var dev=__lensDev;if(bytes>dev.limits.maxStorageBufferBindingSize)return false;` + NL;
+    s += `var dev=__lensDev;if(bytes>dev.limits.maxStorageBufferBindingSize){` + NL;
+    s += `__lensWhy='tile is '+bytes+' bytes, limit '+dev.limits.maxStorageBufferBindingSize;return false;}` + NL;
     s += `if(!__lensPipe){__lensPipe=await dev.createComputePipelineAsync({layout:'auto',` + NL;
     s += `compute:{module:dev.createShaderModule({code:__lensWgsl}),entryPoint:'lensGather'}});}` + NL;
     s += `if(!__lensBuf||__lensBuf.bytes!==bytes){if(__lensBuf){__lensBuf.src.destroy();__lensBuf.dst.destroy();` + NL;
@@ -6822,8 +6834,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `enc.copyBufferToBuffer(B.dst,0,B.rb,0,bytes);dev.queue.submit([enc.finish()]);` + NL;
     s += `await B.rb.mapAsync(GPUMapMode.READ);` + NL;
     s += `new Uint8Array(img.data.buffer).set(new Uint8Array(B.rb.getMappedRange()));B.rb.unmap();` + NL;
-    s += `if(__lensOff)return false;cx.putImageData(img,0,0);return true;` + NL;
-    s += `}catch(err){__lensOff=true;return false;}}` + NL;
+    s += `if(__lensOff){__lensWhy='the device faulted mid-dispatch';return false;}` + NL;
+    s += `cx.putImageData(img,0,0);return true;` + NL;
+    s += `}catch(err){__lensOff=true;__lensWhy='threw: '+(err&&err.message||err);return false;}}` + NL;
     // ONE PREDICATE HERE TOO, and the CPU lens is the fallback rather than an alternative: if the
     // dispatch declines for any reason the stage still runs, because applyCoat deferred it and a
     // tile with no refraction is a tile that is simply wrong.
@@ -6889,11 +6902,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `    var z=await deflateBytes(rgbFromRGBA(px));\n`;
     s += `    parts.push({idx:ty*d.across+tx,z:z});xfer.push(z.buffer);\n`;
     s += `  }}\n`;
-    s += `  self.postMessage({i:d.i,fin:true,lensG:__lg,painted:okP,parts:parts,marked:mk,litSum:lS,litUp:lU,litN:lN},xfer);\n`;
+    s += `  self.postMessage({i:d.i,fin:true,lensG:__lg,lensW:__lensWhy,painted:okP,parts:parts,marked:mk,litSum:lS,litUp:lU,litN:lN},xfer);\n`;
     s += `  return;\n`;
     s += `}\n`;
     s += `var out=tc;if(!d.keepBleed){out=new OffscreenCanvas(d.tileW,d.tileH);out.getContext('2d').drawImage(tc,d.bleed,d.bleed,d.tileW,d.tileH,0,0,d.tileW,d.tileH);}\n`;
-    s += `var bmp=out.transferToImageBitmap();self.postMessage({i:d.i,tx0:d.tx0,ty0:d.ty0,lensG:__lg,bmp:bmp},[bmp]);};`;
+    s += `var bmp=out.transferToImageBitmap();self.postMessage({i:d.i,tx0:d.tx0,ty0:d.ty0,lensG:__lg,lensW:__lensWhy,bmp:bmp},[bmp]);};`;
     return s;
   }
   async function renderTiledParallel(W, opts) {
@@ -12115,6 +12128,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // framed here. See renderStrip for why a band can be painted correctly in isolation.
   async function renderStreamedPNG(W, meta, onStrip, opts) {
     lensOn = null;                                         // this path defers, so it owns the flag
+    lensWhy = '';
     const p = stripPlan(W, opts);                          // opts lets a harness force a band height: the
                                                            // multi-band arithmetic is otherwise unreachable
                                                            // at any width small enough to test everywhere
@@ -12473,6 +12487,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // and this main-thread flag can never see it - which is exactly the stale value the field would
     // otherwise carry, so it is cleared rather than trusted.
     lensGpu: lensOn === 'gpu' || undefined,
+    lensWhy: (lensOn === 'cpu' && lensWhy) || undefined,
     slab: fileStem(), marks: marks.length, lines: geo.lines.length,
     // WHICH MATERIAL DREW THESE PIXELS. `family` is the STONE family, and a slab carries all three
     // materials at once unless one is exported alone - so a wood master wrote `family: "carrara"` with
@@ -21797,6 +21812,7 @@ fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
 
   async function tilePool(W, p) {
     lensOn = null;                                         // this path defers in the worker; it owns the flag
+    lensWhy = '';
     const n = poolWidthFor(p.budgetMB, p.tileMB);
     if (!n) return null;
     const bs = W / COAT_REF, finalW = W, finalH = p.FH;
@@ -21999,7 +22015,7 @@ fn lensGather(@builtin(global_invocation_id) gid: vec3<u32>) {
           else poolSettle(q, tr.s ? tr.f - tr.s : tr.f - t0);
           // In finish mode the pass IS the record - parts, counts and the painted flag - and there is
           // no bitmap to hand over. One pool is in one mode for its whole life, set by p.fin.
-          if (e.data.lensG === 2) lensOn = 'cpu';
+          if (e.data.lensG === 2) { lensOn = 'cpu'; if (!lensWhy && e.data.lensW) lensWhy = e.data.lensW; }
           else if (e.data.lensG === 1 && lensOn !== 'cpu') lensOn = 'gpu';
           res(e.data.fin ? e.data : e.data.bmp);
         };
