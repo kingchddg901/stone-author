@@ -49,6 +49,48 @@ function correlate(a, b) {                               // Pearson, to say whet
   return sa && sb ? sab / Math.sqrt(sa * sb) : null;
 }
 
+// IS A SLOW TILE SLOW BECAUSE OF THE PICTURE? ASKED ON THE SLOW TILES - which is why the correlation is
+// not the one to ask it. Pearson r over every tile describes the BULK, where a 38 ms tile is mostly
+// fixed cost and consumer-side jitter, so r sits near zero on almost any master tiled at 2048 whatever
+// the outliers are doing, and a verdict derived from it cannot fail. Measured over five 1,048,576
+// masters: r = 0.009, 0.033, 0.159, 0.178, 0.235 at medians of 19-77 ms, against 0.692 on the one master
+// tiled large enough for a tile's own content to dominate its time (10,240 tiles of 1,614 ms each).
+//
+// THE GLASS MASTER SOURCE IS THE CASE THAT PROVES THE OLD VERDICT WRONG: r = 0.03, and its slow tiles
+// carry TWENTY-NINE TIMES the bytes of a typical one. They are the dense ones, and it called them
+// stalls. .claude/notes/STATE-render-cost-2026-10-28.md had already recorded the symptom - "the shape of
+// a STALL on five of five masters" - which is how a wrong verdict survives: noticed, written down, and
+// still printed, because nothing it printed could be red.
+//
+// SO ASK WHETHER THE EXTRA BYTES ACCOUNT FOR THE EXTRA TIME. carry = (byteRatio - 1) / (timeRatio - 1),
+// both ratios the slow tiles' median against a typical tile's. Slow tiles at 2.4x the time and 2.4x the
+// bytes give carry 1 and the picture explains them; 2.3x the time at 1.01x the bytes gives carry 0.008
+// and the picture explains none of it. Over those six masters carry runs 0.008 to 20 - three orders of
+// magnitude, where r moved by less than one.
+//
+// A FITTED SLOPE WAS TRIED FIRST AND DOES NOT WORK. ms = a + b*bytes is estimated on the bulk, where
+// bytes barely predict ms, so applied to the outliers it under-predicts: it said content explained 2%
+// of the Glass master's 29x tiles. The ratio needs no fit and is not fooled.
+function slowShape(ms, bytes) {
+  const med = median(ms), idx = [];
+  for (let i = 0; i < ms.length; i++) if (ms[i] > 2 * med) idx.push(i);
+  const out = { med, n: idx.length, slow: idx.map(i => ms[i]) };
+  if (!idx.length) return out;
+  out.timeRatio = median(out.slow) / med;
+  if (!Array.isArray(bytes) || bytes.length !== ms.length) return out;
+  const medB = median(bytes);
+  if (!medB) return out;
+  out.byteRatio = median(idx.map(i => bytes[i])) / medB;
+  if (out.timeRatio > 1) out.carry = (out.byteRatio - 1) / (out.timeRatio - 1);
+  return out;
+}
+
+// The band between is real and is NOT forced to a side. The two 1,048,576 masters of 2026-11-01 sit in
+// it at 0.26 and 0.20, and saying so is the honest answer rather than the cleaner-sounding one.
+const carryReads = c => c >= 1 ? 'the dense ones, and their bytes say so. Not stalls.'
+  : c < 0.1 ? 'the picture accounts for none of their excess - look at the machine, or at the pool'
+  : 'the picture accounts for some of their excess, not all';
+
 // A crossfade never sits at one spectrum value, so it is named for the move rather than the dial.
 const lightOf = m => m.cross ? 'x' + String(m.cross.a).replace('-', 'm') + '_' + String(m.cross.b).replace('-', 'm')
   : m.spectrum === 0 ? 'day' : m.spectrum === -1 ? 'uv'
@@ -122,6 +164,53 @@ if (SLAB && !slabBytes) { console.error('no such slab: ' + SLAB); process.exit(2
 const openDev = dev => openSeal(dev, slabBytes);
 const RENAME = process.argv.includes('--rename'), GO = process.argv.includes('--go');
 const AUDIT = process.argv.includes('--audit');
+
+// THE VERDICT HAS TO BE ABLE TO GO BOTH WAYS, on input whose answer was chosen before it ran. Two tile
+// sets differing in ONE array: the same times, the same slow tiles in the same places, and bytes either
+// heavy on those tiles or flat.
+//
+// THE INPUT IS SHAPED LIKE THE MASTERS THAT BROKE IT, not like a clean demonstration. A first version
+// gave the bulk tiles a byte spread of +-8% and made the slow ones 3% of the picture, perfectly coupled
+// - and on THAT input r = 0.98 and the old verdict was right, so the test asserted a failure that did
+// not happen and went red. What the real masters look like is the opposite: bytes vary by an order of
+// magnitude across the picture WITHOUT tracking time, because a tile's time is mostly fixed cost, and
+// the dense tiles are ~1% of it. Reproduce that and r goes blind while carry still answers.
+if (process.argv.includes('--selftest')) {
+  let s = 12345 >>> 0;
+  const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const N = 4000, SLOW = 40, STEP = 97;                  // 97 * 39 = 3783 < N, so no index repeats
+  const ms = [], base = [];
+  for (let i = 0; i < N; i++) {
+    ms.push(40 + Math.round(rnd() * 6));                 // time is fixed cost plus jitter ...
+    base.push(200 + Math.round(rnd() * 3800));           // ... while bytes range 20x, independently
+  }
+  for (let i = 0; i < SLOW; i++) ms[i * STEP] = 100;
+  const medBase = median(base);
+  const dense = base.slice(), flat = base.slice();
+  for (let i = 0; i < SLOW; i++) {
+    dense[i * STEP] = Math.round(medBase * 2.4);          // the ONLY difference between the two arms
+    flat[i * STEP] = medBase;
+  }
+  let out = 0;
+  const A = slowShape(ms, dense), B = slowShape(ms, flat);
+  const want = (got, exp, what) => {
+    const ok = got === exp;
+    console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${what}: ${got}${ok ? '' : ' (wanted ' + exp + ')'}`);
+    if (!ok) out = 1;
+  };
+  console.log(`  dense arm: ${A.n} slow, ${A.timeRatio.toFixed(2)}x time on ${A.byteRatio.toFixed(2)}x bytes, carry ${A.carry.toFixed(2)}`);
+  console.log(`  flat arm : ${B.n} slow, ${B.timeRatio.toFixed(2)}x time on ${B.byteRatio.toFixed(2)}x bytes, carry ${B.carry.toFixed(2)}`);
+  want(A.n === B.n && A.timeRatio === B.timeRatio, true, 'the arms differ in bytes alone');
+  want(carryReads(A.carry).startsWith('the dense ones'), true, 'heavy slow tiles read as the picture');
+  want(carryReads(B.carry).startsWith('the picture accounts for none'), true, 'flat slow tiles read as the machine');
+  want(carryReads(A.carry) !== carryReads(B.carry), true, 'the verdict moved with the bytes');
+  const rA = correlate(ms, dense), rB = correlate(ms, flat);
+  const oldOf = r => r > 0.7 ? 'picture' : r > 0.3 ? 'partly' : 'machine';
+  console.log(`  old verdict: r = ${rA.toFixed(2)} -> ${oldOf(rA)} (dense), r = ${rB.toFixed(2)} -> ${oldOf(rB)} (flat)`);
+  want(oldOf(rA) === oldOf(rB), true, 'the correlation alone could NOT tell them apart');
+  process.exit(out);
+}
+
 const paths = process.argv.slice(2).filter(a => !a.startsWith('--'));
 if (!paths.length) { console.error('usage: node tools/tiff-meta.mjs [--audit] [--slab <file.json>] [--rename [--go]] <file> [file...]'); process.exit(2); }
 
@@ -298,23 +387,27 @@ for (const path of paths) {
     let fastest = Infinity, slowest = -Infinity;    // `hi` is taken above, by the slow-tile list
     for (const v of t) { if (v < fastest) fastest = v; if (v > slowest) slowest = v; }
     console.log(`  per tile ${t.length} render tiles: median ${med} ms, fastest ${fastest}, slowest ${slowest}`);
-    // The two signals must be read TOGETHER or they contradict each other. A slow tile is only evidence of
-    // a stall if the time did NOT follow the bytes; where the correlation is high the outliers are simply
-    // the dense tiles, which is the innocent answer. Reporting the outlier count on its own once printed
-    // "time followed the PICTURE" and "the shape of a STALL" about the same render.
+    // r IS REPORTED, NOT ASKED FOR A VERDICT. It answers how much of the BULK tracked content, which is
+    // a different question from the one a slow tile raises - slowShape above carries the measurements.
     const r = Array.isArray(pt.bytes) && pt.bytes.length === t.length ? correlate(t, pt.bytes) : null;
-    if (r !== null) {
-      console.log(`           time vs bytes r = ${r.toFixed(2)}  ->  ` +
-        (r > 0.7 ? 'time followed the PICTURE (dense tiles cost more)'
-          : r > 0.3 ? 'partly the picture, partly something else'
-          : 'time did NOT follow the picture — look at the machine, not the slab'));
+    if (r !== null)
+      console.log(`           time vs bytes r = ${r.toFixed(2)} over all ${num(t.length)} tiles — the bulk, not the outliers`);
+    const sh = slowShape(t, pt.bytes);
+    if (!sh.n) console.log('           no tile over twice the median');
+    else {
+      // AND THE COUNT IS NOT THE MACHINE'S EITHER. perTile.ms is CONSUMER-SIDE wall (search "WHY THIS
+      // EXISTS"): with N render workers one consumption in N carries its whole batch, so the fraction
+      // tracks the POOL's shape. The 4-worker master has 27.3% of its tiles over twice the median
+      // against 25% predicted from the pool alone; the single-worker masters sit between 1.4% and 9.5%.
+      const w = Number(m.workers) || 0;
+      console.log(`           ${num(sh.n)} tile(s) over twice the median, ${(100 * sh.n / t.length).toFixed(1)}%` +
+                  `${w > 1 ? ` (${w} render workers alone predict about ${(100 / w).toFixed(0)}%)` : ''}: ` +
+                  `${sh.timeRatio.toFixed(2)}x the time` +
+                  (sh.byteRatio == null ? '' : ` on ${sh.byteRatio.toFixed(2)}x the bytes`));
+      console.log(`           ${sh.slow.slice(0, 8).join(', ')}${sh.n > 8 ? ', …' : ''} ms` +
+                  (sh.carry == null ? '   bytes not recorded per tile, so no verdict'
+                    : `   carry ${sh.carry.toFixed(2)} — ${carryReads(sh.carry)}`));
     }
-    if (!hi.length) console.log('           no tile over twice the median');
-    else if (r !== null && r > 0.7)
-      console.log(`           ${hi.length} tile(s) over twice the median — the dense ones, as the correlation says. Not stalls.`);
-    else
-      console.log(`           ${hi.length} tile(s) over twice the median (${hi.slice(0, 8).join(', ')}${hi.length > 8 ? ', …' : ''})` +
-                  `${r === null ? '' : ' and the time did not track the bytes'} — the shape of a STALL`);
   } else if (m.tiled) {
     console.log('  per tile not recorded (master predates per-tile timing)');
   }

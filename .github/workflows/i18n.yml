@@ -151,6 +151,8 @@ jobs:
         run: node tools/check-op-origin.mjs
       - name: Two masters of one picture are the same picture, and a marked one says so
         run: node tools/check-same-image.mjs --selftest
+      - name: A slow tile is judged on its own bytes, not on a correlation over every other tile
+        run: node tools/tiff-meta.mjs --selftest
       - name: The directory lands after the tile data, whatever order the tiles arrived in
         run: node tools/probe-tiff-offsets.mjs
       - name: The writer worker carries every name it reaches for
