@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.302';
+  const BUILD = '2026.11.02.303';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5622,9 +5622,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // webGlow 0.2 behind a non-normal blend - so the first refusal said blend and said nothing about the
   // glow, because blend is checked first. Clearing both is what let the GPU be taken at all.
   //
-  // ONE THING NOT ACCOUNTED FOR: that GPU run recorded err: 5, five errored draws of 160, with no
-  // gpuDetail because that is only populated for an outright exp.gpu.failed. Whether those five tiles
-  // fell back or came out wrong is OPEN; same-image can compare the two masters directly.
+  // AND NOTHING WAS WRONG WITH THE TILES, though this comment said there might be. `err: 5` in gpuOwn
+  // was read here as five errored draws of 160. IT IS FIVE MILLISECONDS. Every field in gpuOwn is a
+  // duration accumulated with +=, `n` is the only count, and err times the await on popErrorScope -
+  // which the code beside the counter says outright: "POPERRORSCOPE IS AN AWAIT ON THE DEVICE, not a
+  // local read, so it is timed like any other round trip".
+  //
+  // THE READING WAS WRONG TWICE OVER, and the second half is the part worth keeping: an error found in
+  // that scope THROWS on the next line, so a render that hit one produces NO MASTER AT ALL. A completed
+  // master carrying gpuOwn is itself the evidence that no scope error was raised - there is no such
+  // thing as a master with errored tiles from this path, which is what check-gpu-fault.mjs exists to
+  // hold. A number sitting beside a count is not a count.
   //
   // ONE THING UNATTRIBUTED, recorded so a fresh walk does not have to find it twice: at 16,384 the same
   // picture took 4.73 s on build 296 and 6.51 / 6.76 s on 300. TWO changes sit between those builds -
