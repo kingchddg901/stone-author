@@ -42,7 +42,7 @@ function bodyOf(name) {
 }
 const fail = [];
 const parts = {};
-for (const n of ['lensField', 'applyLens', 'lensReach']) {
+for (const n of ['lensField', 'lensTable', 'applyLens', 'lensReach']) {
   parts[n] = bodyOf(n);
   if (!parts[n]) fail.push('`' + n + '` is not in the app — the lens no longer has the shape this gate checks');
 }
@@ -56,6 +56,9 @@ const num = (re, what) => {
   return Number(m[1]);
 };
 const COAT_REF = num(/const COAT_REF = (\d+)/, 'COAT_REF');
+// The table's error budget, read from the app for the same reason: a gate holding its own copy of
+// this number would keep passing after the app loosened it.
+const LENS_TAB_ERR = num(/const LENS_TAB_ERR = ([\d.]+);/, 'LENS_TAB_ERR');
 const H = num(/const H = ([\d.]+);\s*\/\/ frame height/, 'the frame aspect H');
 
 // ---- a 2D context that is an array ------------------------------------------------------------------
@@ -90,7 +93,9 @@ function picture(w, h, seed) {
 }
 
 const run = new Function('G', 'COAT_REF', 'H', 'tcv', 'tx', 'vp',
-  parts.lensField + parts.lensReach + parts.applyLens + '\nreturn { applyLens, lensReach };');
+  'const LENS_TAB_ERR = ' + LENS_TAB_ERR + ';\n' +
+  parts.lensField + parts.lensTable + parts.lensReach + parts.applyLens +
+  '\nreturn { applyLens, lensReach, lensTable };');
 
 let bad = 0;
 const say = (m) => { console.error('  ' + m); bad++; };

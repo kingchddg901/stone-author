@@ -313,7 +313,18 @@ with the rest of the coat. Until 2026-11-01 it ran on a downscaled snapshot (`le
 the argument that the glass hid the softening; at 2048 it did not — mean |dx| **2.509** against **4.668** for the
 same render without the lens, which is the slab's own detail replaced by an upscale of itself. A snapshot also
 needs a whole picture, and the export path that streams tiles to disk never has one, so that path had no lens in
-it at all. The cost of the move is a per-pixel `sqrt` and a `sin`/`cos` over the tile rather than over 640px. A soft
+it at all. The cost of the move was a per-pixel `sqrt`, `sin` and `cos` over the whole tile rather than over
+640px: **67 ns/px** against reeded's and water's 16, which a per-stage ablation priced at **181 ms of a 318 ms
+coat** at 2048 and 1.6 hours at 1,048,576. Since 2026-11-01 the trig is a **radial table**. The field is a
+function of `r` alone, so `lensTable` tabulates `amp·sin(kr)/r` and `1 + amp·k·cos(kr)` against radius and the
+loop interpolates between two entries — which takes the two divides with it as well, because the displacement
+*is* that first number times `rx` and `ry`. The `sqrt` stays: one hardware instruction, about 2 ns. The loop
+measured **56.7 → 29.3 ns/px (1.94×)** and the whole render of one slab at 2048 **344 → 244 ms**; reeded and
+water came out 1.03× and 1.00×, which is the control. It is not free of consequence — linear interpolation of a
+sinusoid is wrong by at most `amp·(k·dr)²/8`, so the step is sized from the error it is allowed to make and
+**0.59% of channels move, by a median of one** (mean |d| 0.0161/255, against the 0.96/255 tiling already costs).
+`tools/check-lens-table.mjs` measures the real error against the trig, and found the first version of that bound
+0.75% optimistic because the quotient's second derivative carries two terms the plain sinusoid bound omits. A soft
 **caustic** brightens (only — glass concentrates light, it never punches dark bands) where the relief focuses,
 so it reads on dark stone and washes out on white, the way a real caustic does. This is the transmission-side
 dual of the spectrum engine's emission, and the same fold runs **back-to-front for the back light** below.

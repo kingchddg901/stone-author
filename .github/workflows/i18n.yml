@@ -73,6 +73,10 @@ jobs:
         run: node tools/check-lens-tile.mjs
       - name: ...and that comparison bites when the bleed is starved
         run: node tools/check-lens-tile.mjs --ablate
+      - name: The radial table says what the trig it replaced said
+        run: node tools/check-lens-table.mjs
+      - name: ...and each way of getting that wrong is caught on its own
+        run: node tools/check-lens-table.mjs --ablate
       - name: No slider readout invents its own English, where the prose rule cannot see it
         run: node tools/check-fmt-vocab.mjs
       - name: ...and that gate can go red, without tripping on a comment
