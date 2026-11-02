@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.311';
+  const BUILD = '2026.11.02.312';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6720,64 +6720,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // ASYNC because finish mode awaits deflateBytes. The bitmap path has no await in it, so its body
     // still runs synchronously to completion exactly as before - an async function only yields at its
     // first await, and that path never reaches one.
-    s += `self.onmessage=async function(e){var d=e.data;\n`;
-    s += `if(d.type==='init'){__lensWgsl=d.lensWgsl||null;setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;layTiles=!!d.layTiles;T=d.T||T;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;workC=d.bk||null;emitC=d.em||null;__bkW=d.bkW|0;__bkH=d.bkH|0;__backlit=!layTiles&&G.backlight>0&&!!workC;coatField=d.cf?{w:d.cfw,h:d.cfh,K:d.cfK,cv:fieldCanvas(d.cfw,d.cfh,d.cf),bytes:d.cf,at:d.cfAt|0}:null;self.postMessage({type:'ready'});return;}\n`;
-    // THE ACK IS THE ONLY WAY TO TELL A QUEUE FROM A STALL. A bitmap arriving late can mean the
-    // worker painted for a minute or that it sat holding a message it had not been scheduled to
-    // read, and the completion time cannot distinguish them. Posted from the top of the handler,
-    // before a single pixel, so the gap from post to ack is scheduling and nothing else. It costs
-    // one empty message per tile - no transfer, no copy - and BOTH consumers of this core must
-    // ignore it or they will treat it as the tile.
-    s += `if(d.i!==undefined)self.postMessage({type:'ack',i:d.i});\n`;
-    // AND WHETHER THE PICTURE ARRIVED ALREADY BLOOMED - per tile, not per init, because only the
-    // passes the shader drew carry one and a worker outlives many of them.
-    // THE GLOW RADIUS, which every main-thread render path sets on entry and this one did not.
-    // glowPx is declared 0 in the preamble above and was never written, so the worker took the
-    // other side of two branches at once: paintVeinLayer's `glowPx > 0` refused to draw the halo,
-    // and applyCoat's `!(BLOOM_DRAW && glowPx > 0)` then ran the two blur passes that exist only
-    // for an engine with no drawn halo. Daylight never noticed - both branches sit inside uvMode -
-    // so a pooled UV tile differed from the sequential one across 95% of its pixels, by up to 159
-    // levels, while every daylight tile stayed bit-exact. Same expression, same bs, as line 4810.
-    s += `glowPx=BLOOM_DRAW?16*d.bs:0;coatBloomDone=!!d.blDone;\n`;
-    s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
-    // A TILE THAT ARRIVES ALREADY DRAWN. The GPU path paints on the main thread - shader, readback,
-    // then renderOneTile's ground, coat and windows - and what is left is the expensive half: the
-    // k x k cut, the marks, the light sample and the deflate. Measured at 76.5% of a tile by
-    // tools/gpu-tile-budget.html, all of it on one thread while eight cores idle, because turning
-    // the GPU on turned the pool off.
-    //
-    // So this skips everything between here and the finish block. Nothing below it changes: the
-    // same storedTilePixels, the same deflate, the same reply. A worker that paints and a worker
-    // that finishes differ by which side of this branch they took.
-    s += `if(d.bmp){tcx.drawImage(d.bmp,0,0);d.bmp.close();}else{\n`;
-    // THE FLOOR PAINTS ITS WHOLE TILE - ground, pieces and coat - so it REPLACES the three steps
-    // below rather than slotting between them. renderFloorTile is the one implementation and the
-    // main thread calls that same function: a second copy here is how the two would drift, and a
-    // floor tile that differs by which thread drew it is the defect harness/floor.mjs exists for.
-    s += `if(layTiles){var fc=renderFloorTile(d.finalW,d.tx0,d.ty0,d.tileW,d.tileH,d.bleed);` + NL;
-    s += `tcx.setTransform(1,0,0,1,0,0);tcx.drawImage(fc,0,0);fc.width=1;fc.height=1;}else{` + NL;
-    s += `tcx.setTransform(1,0,0,1,0,0);if(__backlit){tcx.fillStyle='#0b0b0e';tcx.fillRect(0,0,d.ew,d.eh);}else if(uvMode){tcx.fillStyle=UV_GROUND;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
-    s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
-    // CONTENT FROM SOMEBODY ELSE, GROUND AND COAT STILL OURS. d.bmp above is a tile that is already
-    // finished; d.glass is only the picture, and everything renderOneTile wraps around it still has
-    // to happen - which is why this sits INSIDE the else, after the ground and under the same
-    // transform, exactly where paintContent would have run.
-    //
-    // ONLY WHERE THE SLAB IS, and this is the line that cost a round when the GPU path was new.
-    // paintGlassContent writes through putImageData for the band rows inside woodRect() and nowhere
-    // else, so every pixel outside that rectangle keeps the ground. The shader has no such bound -
-    // it fills the whole tile - and blitting all of it painted over the ground wherever the picture
-    // does not reach, which on a 4096 export is most of the bottom row. woodRect() reads the
-    // transform through g2d, so g2d has to be this canvas while it is asked.
-    //
-    // drawImage AND NOT putImageData, because what arrives is an ImageBitmap. At 1:1 with integer
-    // rectangles that is exact - gpu-sheet-probe.html's texture arm round-trips 12,582,912 channels
-    // through drawImage with 0 apart - and tools/gpu-worker-composite.html is the gate that says so
-    // for the sub-rectangle this uses.
-    s += `if(d.glass){var pg=g2d;g2d=tcx;var WB=null;try{WB=woodRect();}finally{g2d=pg;}` + NL;
-    s += `if(WB){tcx.save();tcx.setTransform(1,0,0,1,0,0);` + NL;
-    s += `tcx.drawImage(d.glass,WB.x0,WB.y0,WB.bw,WB.bh,WB.x0,WB.y0,WB.bw,WB.bh);tcx.restore();}` + NL;
-    s += `d.glass.close();}else if(__backlit){backlitPlace(__bkW,__bkH);backlitBloom(tc,d.bs);}else{paintContent(false,false);}` + NL;
+    // MODULE SCOPE IN THE WORKER, AND THAT IS THE WHOLE FIX. This block first went in beside the
+    // applyCoat line it serves, which is INSIDE self.onmessage - so `var` hoisted to the handler and
+    // every message re-initialised it: the init stored the shader, the next tile wiped it, and a
+    // device would have been re-requested per tile. The first TIFF on the pool came back
+    // `lensWhy: "no shader in the init"`, which is what naming a decline is for.
     // THE LENS, ON THIS WORKER'S OWN DEVICE. applyCoat defers and the gather runs here, which is
     // possible at all only because self.onmessage above is already async - the main thread's nine
     // call sites each needed a seam opened for them and this one came with it.
@@ -6837,6 +6784,64 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     s += `if(__lensOff){__lensWhy='the device faulted mid-dispatch';return false;}` + NL;
     s += `cx.putImageData(img,0,0);return true;` + NL;
     s += `}catch(err){__lensOff=true;__lensWhy='threw: '+(err&&err.message||err);return false;}}` + NL;
+    s += `self.onmessage=async function(e){var d=e.data;\n`;
+    s += `if(d.type==='init'){__lensWgsl=d.lensWgsl||null;setMaterial(d.material);marks=d.marks||[];geo=d.geo;G=d.G;COL=d.COL;OVR=d.OVR;OVR_uv=d.OVR_uv;perItem=d.perItem;fam=d.fam;layers=d.layers;soloLay=d.soloLay;uvMode=d.uvMode;layTiles=!!d.layTiles;T=d.T||T;view=d.view;lightSpectrum=d.lightSpectrum;spotOn=d.spotOn;hidden=new Set(d.hidden);ssC=new OffscreenCanvas(1,1);spC=new OffscreenCanvas(1,1);mmC=new OffscreenCanvas(1,1);__cl=d.cl;__bd=d.bd;__br=d.br;workC=d.bk||null;emitC=d.em||null;__bkW=d.bkW|0;__bkH=d.bkH|0;__backlit=!layTiles&&G.backlight>0&&!!workC;coatField=d.cf?{w:d.cfw,h:d.cfh,K:d.cfK,cv:fieldCanvas(d.cfw,d.cfh,d.cf),bytes:d.cf,at:d.cfAt|0}:null;self.postMessage({type:'ready'});return;}\n`;
+    // THE ACK IS THE ONLY WAY TO TELL A QUEUE FROM A STALL. A bitmap arriving late can mean the
+    // worker painted for a minute or that it sat holding a message it had not been scheduled to
+    // read, and the completion time cannot distinguish them. Posted from the top of the handler,
+    // before a single pixel, so the gap from post to ack is scheduling and nothing else. It costs
+    // one empty message per tile - no transfer, no copy - and BOTH consumers of this core must
+    // ignore it or they will treat it as the tile.
+    s += `if(d.i!==undefined)self.postMessage({type:'ack',i:d.i});\n`;
+    // AND WHETHER THE PICTURE ARRIVED ALREADY BLOOMED - per tile, not per init, because only the
+    // passes the shader drew carry one and a worker outlives many of them.
+    // THE GLOW RADIUS, which every main-thread render path sets on entry and this one did not.
+    // glowPx is declared 0 in the preamble above and was never written, so the worker took the
+    // other side of two branches at once: paintVeinLayer's `glowPx > 0` refused to draw the halo,
+    // and applyCoat's `!(BLOOM_DRAW && glowPx > 0)` then ran the two blur passes that exist only
+    // for an engine with no drawn halo. Daylight never noticed - both branches sit inside uvMode -
+    // so a pooled UV tile differed from the sequential one across 95% of its pixels, by up to 159
+    // levels, while every daylight tile stayed bit-exact. Same expression, same bs, as line 4810.
+    s += `glowPx=BLOOM_DRAW?16*d.bs:0;coatBloomDone=!!d.blDone;\n`;
+    s += `var tc=new OffscreenCanvas(d.ew,d.eh),tcx=tc.getContext('2d');g2d=tcx;\n`;
+    // A TILE THAT ARRIVES ALREADY DRAWN. The GPU path paints on the main thread - shader, readback,
+    // then renderOneTile's ground, coat and windows - and what is left is the expensive half: the
+    // k x k cut, the marks, the light sample and the deflate. Measured at 76.5% of a tile by
+    // tools/gpu-tile-budget.html, all of it on one thread while eight cores idle, because turning
+    // the GPU on turned the pool off.
+    //
+    // So this skips everything between here and the finish block. Nothing below it changes: the
+    // same storedTilePixels, the same deflate, the same reply. A worker that paints and a worker
+    // that finishes differ by which side of this branch they took.
+    s += `if(d.bmp){tcx.drawImage(d.bmp,0,0);d.bmp.close();}else{\n`;
+    // THE FLOOR PAINTS ITS WHOLE TILE - ground, pieces and coat - so it REPLACES the three steps
+    // below rather than slotting between them. renderFloorTile is the one implementation and the
+    // main thread calls that same function: a second copy here is how the two would drift, and a
+    // floor tile that differs by which thread drew it is the defect harness/floor.mjs exists for.
+    s += `if(layTiles){var fc=renderFloorTile(d.finalW,d.tx0,d.ty0,d.tileW,d.tileH,d.bleed);` + NL;
+    s += `tcx.setTransform(1,0,0,1,0,0);tcx.drawImage(fc,0,0);fc.width=1;fc.height=1;}else{` + NL;
+    s += `tcx.setTransform(1,0,0,1,0,0);if(__backlit){tcx.fillStyle='#0b0b0e';tcx.fillRect(0,0,d.ew,d.eh);}else if(uvMode){tcx.fillStyle=UV_GROUND;tcx.fillRect(0,0,d.ew,d.eh);}else{tcx.fillStyle=STONE_BG;tcx.fillRect(0,0,d.ew,d.eh);if(layVis('base')){tcx.globalAlpha=layOp('base');tcx.fillStyle=groundCol();tcx.fillRect(0,0,d.ew,d.eh);tcx.globalAlpha=1;}}\n`;
+    s += `tcx.setTransform(d.finalW,0,0,d.finalW,-d.ex0,-d.ey0);tcx.lineCap='round';tcx.lineJoin='round';\n`;
+    // CONTENT FROM SOMEBODY ELSE, GROUND AND COAT STILL OURS. d.bmp above is a tile that is already
+    // finished; d.glass is only the picture, and everything renderOneTile wraps around it still has
+    // to happen - which is why this sits INSIDE the else, after the ground and under the same
+    // transform, exactly where paintContent would have run.
+    //
+    // ONLY WHERE THE SLAB IS, and this is the line that cost a round when the GPU path was new.
+    // paintGlassContent writes through putImageData for the band rows inside woodRect() and nowhere
+    // else, so every pixel outside that rectangle keeps the ground. The shader has no such bound -
+    // it fills the whole tile - and blitting all of it painted over the ground wherever the picture
+    // does not reach, which on a 4096 export is most of the bottom row. woodRect() reads the
+    // transform through g2d, so g2d has to be this canvas while it is asked.
+    //
+    // drawImage AND NOT putImageData, because what arrives is an ImageBitmap. At 1:1 with integer
+    // rectangles that is exact - gpu-sheet-probe.html's texture arm round-trips 12,582,912 channels
+    // through drawImage with 0 apart - and tools/gpu-worker-composite.html is the gate that says so
+    // for the sub-rectangle this uses.
+    s += `if(d.glass){var pg=g2d;g2d=tcx;var WB=null;try{WB=woodRect();}finally{g2d=pg;}` + NL;
+    s += `if(WB){tcx.save();tcx.setTransform(1,0,0,1,0,0);` + NL;
+    s += `tcx.drawImage(d.glass,WB.x0,WB.y0,WB.bw,WB.bh,WB.x0,WB.y0,WB.bw,WB.bh);tcx.restore();}` + NL;
+    s += `d.glass.close();}else if(__backlit){backlitPlace(__bkW,__bkH);backlitBloom(tc,d.bs);}else{paintContent(false,false);}` + NL;
     // ONE PREDICATE HERE TOO, and the CPU lens is the fallback rather than an alternative: if the
     // dispatch declines for any reason the stage still runs, because applyCoat deferred it and a
     // tile with no refraction is a tile that is simply wrong.
