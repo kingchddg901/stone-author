@@ -192,12 +192,44 @@ to do with what it tests.
 
 **It survives the cleanest measurement available.** On a freshly loaded page, with every sequential
 render taken before any pool exists and the pooled tiles asked for in ascending order with none
-skipped, one tile still differs (16 channels at 2 levels). The magnitude wobbles between runs — the
-same tile read 0 and then 83 channels on consecutive runs — so whatever it is, it is timing-sensitive
-rather than a fixed arithmetic difference. **Not yet attributed.** Ruled out by measurement, not by
-argument: it is not the lens (it is there at lens 0, and the lens leaves it alone or shrinks it), and
-it is not the modulator bitmaps the pool ships to its workers (it persists with clouds, bands and
-breccia all at 0).
+skipped, one tile still differs. The pixels are in the tile's INTERIOR, not its bleed, so they would
+reach a master: a compact 30x61 patch, mostly +1 on a single channel, max 4.
+
+**IT IS THE COAT'S BLUR, AND IT IS NOT BIT-REPRODUCIBLE RUN TO RUN.** Attributed 2026-11-01 by
+ablation rather than by argument:
+
+| | |
+| --- | --- |
+| `subsurface 0, specular 0` | **four consecutive pool walks clean**, and the bleed drops to 12px |
+| `subsurface 2, specular 0` | 3 of 4 walks dirty — tile 2 at 50 channels, max 4 |
+| `subsurface 0, specular 0.75` | 4 of 4 walks dirty — tile 2 at 13 channels, max 6 |
+
+So it is not one stage: it is what those two share, which is a blur laid through `ctx.filter` onto a
+scratch canvas and composited back. **The affected AREA tracks the blur radius** — 7, 53, 50 and 101
+channels at subsurface 0.5, 1, 2 and 4, where the bleed those settings ask for is 26, 35, 54 and
+91px — while the per-channel magnitude stays put at mean 1-2 and max 4-6. A wider blur spreads the
+same hair's-breadth disagreement over more pixels rather than making it worse.
+
+**It is nondeterministic, and discretely so.** Five identical walks of one slab on one page read
+`clean`, `8`, `2+8`, `2+6+8`, `2`. But when a susceptible tile is dirty it is dirty by the SAME
+amount every time — tile 2 is 59 channels at 4 levels, or it is exact — so each tile has one
+alternative rendering rather than a spread. That is a branch being taken differently, not noise, and
+the likeliest branch is the one Skia makes about how to execute a canvas blur. Inferred, not proved:
+no ablation here reaches inside `ctx.filter`.
+
+**Nothing to fix, and there is precedent for saying so.** `docs/final-render.md` already attributes
+the cross-engine differences to *gradient and blur quantisation* inside the blooms, and the GPU-vs-CPU
+coat gap was ruled accepted on 2026-10-29 for this same stage — `applyCoat`'s subsurface pass is a
+high-pass, so it is the part of this renderer most sensitive to a sub-level difference in what it is
+handed. At 13 to 101 channels of a 132,496-pixel tile, this is 0.01% to 0.08%.
+
+Ruled out on the way, each by measurement: not the lens (present at lens 0, and the lens leaves the
+difference alone or shrinks it); not the modulator bitmaps the pool ships its workers (persists with
+clouds, bands and breccia all at 0); not the pool's WIDTH (the same width 8 gives clean and dirty
+runs); not a DOM canvas against an OffscreenCanvas (`renderOneTile` run with `document.createElement`
+shimmed to return an OffscreenCanvas, exactly as the worker preamble shims it, was byte-identical to
+the DOM-canvas render); and not the sequential path drifting (two full passes of 40 tiles with no
+pool in existence, 80 renders, zero drift).
 
 **THREE WAYS TO MEASURE THIS WRONG, each of which cost a wrong answer on the way to `lens-pool`.**
 Any future pooled-against-sequential comparison meets all three:
