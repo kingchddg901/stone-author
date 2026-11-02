@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.303';
+  const BUILD = '2026.11.02.304';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5634,11 +5634,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // thing as a master with errored tiles from this path, which is what check-gpu-fault.mjs exists to
   // hold. A number sitting beside a count is not a count.
   //
-  // ONE THING UNATTRIBUTED, recorded so a fresh walk does not have to find it twice: at 16,384 the same
-  // picture took 4.73 s on build 296 and 6.51 / 6.76 s on 300. TWO changes sit between those builds -
-  // ad34c4f put the glass on in the tile, at the resolution being written - and there is no 297 run at
-  // that size, so whether the table costs anything at 16,384 is OPEN, not answered by the 32,768 gain.
-  // One 16,384 render on build 297 settles it.
+  // AND AT 16,384 IT WAS ATTRIBUTED, 2026-11-02, by the one render that was missing. Same picture, same
+  // arrangement throughout - tile 2048, 40 renders, bleed 103, sigma 33, inputs 292acd27:
+  //
+  //   build 296             4.73 s                 output 186.9 MB
+  //   build 297, no table   7.92 / 7.92 / 7.62 s   output 259.70 MB
+  //   build 300, the table  6.76 / 6.51 s          output 259.57 MB
+  //
+  // THE TABLE HELPS AT 16,384 TOO: 7.92 -> 6.64 s, 1.19x, on outputs agreeing to 0.05%, with the run
+  // ranges either side not overlapping. The 1.40x that 296 and 300 show between them belongs to
+  // ad34c4f, all of it and more - 4.73 -> 7.92 s is 1.67x - and the table hands 19% of it back.
+  //
+  // BUT IT IS NOT A REGRESSION, AND THE LAST COLUMN IS WHAT SHOWS THAT. The 296 output is 28% SMALLER.
+  // ad34c4f changed what gets DRAWN, not how fast the same thing is drawn: putting the glass on at the
+  // resolution being written refracts more of the picture, so 4.73 s against 7.92 s compares two
+  // different outputs and the time bought the difference. A build that draws a different picture is
+  // not a slower build. A compressed SIZE is what caught it, after every timing, every arrangement
+  // field and the `inputs` hash itself all matched - which is the reason to read the size next to the
+  // clock rather than after it.
+  //
+  // THE CAVEAT THAT TRAVELS WITH THE 1.19x: the 297 runs record `coat field ... mean 8.960 K 3.6`
+  // where 296 and 300 record 8.283 K 3.7, because the picture was restored by hand for them and is
+  // not byte-exact. Their output lands within 0.05% of the 300 runs and a light difference that small
+  // cannot flip a 19% gap, so it is a good estimate rather than an exact A/B.
   //
   // NOT the 4x this was pitched at either: 29.3 is still well above reeded's 17.9, and what remains is
   // the sqrt, the two lerps and bright()'s own divide.
