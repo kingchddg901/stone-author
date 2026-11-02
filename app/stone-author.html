@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.307';
+  const BUILD = '2026.11.02.308';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -6044,15 +6044,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const tileH = Math.min(tilePx, finalH - ty0);
       for (let tx0 = 0; tx0 < finalW; tx0 += tilePx) {
         const tileW = Math.min(tilePx, finalW - tx0);
-        jobs.push(() => {
+        jobs.push(async () => {
           const ex0 = tx0 - bleed, ey0 = ty0 - bleed, ew = tileW + 2 * bleed, eh = tileH + 2 * bleed;
           if (tc.width !== ew || tc.height !== eh) { tc.width = ew; tc.height = eh; }
           baseFill(tcx);
           tcx.setTransform(finalW, 0, 0, finalW, -ex0, -ey0); tcx.lineCap = 'round'; tcx.lineJoin = 'round'; g2d = tcx;   // slab 0..1 → final px, offset so this tile's expanded region fills tc
           if (backlit && backlitFor) { backlitPlace(backlitFor.gw, backlitFor.gh); backlitBloom(tc, bs); }
           else paintContent(false, false);
-          applyCoat(tc, tcx, bs, { ident: false, uvMode, backlit, tiled: true }, { ox: ex0, oy: ey0, fw: finalW, fh: finalH });
+          const vp = { ox: ex0, oy: ey0, fw: finalW, fh: finalH };
+          const coatF = { ident: false, uvMode, backlit, tiled: true, deferLens: true };
+          applyCoat(tc, tcx, bs, coatF, vp);
+          // g2d RESTORED BEFORE THE AWAIT, AND THAT ORDER IS THE POINT. The lens does not read g2d,
+          // but holding a borrowed global across an await is how a preview frame firing mid-dispatch
+          // draws into this tile's canvas instead of the screen. The stage still lands before the
+          // drawImage that crops the bleed, which is the only ordering that matters to the picture.
           g2d = prevG;
+          if (lensWanted(coatF)) await lensApply(tc, tcx, vp);
           fx.setTransform(1, 0, 0, 1, 0, 0); fx.drawImage(tc, bleed, bleed, tileW, tileH, tx0, ty0, tileW, tileH);   // crop the bleed
         });
       }
@@ -6411,6 +6418,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   }
   // Same plan, same order, a yield between tiles so the caller can say where it has got to.
   async function renderTiledStepped(W, onTile) {
+    lensOn = null;                                         // this path defers, so it owns the flag
     // THE FLOOR IS THE PICTURE when tiles are laid, and this is what makes render.png. Wiring it
     // into expCompleted alone put it in the .ora merged thumbnail and nowhere else: the kit and
     // the render-only path both come through here, and both were still exporting the slab.
@@ -6433,7 +6441,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     try {
       const p = tiledPlan(W);
       for (let i = 0; i < p.jobs.length; i++) {
-        p.jobs[i]();
+        await p.jobs[i]();
         if (onTile) await onTile(i + 1, p.jobs.length);
       }
       return p.finish();
