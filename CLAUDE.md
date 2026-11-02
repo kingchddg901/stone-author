@@ -61,6 +61,7 @@ node tools/check-fmt-vocab.mjs     # a slider readout that prints a word routes 
 node tools/check-i18n-fallback.mjs # a routed element inline fallback still says what its dictionary entry says
 node tools/check-draft-gate.mjs    # an unreviewed translation is offered, never imposed on a matching browser
 node tools/check-forced-peak.mjs   # a forced tile overrides the ladder's choice, not its memory test
+node tools/check-relief-bleed.mjs  # the emboss offset is on the transform, so the glint reads no neighbours
 ```
 
 The browser harness (`harness/*.mjs`) needs Playwright and **does** run locally, through

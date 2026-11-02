@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.313';
+  const BUILD = '2026.11.02.317';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4799,6 +4799,74 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // clouds, bands and breccia are FILLS and have no geometry to re-draw, so they take no boost at all.
   // Fog does have geometry and is included. CTM is a LOCAL of applyCoat, so it is passed rather than
   // read - a version of this that closed over it would have thrown in every worker.
+  // ---- the glint from the geometry, instead of from the pixels around it -------------------------
+  //
+  // THE SAME ART TRICK, DRAWN RATHER THAN INFERRED. buildGlint finds the features by high-passing the
+  // picture - difference against a blur of itself - and that blur is the last thing on a daylight
+  // slab still asking for bleed: 6,292 px of it at 1,048,576, where a forced 2048 tile becomes an
+  // 857 MB canvas that is 86% margin. The features were never a mystery. geo holds every one of them
+  // and the metal mask in this same stage already re-draws them under the content's own transform.
+  //
+  // WHY AN EMBOSS AND NOT A PER-SEGMENT NORMAL. edgeFinish shades a tile's chamfer exactly, by
+  // dotting each segment's outward normal with the light - but that wants a polygon with an inside.
+  // A vein is a stroked curve whose two sides are neither, and a speck is a circle. Drawing the
+  // coverage TWICE, nudged along the light and against it, gets the same answer for all of them: the
+  // near rim lights, the far rim darkens, the body cancels. One geometry walk, two composites.
+  //
+  // RELIEF IS A MATERIAL PROPERTY, NOT AN ART FLAG, which is what decides the sign. A polished slab
+  // is flat, but the polishing head dishes softer minerals and leaves harder ones proud - quartz
+  // stands, calcite sinks, and a crack is a void and always sinks. So the sign belongs to the
+  // mineral, which is why it resolves through the adjustment ladder like every other per-target
+  // property, and why relief 0 drawing NO glint is correct rather than a gap: a flat face catches no
+  // edge. It is also why the fog is not drawn here - haze in a stone does not reflect.
+  function reliefGlint(tx, w, h, o) {
+    if (!o.CTM) return;                                    // no transform to re-draw against
+    const vis = layers.filter(L => L.on !== false && reliefOf(L) !== 0);
+    if (!vis.length) return;
+    const ang = G.lightAngle * Math.PI / 180, Lx = Math.cos(ang), Ly = -Math.sin(ang);   // toward the light, y-down
+    const [lr, lg, lb] = o.col, C = o.CTM;
+    if (ssC.width !== w || ssC.height !== h) { ssC.width = w; ssC.height = h; }
+    const sc = ssC.getContext('2d');                       // the high-pass's own scratch, free because this replaces it
+    // THE HOTSPOT STILL DECIDES WHERE, the same ramp the high-pass glint was masked by, so a vein on
+    // the dark side of the slab does not glint. Alpha rather than luminance, because this is applied
+    // with destination-in and what has to be scaled is the coverage's own alpha.
+    const near = sc.createRadialGradient(o.cx, o.cy, o.rad * 0.03, o.cx, o.cy, o.rad);
+    near.addColorStop(0, 'rgba(255,255,255,1)'); near.addColorStop(0.5, 'rgba(255,255,255,0.45)'); near.addColorStop(1, 'rgba(255,255,255,0)');
+    for (const L of vis) {
+      // THE OFFSET IS THIS LAYER'S OWN. Content units through the transform the content was drawn
+      // with - hypot(a, b) rather than `a`, so a rotated or flipped view scales it correctly.
+      const rel = reliefOf(L), amt = Math.abs(rel);
+      const d = RELIEF_K * amt * layerStrokeW(L).med * Math.hypot(C.a, C.b);
+      if (!(d > 0)) continue;                              // a layer with no geometry in it draws no rim
+      const sgn = rel > 0 ? 1 : -1;
+      // TWO WALKS, ONE PER SIDE, and that is what buys the margin back. The sides sit at different
+      // offsets, so one coverage cannot serve both - and the offset has to be on the TRANSFORM, not
+      // on the composite, or the rim is a shifted picture and the tile owes for what the shift
+      // reads. Drawn this way a vein outside this tile still puts its rim inside it.
+      for (const side of [0, 1]) {
+        const off = side ? -sgn : sgn;                     // 0 = the lit rim, toward the light
+        sc.setTransform(1, 0, 0, 1, 0, 0); sc.globalAlpha = 1; sc.filter = 'none';
+        sc.globalCompositeOperation = 'source-over'; sc.clearRect(0, 0, w, h);
+        sc.setTransform(C.a, C.b, C.c, C.d, C.e + off * Lx * d, C.f + off * Ly * d);
+        sc.lineCap = 'round'; sc.lineJoin = 'round';
+        const prevG = g2d; g2d = sc; drawLayerArtifacts(L, '#fff'); g2d = prevG;
+        sc.setTransform(1, 0, 0, 1, 0, 0);
+        if (o.mask && o.MM) { sc.globalCompositeOperation = o.mask === 'in' ? 'destination-in' : 'destination-out'; sc.drawImage(o.MM, 0, 0); }
+        // THE HOTSPOT BY destination-in, never a multiply fillRect - that is the trap boostFeatures
+        // documents: multiply composites source-over and leaves alpha 1 where the coverage was empty,
+        // which destroys the very mask this is building.
+        sc.globalCompositeOperation = 'destination-in'; sc.fillStyle = near; sc.fillRect(0, 0, w, h);
+        // source-in keeps the coverage's alpha and takes the fill's colour, same ordering rule.
+        sc.globalCompositeOperation = 'source-in'; sc.fillStyle = side ? '#000' : `rgb(${lr},${lg},${lb})`;
+        sc.fillRect(0, 0, w, h); sc.globalCompositeOperation = 'source-over';
+        tx.save(); tx.setTransform(1, 0, 0, 1, 0, 0);
+        tx.globalCompositeOperation = side ? 'multiply' : 'screen';
+        tx.globalAlpha = Math.min(1, (side ? RELIEF_DARK : RELIEF_LIT) * o.sp * amt);
+        tx.drawImage(ssC, 0, 0);                           // NO OFFSET HERE - it is already in the transform
+        tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
+      }
+    }
+  }
   function boostFeatures(tcv, tx, w, h, ss, CTM) {
     if (!CTM) return;                                      // no transform to re-draw against; the lift would land in the wrong place
     const a = Math.min(0.95, 0.9 * ss);                    // the blur stage's own amount curve, so the slider reads the same
@@ -5104,8 +5172,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         tx.filter = 'none'; tx.globalCompositeOperation = 'source-over'; tx.globalAlpha = 1; tx.restore();
       };
       const base = specRGB(), metal = specRGB(1);
-      if (!MM) { pass(base, null); buildGlint(); glint(base, null); }
-      else { pass(base, 'out'); pass(metal, 'in'); buildGlint(); glint(base, 'out'); glint(metal, 'in'); }
+      // THE SHEEN IS KEPT EITHER WAY. It is already a drawn radial gradient and reads no neighbours,
+      // so it never owed any bleed; the high-pass glint is the whole of what gives way.
+      const geoG = glintGeo();
+      const rg = (c, m) => reliefGlint(tx, w, h, { sp, bs, CTM, col: c, mask: m, MM, cx, cy, rad });
+      if (!MM) { pass(base, null); if (geoG) rg(base, null); else { buildGlint(); glint(base, null); } }
+      else { pass(base, 'out'); pass(metal, 'in');
+             if (geoG) { rg(base, 'out'); rg(metal, 'in'); }
+             else { buildGlint(); glint(base, 'out'); glint(metal, 'in'); } }
     }
     // THE LENS IS A WHOLE-PICTURE EFFECT AND A TILE IS A WINDOW ONTO IT. `!f.tiled` stood here
     // because a tile evaluating the pattern in its own coordinates would centre its own rings; the
@@ -5371,10 +5445,74 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   };
   const shadowReach = b => blurReach(b / 2);                 // a canvas shadow's deviation is HALF its blur
   const BLEED_MARGIN = 4;                                    // rounding, not a fudge for the formula
+  // THE EMBOSS OFFSET AT FULL RELIEF, as a fraction of THE FEATURE'S OWN STROKE WIDTH - not of the
+  // picture, which is what the first version used and why it was wrong.
+  //
+  // MEASURED, and the measurement is what settled it: a rim is made by the offset coverage sticking
+  // out past the original, so it DETACHES the moment the offset exceeds the stroke width and the
+  // feature then reads as floating above the slab rather than set into it. At bs the offset is one
+  // number for every feature, so it cannot be right for two of them at once - the first spelling used
+  // 2 * bs, which is 19.7 px at 16,384, against a web edge 16.4 px wide. Detached, and visibly.
+  //
+  // Tied to the stroke instead, the ratio is the same whatever the feature: at 0.35 a 65.5 px vein
+  // gets a 13.8 px rim and a 16.4 px web edge gets 3.4, and neither can come away. It still scales
+  // with the picture, because the widths do - they are content units and the transform is the width.
+  const RELIEF_K = 0.35;
+  // AND THE TWO SIDES' WEIGHTS, in edgeFinish's own ratio - the shadow is the stronger half, which is
+  // what makes a surface read as a surface rather than as a drawing. First numbers, tuned by eye.
+  const RELIEF_LIT = 0.35, RELIEF_DARK = 0.56;
   // The two effects below are in OUTPUT pixels and do not grow with the render, so they matter only when
   // nothing else blurs — and then they are what stops the bleed being zero.
   const maxAdjBlur = () => { let m = 0; for (const k in OVR) if (/:blur$/.test(k)) { const v = +OVR[k]; if (v > m) m = v; } return m; };
   const maxGlow = () => { let m = 0; for (const k in COL) if (/Glow$/.test(k)) { const v = +COL[k] || 0; if (v > m) m = v; } return m; };
+  // POLISH RELIEF, signed, and the WIDEST of it because the bleed is one number for the whole render.
+  // Read off OVR the way maxAdjBlur reads the blur: a token set on an artifact, a layer or a bucket
+  // all land there, so this sees every granularity without walking the ladder itself.
+  const maxRelief = () => { let m = 0; for (const k in OVR) if (/:relief$/.test(k)) { const v = Math.abs(+OVR[k] || 0); if (v > m) m = v; } return m; };
+  // ONE PREDICATE, TWO READERS - the shape check-coat-field already holds for the subsurface field
+  // and the lens holds for lensWanted. coatRadius asks it whether to drop the specular blur clause;
+  // applyCoat asks it whether to draw the glint from the geometry instead. A second copy of this
+  // expression is exactly how a stage reads no neighbours while the bleed still pays for them.
+  const glintGeo = () => maxRelief() > 0;
+  // AND PER LAYER, through the adjustment ladder every other per-target property uses, so an artifact
+  // override beats its layer and a layer beats its bucket with no new mechanism.
+  const reliefOf = L => adjOf(null, L.key, L.bucket, 'relief', 0);
+  // THE FEATURE'S OWN WIDTH, in content units, taken from the SAME lists drawLayerArtifacts draws
+  // from - so the two agree by construction rather than by my reading of one against the other. The
+  // median sizes the rim and the max sizes the bleed: a rim wants the typical stroke, a margin has to
+  // cover the widest one.
+  //
+  // CACHED ON `geo` ITSELF, which is sound because build() REPLACES it (`geo = out`, three sites)
+  // rather than mutating it - so a WeakMap keyed on the object invalidates itself the moment the
+  // geometry is rebuilt, including a rebuild that changes widths without changing counts. Keying on
+  // the array lengths instead would survive exactly that case and be wrong. Worth having: this is
+  // asked per tile, and a 1,048,576 render asks it 163,840 times over ~11k widths.
+  const layerStrokeW = L => {
+    if (!geo) return { med: 0, max: 0 };
+    // THE CACHE HANGS OFF THE FUNCTION, not beside it, because the pool gets this as SOURCE TEXT -
+    // `var layerStrokeW = <source>` carries the body and nothing else, so a WeakMap declared next to
+    // it is a free name and the first relieved tile throws. check-worker-core caught exactly that.
+    if (!layerStrokeW.cache) layerStrokeW.cache = new WeakMap();
+    const strokeWCache = layerStrokeW.cache;
+    let m = strokeWCache.get(geo);
+    if (!m) { m = new Map(); strokeWCache.set(geo, m); }
+    if (m.has(L.key)) return m.get(L.key);
+    const b = L.bucket, key = L.key, ws = [];
+    if (b === 'major' || b === 'minor') {
+      if (key === 'styl') { for (const t of geo.styl || []) ws.push(t.width); }
+      else for (const ln of geo.lines || []) if ((b === 'major' ? ln.major : !ln.major) && (ln.layer || b) === key) for (const w of ln.w) ws.push(w);
+    } else if (b === 'micro') {
+      for (const sp of geo.specks || []) if ((sp.layer || 'micro') === key) ws.push(2 * (sp.R0 || sp.rad));
+      if (key === 'drusy') for (const dr of geo.drusy || []) ws.push(2 * dr.r);
+    } else if (b === 'web') { for (const e of geo.web || []) if ((e.layer || 'web') === key) ws.push(e.width); }
+    let out = { med: 0, max: 0 };
+    if (ws.length) { ws.sort((x, y) => x - y); out = { med: ws[ws.length >> 1], max: ws[ws.length - 1] }; }
+    m.set(L.key, out); return out;
+  };
+  // THERE IS NO reliefReach. It existed while the emboss shifted the rendered picture; the offset is
+  // on the transform now, so the stage reads nothing outside its own canvas and asks for no margin.
+  // check-relief-bleed holds that pairing: an offset applied to a drawImage instead of a setTransform
+  // is a silent re-introduction of the margin, and the picture would look right either way.
   // The widest blur RADIUS a tile can be subject to, under the conditions a tile renders in: never
   // backlit (the back light forces the whole-image path), never the lens (run once on the assembled
   // picture), never ident. Keep this in step with applyCoat — tools/check-bleed.mjs fails if a blur
@@ -5474,7 +5612,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // it cannot be from anything on disk: the glint only exists where specular or a glaze is
       // non-zero, and there is no glossy render at two widths to compare. Unmeasured is why it is
       // untouched, not oversight.
-      if (Math.max(G.specular, surfaceGloss()) > 0) r = Math.max(r, 2 * bs, 0.6 * bs);
+      // THE GEOMETRY ROUTE DROPS THIS CLAUSE IN THE SAME BREATH, which is the only reason the bleed
+      // actually falls - the same sentence ?boost= earned above. Both radii go: buildGlint's
+      // difference blur and the 0.6 * bs softening that screens it on, because the emboss replaces
+      // both. Nothing replaces them in here: the emboss offsets the TRANSFORM, so it reads nothing
+      // outside its own canvas and is owed no margin at all - see coatReach.
+      if (!glintGeo() && Math.max(G.specular, surfaceGloss()) > 0) r = Math.max(r, 2 * bs, 0.6 * bs);
     }
     return r;
   }
@@ -5495,6 +5638,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return Math.ceil(lensField(fw, Math.round(fw * H)).amp);
   }
   function coatReach(bs, uv) {
+    // RELIEF IS NOT IN HERE, AND THAT IS THE POINT. The emboss offsets the TRANSFORM the geometry is
+    // drawn through, not the picture it produced - so a feature lying outside this tile whose rim
+    // falls inside it is drawn, clipped by the canvas, exactly as the drawn glow is. Nothing in that
+    // stage reads a neighbour, and a stage that reads no neighbours is owed no margin.
+    //
+    // The first spelling composited with `drawImage(scratch, dx, dy)`, which shifts the RENDERED
+    // picture and therefore does read outside the tile - it wanted 1,875 px at 1,048,576 for a rim
+    // 23 px wide. Moving the offset onto setTransform costs a second geometry walk per layer and
+    // takes the margin to nothing. It is also sharper: drawImage at a fractional offset resamples.
     return Math.max(blurReach(coatRadius(bs, uv)), blurReach(maxAdjBlur()), shadowReach(6 * maxGlow()), lensReach(bs)) + BLEED_MARGIN;
   }
   // A window's own light, which is a spectrum rather than a flag: renderSlabTo reads uvMode = spec !== 0.
@@ -6509,6 +6661,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // is the whole point of it, and is also why the key has to travel with the function rather than
       // be stubbed out here.
       warpCacheKey,
+      // THE GEOMETRY-DRAWN GLINT AND EVERYTHING IT REACHES. applyCoat calls reliefGlint and coatRadius
+      // calls glintGeo, so without these the pool throws ReferenceError on the first tile of any slab
+      // with relief set - which is a slab that renders perfectly on the main thread. check-worker-core
+      // is what noticed; nothing else would have until a pooled export of a relieved slab.
+      reliefGlint, glintGeo, maxRelief, reliefOf, layerStrokeW,
       // blurDraw and pyramidBlur are function declarations above this point, so they can be named
       // here; the glow trio cannot, and arrives through glowFns() below.
       blurDraw, pyramidBlur,
@@ -10651,9 +10808,15 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     { n: 'strain', min: 0, max: 1, step: 0.05, def: 0 },
     { n: 'strainSpx', min: -4, max: 4, step: 0.1, def: -1 },
     { n: 'strainScale', min: 0.005, max: 0.3, step: 0.005, def: 0.06 },
+    // POLISH RELIEF: whether this feature stands proud of the polished face or dishes below it, which
+    // is a property of the mineral and not a choice - the head dishes what is softer. Signed because
+    // one quantity carries both the side that lights and how far it stands, and a flag plus a
+    // strength can disagree. Default 0 is dead flat, so nothing an existing slab holds changes until
+    // it is asked for - and at 0 the specular glint stays on the high-pass it has always used.
+    { n: 'relief', min: -1, max: 1, step: 0.05, def: 0 },
   ];
   const ADJ_LABEL = { blur: 'blur', hue: 'hue', sat: 'saturation', bright: 'brightness', contrast: 'contrast', weight: 'weight',
-                      strain: 'strain glow', strainSpx: 'strain spectrum', strainScale: 'strain scale' };
+                      strain: 'strain glow', strainSpx: 'strain spectrum', strainScale: 'strain scale', relief: 'polish relief' };
   const adjTokens = (base, label) => ADJ.map(a => ({ key: base + ':' + a.n, label: label + ' — ' + ADJ_LABEL[a.n], type: 'number', min: a.min, max: a.max, step: a.step, default: a.def }));
   // Resolve one adjustment for an item, walking the granularity: artifact → its layer → its bucket → default.
   const adjOf = (id, layer, bucket, name, def) => { const v = (id != null ? OVR['id:' + id + ':' + name] : undefined) ?? OVR['lay:' + layer + ':' + name] ?? OVR[bucket + ':' + name]; return v !== undefined && v !== '' ? +v : def; };
@@ -16064,7 +16227,8 @@ self.onmessage = async (e) => {
     // reads both and is serialised by toString(), so the far end needs the values and not the URL.
     // coatField starts null and the init message fills it - a worker that is sent no field falls
     // through to the original branch, which is the right answer for every render that is not using one.
-    return 'var BLEED_MARGIN=' + BLEED_MARGIN + ',glowSuppress=false;' + String.fromCharCode(10) +
+    return 'var BLEED_MARGIN=' + BLEED_MARGIN + ',glowSuppress=false' +
+           ',RELIEF_K=' + RELIEF_K + ',RELIEF_LIT=' + RELIEF_LIT + ',RELIEF_DARK=' + RELIEF_DARK + ';' + String.fromCharCode(10) +
            'var FIELD_ON=' + FIELD_ON + ',FIELD_W=' + FIELD_W + ',FIELD_MIN=' + FIELD_MIN + ',FIELD_PX=' + FIELD_PX +
            ',coatField=null,coatFieldBuilding=false;' + String.fromCharCode(10);
   }

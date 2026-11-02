@@ -139,7 +139,8 @@ Full table with defaults/ranges is in [`final-render.md`] and the source; key gr
 
 - Stores: `OVR` (edited/persisted), `COL` (resolved), `perItem` (id→bucket), `OVR_uv` (spectrum emission, lists of `{v,c}`).
 - Token keys: bucket (`major`…), `lay:<layer>`, `id:<artifact>` (`W`=web, `S`=seam, else vein), `micro:<g>[.<v>]`, `drusy:<g>[.<v>]`, `<key>Blend`/`<key>Glow` (FX layers), `<base>:<adj>`.
-- **Adjustment set `ADJ`** (per target, resolves artifact→layer→bucket→default): `blur` 0–8, `hue` ±180, `sat` 0–2, `bright` 0–2, `contrast` 0–2 (all via `ctx.filter`), `weight` 0.2–3 (line-width multiplier). Applied per-artifact; **veins run it twice** (shoulder + main stroke), so effects compound.
+- **Adjustment set `ADJ`** (per target, resolves artifact→layer→bucket→default): `blur` 0–8, `hue` ±180, `sat` 0–2, `bright` 0–2, `contrast` 0–2 (all via `ctx.filter`), `weight` 0.2–3 (line-width multiplier), `relief` −1–1 (signed polish relief: positive stands proud of the
+  polished face, negative dishes below it, 0 is dead flat and draws no glint at all). Applied per-artifact; **veins run it twice** (shoulder + main stroke), so effects compound.
 
 ## 8. Coat / lighting / spectrum / back light / lens
 

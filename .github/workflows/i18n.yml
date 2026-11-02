@@ -218,6 +218,8 @@ jobs:
         run: node tools/check-plan-memory.mjs
       - name: A forced tile overrides the ladder's choice, not its memory test
         run: node tools/check-forced-peak.mjs
+      - name: The emboss offset rides on the transform, so the glint is owed no bleed
+        run: node tools/check-relief-bleed.mjs
       - name: The studio asks once whether the GPU drew this frame
         run: node tools/check-preview-face.mjs
       - name: A master that painted one flat colour is kept, not recorded as good and deleted
