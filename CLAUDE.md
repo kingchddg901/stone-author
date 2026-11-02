@@ -62,8 +62,18 @@ node tools/check-i18n-fallback.mjs # a routed element inline fallback still says
 node tools/check-draft-gate.mjs    # an unreviewed translation is offered, never imposed on a matching browser
 ```
 
-The browser harness (`harness/*.mjs`) needs Playwright and runs in CI; it cannot spawn locally here, so CI
-is its first run.
+The browser harness (`harness/*.mjs`) needs Playwright and **does** run locally, through
+`launchChromium` in `harness/browser.mjs`. Corrected 2026-11-02: this used to say it cannot spawn here,
+which stopped being true when that fallback landed on 2026-10-31. A **bare** `chromium.launch()` still
+dies with `spawn UNKNOWN` — full `chrome.exe` wants a private side-by-side assembly this box does not
+have, at *every* revision — but the fallback launches `chrome-headless-shell` from Playwright's own
+cache instead, and all 15 harness scripts that open a browser route through it, `npm run verify`
+included.
+
+**The numbers still belong to CI.** Locally the fallback is chromium 148; CI runs the pinned 1.48.2's
+own build. So verify here that a harness edit *runs*, and never compare a pixel or a timing from a local
+run against a committed baseline. `harness/engines.mjs` is deliberately not wired to the fallback,
+because there the browser's identity is the measurement.
 
 **That list is not the CI set, and CI is not `tools/**`.** There are **47** `tools/check-*.mjs` and the
 block above names 16. `tools/**` in `i18n.yml` is the **trigger** — it decides *when* the workflow runs,

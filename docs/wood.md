@@ -489,8 +489,11 @@ node tools/state-sig.mjs test-slabs/default-state.json     # expect bc019919 / 3
 python tools/serve-studio.py                # http://127.0.0.1:8777/app/stone-author.html
 ```
 
-The browser harness (`npm run verify`) cannot run locally — Playwright will not spawn in this
-environment. CI is its first run; do not gate anything on having verified it here.
+The browser harness (`npm run verify`) does run locally — `harness/browser.mjs` falls back to the
+headless-shell binary, so a bare launch failing is not the harness failing (corrected 2026-11-02; this
+said Playwright would not spawn at all). Do not gate a NUMBER on a local run, though: the fallback is
+chromium 148 and CI runs the pinned 1.48.2's own build, so pixels and timings from here are not
+comparable with CI's.
 
 ---
 
