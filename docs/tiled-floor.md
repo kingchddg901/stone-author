@@ -181,6 +181,16 @@ OffscreenCanvas leaves nothing.
 `window-pool` and `worker-finish` all assert a pooled tile is byte-identical to a sequential one and
 all of them pass, because `renderOneTile` sets no clip and the two kinds then agree exactly.
 
+**That is true of the tiles those three check, and not of every tile.** Measured 2026-11-01 while
+adding `lens-pool`: walking all 40 tiles of a 256px grid at 2048, with the bleed the app's own
+`coatReach` asks for (54px), **39 agree exactly and one does not** — about 30 channels at up to 2
+levels, and *which* tile it is moves with the seed, because `render()` builds a fresh slab per load.
+So it is not a property of a position in the grid. It is small, it predates the lens, and the lens
+makes it *smaller* rather than larger (16 channels at 2 with glass on, against 30 without), which is
+why `lens-pool` asks a **differential** question instead of a byte-identity one: every tile the two
+paths agree on without glass must still agree with it. A gate that demanded byte-identity across the
+whole grid would be red today for a reason that has nothing to do with what it is testing.
+
 `floorCanvas(w, h)` now hands both threads an OffscreenCanvas, falling back to a DOM canvas only
 where there is none — and a browser without `OffscreenCanvas` has no pool either, so there is no
 second path on that machine to disagree with. **Pooled against sequential is now 0 pixels**, with the
@@ -298,6 +308,7 @@ Renaming it is fifteen packs of work and has not been done.
 | --- | --- |
 | `harness/floor.mjs` | the correctness gate — joins, re-render, and a positive control. Runs in CI |
 | `harness/floor-pool.mjs` | a pooled floor tile against the sequential one, byte for byte, plus the refusal in both directions and a control |
+| `harness/lens-pool.mjs` | the lens through a worker: every tile the two paths agree on without glass must agree with it. Runs in CI with all three ablations |
 | `harness/floor-cost.mjs` | the painting share, via the repo's own paint ablation. Asks what painting costs, never what a port would buy |
 | `harness/floor-window.mjs` | the cross-build pixel differential. Needs `tools/make-probe-builds.mjs --only=ab`, so it is not in CI |
 

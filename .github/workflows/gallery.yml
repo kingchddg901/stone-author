@@ -78,3 +78,5 @@ jobs:
         run: node harness/worker-finish.mjs --ablate=all
       - name: A worker composites a reality window the same way the main thread does
         run: node harness/window-pool.mjs --ablate=all
+      - name: A pooled tile of a slab with glass on it agrees with the sequential one
+        run: node harness/lens-pool.mjs --ablate=all

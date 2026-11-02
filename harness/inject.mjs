@@ -89,6 +89,16 @@ const hook = `
     // an assertion rather than a measurement.
     get drewOnGpu() { return drewOnGpu; }, set drewOnGpu(v) { drewOnGpu = !!v; },
     get T() { return T; },
+    // THE PLAN'S OWN ARITHMETIC, for a gate that has to build a tile grid without calling tiffPlan.
+    // tiffPlan is the real planner and it CALIBRATES - renderFull at the reference width, then a race
+    // between candidate tile sizes against the device's memory ceiling - so the grid it returns is a
+    // property of the machine. A gate wants a FIXED grid and the app's own numbers inside it: the
+    // frame aspect, the reference width that bs is taken against, and coatReach, which is the max
+    // over every stage that reads a neighbouring pixel. lensReach comes too, so a gate can say
+    // whether the lens is what SET that margin rather than assume it - a bleed the lens does not
+    // dominate is a weaker test than one it does. Restating any of these in a harness is how a
+    // comparison ends up measuring a grid the app would never choose.
+    get H() { return H; }, get COAT_REF() { return COAT_REF; }, coatReachAt, lensReach,
     get layTiles() { return layTiles; }, set layTiles(v) { layTiles = !!v; },
     // the spectral resolver, so a gate can ask what an artifact glows at a given light without rendering
     emit, emitAt, setSpx: (v) => { lightSpectrum = v; uvMode = v !== 0; },
