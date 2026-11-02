@@ -28,6 +28,13 @@ const LAY_SINCE = '2026.10.12.65';
 // published as marble on exactly that reading. Absence here means "cannot say", never "stone".
 const MATERIAL_SINCE = '2026.10.15.83';
 
+// The builds that began recording WHICH RENDERER laid the lens, and WHY when it was the CPU. Same trap
+// as the two above: before 307 a master cannot say, and absence must not be read as the CPU. The reason
+// field arrived four commits after the flag, so a 307-310 master can say the CPU did it and still not
+// say why - which is a third state, not a defect.
+const LENS_GPU_SINCE = '2026.11.02.307';
+const LENS_WHY_SINCE = '2026.11.02.311';
+
 // Numeric per component, not lexicographic: '2026.10.12.9' sorts ABOVE '2026.10.12.65' as text. At
 // module scope because two readers need it - the floor key and the material key - and the second could
 // not see it while it was declared inside the first one's branch.
@@ -302,6 +309,24 @@ for (const path of paths) {
   if (Array.isArray(m.omits) && m.omits.length)
     console.log(`           [INCOMPLETE — this render did not run: ${m.omits.join(', ')}.` +
                 ` The settings block above says what was ASKED for; this says what the path could do.]`);
+  // WHICH RENDERER LAID THE LENS. The app has recorded `lensGpu` since 307 and `lensWhy` since 311, and
+  // nothing read either - so the field built to explain a GPU decline could only be reached by writing a
+  // script, which is the same as not having it. ABSENCE HAS THREE CAUSES and they are different answers:
+  // no lens was asked for, the build predates the key, or the CPU laid it. The first is read off G.lens
+  // and NOT off lensGpu, because a daylight slab with no lens would otherwise read as a GPU refusal.
+  //
+  // The last branch can bite: a 311-or-later master that says CPU with no reason means the eight named
+  // declines have a hole in them, and that is worth seeing rather than printing a blank.
+  const lensAsked = m.G && m.G.lens > 0;
+  const lensWhat = lensAsked ? `${m.G.lensType || 'lens'} ${m.G.lens}` : '';
+  if (!lensAsked) console.log(`  lens     none in this render — G.lens 0, so nothing was refracted`);
+  else if (cmpBuild(m.build, LENS_GPU_SINCE) < 0)
+    console.log(`  lens     ${lensWhat} — build ${m.build || '?'} predates the renderer key, so absence says nothing either way`);
+  else if (m.lensGpu) console.log(`  lens     ${lensWhat} — the GPU refracted it`);
+  else console.log(`  lens     ${lensWhat} — the CPU refracted it: ` + (
+    m.lensWhy ? m.lensWhy
+      : cmpBuild(m.build, LENS_WHY_SINCE) < 0 ? `build ${m.build || '?'} predates the reason key`
+        : `NO REASON RECORDED, which this build should not produce`));
   if (m.maxTexture) console.log(`           device reports MAX_TEXTURE_SIZE ${m.maxTexture}` +
                                 `${m.bleed && m.render ? `, this render needed ${m.render + 2 * m.bleed}px` : ''}`);
   // FORCED BY WHOM. forcedTile() is true for two unrelated reasons - an operator naming a size, and a
