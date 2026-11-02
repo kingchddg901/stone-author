@@ -109,7 +109,10 @@ is GitHub-managed and is not one of those files, so a push that changes the app 
 **And it is not the app that fires it — every push to `master` does.** Measured across six pushes on
 2026-11-01: it ran for one that changed `app/` + `tools/` + `docs/`, one that changed `app/` + `docs/`,
 two that changed `harness/` + `docs/`, one that changed **only** `docs/`, and one that changed **only**
-`harness/`. So the derivation is *the workflows whose `paths:` match, plus one*, always. Getting that
+`harness/`. So the derivation is *the workflows whose `paths:` match, plus one*, always — and that rule
+was then used FORWARD rather than only backward: the commit adding this paragraph changes **only this
+file**, which no workflow's `paths:` lists, so it was predicted to fire pages alone. It did, which is
+worth more than the six counts behind it. Getting that
 wrong is not cosmetic in either direction: expect too many and a clean CI reads as inconclusive, too
 few and a run you never looked at reads as green. Derive the workflow part from each file's own
 `on.push.paths` rather than from habit — `engines.yml` wants `harness/engines|compare|png|hero.mjs`
