@@ -297,8 +297,10 @@ Two things make it trustworthy rather than hopeful. The **scanline byte-count ba
 render whose bands do not tile the image exactly, so a degrade that lost or duplicated a row could not
 produce a file. And band height turns out to change the *bytes* but not the *picture*: measured at 2048,
 five bands of 256 against forty of 32 differ in **0.01% of pixels**, max 25/255, scattered rather than
-gathered at the seams — the lens pass resamples to ≤640 whatever the band plan, and the 25px bleed covers
-the coat's blur either way. A degraded render is pixel-identical to one *planned* at the height it lands on.
+gathered at the seams — the 25px bleed covers the coat's blur either way. A degraded render is pixel-identical
+to one *planned* at the height it lands on. **That figure was measured before 2026-11-01**, when the lens still
+resampled to ≤640 and so could not depend on the band plan at all; it is gathered per band now, inside that same
+bleed, and the comparison has not been taken again.
 It also means a Firefox user's 65535 differs from a Chrome user's by this much on top of the engine
 difference, because `deviceMemory` gives them a different band plan.
 

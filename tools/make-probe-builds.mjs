@@ -196,8 +196,8 @@ const ABLATE = [
    '      paintWoodContent, paintContent, __ablPaint, setMaterial,',
    'the lift list'],
 
-  ['    s += `var ssC,lensC,spC,mmC;',
-   '    s += `var __ablCv=null,__ablKey=\'\';`;\n    s += `var ssC,lensC,spC,mmC;',
+  ['    s += `var ssC,spC,mmC;',
+   '    s += `var __ablCv=null,__ablKey=\'\';`;\n    s += `var ssC,spC,mmC;',
    'the worker preamble'],
 ];
 

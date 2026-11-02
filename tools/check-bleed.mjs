@@ -21,8 +21,11 @@ const fail = [];
 
 // ---- 1. the inventory ------------------------------------------------------------------------------
 // covered  - coatRadius() accounts for it, so bleed grows with it
-// excluded - cannot happen in a tile: the back light renders whole-image, the lens runs once on the
-//            assembled picture, and the scratch helper is only reached from the back light
+// excluded - cannot happen in a tile: the back light renders whole-image, and the scratch helper is
+//            only reached from the back light. THE LENS WAS NAMED HERE TOO until 2026-11-01, when it
+//            stopped running once on the assembled picture and moved into the tile. Nothing in this
+//            inventory moved with it, because the lens owns no blur at all - its reach is a
+//            displacement, which coatReach carries separately as lensReach()
 // output   - in output pixels, does not scale with the render; covered via maxAdjBlur / maxGlow
 // prelude  - buildCoatField's own, run ONCE over the whole picture at FIELD_W to make the subsurface
 //            field. Not a tile blur and not covered by coatRadius BY DESIGN: the field exists so that

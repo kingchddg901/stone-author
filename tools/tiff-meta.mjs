@@ -202,6 +202,17 @@ for (const path of paths) {
   // experiment gets quoted back later as a normal result.
   if (m.dimOverride) console.log(`           [LIGHT VETO WITHHELD — ?dim=off. The plan predicted this render would be dim;` +
                                  ` the figure above is what it actually came out at. Compare it against a master of the same slab.]`);
+  // A STAGE THE RENDER DID NOT RUN. The app wrote this and nothing read it, which is the quietest
+  // possible way to record something: `omits: ['lens']` sat in every lensed tiled master written
+  // before 2026-11-01 while this tool — the one thing that reads a master's own record of itself —
+  // printed every other path flag and skipped that one. The gap showed up the only way it could,
+  // from the outside: a TIFF and a PNG of one slab, same `inputs`, light.mean 67.35 against 80.01.
+  //
+  // KEPT AFTER THE APP STOPPED WRITING IT. The lens is laid per tile now, so nothing sets this any
+  // more — but the masters that carry it still mean it, and a reader holding one needs to be told.
+  if (Array.isArray(m.omits) && m.omits.length)
+    console.log(`           [INCOMPLETE — this render did not run: ${m.omits.join(', ')}.` +
+                ` The settings block above says what was ASKED for; this says what the path could do.]`);
   if (m.maxTexture) console.log(`           device reports MAX_TEXTURE_SIZE ${m.maxTexture}` +
                                 `${m.bleed && m.render ? `, this render needed ${m.render + 2 * m.bleed}px` : ''}`);
   // FORCED BY WHOM. forcedTile() is true for two unrelated reasons - an operator naming a size, and a

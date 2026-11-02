@@ -1334,8 +1334,10 @@ coordinate walk and `glassLay` as structural, not numeric.
 ### What that means in practice
 
 A GPU pass is a **different renderer**, not a faster one, and must be labelled as such everywhere the
-output is compared — the same way `bloomless` and `omits` already declare a path that produced
-something different. Concretely:
+output is compared — the same way `bloomless` already declares a path that produced
+something different. (`omits` did that job for the lens until 2026-11-01, when the lens became
+tileable and the field stopped being set; masters written before it still carry it, and `tiff-meta`
+prints it for exactly them.) Concretely:
 
 - the master records which renderer drew it, so a reader a year later is never guessing;
 - `renderSig` / the gallery gate must not treat a GPU master and a CPU master as the same picture;

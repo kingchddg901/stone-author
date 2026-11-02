@@ -307,8 +307,13 @@ bending is exactly a **displacement of the image beneath it**. So the pass is a 
 pixel samples the finished slab at an offset given by the lens profile (radial sine = concentric Fresnel rings,
 per-column sine = reeded grooves, crossed sines = hammered "water" glass). A gather is used rather than a
 mesh-blit warp because a blit tears wherever neighbouring cells diverge by more than the overlap — which, at any
-visible amplitude, is everywhere; a gather never tears. It runs on a downscaled snapshot (`lensC`, ≤640px,
-upscaled back — the glass hides the softening), so real refraction stays cheap **without a GPU**. A soft
+visible amplitude, is everywhere; a gather never tears. **It runs at the resolution being written**, evaluating
+the profile in the picture's own coordinates, so a tile can take its own piece of the field and the stage sits
+with the rest of the coat. Until 2026-11-01 it ran on a downscaled snapshot (`lensC`, ≤640px, upscaled back) on
+the argument that the glass hid the softening; at 2048 it did not — mean |dx| **2.509** against **4.668** for the
+same render without the lens, which is the slab's own detail replaced by an upscale of itself. A snapshot also
+needs a whole picture, and the export path that streams tiles to disk never has one, so that path had no lens in
+it at all. The cost of the move is a per-pixel `sqrt` and a `sin`/`cos` over the tile rather than over 640px. A soft
 **caustic** brightens (only — glass concentrates light, it never punches dark bands) where the relief focuses,
 so it reads on dark stone and washes out on white, the way a real caustic does. This is the transmission-side
 dual of the spectrum engine's emission, and the same fold runs **back-to-front for the back light** below.
