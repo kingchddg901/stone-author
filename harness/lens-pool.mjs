@@ -28,7 +28,11 @@
 // THE CLAIM IS DIFFERENTIAL, AND IT HAS TO BE. A pooled tile is NOT byte-identical to the sequential
 // one everywhere, with or without a lens: measured on this grid, 39 of 40 tiles agree exactly and one
 // does not - 30 channels at up to 2 levels, which the lens then makes SMALLER rather than larger (16
-// at 2). That disagreement predates the lens and is not this file's question. So the claim is:
+// at 2). That disagreement predates the lens and is not this file's question - it was chased down
+// afterwards and it is the COAT'S BLUR: with subsurface and specular both at 0 the disagreement goes
+// away entirely, each of them brings it back alone, and the affected area tracks the blur radius
+// while the magnitude stays at a few levels. It is nondeterministic run to run. docs/tiled-floor.md
+// carries the numbers and the five things ruled out. So the claim here is:
 //
 //     EVERY TILE THE POOL AND THE SEQUENTIAL PATH AGREE ON WITHOUT GLASS, THEY STILL AGREE ON WITH IT.
 //
