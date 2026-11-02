@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.02.306';
+  const BUILD = '2026.11.02.307';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -12047,6 +12047,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // CompressionStream('deflate') — which emits exactly the zlib stream IDAT wants — and the chunks are
   // framed here. See renderStrip for why a band can be painted correctly in isolation.
   async function renderStreamedPNG(W, meta, onStrip, opts) {
+    lensOn = null;                                         // this path defers, so it owns the flag
     const p = stripPlan(W, opts);                          // opts lets a harness force a band height: the
                                                            // multi-band arithmetic is otherwise unreachable
                                                            // at any width small enough to test everywhere
@@ -12393,6 +12394,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // which renderer made it - and the renderer changed three times today in ways that move output.
     // Cannot be retrofitted: a file written without it can never learn its own build.
     build: BUILD,
+    // AND WHETHER THE GPU REFRACTED IT. The lens is the one coat stage that can run on either path,
+    // and the two do not agree bit for bit BY CONSTRUCTION - the kernel computes the field exactly
+    // where the CPU interpolates a table, bounded by LENS_TAB_ERR and measured by
+    // tools/check-lens-table.mjs. So a master that does not say which drew it cannot be compared
+    // against another one, which is the same reason the trail records which painter drew the content.
+    //
+    // ABSENT MEANS "NOT THROUGH THE DISPATCH", and that is unambiguous rather than unknown: lensOn is
+    // cleared by every path that DEFERS the stage, and a path that does not defer ran the CPU lens
+    // inside applyCoat by definition. A pooled render's worker draws its own lens in its own scope
+    // and this main-thread flag can never see it - which is exactly the stale value the field would
+    // otherwise carry, so it is cleared rather than trusted.
+    lensGpu: lensOn === 'gpu' || undefined,
     slab: fileStem(), marks: marks.length, lines: geo.lines.length,
     // WHICH MATERIAL DREW THESE PIXELS. `family` is the STONE family, and a slab carries all three
     // materials at once unless one is exported alone - so a wood master wrote `family: "carrara"` with

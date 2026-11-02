@@ -130,6 +130,25 @@ else {
   if (unpaid.length) fail(`${unpaid.length} of ${defers.length} deferral(s) never call lensApply`);
   else ok(`all ${defers.length} deferral(s) run lensApply`);
 }
+// AND EVERY DEFERRING PATH CLEARS THE FLAG. expMeta reads lensOn to say whether the GPU refracted
+// this master, and the flag is module-level - so a path that defers without clearing hands its
+// master the LAST render's answer. Absent has to mean "not through the dispatch", not "unknown".
+// COUNTED, NOT SEARCHED FROM THE DEFERRAL. The first spelling looked BACKWARDS from each
+// `deferLens: true` for a `lensOn = null;` in the same function or just above it - and the path that
+// clears (renderStreamedPNG) sits six thousand lines BELOW the path that defers (renderStrip), so it
+// found nothing and was red before anything was ablated. Red on the first run is the probe, not the
+// code; the arm that "proved" it bit had proved only that it was already failing.
+//
+// So the pairing is counted instead: one clear per deferral. That bites both ways - drop the clear
+// and it is 1 against 0, add a second deferring path without one and it is 2 against 1. Two
+// deferrals inside ONE function would need only one clear and would read as a false divergence,
+// which is a trade for a check that cannot quietly stop working.
+// AND THE DECLARATION IS NOT A CLEAR. `let lensOn = null;` matched the first spelling of this and
+// made it 1 deferral against 2 clears, which is the gate reporting on its own regex.
+const clears = [...APP.matchAll(/(?<!let )lensOn = null;/g)].length;
+if (clears !== defers.length)
+  fail(`${defers.length} deferral(s) against ${clears} clear(s) of lensOn - a master would inherit the last answer`);
+else ok(`${defers.length} deferral(s), ${clears} clear(s) of lensOn`);
 if (!/const lensWanted = f => !f\.ident && G\.lens > 0;/.test(APP))
   fail('lensWanted is not the single predicate any more');
 else ok('lensWanted is the one predicate both readers ask');

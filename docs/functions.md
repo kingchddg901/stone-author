@@ -219,11 +219,11 @@ CPU painter and the field under both.
   arena and one uniform** for the shader. Refuses two things rather than shipping them: a declared
   field that nothing supplies — the struct names it, the shader reads it, and it would be quietly zero
   for the life of the port — and more features than the shader's scratch array holds, which the CPU
-  painter has no limit on. *(18341)*
+  painter has no limit on. *(18354)*
 - `woodSource(GW)` — assembles wood's WGSL. **Assembled, not concatenated**: it borrows `woodAtan2`,
   `woodHash` and `fbm2` from the glass blocks rather than keeping unverified copies of each, and closes
   over the call sites rather than listing them, because `fbm2` calls `vnoise` and `vnoise` calls `nz`
-  and neither name appears anywhere in wood's own text. *(18967)*
+  and neither name appears anywhere in wood's own text. *(18980)*
 
 ## Glass — a lay-up, then a forming process
 
@@ -947,28 +947,28 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
 - `crc32(u8)` — CRC-32 over a byte array (the zip checksum). *(12019)*
 - `zipStore(files)` — a store-only (uncompressed) zip `Blob` from `[{name, data}]`. PNGs are already
   compressed and `.ora` requires stored entries, so nothing is deflated. Writes local headers, a
-  central directory, and the EOCD by hand. *(12456)*
-- `toU8(canvas)` — a canvas as PNG bytes (`toBlob` → `Uint8Array`). *(14338)*
+  central directory, and the EOCD by hand. *(12469)*
+- `toU8(canvas)` — a canvas as PNG bytes (`toBlob` → `Uint8Array`). *(14351)*
 - `expCanvas(W)` / `polyPath(cx, pts)` — an off-screen slab-ratio canvas; a polyline subpath. *(2314/2315)*
-- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(14368)*
+- `expCompleted(W)` — the finished slab, every layer baked in (what `render.png` holds). *(14381)*
 - `expBaseMask(W)` — the base composite (ground + breccia + clouds + bands) flattened to luminance:
-  the greyscale value map for the `base` bucket. *(14375)*
+  the greyscale value map for the `base` bucket. *(14388)*
 - `expCoverage(kind, W)` — white-on-black coverage for a consumer bucket (`major` / `minor` / `micro`
-  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(14386)*
+  / `web`); `minor` also stamps the stylolites, `micro` the specks and drusy. *(14399)*
 - `expBucket(bucketKey, W)` — one bucket in colour, transparent elsewhere, by gating layers to that
-  bucket — the layer PNGs inside the `.ora`. *(14396)*
+  bucket — the layer PNGs inside the `.ora`. *(14409)*
 - `expIdT(W)` — the rich pair: a vein-**id** map (each line an rgb-encoded index) and an
-  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(14404)*
+  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(14417)*
 - `pathsJSON()` — the vectors as data: slab size in feet, then each line's `id / major / parent / at`,
-  its points, and its per-sample widths. *(14413)*
-- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(14414)*
+  its points, and its per-sample widths. *(14426)*
+- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(14427)*
 - `buildOraFrom(merged, buckets, order, W)` — an OpenRaster `.ora` assembled from already-encoded
   PNG bytes: a nested zip with `mimetype` stored first, a `stack.xml` (top child = top layer), the
   bucket layers under `data/`, and a `mergedimage` + thumbnail. Opens in Krita / GIMP / Photoshop.
-  Takes the encoded bytes rather than rendering them, so the encode happens once. *(14459)*
+  Takes the encoded bytes rather than rendering them, so the encode happens once. *(14472)*
 - `exportAll(W)` — assemble `render.png`, `masks/{base,major,minor,micro,web}.png`,
   `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, and
-  `slab.ora` into one zip and hand it to the viewer. *(14637)*
+  `slab.ora` into one zip and hand it to the viewer. *(14650)*
 
 ## Large renders — what a canvas can hold, and what to do past it
 
@@ -999,12 +999,12 @@ it reports the size asked for and leaves the far end unwritten. See
   `sideCap()`, and **refuses if the scanline byte count does not match the plan**, because a band written
   twice or skipped is invisible to every decoder. Returns `{blob, plan, msRender, bytes}`. *(12049)*
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
-  family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(12390)*
+  family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(12391)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(15657)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(15670)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(15682)*
+  actually on offer, not a probe's answer to a different question. *(15695)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(15759)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(22747)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(15772)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(22760)*
