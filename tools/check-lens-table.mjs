@@ -241,6 +241,34 @@ if (!/const LT = type === 'fresnel' \? lensTable\(fw, fh, rNeed\)/.test(APP))
 if (!/const sr = s0 \+ \(T\[ti \+ 2\] - s0\) \* fr;/.test(APP))
   say('the fresnel branch no longer interpolates between two table entries - the error this gate bounds is not the error the picture takes');
 
+// ---- the brightness cap, which lensTable's note calls unreachable from the UI --------------------
+//
+// b = 1 + caus * max(0, 1/max(0.3,|jac|) - 1), capped at 2. The cap needs caus > 3/7, which is
+// lens > 1.2245, and the slider stops at 1 - so the clause cannot fire from the UI and only a loaded
+// file reaches it, exactly like the step's own floor. That is a claim in a comment, and a claim in a
+// comment is what fails, so it is pinned: walk the slider's OWN declared range and evaluate b at the
+// extreme of jac. Raise the slider's max past 1.2245 and this goes red, which is the point - the cap
+// would then be live and the note beside it stale.
+{
+  const m = APP.match(/\{ key: 'lens',\s+min: ([\d.]+),\s+max: ([\d.]+),\s+step: ([\d.]+)/);
+  if (!m) say('cannot read the lens slider range from the app, so the cap claim cannot be pinned');
+  else {
+    const lo = Number(m[1]), hi = Number(m[2]), st = Number(m[3]);
+    const field = new Function('G', 'LENS_TAB_ERR', parts.lensField + '\nreturn lensField;');
+    let worst = 0, at = '';
+    for (let lens = lo; lens <= hi + 1e-9; lens += st) {
+      const L = field({ lens, lensPitch: 9, lensType: 'fresnel' }, LENS_TAB_ERR)(2048, Math.round(2048 * H));
+      const A = L.amp * L.k;                        // pi*lens; jac spans 1-A .. 1+A
+      // the smallest |jac| the field reaches, then the clamp's own floor under it
+      const jmin = Math.max(0.3, A >= 1 ? 0 : 1 - A);
+      const b = 1 + L.caus * Math.max(0, 1 / jmin - 1);
+      if (b > worst) { worst = b; at = 'lens ' + lens.toFixed(2); }
+    }
+    if (!(worst <= 2)) say(`the brightness cap FIRES at ${at}, where b reaches ${worst.toFixed(3)} - it is no longer unreachable from the slider, so lensTable's note beside it is now wrong`);
+    else console.log(`  the brightness cap stays unreachable across the slider's ${lo}..${hi}: b peaks at ${worst.toFixed(3)} at ${at}`);
+  }
+}
+
 // ---- the verdict --------------------------------------------------------------------------------
 if (!ABLATE) {
   bad += runChecks(parts.lensTable, true);

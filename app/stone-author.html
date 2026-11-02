@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.01.299';
+  const BUILD = '2026.11.01.300';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5541,9 +5541,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // at 1,048,576 goes from about 1.6 h to about 1 h, not to the 0.8 h a flat 1.94x would promise.
   //
   // NOT the 4x this was pitched at either: 29.3 is still well above reeded's 17.9, and what remains is
-  // the sqrt, the two lerps and bright()'s own divide. Folding bright() into the table would take
-  // fresnel BELOW reeded, and is not done here - the brightness curve has a kink where the Jacobian
-  // clamps at 0.3, so it needs its own error bound rather than this one.
+  // the sqrt, the two lerps and bright()'s own divide.
+  //
+  // FOLDING bright() INTO THE ODD SLOTS WAS PRICED AND REJECTED, and the claim that used to sit here -
+  // that it would take fresnel BELOW reeded - was wrong on the arithmetic. bright() was replaced by a
+  // constant to measure it: it is worth 1.1 ns/px at lens 0.22 and 6.3 at lens 1 pitch 40. The gap to
+  // reeded is 14.9, so removing the whole of bright() does not close a tenth of it, and a fold would
+  // still pay for the lerp it replaced the divide with.
+  //
+  // AND IT IS ONLY SAFE WHERE IT BUYS NOTHING, which is the part worth remembering. b is not smooth:
+  // max(0.3, |jac|) puts a KINK in it, and across a kink linear interpolation is wrong to FIRST order
+  // in the step where the displacement's sinusoid is wrong to second. jac is 1 + pi*lens*cos(kr), so
+  // the clamp is reachable exactly when pi*lens > 0.7 - lens > 0.2228, one slider notch above the 0.22
+  // this was measured on. Tabulated at this same step, the worst error in b runs 0.0011 at lens 0.22
+  // (0.1 levels on mid grey) and 0.108 at lens 1 (13.8 levels), against a displacement budget that
+  // costs the picture 0.0161/255. Three orders of magnitude of brightness error to save 6 ns/px.
+  //
+  // THE b > 2 CAP CANNOT FIRE FROM THE UI. It needs 1/0.3 >= 1 + 1/caus, i.e. lens >= 1.224, and the
+  // slider's max is 1 - so like the step's own floor, only a loaded file reaches it. Pinned by
+  // tools/check-lens-table.mjs, which goes red if the slider's range ever grows past it.
   //
   // THE STEP IS A FUNCTION OF THE PICTURE; THE LENGTH IS A FUNCTION OF THE CALLER. That split is what
   // the tiling check rests on. A corner tile reads further from the centre than a middle one, so the
