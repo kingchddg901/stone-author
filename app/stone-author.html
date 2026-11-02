@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.01.300';
+  const BUILD = '2026.11.02.301';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -5513,8 +5513,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // reeded's displacement is a function of x alone and water's of x and y separately, so each is an
   // array laid down once per tile and costs nothing per pixel; fresnel's is a function of the distance
   // from the centre, which is both coordinates at once, and it paid for that with a sin, a cos and two
-  // divides in EVERY pixel - 67 ns/px against their 16, measured 2026-11-01. That was 181 ms of a
-  // 318 ms coat at 2048 and 1.6 hours at 1,048,576: the whole reason a lensed slab costs what it does.
+  // divides in EVERY pixel - 67 ns/px against their 16 on a BENCH, measured 2026-11-01, and 181 ms of a
+  // 318 ms coat at 2048: the whole reason a lensed slab costs what it does. The "1.6 hours at
+  // 1,048,576" that stood here is WITHDRAWN. It cannot be reconciled with its own ns/px, which puts
+  // that stage at 12.8 h over 687 Gpx, nor with the app, which measures 3.6 h; where it came from is
+  // not known and is not guessed at here. Every per-pixel figure above is a lifted loop's, and the app
+  // says those run about 3x high - see THEN IT WAS MEASURED IN THE APP below, which is the authority
+  // for what a lensed export costs.
   //
   // IT IS RADIAL, AND RADIAL IS ONE DIMENSION. Every term is a function of r and of nothing else, so
   // one table answers both of them: amp*sin(kr)/r in the even slots, which takes the two divides with
@@ -5537,8 +5542,55 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // table rather than a long one. Holding the tile at 2048x1280 and moving only fw gives 1.90x then
   // 1.66x, which looks like a picture-size effect until a 1024x1024 tile of a 2048 picture comes back
   // at 1.34x with a 42.9 ns/px new arm against 28-32 in every other cell. So: 1.7x is the middle, 1.6x
-  // is what an export should expect, and the rest is unexplained rather than explained badly. The lens
-  // at 1,048,576 goes from about 1.6 h to about 1 h, not to the 0.8 h a flat 1.94x would promise.
+  // is what an export should expect, and the rest is unexplained rather than explained badly. What that
+  // predicted for an export has since been measured in the app and came out lower on both sides.
+  //
+  // THEN IT WAS MEASURED IN THE APP, AND A BENCH IS NOT THE APP. 2026-11-02, one picture, one slab, the
+  // lens on and off at 32,768 with everything else held. These are whole-render wall times out of the
+  // studio rather than a loop lifted into node, which is why they are the ones to trust:
+  //
+  //   build 297, pre-table, lens 0.22    23.17 / 24.26 / 27.50 s     lens stage 12.67 s   52.2%
+  //   build 300, the table,  lens 0.22               19.91 s         lens stage  8.33 s   41.8%
+  //   build 300, the table,  lens 0                  11.59 s         the ablation itself
+  //
+  // THE ABLATION IS CLEAN BECAUSE THE BLEED DOES NOT MOVE: 201 px with the lens and 201 without, at
+  // sigma 66, because coatReach takes the blur's margin and lensReach never exceeded it on this slab.
+  // So lens 0 removes the loop and nothing else - and a lens moved to the GPU would still pay that
+  // margin, so the saving below is not inflated by one it would not get.
+  //
+  // THE TABLE IS WORTH 1.52x ON THE STAGE IN SITU, not the 1.94x the bench read - 1.39x to 1.91x
+  // depending which of the three 297 runs it is measured against, and their own spread is 18%, so the
+  // app does not tighten the 1.6-2.0x range above, only show its top to be optimistic. On the WHOLE
+  // render it is 1.22x. The stage costs 18.9 ns/px before and 12.4 after, against the bench's 56.7 and
+  // 29.3: the lifted loop overstated the absolute cost about 3x while getting the ratio roughly right.
+  //
+  // WHAT AN EXPORT ACTUALLY COSTS. 65,535 on build 300 came in at 84.85 s, 4.26x the 32,768's time for
+  // 4x its area - so area scaling holds here and the projection is worth something: about 6.0 h at
+  // 1,048,576 with the table against about 6.9 h without. The table bought roughly an hour, and a
+  // lensed 1,048,576 is still a walk-away render.
+  //
+  // IT PRICES ONE TERM AND NOT THE PROJECT. If the lens's arithmetic became free the floor is the
+  // lens-0 number: 1.72x on the whole render, about 3.5 h at 1,048,576. THAT IS NOT A CEILING ON
+  // PUTTING THE LENS ON THE GPU, and reading it as one is the error this paragraph exists to stop. The
+  // gain from a GPU lens is not only its own arithmetic - it is also not LOSING the GPU for the
+  // expensive stages around it. The lens is the LAST coat pass and it works by getImageData, a
+  // readback, on a canvas the pool reuses tile after tile; docs/capabilities.md already records that a
+  // content-heavy canvas falls back to CPU, and that benchmarking an export on a trivial slab measures
+  // the browser's storage heuristics rather than this app. So the 11.59 s baseline may itself contain
+  // CPU-side subsurface and specular, and 1.72x is then a FLOOR on that project rather than a ceiling.
+  //
+  // WHAT THIS CANNOT SAY, written down so it is not read as having said it. The ablation holds the
+  // ARRANGEMENT fixed while a GPU coat chain would change it, so the share it found belongs to the
+  // arrangement that change destroys. Nothing here shows whether a tile canvas is GPU-backed at all on
+  // a content-heavy slab, so nothing here shows the lens costs the subsurface anything. What answers it
+  // is the subsurface and specular ablations at 32,768 on this same picture: their shares are what a
+  // GPU coat would be competing for. Three renders of twenty seconds. Not done.
+  //
+  // ONE THING UNATTRIBUTED, recorded so a fresh walk does not have to find it twice: at 16,384 the same
+  // picture took 4.73 s on build 296 and 6.51 / 6.76 s on 300. TWO changes sit between those builds -
+  // ad34c4f put the glass on in the tile, at the resolution being written - and there is no 297 run at
+  // that size, so whether the table costs anything at 16,384 is OPEN, not answered by the 32,768 gain.
+  // One 16,384 render on build 297 settles it.
   //
   // NOT the 4x this was pitched at either: 29.3 is still well above reeded's 17.9, and what remains is
   // the sqrt, the two lerps and bright()'s own divide.
