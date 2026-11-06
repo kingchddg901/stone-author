@@ -5,7 +5,7 @@
 > mouse and touch supply the unavailable ones from explicit controls. A tool sees the same channel set
 > either way and never asks what device drew it.
 
-**Status: partly built, by accident rather than by design.** The shape exists — two extractor functions
+**Status: partly built, by accident rather than by design.** The shape exists — three extractor functions
 and a per-mark opt-in — but it is incomplete and used inconsistently. See
 [Where the code stands](#where-the-code-stands). Generalised out of [`moon.md`](moon.md), which is the
 first tool that needs the whole set.
@@ -561,12 +561,13 @@ gesture.samples.push([ f[0], f[1], now(), pen(e), leanOf(e), azOf(e) ]);
 //                     x     y     time   pressure  lean      azimuth
 ```
 
-**Two extractors already exist** and are exactly the right shape — raw samples in, a per-stroke profile
+**Three extractors already exist** and are exactly the right shape — raw samples in, a per-stroke profile
 out, `null` when the channel is switched off:
 
 ```js
 const press  = M.pressure ? pressFactor(m.samples) : null;
 const leanAt = M.tilt     ? leanProfile(m.samples, m.rest) : null;
+const axis   = leanAt     ? penAxis(m.samples) : null;        // the roller's, and only the roller's
 ```
 
 **But they are used inconsistently, and the set is incomplete.**
@@ -574,13 +575,17 @@ const leanAt = M.tilt     ? leanProfile(m.samples, m.rest) : null;
 | tool | how it gets its channels |
 |---|---|
 | vein, branch | `pressFactor` / `leanProfile` — the intended path |
+| roller | `pressFactor` / `leanProfile`, plus `penAxis` for azimuth — the intended path, and the only tool that calls all three |
 | magnet | re-derives lean, azimuth, pressure and `dt` **inline from the raw samples**, duplicating the extractors it does not call |
 | moon | consumes none — `resample()` discards time, pressure and tilt on its first line |
 
 What is missing to make it a real adapter:
 
 1. **A speed/dwell extractor.** Only the magnet derives `dt`, and it does so inline.
-2. **An azimuth extractor.** `leanProfile` covers lean; the magnet reads `q[5]` itself.
+2. **The azimuth extractor, where the others are.** `penAxis` is one and the roller calls it, but it sits
+   six thousand lines away beside the roller rather than beside `pressFactor` and `leanProfile`, and the
+   magnet still derives azimuth from `q[5]` inline instead of calling it. It also returns by writing into
+   a caller's array rather than returning a value, so unifying the three means settling that convention.
 3. **A source for mouse and touch.** There is no authored pressure or tilt anywhere. The magnet's fallback
    is a silent constant — `lean = 55/90`, axis along travel — which is a guess standing in for a control
    the user never had. Its tilt value must be in the **normalised** 0..1 space, not degrees.
