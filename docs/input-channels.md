@@ -5,7 +5,7 @@
 > mouse and touch supply the unavailable ones from explicit controls. A tool sees the same channel set
 > either way and never asks what device drew it.
 
-**Status: partly built, by accident rather than by design.** The shape exists — three extractor functions
+**Status: partly built, by accident rather than by design.** The shape exists — four extractor functions
 and a per-mark opt-in — but it is incomplete and used inconsistently. See
 [Where the code stands](#where-the-code-stands). Generalised out of [`moon.md`](moon.md), which is the
 first tool that needs the whole set.
@@ -561,13 +561,16 @@ gesture.samples.push([ f[0], f[1], now(), pen(e), leanOf(e), azOf(e) ]);
 //                     x     y     time   pressure  lean      azimuth
 ```
 
-**Three extractors already exist** and are exactly the right shape — raw samples in, a per-stroke profile
-out, `null` when the channel is switched off:
+**Four extractors already exist** and are exactly the right shape — raw samples in, a per-stroke
+profile out. Three hand back `null` when the channel is switched off; the fourth cannot, because speed
+is **derived** rather than reported — the sample clock is always there, so a stroke with nothing to
+say reads zero rather than absent:
 
 ```js
 const press  = M.pressure ? pressFactor(m.samples) : null;
 const leanAt = M.tilt     ? leanProfile(m.samples, m.rest) : null;
 const axis   = leanAt     ? penAxis(m.samples) : null;        // the roller's, and only the roller's
+const spd    = speedProfile(m.samples);                       // never null: the clock is always there
 ```
 
 **But they are used inconsistently, and the set is incomplete.**
@@ -576,12 +579,15 @@ const axis   = leanAt     ? penAxis(m.samples) : null;        // the roller's, a
 |---|---|
 | vein, branch | `pressFactor` / `leanProfile` — the intended path |
 | roller | `pressFactor` / `leanProfile`, plus `penAxis` for azimuth — the intended path, and the only tool that calls all three |
+| pour | `pressureReal` for paint, and `speedProfile` for speed, dwell and heading — the whole derived channel, extracted out of this tool rather than written for it |
 | magnet | re-derives lean, azimuth, pressure and `dt` **inline from the raw samples**, duplicating the extractors it does not call |
 | moon | consumes none — `resample()` discards time, pressure and tilt on its first line |
 
 What is missing to make it a real adapter:
 
-1. **A speed/dwell extractor.** Only the magnet derives `dt`, and it does so inline.
+1. **The magnet's own `dt`.** The speed/dwell extractor exists now and the pour calls it, but the magnet
+   still derives `dt` inline — and its clamp disagrees with the one the pour was using: 0.05 s against
+   0.1 s. Two copies of a predicate, and the shorter one is the one to doubt.
 2. **The azimuth extractor, where the others are.** `penAxis` is one and the roller calls it, but it sits
    six thousand lines away beside the roller rather than beside `pressFactor` and `leanProfile`, and the
    magnet still derives azimuth from `q[5]` inline instead of calling it. It also returns by writing into
@@ -599,10 +605,30 @@ What is missing to make it a real adapter:
 
 The cheap, reversible step first, because it proves the seam without changing a pixel:
 
-1. **Extract what the magnet already does inline** into speed/dwell and azimuth extractors beside
-   `pressFactor` and `leanProfile`, and have the magnet call them. Behaviour identical, duplication gone —
-   and a rendering diff should confirm *identical*, since the magnet is the one tool already using the
-   whole set.
+1. **Extract what the tools already do inline** into speed/dwell and azimuth extractors beside
+   `pressFactor` and `leanProfile`. **The speed half landed on 2026-11-08**, out of the *pour* rather than
+   the magnet: the magnet derives `dt` but never a speed, so the pour was where the channel actually
+   lived — a smoothed per-sample speed, the heading that goes with it, and a dwell accumulator. The
+   arithmetic was lifted unchanged and proved bit-for-bit against its own previous form over nine sample
+   shapes, with every constant mutated to show the comparison could fail at all. Two mutations were
+   invisible to the first sample set: at 480 Hz the ±0.03 s window steps in whole samples, so `0.03` and
+   `0.031` floor to the same count, and the window's own `dt` never comes near the `1e-4` floor. A rate
+   that straddles the boundary and a two-sample stroke 0.5 ms apart carry them.
+
+   **What the factor may not touch** decided the shape. `sp` is also the only arc length the pour has —
+   it integrates `sp[i] * dt` into `ds` and divides a heading change by it for curvature — so a
+   calibration factor multiplied into the array would be scaling a *geometric* quantity, and it would
+   bend every fling in the stroke. The factor is handed out separately, as `eq`, and applied at exactly
+   the three places a speed is weighed against a number tuned by eye: the width falloff, the dwell
+   threshold and the fling test. The throw length keeps the raw speed, because it is a distance.
+
+   What is deliberately *not* identical is a calibrated hand. That `0.35` falloff and `0.06` dwell
+   threshold are one wrist's figures, so the measured `speed.natural` now rescales a stroke onto them the
+   way `penPress` rescales pressure: measured, a hand drawing at twice his median was getting a 13%
+   thinner pour on every ordinary stroke, and eased off to 85% of its own natural speed without ever
+   registering a dwell. An uncalibrated hand renders byte for byte as it did, and a measurement outside
+   the believable band falls back to the same place rather than to the end of a clamp. The azimuth half
+   is still to do.
 2. **Add the mouse/touch source**, feeding the same extractors from authored values. This is the half that
    makes it an adapter rather than a helper library, and it fixes the magnet's silent default as a
    side-effect.

@@ -30,17 +30,25 @@ function lift(name) {
   }
   throw new Error('unbalanced: ' + name);
 }
-const NEEDED = ['penPress', 'pressureReal', 'pressFactor', 'tiltReal', 'leanProfile'];
+const NEEDED = ['penPress', 'pressureReal', 'pressFactor', 'tiltReal', 'leanProfile', 'speedProfile'];
 // Taken from the source, not retyped: the output range is the thing under test, and a probe that
 // carried its own copy of it would agree with itself whatever the app did.
 const RANGE = SRC.match(/^ *const PRESS_LO = .*$/m)[0];
 const SMOOTH = SRC.match(/^ *const smoothstep = .*$/m)[0];
+const SPNAT = SRC.match(/^ *const SPEED_NATURAL = .*$/m)[0];
+const SPBAND = SRC.match(/^ *const SPEED_BAND = .*$/m)[0];
+// The pour's own tuned numbers, read out of the pour. They double as the REACHABILITY check: the
+// dwell pattern matches only while that line is weighing the EQUIVALENT speed, so if the pour ever
+// goes back to reading the raw one, these lines throw and the probe stops rather than passing.
+const FALL = +SRC.match(/Math\.exp\(-v \/ ([\d.]+)\)/)[1];
+const DWELL = +SRC.match(/dwell = ve < ([\d.]+) \?/)[1];
+const widOf = v => 0.0035 + 0.02 * Math.exp(-v / FALL);
 const api = new Function(
-  'let calProfile = null;\n' + RANGE + '\n' + SMOOTH + '\n' +
+  'let calProfile = null;\n' + RANGE + '\n' + SMOOTH + '\n' + SPNAT + '\n' + SPBAND + '\n' +
   NEEDED.map(lift).join('\n') +
   '\nreturn {' + NEEDED.join(',') + ', setCal: p => { calProfile = p; },' +
-  ' LO: PRESS_LO, HI: PRESS_HI};')();
-const { penPress, leanProfile, setCal, LO, HI } = api;
+  ' LO: PRESS_LO, HI: PRESS_HI, NAT: SPEED_NATURAL, BAND: SPEED_BAND};')();
+const { penPress, leanProfile, speedProfile, setCal, LO, HI, NAT, BAND } = api;
 
 let bad = 0;
 const say = (ok, msg) => { if (!ok) bad++; console.log('  ' + (ok ? 'OK  ' : 'RED ') + msg); };
@@ -125,6 +133,73 @@ say(f100 < 0.25, `fixed: the same hand, laid as far as it goes, got ${f100.toFix
 let tm = true, tp = -Infinity;
 for (let i = 0; i <= 200; i++) { const v = fitted(i / 200); if (v < tp - 1e-12) tm = false; tp = v; }
 say(tm, 'and it never goes backwards either');
+
+// ---- speed ------------------------------------------------------------------------------------------
+console.log('\nSPEED');
+// The channel that was measured and read by nothing. Four of the twenty strokes - the whole `quick`
+// phase - fed a number with no consumer, while the pour weighed every stroke against 0.35 and 0.06,
+// both of them one wrist's figures.
+//
+// A stroke whose answer is chosen in advance: dead straight, exactly constant speed, so every
+// sample must read that speed back whatever the window does at the ends.
+const straight = (n, gap, v) => Array.from({ length: n }, (_, i) => [0.1 + v * gap * i, 0.1, gap * i, 0.5, 0.3, 0]);
+setCal(null);
+{
+  const S = straight(120, 1 / 120, 0.2), P = speedProfile(S);
+  let worst = 0, wth = 0;
+  for (let i = 0; i < S.length; i++) { worst = Math.max(worst, Math.abs(P.sp[i] - 0.2)); wth = Math.max(wth, Math.abs(P.th[i])); }
+  say(worst < 1e-9, `a stroke built at exactly 0.2 slab-widths/s reads back 0.2 (worst error ${worst.toExponential(1)})`);
+  say(wth === 0, 'and its heading is dead along x, as drawn');
+}
+// Off, it must be the IDENTITY - not approximately. This is the half that decides whether wiring
+// the channel re-renders every slab already on disk.
+{
+  const P = speedProfile(straight(60, 1 / 60, 0.1));
+  let worst = 0;
+  for (let i = 0; i <= 1000; i++) { const v = i / 1000; worst = Math.max(worst, Math.abs(P.eq(v) - v)); }
+  say(P.k === 1 && worst === 0, `with no profile the factor is exactly 1 and eq is the identity (worst difference ${worst})`);
+}
+// A QUICK HAND. His own median is NAT, over 17 marks held deliberately straight. A hand that draws
+// at twice that was handed a thinner pour for every ordinary stroke and never reached the dwell
+// that thickens a lingering one - the same shape as a hand living in the bottom tenth of the
+// pressure sensor being told its normal stroke was faint.
+const QUICK = { speed: { natural: NAT * 2, quick: NAT * 6 } };
+{
+  const vNat = QUICK.speed.natural;
+  setCal(null);   const fixed = speedProfile(straight(60, 1 / 60, vNat));
+  setCal(QUICK);  const fitted = speedProfile(straight(60, 1 / 60, vNat));
+  console.log(`    a hand whose natural stroke runs at ${vNat.toFixed(3)}, where the tuned constants assume ${NAT}`);
+  console.log(`    pour width at its natural speed   fixed ${widOf(fixed.eq(vNat)).toFixed(5)}   fitted ${widOf(fitted.eq(vNat)).toFixed(5)}` +
+              `   (a natural stroke should give ${widOf(NAT).toFixed(5)})`);
+  say(Math.abs(fitted.k - 0.5) < 1e-12, `the factor halves this hand's speeds (k ${fitted.k})`);
+  say(Math.abs(widOf(fitted.eq(vNat)) - widOf(NAT)) < 1e-12,
+      'fitted: its natural stroke gets exactly the pour a natural stroke is meant to get');
+  say(widOf(fixed.eq(vNat)) < widOf(NAT) - 1e-4,
+      `fixed: the same stroke drew thinner (${widOf(fixed.eq(vNat)).toFixed(5)} against ${widOf(NAT).toFixed(5)}) for no reason but the wrist the number came from`);
+  const slow = vNat * 0.85;
+  say(fitted.eq(slow) < DWELL && !(fixed.eq(slow) < DWELL),
+      `easing off to ${slow.toFixed(3)} now registers as dwell (${fitted.eq(slow).toFixed(3)} < ${DWELL}); unfitted it read ${fixed.eq(slow).toFixed(3)} and never did`);
+}
+// FAIL CLOSED, NOT CLAMPED. A measurement this far out is not a hand, and the difference matters:
+// the calibration harness's own synthetic pen crosses the canvas 28 times quicker than he does, and
+// the 0/0 layout bug this file records saved a profile whose speed had quietly become 0. Both have
+// to land on 1 - today's behaviour - rather than on the end of a clamp.
+const kOf = () => speedProfile(straight(10, 1 / 60, 0.1)).k;
+for (const [nm, nat] of [['the synthetic pen, 1.687', 1.687], ['the 0/0 bug, 0', 0],
+                         ['absent', null], ['NaN', NaN], ['just outside the band', NAT / BAND * 0.99]]) {
+  setCal({ speed: { natural: nat, quick: 1 } });
+  say(kOf() === 1, `${nm}: the factor falls back to 1`);
+}
+setCal({ speed: { natural: NAT / BAND * 1.01, quick: 1 } });
+say(Math.abs(kOf() - BAND / 1.01) < 1e-9, `just inside it, a slow hand is still fitted (k ${kOf().toFixed(3)})`);
+// And the remap cannot reverse: easing off must never read as speeding up.
+setCal(QUICK);
+{
+  const P = speedProfile(straight(10, 1 / 60, 0.1));
+  let mono = true, prev = -Infinity;
+  for (let i = 0; i <= 1000; i++) { const v = P.eq(i / 1000); if (v < prev - 1e-12) mono = false; prev = v; }
+  say(mono, 'the factor never goes backwards either');
+}
 
 console.log('');
 process.exit(bad ? 1 : 0);

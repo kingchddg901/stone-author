@@ -126,7 +126,7 @@ survive any rewrite of this note.
 each tool consumes all of them, some, or none. A vein wants pressure and lean; the magnet wants all four;
 a chip wants only the path. Moon is simply the first tool that needs the complete set and has none of it,
 which is why the idea surfaced here — but it belongs at the input layer, shared. It is written up on its
-own terms in [`input-channels.md`](input-channels.md), including the three extractors that already exist.
+own terms in [`input-channels.md`](input-channels.md), including the four extractors that already exist.
 
 It also means a recorded Moon is not merely "a warped result". It is a **replayable semantic event**
 carrying a trajectory and its changing parameters — which is what makes replaying Moon history possible
