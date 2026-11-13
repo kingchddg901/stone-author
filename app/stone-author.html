@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.08.318';
+  const BUILD = '2026.11.12.319';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14638,7 +14638,32 @@ self.onmessage = async (e) => {
       }, 'image/png');
     } catch (e) { rej(e); }
   });
-  const expCanvas = W => { const c = document.createElement('canvas'); c.width = W; c.height = Math.round(W * H); return c; };
+  // A VIEW is the window a mask is drawn through: the canvas it lands on, and the transform that
+  // maps draw space onto it. Draw space is 1 wide and H tall - the whole 8 x 5 ft slab - and the
+  // scale is UNIFORM in both axes. That uniformity is the whole reason a square costs nothing here.
+  //
+  //   viewSlab(W)    the whole slab, W x round(W * H). What every export has always asked for.
+  //   viewSquare(S)  the largest CENTRED square of the same rasterisation - 5 x 5 ft of the slab,
+  //                  keeping 62.5% of its width - delivered at exactly S x S.
+  //
+  // THE SQUARE IS A WINDOW, NOT A RESAMPLE. Its scale is S / H, so at S = 2048 every vein is laid
+  // down at the width a 3276.8-wide render would give it, and no bitmap is ever scaled. That is
+  // the property docs/architecture.md has claimed for a 2048-square mask since before anything
+  // here produced one: the simple reader wants base/major/minor/micro at 2048 squared.
+  //
+  // WHAT A NON-UNIFORM SCALE WOULD DO, because it is the plausible mistake: setTransform(S, 0, 0,
+  // S / H, 0, 0) also fills the square, with the whole 8 ft in frame, and looks almost right. It
+  // is a lie about the stone - the grain comes out 1.6x wider than it is tall. The gate fails on it.
+  //
+  // THE OFFSET RIDES ON THE TRANSFORM, never on a drawImage of the finished picture - the same
+  // reason check-relief-bleed holds for the emboss offset. Moving the geometry reads no pixels
+  // from outside the canvas; shifting the picture reads neighbours that were never drawn.
+  const SQUARE_MASK = 2048;                       // the published square-mask contract, in pixels a side
+  const viewSlab = W => ({ w: W, h: Math.round(W * H), k: W, dx: 0 });
+  const viewSquare = S => ({ w: S, h: S, k: S / H, dx: -(S / H) * (1 - H) / 2 });
+  const expViewOf = Wv => typeof Wv === 'number' ? viewSlab(Wv) : Wv;   // a builder takes a width OR a view
+  const expCanvasOf = V => { const c = document.createElement('canvas'); c.width = V.w; c.height = V.h; return c; };
+  const expCanvas = Wv => expCanvasOf(expViewOf(Wv));
   const polyPath = (cx, pts) => { cx.beginPath(); cx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) cx.lineTo(pts[i][0], pts[i][1]); };
   // THE FLOOR, at export resolution. The same painter the preview uses, pointed at an export canvas
   // with the frame mapped straight onto it: a floor is the slab rearranged, so there is nothing new
@@ -14667,10 +14692,10 @@ self.onmessage = async (e) => {
     if (layTiles) return renderFloor(W);
     return renderTiled(W);
   }
-  function expBaseMask(W) {                               // base value map: the base composite as luminance
-    const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
+  function expBaseMask(Wv) {                              // base value map: the base composite as luminance
+    const V = expViewOf(Wv), c = expCanvasOf(V), cx = c.getContext('2d'), prev = g2d;
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = groundCol(); cx.fillRect(0, 0, c.width, c.height);
-    cx.setTransform(W, 0, 0, W, 0, 0);
+    cx.setTransform(V.k, 0, 0, V.k, V.dx, 0);
     if (G.brecStrength > 0) cx.drawImage(ensureBreccia(), 0, 0, 1, H);
     if (G.cloudStrength > 0) { cx.globalCompositeOperation = 'soft-light'; cx.drawImage(ensureClouds(), 0, 0, 1, H); cx.globalCompositeOperation = 'source-over'; }
     if (G.bandStrength > 0) { cx.globalCompositeOperation = 'soft-light'; cx.drawImage(ensureBands(), 0, 0, 1, H); cx.globalCompositeOperation = 'source-over'; }
@@ -14678,10 +14703,10 @@ self.onmessage = async (e) => {
     for (let i = 0; i < d.length; i += 4) { const l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; d[i] = d[i + 1] = d[i + 2] = l; d[i + 3] = 255; }
     cx.putImageData(im, 0, 0); g2d = prev; return c;
   }
-  function expCoverage(kind, W) {                         // white-on-black coverage for a bucket
-    const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d;
+  function expCoverage(kind, Wv) {                        // white-on-black coverage for a bucket
+    const V = expViewOf(Wv), c = expCanvasOf(V), cx = c.getContext('2d'), prev = g2d;
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = '#000'; cx.fillRect(0, 0, c.width, c.height);
-    cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.strokeStyle = cx.fillStyle = '#fff'; g2d = cx;
+    cx.setTransform(V.k, 0, 0, V.k, V.dx, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.strokeStyle = cx.fillStyle = '#fff'; g2d = cx;
     if (kind === 'major') { for (const L of geo.lines) if (L.major) runs(L, () => '#fff', null, 1, false); }
     else if (kind === 'minor') { for (const L of geo.lines) if (!L.major) runs(L, () => '#fff', null, 1, false); cx.lineJoin = 'miter'; cx.lineCap = 'butt'; for (const s of geo.styl) { polyPath(cx, s.pts); cx.lineWidth = s.width; cx.stroke(); } cx.lineJoin = 'round'; cx.lineCap = 'round'; }
     else if (kind === 'micro') { for (const s of geo.specks) { cx.beginPath(); cx.arc(s.x, s.y, s.R0 || s.rad, 0, 6.2832); cx.fill(); } for (const s of geo.drusy) { cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, 6.2832); cx.fill(); } }
@@ -15000,9 +15025,17 @@ self.onmessage = async (e) => {
         () => expCoverage('major', W), () => expCoverage('minor', W),
         () => expCoverage('micro', W), () => expCoverage('web', W),
         () => { idt = expIdT(W); return idt.ids; }, () => idt.t,   // paired on purpose: one call makes both
+        // The square set, through the SAME builders the slab masks use - one copy of the drawing
+        // code, so a square mask and its slab mask can never disagree about what is in the stone.
+        // Fixed at SQUARE_MASK whatever W is: the contract is a size, not a fraction of the render.
+        () => expBaseMask(viewSquare(SQUARE_MASK)), () => expCoverage('major', viewSquare(SQUARE_MASK)),
+        () => expCoverage('minor', viewSquare(SQUARE_MASK)), () => expCoverage('micro', viewSquare(SQUARE_MASK)),
         () => expCompleted(oW), ...oOrder.map(b => () => expBucket(b, oW)),
       ];
-      const names = ['render.png', 'masks/base.png', 'masks/major.png', 'masks/minor.png', 'masks/micro.png', 'masks/web.png', 'rich/vein-ids.png', 'rich/vein-t.png'];
+      const names = ['render.png', 'masks/base.png', 'masks/major.png', 'masks/minor.png', 'masks/micro.png', 'masks/web.png', 'rich/vein-ids.png', 'rich/vein-t.png',
+        // NOT masks/va/ - the folder says what the files ARE. The first consumer to want a square
+        // is not the only one that ever will, and a key named after it would lock the next one out.
+        'masks/square/base.png', 'masks/square/major.png', 'masks/square/minor.png', 'masks/square/micro.png'];
       const bytes = [], steps = makers.length + 2;          // + packing + saving
       let msRender = 0, msEncode = 0;
       for (let i = 0; i < makers.length; i += EXP_PEAK) {
@@ -15040,7 +15073,13 @@ self.onmessage = async (e) => {
         scope: 'all', w: W, h: Math.round(W * H), images: makers.length, bytes: bytes.reduce((a, b) => a + b.length, 0),
         ms: { render: msRender, encode: msEncode, toPack: Date.now() - expT0 },
       })) });
-      files.push({ name: 'slab.ora', data: await buildOraFrom(bytes[8], oOrder.map((b, i) => bytes[9 + i]), oOrder, oW) });
+      // THE .ora LAYERS FOLLOW THE NAMED PNGs, so their offset is names.length, not an 8 written by
+      // hand. The 8 was exactly right for as long as the PNG half of the kit never moved: inserting
+      // one image ahead of it would have packed that image as the slab and nothing would have said
+      // so - no gate reads these indices and the .ora would still open. names.length was 8 when this
+      // changed, so the first run of it is a no-op by construction.
+      const oraAt = names.length;
+      files.push({ name: 'slab.ora', data: await buildOraFrom(bytes[oraAt], oOrder.map((b, i) => bytes[oraAt + 1 + i]), oOrder, oW) });
       const zip = zipStore(files);
       expStat(TR('exp.saving'), (makers.length + 1) / steps); await breathe();
       const fn = expName(W, 'zip');

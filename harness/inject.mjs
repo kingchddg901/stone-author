@@ -21,6 +21,10 @@ const hook = `
     // the export's own builders, so the harness can time them against each other. renderTiled paints the
     // whole slab's content once PER TILE; renderFull paints it once but needs the entire canvas at once.
     renderTiled, renderTiledStepped, expBaseMask, expCoverage, expIdT,
+    // THE VIEWS, so a probe asks the APP for the square window rather than retyping S / H and the
+    // centring offset on this side. A harness that recomputes the thing under test agrees with
+    // itself; expViewOf takes any object, so a hand-built view would have passed a squeeze.
+    viewSlab, viewSquare, SQUARE_MASK,
     // THE BACK LIGHT'S WHOLE-SLAB MAPS AND THE RENDER-SCOPED HANDLE TO THEM. exportTiff and
     // renderTiled set this for the length of a render and clear it after; a probe comparing ONE
     // pooled tile against one sequential tile is not inside either, so it has to say so itself.

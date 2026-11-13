@@ -27,7 +27,9 @@ downstream code can't tell them apart. That interchangeability is the point.
 **Consumers** read the contract at whatever richness they need:
 
 - **Vacuum Agent** (`eufy-vacuum-manager`) — the simple reader: 4 grey masks (base / major /
-  minor / micro) at 2048².
+  minor / micro) at 2048². The kit writes them to `masks/square/` on every full export. They are
+  the largest **centred square** of the slab — 5 × 5 ft of the 8 × 5 ft picture, 62.5% of its
+  width — not the whole slab fitted to a square, so the grain keeps its proportions.
 - **HA dashboard builder** (`ha-dashboard-builder`) — the rich reader: masks plus vein ids and
   *t*-maps, the per-tier colour model, the tile wrap. It keeps only the *renderer*
   (`panel/stone-art.js`, `stone-raster.js`, `stone-controls.js`); this repo produces the masks it
@@ -387,7 +389,10 @@ deliberately does *not* gate on a cross-build byte match.
 
 Authoring is **vector** (a vein is a route → core + shoulder; specks and clouds are fields);
 rendering is **raster** (drawn 3× supersampled, downsampled). The same source rasterises to a
-430-px card or a 2048² mask without a bitmap ever being scaled.
+430-px card or a 2048² mask without a bitmap ever being scaled. That held for the card long before
+anything produced the square: masks came out `W × round(W·H)` and nothing emitted 2048² at all.
+A **view** closes it — `viewSlab(W)` and `viewSquare(S)` are the canvas-and-transform pair every mask
+builder sets up, so the square is a window on the same rasterisation rather than a second one.
 
 ### The colour engine (token-theme-kit)
 

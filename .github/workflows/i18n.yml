@@ -220,6 +220,8 @@ jobs:
         run: node tools/check-forced-peak.mjs
       - name: The emboss offset rides on the transform, so the glint is owed no bleed
         run: node tools/check-relief-bleed.mjs
+      - name: A square mask is a window on the slab, not the slab squeezed into a square
+        run: node tools/check-square-view.mjs
       - name: The studio asks once whether the GPU drew this frame
         run: node tools/check-preview-face.mjs
       - name: A master that painted one flat colour is kept, not recorded as good and deleted
