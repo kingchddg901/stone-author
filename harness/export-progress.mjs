@@ -114,14 +114,28 @@ const tiled = await page.evaluate(async () => {
     // machine the tiles go by quicker than the interval. That cost a red CI run on a correct app.
     const obs = new MutationObserver(() => { const t = stat.textContent; if (t && seen[seen.length - 1] !== t) seen.push(t); });
     obs.observe(stat, { childList: true, characterData: true, subtree: true });
+    // STAMP THE CLOCK FIRST, OR THIS CHECK IS AN IDENTITY. It reads what is on the clock as the
+    // SECOND export begins and wants '0:00'. The first export clocked 0:00 on every machine that
+    // ever ran this, so the leftover text WAS '0:00' and the assertion compared a value with
+    // itself for as long as it existed — until the kit grew to 18 images on 2026-11-13, the first
+    // export crossed a second on CI, and it went red with '0:01' on an app that had not changed
+    // in that respect. A figure nothing could have put there makes it bite whatever the box does.
+    const clockBefore = '7:77';
+    document.getElementById('expclock').textContent = clockBefore;
     btn.click();
+    // AND READ IT ONCE THE EXPORT HAS ACTUALLY BEGUN. Read synchronously, this caught the frame
+    // BEFORE the new export had done anything: the status line still said "Saved the render" and
+    // the bar still stood at 100%, because the click handler reaches expStat a microtask later.
+    // So the clock was not stale in any sense the app is answerable for — nothing had started.
+    // Measured 2026-11-13: one macrotask in, the clock reads 0:00 whatever the previous export took.
+    await new Promise(r => setTimeout(r, 0));
     // This is the SECOND export on this page, which is the only way to see a clock that never resets.
     const clockAtStart = document.getElementById('expclock').textContent;
     const t0 = Date.now();
     while (Date.now() - t0 < 60000) { await new Promise(r => setTimeout(r, 40)); if (!btn.disabled) break; }
     obs.disconnect();
     document.getElementById('expwhat').value = 'all';
-    return { seen, finalLine: stat.textContent, clockAtStart };
+    return { seen, finalLine: stat.textContent, clockAtStart, clockBefore };
   } finally { HTMLAnchorElement.prototype.click = realClick; }
 });
 const tileLines = tiled.seen.filter(t => /\d+ of \d+/.test(t) && !/1 of 1/.test(t));
@@ -172,7 +186,8 @@ checks.push(['render-only counts its tiles', tileLines.length + ' tile lines', t
 checks.push(['render-only reports a time', tiled.finalLine, /\d+:\d\d$/.test(tiled.finalLine)]);
 // The clock froze with the previous export's finished time still on it; expStat only starts the timer
 // when it is unset, so a second export used to count on from the first one's start.
-checks.push(['the clock restarts each export', tiled.clockAtStart, tiled.clockAtStart === '0:00']);
+checks.push(['the clock restarts each export', tiled.clockAtStart + ' (was ' + tiled.clockBefore + ')',
+             tiled.clockAtStart === '0:00' && tiled.clockBefore !== '0:00']);
 
 // --- and it must FAIL loudly rather than wait for ever -------------------------------------------
 // An encode that cannot happen used to leave a promise unsettled: the worker's onmessage is async, so a
