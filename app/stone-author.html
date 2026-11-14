@@ -2020,7 +2020,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.328';
+  const BUILD = '2026.11.13.329';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -7933,6 +7933,25 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // IT ALSO SAVES THE WORK. expIdT builds two full-size canvases and the kit encodes both, which at
   // 16384 is two 671 MB allocations for a material that has nothing to put in them.
   function materialAuthorsVectors() { return MATERIAL === 'stone'; }
+  // WHAT THE .ora's LAYER STACK IS. An OpenRaster file hands the author editable layers of their own
+  // picture, so the stack should be the material's own compositing spine. Stone HAS one: `layers` is
+  // an authored list with an on and an op per entry, and expBucket gates it by bucket. Wood's face is
+  // computed from a ring field around a wandering pith and glass's from a transmission model, and
+  // neither reads that list - so every bucket painted the WHOLE face and the stack came out as five
+  // byte-identical copies of it, under stone's names.
+  //
+  // MEASURED: a wood .ora held 5 x 3,021,813 bytes of ONE image - 15.1 MB - in layers called base,
+  // web, micro, minor and major, and that image's hash is the wood render's own. Glass the same at
+  // 5 x 1,357,750. The 'base' special case made no difference either, because the face paints opaque
+  // over the ground it lays first.
+  //
+  // SO THEY GET ONE LAYER, and it is named for what it is rather than borrowed from stone. Layering
+  // their tiers instead would be inventing a composite neither material has: wood's colour is a lerp
+  // between earlywood and latewood, and glass's absorptions add inside an exponent - stacked with
+  // alpha-over, neither recomposes into the picture it came from.
+  function materialOraLayers() {
+    return MATERIAL === 'stone' ? ['base', 'web', 'micro', 'minor', 'major'] : ['face'];
+  }
   function materialPackStem() { return 'ma-' + MATERIAL; }
   function materialPackId() {
     if (packId) return packId;                      // latched: never re-derived, whatever else moved
@@ -15228,9 +15247,16 @@ self.onmessage = async (e) => {
   }
   function expBucket(bucketKey, W) {                      // one consumer bucket, in colour, transparent elsewhere (for .ora layers)
     const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d, saved = layers.map(L => L.on), sv = soloLay; soloLay = null;
-    for (const L of layers) L.on = (L.bucket === bucketKey);
+    // 'face' IS THE ABSENCE OF A BUCKET, not another one. A material with no authored layer spine has
+    // a single .ora layer and that layer is everything, so the list is left exactly as the author set
+    // it - gating it by a key no entry carries would turn every layer OFF, which for stone would
+    // paint an empty picture and for wood and glass would paint the same face either way, silently.
+    const whole = bucketKey === 'face';
+    if (!whole) for (const L of layers) L.on = (L.bucket === bucketKey);
     cx.setTransform(1, 0, 0, 1, 0, 0);
-    if (bucketKey === 'base') { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, c.width, c.height); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = groundCol(); cx.fillRect(0, 0, c.width, c.height); cx.globalAlpha = 1; } }
+    // The whole-face layer wants its ground for the same reason the base bucket does: it is the
+    // bottom of the stack, and what is under it is nothing.
+    if (whole || bucketKey === 'base') { cx.fillStyle = STONE_BG; cx.fillRect(0, 0, c.width, c.height); if (layVis('base')) { cx.globalAlpha = layOp('base'); cx.fillStyle = groundCol(); cx.fillRect(0, 0, c.width, c.height); cx.globalAlpha = 1; } }
     cx.setTransform(W, 0, 0, W, 0, 0); cx.lineCap = 'round'; cx.lineJoin = 'round'; g2d = cx; paintContent(false, false); g2d = prev;
     layers.forEach((L, i) => L.on = saved[i]); soloLay = sv; return c;
   }
@@ -15524,7 +15550,9 @@ self.onmessage = async (e) => {
         hint(TR('hint.exported-render', { px: W }));
         return;
       }
-      const te = new TextEncoder(), oW = Math.min(W, 2048), oOrder = ['base', 'web', 'micro', 'minor', 'major'];
+      // THE .ora STACK IS THE MATERIAL'S TOO, asked once. It was this literal list of stone buckets,
+      // which is how a wood .ora came to hold five copies of one image in layers named after veins.
+      const te = new TextEncoder(), oW = Math.min(W, 2048), oOrder = materialOraLayers();
       // Built in PAIRS and freed as we go. The old "render everything first" batch held EIGHT full-size
       // canvases alive before encoding any of them: 5 GiB at 16384, which no machine has, and 1.2 GiB at
       // 8192. It was batched that way to feed the worker pool — the same pool the history records as

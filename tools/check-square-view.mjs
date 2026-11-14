@@ -481,6 +481,37 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
     else ok('the three rich data files are gated on the same flag');
   }
 
+  // THE .ora's LAYER STACK IS THE MATERIAL'S. An OpenRaster file hands the author editable layers of
+  // their own picture, and stone is the material with an authored spine: `layers` carries an on and
+  // an op per entry and expBucket gates it by bucket. Wood's face comes from a ring field and glass's
+  // from a transmission model, and neither reads that list - so every bucket painted the WHOLE face.
+  //
+  // MEASURED before the fix: a wood .ora held 5 x 3,021,813 bytes of ONE image, 15.1 MB, in layers
+  // named base / web / micro / minor / major - and that image's hash was the wood render's own.
+  // Glass the same at 5 x 1,357,750. Kits went 30.75 -> 19.23 MB and 13.49 -> 8.31; stone unchanged.
+  //
+  // RED WHEN: the stack stops being the material's; the export goes back to a literal list; the
+  // whole-face key gates the layer list (which turns every layer OFF, and for stone would paint an
+  // empty picture); or it stops laying its ground, which is the bottom of a one-layer stack.
+  {
+    if (!/function materialOraLayers\(\) \{\s*\n\s*return MATERIAL === 'stone' \? \['base', 'web', 'micro', 'minor', 'major'\] : \['face'\];/.test(APP))
+      fail("materialOraLayers is not stone's five buckets and a single face for everything else - wood and glass have no authored layer spine, so every bucket painted the same image and the stack came out as five byte-identical copies under stone's names");
+    else ok("materialOraLayers gives stone its five buckets and the others one face");
+    if (!/oOrder = materialOraLayers\(\);/.test(APP))
+      fail('the export does not read the stack from the fork - the literal list of stone buckets is what put five copies of one image in a wood .ora');
+    else ok('the export reads the .ora stack from the fork');
+    const eb = /function expBucket\(bucketKey, W\) \{([\s\S]*?)\n  \}/.exec(APP);
+    if (!eb) fail('cannot find expBucket');
+    else {
+      if (!/const whole = bucketKey === 'face';/.test(eb[1]) || !/if \(!whole\) for \(const L of layers\)/.test(eb[1]))
+        fail("expBucket gates the layer list for the whole-face key - no entry carries 'face', so that turns every layer off: an empty picture for stone, and for wood and glass the same face either way, silently");
+      else ok('the whole-face key leaves the authored layer list alone');
+      if (!/if \(whole \|\| bucketKey === 'base'\) \{/.test(eb[1]))
+        fail('the whole-face layer does not lay its ground - it is the bottom of a one-layer stack, and what is under it is nothing');
+      else ok('the whole-face layer lays its ground, as the base bucket does');
+    }
+  }
+
   // AND THE .ora OFFSET IS STILL DERIVED. The .ora layers sit directly after the named PNGs, so a
   // literal index there silently packs a mask as the slab the moment anything is inserted ahead.
   if (!/const oraAt = names\.length;/.test(APP)) fail('the .ora offset is not derived from names.length - a literal index packs the wrong image the moment one is inserted ahead of it');
