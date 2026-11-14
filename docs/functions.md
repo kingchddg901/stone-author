@@ -225,11 +225,11 @@ CPU painter and the field under both.
   arena and one uniform** for the shader. Refuses two things rather than shipping them: a declared
   field that nothing supplies — the struct names it, the shader reads it, and it would be quietly zero
   for the life of the port — and more features than the shader's scratch array holds, which the CPU
-  painter has no limit on. *(19510)*
+  painter has no limit on. *(19583)*
 - `woodSource(GW)` — assembles wood's WGSL. **Assembled, not concatenated**: it borrows `woodAtan2`,
   `woodHash` and `fbm2` from the glass blocks rather than keeping unverified copies of each, and closes
   over the call sites rather than listing them, because `fbm2` calls `vnoise` and `vnoise` calls `nz`
-  and neither name appears anywhere in wood's own text. *(20136)*
+  and neither name appears anywhere in wood's own text. *(20209)*
 
 ## Glass — a lay-up, then a forming process
 
@@ -1001,17 +1001,28 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
 - `materialPackLatch()` — stores the derived id the first time a pack is exported and returns it
   thereafter, saving through the ordinary autosave. The consumer's instruction is to treat the id as
   permanent from the first time the pack leaves the generator; this is that moment.
-- `expStoneField(Wv)` — stone's field layer: **full coverage with the veins taken out of it**, not
-  the ground colour flattened. A mask is coverage (`layerAlpha = luminance/255 × opacity`) and the
-  colour travels in the layer's own `color`, so a near-black marble's matrix still covers the whole
-  floor; `expBaseMask` answered the other question and measured 8.00 / 0.00 / 100% below 32. This
-  measures **226.03 / 79.50 / 10.58%** against the consumer's shipped `marble-base-mask` at 232.6 /
-  71.3 / 8.5%. Subtracts `major` and `minor` — a vein is a fracture filled with other mineral, so
-  the matrix is absent there — and **not** `micro`, because specks and drusy are inclusions within
-  it (taking micro out too: 141.31 / 126.75 / 44.59%, since micro alone covers 37.93%). The vein
-  coverages are **unioned, not summed**, so a crossing is not punched twice; combined through the
-  pixels rather than `destination-out`, which reads the source's *alpha* and `expCoverage` is opaque
-  everywhere, so it would have erased the canvas. The base composite is deliberately not drawn —
+- `expStoneField(Wv)` — stone's field layer: **full coverage with the veins taken out of their
+  core**, not the ground colour flattened. A mask is coverage (`layerAlpha = luminance/255 ×
+  opacity`) and the colour travels in the layer's own `color`, so a near-black marble's matrix still
+  covers the whole floor; `expBaseMask` answered the other question and measured 8.00 / 0.00 / 100%
+  below 32. This measures **229.15 / 76.97 / 10.14%** against the consumer's shipped
+  `marble-base-mask` at 232.6 / 71.3 / 8.5%. Subtracts `major` and `minor` — a vein is a fracture
+  filled with other mineral, so the matrix is absent there — and **not** `micro`, because specks and
+  drusy are inclusions within it (taking micro out too: 141.53 / 124.39 / 42.53%, since micro alone
+  covers 40.53%). The vein coverages are **unioned, not summed**, so a crossing is not punched
+  twice; combined through the pixels rather than `destination-out`, which reads the source's *alpha*
+  and `expCoverage` is opaque everywhere, so it would have erased the canvas.
+  **The subtraction is a step at `vein === 255`, at full depth.** The consumer composites the veins
+  as layers *over* this one, so a proportional subtraction removes the matrix twice, and since this
+  layer is what makes the floor opaque the second removal lets the room's flat fill through —
+  `D·m·(1−m)`, measured at 8.69% of the vein feather and **25.00%** at the worst pixel, on both
+  slabs, against an arithmetic `D/4`. No depth in [0,1] removes it; 0.5 and 0.37 scale it to 12.55%
+  and 9.34% while collapsing the contrast to 39.60 and 29.31. `D·m·(1−m)` is zero at both ends, so
+  confining the hole to a vein's solid core zeroes it outright (0.00%) and costs the composite
+  nothing — core-only and no subtraction give the same floor to the figure — while holding the
+  flat-primary check at 76.97 rather than 0.00. `>= 250` puts 1.96% back, so 255-exactly is
+  load-bearing. The union still reads `expCoverage`'s anti-aliasing, which now decides where the
+  hole **ends** rather than what fills it. The base composite is deliberately not drawn —
   measured, clouds and bands change nothing through soft-light over white and breccia drives the mean
   to 10.13 by painting `source-over`. `expBaseMask` is untouched and keeps its own callers.
 - `expWoodTiers(V)` — wood's six tiers in **one pass**, by the board painter's own path: clamp to
@@ -1058,7 +1069,7 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
   another one: it leaves the authored layer list exactly as it is, because no entry carries that
   bucket and gating on it would turn every layer off — an empty picture for stone, and for wood and
   glass the same face either way, silently. It lays its ground like `base` does, being the bottom of
-  a one-layer stack. *(15398)*
+  a one-layer stack. *(15471)*
 - `materialRich()` — **at the material fork**: the rich set itself, not a word for it.
   `{vectors: true}` for stone (the id map, the t map, `paths.json`, `lines.svg` — four views of a
   list of authored strokes), or `{file, draw, legend}` for a material whose features are labelled
@@ -1089,14 +1100,14 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
   joins the colour in `material.json` on a name rather than a position.
 - `expIdT(W)` — the rich pair: a vein-**id** map (each line an rgb-encoded index) and an
   along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. Built only when
-  the material authors vectors, which also saves two full-size canvases and their encodes. *(15413)*
+  the material authors vectors, which also saves two full-size canvases and their encodes. *(15486)*
 - `pathsJSON()` — the vectors as data: slab size in feet, then each line's `id / major / parent / at`,
-  its points, and its per-sample widths. *(15454)*
-- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(15455)*
+  its points, and its per-sample widths. *(15527)*
+- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(15528)*
 - `buildOraFrom(merged, buckets, order, W)` — an OpenRaster `.ora` assembled from already-encoded
   PNG bytes: a nested zip with `mimetype` stored first, a `stack.xml` (top child = top layer), the
   bucket layers under `data/`, and a `mergedimage` + thumbnail. Opens in Krita / GIMP / Photoshop.
-  Takes the encoded bytes rather than rendering them, so the encode happens once. *(15500)*
+  Takes the encoded bytes rather than rendering them, so the encode happens once. *(15573)*
 - `packFiles(base, span)` — the drop-in pack's files, with **bare names** so the caller owns the
   layout: the 2048-square greyscale masks the material publishes plus `material.json`. Lifted out of
   `exportAll` when the pack got a scope of its own, and **lifted rather than copied** — a second
@@ -1120,7 +1131,7 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
   the selectors read and no mask builder applies the coat. Both of those were wrong on the first
   pass: the floor-size refusal sat above the dispatch and refused a pack for a width it never uses,
   and the coat field was built for a scope that reads none — which `check-coat-field` found by
-  reporting its own ablation **INERT** rather than passing quietly. *(15680)*
+  reporting its own ablation **INERT** rather than passing quietly. *(15753)*
 
 ## Large renders — what a canvas can hold, and what to do past it
 
@@ -1153,10 +1164,10 @@ it reports the size asked for and leaves the far end unwritten. See
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
   family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(12928)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(16784)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(16857)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(16809)*
+  actually on offer, not a probe's answer to a different question. *(16882)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(16886)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(23951)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(16959)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(24024)*

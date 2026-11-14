@@ -2021,7 +2021,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.332';
+  const BUILD = '2026.11.14.333';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14988,22 +14988,33 @@ self.onmessage = async (e) => {
   // marble-base-mask is the tell at mean 232.6, contrast 71.3, 8.5% of it below 32, which is not any
   // dark stone's luminance. It is a bright field with the veins cut out of it.
   //
-  // SO: FULL COVERAGE, MODULATED BY THE MATRIX'S OWN STRUCTURE, WITH THE VEINS TAKEN OUT.
+  // SO: FULL COVERAGE, MODULATED BY THE MATRIX'S OWN STRUCTURE, WITH THE VEINS OUT OF ITS CORE.
   // Major and minor are subtracted because a vein is a fracture FILLED WITH OTHER MINERAL - the
   // matrix is genuinely absent where one runs. Micro is NOT, because specks and drusy are inclusions
   // WITHIN the matrix and it surrounds them; that is a distinction about the rock, not about hitting
-  // a number, and the numbers happen to agree. Measured on Hero_Psyker at the square:
+  // a number, and the numbers happen to agree.
   //
-  //   subtracting major+minor+micro   mean 141.31  contrast 126.75  44.59% below 32   not a field
-  //   subtracting major+minor         mean 226.17  contrast  80.75  11.31% below 32   their marble
+  // EVERY FIGURE IN THIS NOTE IS ONE SCOPE, FROM ONE RUN: Hero_Psyker at viewSquare(SQUARE_MASK),
+  // 2048 a side, 4,194,304 px - the view the consumer actually receives. SAYING THE SIZE IS NOT
+  // DECORATION. The table this replaces carried two readings of the SAME configuration, 226.17 /
+  // 80.75 / 11.31% here and 226.11 / 75.12 lower down as "all three off"; the second is square 512
+  // EXACTLY and the first matches nothing below 4096, and neither said which square it was. Nothing
+  // had moved to explain it - expStoneField, expCoverage, runs and paintVeinLayer are byte-identical
+  // to a201755 where the note was written, and the slab file has not been touched since it was added.
+  // The field's MEAN is scale-stable (226.0-226.1 from 512 to 4096) and its CONTRAST and dark
+  // fraction are NOT (75.12 -> 80.20), which is exactly why those two readings' means agreed to 0.14
+  // while their contrasts stood five levels apart. A contrast quoted without its size says little.
+  //
+  //   subtracting major+minor+micro   mean 141.53  contrast 124.39  42.53% below 32   not a field
+  //   subtracting major+minor's CORE  mean 229.15  contrast  76.97  10.14% below 32   their marble
   //                                                                                   reads 232.6 /
   //                                                                                   71.3 / 8.5%
   //
-  // micro alone covers 37.93% of this square, which is why taking it out stops being a field layer
-  // and starts being a speckle mask. The small excess over their marble is this slab carrying 11.96%
-  // veins against whatever theirs carried - a property of the picture, and the band is eighteen
-  // observations rather than a rule. The only figure the consumer enforces is the flat-primary
-  // threshold at 1.5, which this clears by fifty times.
+  // micro alone covers 40.53% of this square, which is why taking it out stops being a field layer
+  // and starts being a speckle mask. The remaining excess over their marble is this slab's own vein
+  // load - 12.51% of the square, 10.14% of it solid - against whatever theirs carried, a property of
+  // the picture, and the band is eighteen observations rather than a rule. The only figure the
+  // consumer enforces is the flat-primary threshold at 1.5, which this clears by fifty-one times.
   //
   // expBaseMask IS LEFT EXACTLY AS IT WAS, because it has two other callers and neither wants this:
   // the back light reads it as the translucent body that GLOWS, and the slab-aspect masks/base.png
@@ -15016,7 +15027,11 @@ self.onmessage = async (e) => {
     // THE BASE COMPOSITE IS DELIBERATELY NOT DRAWN HERE, and it was, until it was measured. Drawing
     // breccia, clouds and bands over white the way expBaseMask draws them over the ground is the
     // obvious move and it fails in both directions at once. Ablated on Hero_Psyker, one modulator at
-    // a time:
+    // a time, AT THE 512 SQUARE and against the whole-footprint field this builder shipped at the
+    // time - the scope is named because these three rows are the other half of the mis-scoped pair
+    // the preamble describes, and 226.11 / 75.12 is square 512 exactly. What is load-bearing here is
+    // the IDENTITY, which no size changes: two modulators that move nothing cannot be measuring
+    // their own contribution. The absolute figures belong to that square and that field.
     //
     //   clouds only, 0.7     mean 226.11  contrast 75.12   IDENTICAL to all three off, to 0.01
     //   bands only, 0.5      mean 226.11  contrast 75.12   IDENTICAL
@@ -15039,16 +15054,74 @@ self.onmessage = async (e) => {
     //
     // NOT destination-out, which is the composite this asks for and the wrong one: it reads the
     // SOURCE'S ALPHA, and expCoverage draws white on an opaque BLACK fill - alpha 255 everywhere -
-    // so it would have erased the whole canvas. Taken through the pixels instead, which also keeps
-    // the coverage builder's own anti-aliasing, so a vein's edge stays soft in the hole it leaves.
+    // so it would have erased the whole canvas. Taken through the pixels instead, which is also what
+    // lets the subtraction below READ the coverage builder's anti-aliasing in order to stop at the
+    // edge of it. This used to say the union keeps a vein's edge soft IN THE HOLE IT LEAVES, and that
+    // stopped being true when the hole became the vein's CORE: the softness is still in `vein`, and
+    // it now decides where the hole ENDS rather than what fills it.
     const vein = new Uint8Array(c.width * c.height);
     for (const k of ['major', 'minor']) {
       const vc = expCoverage(k, V), vd = vc.getContext('2d').getImageData(0, 0, c.width, c.height).data;
       for (let i = 0, j = 0; i < vd.length; i += 4, j++) if (vd[i] > vein[j]) vein[j] = vd[i];
       vc.width = 1; vc.height = 1;                        // hand it back before building the next
     }
+    // THE DEPTH IS FULL AND THE FOOTPRINT IS THE CORE, which is a measurement and not a preference.
+    //
+    // Asked to pick the subtraction's depth from a measurement rather than from the edge of the field
+    // band, the first instinct was to solve the vein's own alpha out of the render - face =
+    // (1-a)*matrix + a*veinColour, projected over three channels at pixels where one vein is full and
+    // the other absent. It came back 0.3915 for a major vein and 0.8492 for a minor against an
+    // AUTHORED OPACITY OF 1 for both, moved to 0.7388 / 0.6539 on another slab, and fitted a line
+    // through the origin at only r2 0.9107. So it was never one constant - and it was not even the
+    // right quantity: runs() paints the main pass at 0.94 * layOp in a COLOUR that varies along the
+    // vein, so what that solved was colour-distance, not an opacity.
+    //
+    // THE CONSUMER'S OWN COMPOSITOR SETTLES IT, in three lines of their file: start from an OPAQUE
+    // BASE COLOUR - the flat room fill shown when textures are off - then layerAlpha =
+    // (luminance/255) * layerOpacity and out = layerColor*layerAlpha + out*(1 - layerAlpha), bottom
+    // to top. THE VEINS ARE LAYERS OVER THIS ONE. So a vein already removes the matrix once, by
+    // covering it, and subtracting it here as well removes it TWICE. Because this layer is what makes
+    // the floor opaque, the second subtraction does not darken the stone - IT LETS THE ROOM'S FLAT
+    // FILL THROUGH. At depth D and coverage m the seed survives D*m*(1-m).
+    //
+    // MEASURED, NOT ARGUED: the real pack composited twice against a black seed and a white one and
+    // differenced, since nothing else in the stack depends on the seed, so the difference IS the
+    // fraction of floor that is still room fill. Of the 99,328 px in this slab's vein feather:
+    //
+    //   whole footprint, depth 1     8.69% of the feather, 25.00% at the worst pixel
+    //   whole footprint, depth 0.5   4.32%                 12.55%
+    //   whole footprint, depth 0.37  3.21%                  9.34%     (the solved alpha)
+    //   THE CORE ONLY                0.00%                  0.00%
+    //
+    // 25.00% against an arithmetic D/4, on both slabs measured - so the halo along every vein feather
+    // was a quarter of the room's tint, and NO DEPTH IN [0,1] REMOVES IT. Lowering one only scales
+    // the bleed, and it costs the field its structure on the way down: contrast 79.50 -> 39.60 at
+    // depth 0.5 -> 29.31 at 0.37. The tuned constant loses on both axes at once.
+    //
+    // BUT D*m*(1-m) IS ZERO AT BOTH ENDS, so the FOOTPRINT is the instrument and not the depth.
+    // Confine the subtraction to where a vein's coverage is FULL and every term vanishes: where the
+    // hole is, the vein above paints at alpha 1 and covers it completely; where the vein is partial
+    // the matrix stays whole and shows through at exactly (1-m), which is what the compositing is
+    // for. The field reads 229.15 / 76.97 / 10.14% against the shipped 226.03 / 79.50 / 10.58%.
+    //
+    // AND THE STEP IS FREE IN THE COMPOSITE, which is the part worth keeping: core-only and NO
+    // subtraction at all produce the same floor to the figure - mean 0.26, worst 32, 1.40% of the
+    // picture moved, all three identical - because the pixels they differ in are the ones the vein
+    // layer covers opaquely. So the hole costs the floor nothing and buys the card's single-layer
+    // path its vein lines, holding the flat-primary check at contrast 76.97 instead of 0.00.
+    //
+    // 255-EXACTLY IS LOAD-BEARING. At >= 250 the bleed is back at 0.03% of the feather and 1.96% at
+    // worst, because 255 is the threshold where the covering alpha stops being 1. The hard edge that
+    // would normally cost something is invisible by construction: the step sits at the one coverage
+    // where the vein layer is opaque. The vein layers keep their own anti-aliasing and they are what
+    // draws the visible vein.
+    //
+    // WHAT THIS DOES NOT FIX, and was not asked to: 76.97 and 10.14% are still outside the band's 71
+    // and 8%, and on `before` core-only reads 72.13 / 8.77% - still just outside. That excess is the
+    // slab's own vein load, as the note above says. Tuning the depth to land inside the band is the
+    // move this measurement replaced, not one it postpones.
     for (let i = 0, j = 0; i < d.length; i += 4, j++) {
-      const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) * (1 - vein[j] / 255);
+      const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) * (vein[j] === 255 ? 0 : 1);
       d[i] = d[i + 1] = d[i + 2] = l; d[i + 3] = 255;
     }
     cx.putImageData(im, 0, 0); return c;

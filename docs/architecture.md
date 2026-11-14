@@ -78,11 +78,22 @@ downstream code can't tell them apart. That interchangeability is the point.
   near-black marble's matrix still covers the whole floor, so flattening the ground colour to
   luminance — which is what `expBaseMask` does — answers the wrong question and measured mean 8.00
   contrast 0.00 with every pixel below 32. `expStoneField` publishes full coverage with the **veins
-  taken out of it** instead: 226.03 / 79.50 / 10.58% against the consumer's own shipped
+  taken out of its core** instead: 229.15 / 76.97 / 10.14% against the consumer's own shipped
   `marble-base-mask` at 232.6 / 71.3 / 8.5%, reached without tuning anything. Major and minor are
   subtracted because a vein is a fracture filled with other mineral and the matrix is genuinely
   absent there; micro is not, because specks and drusy are inclusions *within* it, and taking micro
-  out as well measured 141.31 / 126.75 / 44.59% — micro alone covers 37.93% of that square.
+  out as well measured 141.53 / 124.39 / 42.53% — micro alone covers 40.53% of that square.
+  **The subtraction is a step at full coverage, not a depth, and that is the consumer's own
+  arithmetic rather than a preference.** The veins are layers *over* this one, so a proportional
+  subtraction takes the matrix out twice — and because this layer is what makes the floor opaque,
+  the second removal does not darken the stone, it lets the room's flat fill through: `D·m·(1−m)`
+  of it, measured at **8.69% of the vein feather and 25.00% at the worst pixel** at full depth, on
+  both slabs, against an arithmetic `D/4`. No depth in [0,1] removes it — 0.5 and 0.37 only scale
+  the bleed to 12.55% and 9.34% while collapsing the field's contrast from 79.50 to 39.60 and
+  29.31, losing on both axes. Confining the hole to where a vein is *solid* makes every term zero
+  and costs the floor nothing, because the pixels it changes are the ones the vein layer covers
+  opaquely. **Every figure here is one scope**, `viewSquare(SQUARE_MASK)` at 2048: the field's mean
+  is scale-stable across 512–4096 and its contrast is not, 75.12 → 80.20.
   `expBaseMask` is unchanged and still has its own callers: the back light reads it as the
   translucent body that glows.
   **The `id` is a namespace and the `name` is display text, and the slab's own name may only reach

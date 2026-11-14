@@ -78,6 +78,11 @@ const hook = `
     // it contributed. groundCol is the sanctioned accessor at the material fork, so asking it
     // here reads the same answer the painter does, per material, with no token leak.
     groundCol,
+    // THE RESOLVED PALETTE AND THE AUTHORED PER-LAYER OPACITY. A probe asking how much of the
+    // matrix a vein actually displaces needs the vein's own colour to solve for an alpha, and
+    // layOp to compare that alpha against what the author asked for - which is the number the
+    // manifest already hands the consumer.
+    get COL() { return COL; }, layOp,
     // AND STONE'S FIELD BUILDER. Every committed slab has the base composite at zero, so the
     // modulator half of this is unreachable through a real export and a probe that cannot see
     // the effect is not a measurement - this is how the brec/cloud/band path gets exercised.

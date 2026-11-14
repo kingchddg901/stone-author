@@ -188,14 +188,39 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat`
   measured mean 8.00 contrast **0.00** with every pixel below 32 — dark *and* flat, a field layer by
   neither test — and the diagnosis was that a mask is **coverage**, not the material's colour. A
   near-black marble's matrix still covers the whole floor, and the colour travels in the layer's own
-  `color`. `expStoneField` publishes full coverage with the **veins taken out of it**:
-  **226.03 / 79.50 / 10.58%**, against the consumer's shipped `marble-base-mask` at 232.6 / 71.3 /
+  `color`. `expStoneField` publishes full coverage with the **veins taken out of its core**:
+  **229.15 / 76.97 / 10.14%**, against the consumer's shipped `marble-base-mask` at 232.6 / 71.3 /
   8.5% — the same population, reached without tuning a constant. Major and minor are subtracted (a
   vein is a fracture filled with other mineral, so the matrix is absent); micro is not (specks and
-  drusy are inclusions *within* the matrix), and subtracting it too measured 141.31 / 126.75 /
-  44.59%, because micro alone covers 37.93% of that square. `base` takes the `primary` back from
+  drusy are inclusions *within* the matrix), and subtracting it too measured 141.53 / 124.39 /
+  42.53%, because micro alone covers 40.53% of that square. `base` takes the `primary` back from
   `major` as a result: untinted it now paints a bright matrix with the veins cut out, which is what
   a marble card should look like, where `major` painted the veins alone on an empty card.
+  **The hole is the vein's CORE, not its whole footprint, and the depth stays full.** Asked to pick
+  that depth from a measurement rather than from the edge of the field band, the first attempt
+  solved the vein's own alpha out of the render: 0.3915 for a major and 0.8492 for a minor against
+  an authored opacity of **1** for both, 0.7388 / 0.6539 on another slab, fitting a line through
+  the origin at only r² 0.9107. Never one constant — and not even the right quantity, since `runs`
+  paints the main pass at `0.94 × layOp` in a colour that varies *along* the vein, so what that
+  solved was colour-distance. The consumer's compositor settles it instead: it seeds from an
+  **opaque room fill** and the veins are layers *over* the base, so a vein already removes the
+  matrix once by covering it. Subtracting it from the mask as well removes it twice, and because
+  the base is what makes the floor opaque the second removal lets the room's tint through —
+  `D·m·(1−m)`, which peaks mid-feather. Measured by compositing the real pack against a black seed
+  and a white one and differencing, so nothing but the seed differs between the two runs:
+  **8.69% of the feather and 25.00% at the worst pixel**, on both slabs, against an arithmetic
+  `D/4`. Lowering the depth only scales it (0.5 → 12.55%, 0.37 → 9.34%) while flattening the field
+  (contrast 39.60, 29.31), so no constant was ever the instrument. But `D·m·(1−m)` is **zero at
+  both ends**, so confining the hole to full coverage makes every term vanish — measured **0.00%** —
+  and the step is free in the composite: core-only and no subtraction at all give the same floor to
+  the figure (mean 0.26, worst 32, 1.40% moved), because the pixels they differ in are the ones the
+  vein layer covers opaquely. `255`-exactly is load-bearing: at `>= 250` the bleed returns at 1.96%
+  worst, that being where the covering alpha stops being 1. The hard edge is invisible by
+  construction, sitting at the one coverage where the vein above is opaque.
+  **What it does not fix**, and was not asked to: 76.97 and 10.14% are still outside the
+  eighteen-mask band's 71 and 8%, and `before` reads 72.13 / 8.77% — still just outside. That
+  excess is the slab's own vein load (12.51% of the square, 10.14% of it solid), and tuning the
+  depth to land inside the band is the move this measurement replaced, not one it postpones.
   **The base composite is deliberately NOT drawn into it**, and that was measured rather than
   assumed. Ablated one modulator at a time on `Hero_Psyker`: clouds at 0.7 and bands at 0.5 each
   left the result **identical to all three off, to 0.01** — soft-light is the blend that leaves a

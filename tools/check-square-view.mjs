@@ -140,7 +140,14 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
 
   // ONE MATERIAL CHOOSES THE LIST, and the loop draws every entry through the square view. One call,
   // because the set is now iterated rather than enumerated.
-  const calls = [...APP.matchAll(/viewSquare\(SQUARE_MASK\)/g)].length;
+  //
+  // COUNTED IN CODE, NOT IN PROSE. This counted raw matches in the whole file, which means it counted
+  // the NAME rather than the call - so a comment that merely says which view a measurement was taken
+  // at reddened it, claiming two call sites where there is one. Found by writing exactly such a
+  // comment. Full-line comments are dropped before counting; a trailing comment on a line of code
+  // still counts, which is a narrower hole and is said here rather than left to be rediscovered.
+  const CODE = APP.split(/\r?\n/).filter(l => !/^\s*\/\//.test(l)).join('\n');
+  const calls = [...CODE.matchAll(/viewSquare\(SQUARE_MASK\)/g)].length;
   if (calls !== 1) fail(`${calls} call(s) to viewSquare(SQUARE_MASK); the square set is one loop over materialMasks() and wants exactly one`);
   else ok('one square view, iterated over the material\'s own layer list');
   // THIS CLAUSE AND THE MANIFEST ONE BELOW MOVED, not changed: the square set's builder was lifted
@@ -192,11 +199,31 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
     if (!sf) fail('cannot find expStoneField');
     else {
       if (!/\['major', 'minor'\]/.test(sf[1]))
-        fail("expStoneField does not subtract exactly major and minor - a vein is a fracture filled with other mineral so the matrix is absent there, but specks and drusy are inclusions WITHIN it; taking micro out as well measured mean 141.31 contrast 126.75 with 44.59% below 32, because micro alone covers 37.93% of the square");
+        fail("expStoneField does not subtract exactly major and minor - a vein is a fracture filled with other mineral so the matrix is absent there, but specks and drusy are inclusions WITHIN it; taking micro out as well measured mean 141.53 contrast 124.39 with 42.53% below 32 at the published square, because micro alone covers 40.53% of it");
       else ok('expStoneField subtracts the veins and leaves the speckle field alone');
       if (!/if \(vd\[i\] > vein\[j\]\) vein\[j\] = vd\[i\]/.test(sf[1]))
         fail('the vein coverages are not unioned - summing them punches a darker hole wherever a minor crosses a major, which is the matrix being absent twice over');
       else ok('the vein coverages are unioned, not summed');
+
+      // THE SUBTRACTION IS A STEP AT FULL COVERAGE, NOT A PROPORTIONAL DEPTH. The consumer
+      // composites the veins as LAYERS OVER this one, so a proportional subtraction removes the
+      // matrix twice - and because this layer is what makes the floor opaque, the second removal does
+      // not darken the stone, it lets the ROOM'S FLAT FILL through. The surviving seed is D*m*(1-m),
+      // measured by compositing the real pack against a black seed and a white one and differencing:
+      // 8.69% of the vein feather and 25.00% at the worst pixel, on both slabs, against an arithmetic
+      // D/4. Confining the hole to where a vein is SOLID makes every term vanish - measured 0.00% -
+      // and costs the floor nothing, because core-only and no-subtraction composite to the same floor
+      // to the figure (mean 0.26, worst 32, 1.40% moved, all three identical).
+      //
+      // RED WHEN: the proportional form returns, which no depth in [0,1] rescues - 0.5 and 0.37 only
+      // scale the bleed to 12.55% and 9.34% while collapsing the field's contrast from 79.50 to 39.60
+      // and 29.31, losing on both axes at once; or the threshold is loosened off 255, which put the
+      // bleed back at 1.96% worst with >= 250, that being where the covering alpha stops being 1.
+      if (/\(1 - vein\[j\] \/ 255\)/.test(sf[1]))
+        fail('expStoneField subtracts the veins PROPORTIONALLY again - the consumer composites them as layers over this one, so that takes the matrix out twice and the second removal lets the room flat fill through, measured at 8.69% of the vein feather and 25.00% at the worst pixel; no depth in [0,1] removes it, lowering one only scales it');
+      else if (!/\* \(vein\[j\] === 255 \? 0 : 1\)/.test(sf[1]))
+        fail("expStoneField no longer steps at FULL vein coverage - the bleed is D*m*(1-m) and is zero at both ends, so confining the hole to a vein's solid core is the one construction that makes every term vanish; at >= 250 rather than === 255 the worst pixel measured 1.96% again");
+      else ok("the matrix is taken out of the vein's core only, where the covering alpha is already 1");
       if (/ensureBreccia|ensureClouds|ensureBands/.test(sf[1]))
         fail('the base composite is drawn into the field builder again - ablated one modulator at a time, clouds and bands changed NOTHING (soft-light leaves a light base light) and breccia drove the mean to 10.13 by painting its clasts source-over; the variation is matrix COLOUR and a layer carries one hex, so it has nowhere to go');
       else ok('the base composite is kept out of the field builder, as measured');
