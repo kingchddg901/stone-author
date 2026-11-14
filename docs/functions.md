@@ -225,11 +225,11 @@ CPU painter and the field under both.
   arena and one uniform** for the shader. Refuses two things rather than shipping them: a declared
   field that nothing supplies — the struct names it, the shader reads it, and it would be quietly zero
   for the life of the port — and more features than the shader's scratch array holds, which the CPU
-  painter has no limit on. *(18917)*
+  painter has no limit on. *(18928)*
 - `woodSource(GW)` — assembles wood's WGSL. **Assembled, not concatenated**: it borrows `woodAtan2`,
   `woodHash` and `fbm2` from the glass blocks rather than keeping unverified copies of each, and closes
   over the call sites rather than listing them, because `fbm2` calls `vnoise` and `vnoise` calls `nz`
-  and neither name appears anywhere in wood's own text. *(19543)*
+  and neither name appears anywhere in wood's own text. *(19554)*
 
 ## Glass — a lay-up, then a forming process
 
@@ -974,8 +974,13 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
   with its own drawer, colour, opacity and optional `primary`. Stone's four, glass's seven, wood's
   none. The exporter takes the list and never learns what is on it.
 - `materialPackId()` — the pack's id, `ma-<material>`. One stable id per material, because the id
-  mints every theme token and is what a room stores: anything derived from the slab would move when
-  the slab is renamed, and dangle every room already using the pack, silently.
+  mints every theme token (`--evcc-floor-<id>-<suffix>`, minted by the consumer — the format is not
+  ours) and is what a room stores: anything derived from the slab would move when the slab is
+  renamed, and dangle every room already using the pack, silently. The `ma-` prefix is load-bearing
+  — measured against the consumer's own `id_conflict`, `wood` / `wood-oak` / `marble-carrara` /
+  `tile-x` are refused and `ma-glass` / `ma-stone` / `ma-wood` are clear. The slab's name goes in
+  the manifest's `name` instead, which is display text coerced with `str()`; it would not fit an id
+  in any case, since this repo's own glass slab makes a 35-character one against a 32-char cap.
 - `stoneMasks()` / `glassMasks()` — the two lists. `glassMasks` rasterises the label field **once**
   into its own closure and expands one cane per layer from it, so the unforming walk is paid once
   rather than per cane; the cane count is the sheet's (`F.CN`), never a fixed six.
@@ -1040,10 +1045,10 @@ it reports the size asked for and leaves the far end unwritten. See
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
   family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(12710)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(16199)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(16210)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(16224)*
+  actually on offer, not a probe's answer to a different question. *(16235)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(16301)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(23358)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(16312)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(23369)*

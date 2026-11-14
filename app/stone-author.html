@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.320';
+  const BUILD = '2026.11.13.321';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15266,9 +15266,20 @@ self.onmessage = async (e) => {
           if (m.primary) ld.primary = true;
           decl.push(ld);
         }
-        files.push({ name: 'masks/square/material.json', data: te.encode(JSON.stringify({
-          schema: 1, id: materialPackId(), family: currentMaterial(), layers: decl,
-        }, null, 2)) });
+        // THE SLAB'S NAME GOES HERE AND NOWHERE ELSE IN THIS FILE. `name` is display text, coerced
+        // with str() by the consumer and never part of a token key, so it is the one field a slab's
+        // own name can reach without consequence. The ID is the opposite: it mints every theme token
+        // by rule and is what a room stores, so a name in there dangles every room using the pack
+        // the moment the slab is renamed - silently, because the consumer's fallback is correct
+        // behaviour and looks exactly like the pack not being installed. It would not fit either:
+        // this slab's name makes a 35-character id and the id regex caps at 32.
+        // check-square-view pins the separation in both directions.
+        const nm = (slabName || '').trim();
+        const desc = { schema: 1, id: materialPackId() };
+        if (nm) desc.name = nm;                           // absent on a slab saved before names existed
+        desc.family = currentMaterial();
+        desc.layers = decl;
+        files.push({ name: 'masks/square/material.json', data: te.encode(JSON.stringify(desc, null, 2)) });
       }
       files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(idt.legend)) });
       files.push({ name: 'rich/paths.json', data: te.encode(pathsJSON()) });

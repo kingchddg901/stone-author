@@ -41,6 +41,28 @@ downstream code can't tell them apart. That interchangeability is the point.
   own flat-field warning sits at contrast 1.5 while the shipped field band starts at 2.8, so it can
   never catch a defaulted field layer. Verified against the shipped validator, not a copy of it:
   `ma-glass` 7 layers, primary `ground` contrast 4.2; `ma-stone` 4 layers, primary `major` 67.2.
+  `ma-glass` 7 layers, primary `ground` contrast 4.2; `ma-stone` 4 layers, primary `major` 67.2.
+  **The `id` is a namespace and the `name` is display text, and the slab's own name may only reach
+  the second.** The consumer mints every theme token from the id by rule — `--evcc-floor-<id>-<suffix>`
+  — so the token *format* is not ours to choose; the id and the layer suffixes are the only two
+  things this end supplies. An id equal to a reserved floor type makes `assertUniqueTokenKeys` throw
+  with the initial `rebuild()` unguarded, so **the card never defines**; an id that is a prefix of
+  one has a scoped theme import clear the reserved material's keys, and one prefixed *by* one has
+  its own keys cleared. Measured against the consumer's own `id_conflict`: `wood`, `wood-oak`,
+  `marble-carrara` and `tile-x` are all refused, while `ma-glass` / `ma-stone` / `ma-wood` come back
+  clear — the `ma-` prefix is what keeps them clear. So the id is **`ma-<material>`, one per
+  material and derived from nothing that moves**: an id carrying the slab name, the picture or a
+  render signature dangles every room using the pack the moment it changes, silently, because the
+  fallback to `floor_type` is correct behaviour and looks exactly like the pack not being installed.
+  The slab name goes in `name`, which the consumer coerces with `str()` and never reads as a key.
+  A per-slab id would need a stored field, and is a decision rather than a default.
+  **`scale` and `opacity` are deliberately not declared.** The consumer's own table is tuned by eye
+  (0.05 everywhere but `concrete` 0.16 and carpet 0.09) and a drop-in's fallback chain lands on
+  0.05 anyway, so declaring 0.05 is identical to omitting it and any other figure is a guess — note
+  that this end *could* derive a physically anchored one, since it alone knows the mask is 5 × 5 ft
+  of real slab, but it would be the only such number in an eyeballed table and a per-type token
+  slider exists for tuning it. `opacity` is the material's *card* opacity; the nearest thing here is
+  `GLASS.opq`, the sheet's physical opacity, which is a different quantity.
 - **HA dashboard builder** (`ha-dashboard-builder`) — the rich reader: masks plus vein ids and
   *t*-maps, the per-tier colour model, the tile wrap. It keeps only the *renderer*
   (`panel/stone-art.js`, `stone-raster.js`, `stone-controls.js`); this repo produces the masks it

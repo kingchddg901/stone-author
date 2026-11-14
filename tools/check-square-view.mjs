@@ -220,6 +220,32 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
     fail('the square set ships without an UNGUARDED schema-1 manifest - masks with no descriptor are not a pack, and a push behind a condition leaves the path literal in the file while nothing writes it');
   else ok('a schema-1 manifest ships beside the square masks, unguarded');
 
+  // THE NAME IS DISPLAY TEXT; THE ID IS A NAMESPACE. Measured against the consumer's own
+  // id_conflict(): `wood` is refused outright, `wood-oak` and `marble-carrara` are refused for being
+  // prefixed BY a reserved name, and an id equal to a reserved one makes assertUniqueTokenKeys throw
+  // with the initial rebuild() unguarded - the card never defines. `ma-glass`, `ma-stone` and
+  // `ma-wood` all come back clear, so the `ma-` prefix is what is keeping them clear.
+  //
+  // WHAT THIS PINS is the SEPARATION, not the format: the slab's name may reach `name`, and must
+  // never reach the id. An id carrying anything that moves - the slab name, the picture, a render
+  // signature - dangles every room using the pack the moment it moves, and says nothing.
+  //
+  // RED WHEN: materialPackId reads slabName, or stops being 'ma-' + the material; or the manifest
+  // stops carrying the slab's name at all.
+  {
+    const body = /function materialPackId\(\) \{([^}]*)\}/.exec(APP);
+    if (!body) fail('cannot find materialPackId');
+    else if (!/return 'ma-' \+ MATERIAL;/.test(body[1]))
+      fail(`materialPackId is not 'ma-' + MATERIAL: ${body[1].trim()} - one stable id per material is the most that can be minted safely without a stored field`);
+    else ok("materialPackId is 'ma-' + the material, and nothing else");
+    if (body && /slabName|serialize|renderSig|stateSig/.test(body[1]))
+      fail('materialPackId is derived from something that MOVES - renaming the slab would then dangle every room using the pack, silently');
+    else ok('the pack id is derived from nothing that moves');
+    if (!/const nm = \(slabName \|\| ''\)\.trim\(\);/.test(APP) || !/if \(nm\) desc\.name = nm;/.test(APP))
+      fail("the manifest does not carry the slab's name - `name` is display text the consumer coerces with str(), the one field a slab name can reach without consequence");
+    else ok("the manifest carries the slab's own name as display text");
+  }
+
   // AND THE .ora OFFSET IS STILL DERIVED. The .ora layers sit directly after the named PNGs, so a
   // literal index there silently packs a mask as the slab the moment anything is inserted ahead.
   if (!/const oraAt = names\.length;/.test(APP)) fail('the .ora offset is not derived from names.length - a literal index packs the wrong image the moment one is inserted ahead of it');
