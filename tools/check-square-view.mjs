@@ -451,6 +451,36 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
     else ok('deserialize refreshes the box after it has set the material');
   }
 
+  // THE RICH SET IS FOUR VIEWS OF ONE LIST, AND IT RIDES ONE FLAG. The id map, the t map,
+  // paths.json and lines.svg all come from geo.lines - authored strokes with identity, a parent and
+  // a parameter along their length. Stone has those; wood is grown and glass is poured.
+  //
+  // THIS WAS NOT HARMLESS EMPTY FILES, which is how it was recorded. Measured: Hero_Psyker exported
+  // as wood and as stone gives a DIFFERENT render.png and byte-identical rich artifacts - 1.77 MB of
+  // marble vein geometry in a wood kit, 70 legend entries, 70 paths, 73 SVG strokes, describing
+  // veins nowhere in the picture. geo.lines does not care what material is selected.
+  //
+  // RED WHEN: the flag stops being stone-only; or any ONE of the three places that reads it is
+  // gated separately - the makers, the names, or the data files. Splitting them gives either a
+  // positional mismatch between makers[] and names[], or a throw on idt.legend when idt is null.
+  {
+    if (!/function materialAuthorsVectors\(\) \{ return MATERIAL === 'stone'; \}/.test(APP))
+      fail("materialAuthorsVectors is not stone-only - the rich set is four views of a list of authored STROKES, and wood's structure is grown while glass's is poured, so for them it published another material's vein geometry");
+    else ok('materialAuthorsVectors is asked at the fork, and is stone-only');
+    const flag = /const vec = materialAuthorsVectors\(\);/.test(APP);
+    const mk = /\.\.\.\(vec \? \[\(\) => \{ idt = expIdT\(W\); return idt\.ids; \}, \(\) => idt\.t\] : \[\]\),/.test(APP);
+    const nm = /\.\.\.\(vec \? \['rich\/vein-ids\.png', 'rich\/vein-t\.png'\] : \[\]\)\];/.test(APP);
+    const dat = /if \(vec\) \{\s*\n\s*files\.push\(\{ name: 'rich\/legend\.json'/.test(APP);
+    if (!flag) fail('the export does not read materialAuthorsVectors once into a flag');
+    else ok('the export reads it once into a flag');
+    if (!mk) fail('the rich MAKERS are not gated on that flag - the pair is all-or-nothing, because a t map with no ids to key it to says nothing');
+    else ok('both rich makers are gated on it, together');
+    if (!nm) fail('the rich NAMES are not gated on the same flag - names[] and makers[] align by position, so gating one and not the other packs a mask as a vein map');
+    else ok('the rich names are gated on the same flag');
+    if (!dat) fail('the rich DATA FILES are not gated on the same flag - idt is null when the flag is false, so reading idt.legend is what throws');
+    else ok('the three rich data files are gated on the same flag');
+  }
+
   // AND THE .ora OFFSET IS STILL DERIVED. The .ora layers sit directly after the named PNGs, so a
   // literal index there silently packs a mask as the slab the moment anything is inserted ahead.
   if (!/const oraAt = names\.length;/.test(APP)) fail('the .ora offset is not derived from names.length - a literal index packs the wrong image the moment one is inserted ahead of it');

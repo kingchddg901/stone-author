@@ -135,10 +135,32 @@ downstream code can't tell them apart. That interchangeability is the point.
   of real slab, but it would be the only such number in an eyeballed table and a per-type token
   slider exists for tuning it. `opacity` is the material's *card* opacity; the nearest thing here is
   `GLASS.opq`, the sheet's physical opacity, which is a different quantity.
-- **HA dashboard builder** (`ha-dashboard-builder`) — the rich reader: masks plus vein ids and
-  *t*-maps, the per-tier colour model, the tile wrap. It keeps only the *renderer*
-  (`panel/stone-art.js`, `stone-raster.js`, `stone-controls.js`); this repo produces the masks it
-  vendors.
+- **HA dashboard builder** (`ha-dashboard-builder`) — the rich reader *in intent*: masks plus vein
+  ids and *t*-maps, the per-tier colour model, the tile wrap. It keeps only the *renderer*.
+  **Measured 2026-11-13, because the claim mattered:** it builds its own fields in
+  `panel/material-art.js`, references none of these filenames, and its own `docs/stone-generator.md`
+  records that a white-on-black mask "is useless to both consumers" because CSS `mask-image` takes
+  alpha. So nothing live reads these PNGs today, and "this repo produces the masks it vendors" was
+  aspirational rather than current.
+- **The rich set is STONE's**, and that is a property of the material rather than a choice.
+  `rich/vein-ids.png`, `rich/vein-t.png`, `rich/paths.json` and `lines.svg` are four views of ONE
+  thing: a list of authored strokes carrying identity, a parent, and a parameter along their length.
+  Stone has that — its marks become `geo.lines`. Wood's structure is **grown** from a ring model
+  around a wandering pith and glass's is **poured** into a mould, so neither has strokes to identify
+  or to run along, and `materialAuthorsVectors()` at the fork says so.
+  **It was not the harmless empty files it was recorded as.** `geo.lines` does not care which
+  material is selected: `Hero_Psyker` exported as wood and as stone gives a **different**
+  `render.png` — so the material really was wood — and **byte-identical** vein ids, *t*-map, legend
+  (70 entries), paths (70 lines) and SVG (73 strokes). **1.77 MB of marble vein geometry in a wood
+  kit**, describing veins nowhere in the picture; the same defect the mask set carried, in the last
+  place it survived. The glass kit's empty versions were a property of one slab having no vein
+  marks, not of the material. Skipping them also skips the work: `expIdT` builds two full-size
+  canvases and the kit encodes both, which at 16384 is two 671 MB allocations for nothing. Stone's
+  own set is unchanged, 1,850,490 bytes before and after.
+  A glass **label field** (which cane at each pixel) and a wood **ring-index** map (which growth year)
+  are both buildable and cheap — the label is already `lay[0]`, and the ring index is one more slot
+  in `shade`'s guarded tier block. They are *different artifacts* with different meanings, though,
+  and publishing them under the `vein-` names would be the mistake this removes.
 
 Loose coupling on purpose: no cross-repo build. This repo makes files; consumers copy them.
 

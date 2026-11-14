@@ -2020,7 +2020,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.327';
+  const BUILD = '2026.11.13.328';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -7915,6 +7915,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // is the divergence this file keeps paying for elsewhere, and the prefix is the whole structural
   // guarantee - no reserved floor-type name is `ma` or begins `ma-`, which is why it is not the
   // author's to type.
+  // DOES THIS MATERIAL AUTHOR ITS FEATURES AS VECTORS? The rich set is four views of ONE thing - a
+  // list of authored strokes carrying identity, a parent and a parameter along their length: the id
+  // map colours each stroke by index, the t map runs 0..255 head to tail along it, paths.json is the
+  // list itself and lines.svg draws it. Stone has that, because its marks become geo.lines. Wood's
+  // structure is GROWN from a ring model around a wandering pith and glass's is POURED into a mould,
+  // so neither has strokes to identify or to run along.
+  //
+  // AND geo.lines IS NOT EMPTY ON THEIR SLABS, which is the part that made this worth fixing rather
+  // than tidying. Measured: Hero_Psyker exported as wood and as stone gives a DIFFERENT render.png -
+  // so the material really was wood - and byte-identical rich/vein-ids.png, rich/vein-t.png,
+  // rich/legend.json (70 entries), rich/paths.json (70 lines) and lines.svg (73 paths). 1.77 MB of
+  // marble vein geometry in a wood kit, describing veins that are nowhere in the picture. The same
+  // defect the mask set had, in the last place it survived - and not the harmless empty files it was
+  // recorded as: those were a property of one glass slab having no vein marks, not of the material.
+  //
+  // IT ALSO SAVES THE WORK. expIdT builds two full-size canvases and the kit encodes both, which at
+  // 16384 is two 671 MB allocations for a material that has nothing to put in them.
+  function materialAuthorsVectors() { return MATERIAL === 'stone'; }
   function materialPackStem() { return 'ma-' + MATERIAL; }
   function materialPackId() {
     if (packId) return packId;                      // latched: never re-derived, whatever else moved
@@ -15533,10 +15551,14 @@ self.onmessage = async (e) => {
       // against a path the export's own notes already measure at 1.28 GiB for two canvases. The
       // consumer that requires colour type 0 reads the square set, which is bounded.
       const slabSet = materialMasks();
+      // THE RICH SET RIDES ON THE SAME QUESTION, asked once. Both makers go or both stay, because
+      // the t map is meaningless without the ids to key it to - and names[] is built from the same
+      // flag in the same breath, so the positional pair cannot come apart.
+      const vec = materialAuthorsVectors();
       const makers = [
         onTile => renderTiledStepped(W, onTile),
         ...slabSet.map(m => () => m.draw(viewSlab(W))),
-        () => { idt = expIdT(W); return idt.ids; }, () => idt.t,   // paired on purpose: one call makes both
+        ...(vec ? [() => { idt = expIdT(W); return idt.ids; }, () => idt.t] : []),   // paired on purpose: one call makes both
         // THE SQUARE SET IS NOT HERE ANY MORE. It has its own loop below, because it has its own
         // rules: a fixed 2048 whatever W is, a greyscale encode no canvas can do, a manifest, and a
         // layer list the MATERIAL chooses rather than this array. It still goes through the same
@@ -15544,7 +15566,7 @@ self.onmessage = async (e) => {
         () => expCompleted(oW), ...oOrder.map(b => () => expBucket(b, oW)),
       ];
       const names = ['render.png', ...slabSet.map(m => 'masks/' + m.suffix + '.png'),
-        'rich/vein-ids.png', 'rich/vein-t.png'];
+        ...(vec ? ['rich/vein-ids.png', 'rich/vein-t.png'] : [])];
       const bytes = [], steps = makers.length + 2;          // + packing + saving
       let msRender = 0, msEncode = 0;
       for (let i = 0; i < makers.length; i += EXP_PEAK) {
@@ -15619,9 +15641,14 @@ self.onmessage = async (e) => {
         desc.layers = decl;
         files.push({ name: 'masks/square/material.json', data: te.encode(JSON.stringify(desc, null, 2)) });
       }
-      files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(idt.legend)) });
-      files.push({ name: 'rich/paths.json', data: te.encode(pathsJSON()) });
-      files.push({ name: 'lines.svg', data: te.encode(linesSVG()) });
+      // THE OTHER THREE VIEWS OF THE SAME LIST, under the same flag. idt is null when the flag is
+      // false, so reading its legend here is also what would throw - the files and the maker that
+      // fills them cannot be gated separately.
+      if (vec) {
+        files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(idt.legend)) });
+        files.push({ name: 'rich/paths.json', data: te.encode(pathsJSON()) });
+        files.push({ name: 'lines.svg', data: te.encode(linesSVG()) });
+      }
       files.push({ name: 'source.json', data: te.encode(JSON.stringify(serialize())) });
       // The same figures the render PNG carries in its tEXt chunk, as a file you can read without a
       // PNG reader. The total stops here: packing and saving are after it, and vary with the browser.
