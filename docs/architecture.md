@@ -31,7 +31,7 @@ downstream code can't tell them apart. That interchangeability is the point.
   **centred square** of the slab — 5 × 5 ft of the 8 × 5 ft picture, 62.5% of its width — not the
   whole slab fitted to a square, so the grain keeps its proportions.
   **How many, and which, is the material's answer** (`materialMasks`, at the material fork), not a
-  fixed four: stone publishes its old four (base / major / minor / micro) and **glass publishes
+  fixed four: stone publishes **five** (base / major / minor / micro / web) and **glass publishes
   seven** — the sheet, then one layer per cane. Wood publishes **none**, and that is the honest
   state rather than an omission: its tiers live as scalars inside `shade` with no seam to tap, and
   what it exported before this was stone's vein geometry drawn from a wood slab.
@@ -40,7 +40,22 @@ downstream code can't tell them apart. That interchangeability is the point.
   which the consumer requires. Exactly one is declared `primary`, always explicitly: the consumer's
   own flat-field warning sits at contrast 1.5 while the shipped field band starts at 2.8, so it can
   never catch a defaulted field layer. Verified against the shipped validator, not a copy of it:
-  `ma-glass` 7 layers, primary `ground` contrast 4.2; `ma-stone` 4 layers, primary `base` 79.5.
+  `ma-glass` 7 layers, primary `ground` contrast 4.2; `ma-stone` 5 layers, primary `base` 79.5.
+  **ONE list serves BOTH aspects.** The slab-aspect `masks/*.png` used to be five literal builders
+  in the export, all of them stone, so a glass slab's `masks/major.png` carried marble veins drawn
+  from a glass picture and a wood slab's did too — the same defect the square set had, surviving in
+  the one place it had not been fixed, and undetectable because a mask of the wrong material is a
+  perfectly well-formed mask. Both sets read `materialMasks()` now, which is what added `web`: the
+  slab set always wrote it and the square set never did, so one list had to carry it or the kit
+  would have lost a file. The slab set keeps its place in the paced `makers[]` because those are
+  full-size canvases at the render width, which is what `EXP_PEAK` paces; `names[]` and `makers[]`
+  still align by position, and both are built from the same list in the same order so a material
+  that publishes a different number of layers cannot make them disagree.
+  **The slab set stays RGBA**, where the square set is hand-encoded to colour type 0: that transcode
+  materialises an ImageData plus a one-byte-per-pixel row buffer for the whole canvas, which is fine
+  at a fixed 2048 and is not at 16384 — 168 Mpx, so 671 MB plus 168 MB on top of the canvas, against
+  a path already measured at 1.28 GiB for two canvases. The consumer that requires type 0 reads the
+  square set, which is bounded by the contract.
   **A mask is COVERAGE, not the material's colour**, and that is what stone's field layer turns on:
   `layerAlpha = luminance/255 × opacity`, with the colour carried by the layer's own `color`. A
   near-black marble's matrix still covers the whole floor, so flattening the ground colour to

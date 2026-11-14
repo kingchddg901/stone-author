@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.323';
+  const BUILD = '2026.11.13.324';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14917,6 +14917,14 @@ self.onmessage = async (e) => {
     { suffix: 'major', colour: COL.major, opacity: layOp('major'), draw: V => expCoverage('major', V) },
     { suffix: 'minor', colour: COL.minor, opacity: layOp('minor'), draw: V => expCoverage('minor', V) },
     { suffix: 'micro', colour: COL.micro, opacity: layOp('micro'), draw: V => expCoverage('micro', V) },
+    // WEB JOINS THE LIST, which is what lets ONE list serve both aspects. The slab-aspect set
+    // published base/major/minor/micro/web and the square set published four of those, so the kit
+    // carried two different answers to "what masks does stone have" - and the moment the slab set
+    // reads this list instead of its own literal array, the difference has to go somewhere. Dropping
+    // web would delete a file the kit has always written; adding it gives the consumer a fifth layer
+    // against a cap of eight, and a fracture web is real structure rather than padding. The order is
+    // the order the kit already wrote, so no stone filename moves.
+    { suffix: 'web', colour: COL.web, opacity: layOp('web'), draw: V => expCoverage('web', V) },
   ];
   // GLASS'S SEVEN: the sheet, then one layer per cane. PAINT BY NUMBERS, SPENT AS LAYERS RATHER
   // THAN GREY LEVELS - the consumer gives every layer its own colour and reads the mask as
@@ -15332,10 +15340,27 @@ self.onmessage = async (e) => {
       // The first maker is the finished slab -- the same work the render-only path does, and by far the
       // longest step here. It takes the tile reporter so the kit does not sit on "1 of 14" for two
       // minutes; the rest ignore the argument, because they are single-pass renders.
+      // THE SLAB-ASPECT MASK SET, FROM THE SAME LIST THE SQUARE SET USES. It was five literal
+      // builders here, all of them stone: a glass slab's masks/major.png held marble veins drawn
+      // from a glass picture, and a wood slab's held them too - the same defect the square set had,
+      // in the one place it had not been fixed. Nothing could detect it, because a mask of the wrong
+      // material is a perfectly well-formed mask.
+      //
+      // STAYS IN THE PACED LOOP, unlike the square set, and that is the whole reason it is spliced
+      // in here rather than given its own: these are full-size canvases at the render width, which
+      // is what EXP_PEAK exists to pace. The square set is 2048 whatever W is and needs no pacing.
+      // names[] and makers[] still align by POSITION, so both are built from the same list in the
+      // same order - which is how a positional pair can carry a list whose length moves at all.
+      //
+      // AND THE ENCODE STAYS RGBA HERE, deliberately. greyPNG materialises an ImageData plus a
+      // one-byte-per-pixel row buffer for the whole canvas, which is fine at 2048 and is not at
+      // 16384: that is 168 Mpx, so 671 MB of ImageData and 168 MB of rows on top of the canvas,
+      // against a path the export's own notes already measure at 1.28 GiB for two canvases. The
+      // consumer that requires colour type 0 reads the square set, which is bounded.
+      const slabSet = materialMasks();
       const makers = [
-        onTile => renderTiledStepped(W, onTile), () => expBaseMask(W),
-        () => expCoverage('major', W), () => expCoverage('minor', W),
-        () => expCoverage('micro', W), () => expCoverage('web', W),
+        onTile => renderTiledStepped(W, onTile),
+        ...slabSet.map(m => () => m.draw(viewSlab(W))),
         () => { idt = expIdT(W); return idt.ids; }, () => idt.t,   // paired on purpose: one call makes both
         // THE SQUARE SET IS NOT HERE ANY MORE. It has its own loop below, because it has its own
         // rules: a fixed 2048 whatever W is, a greyscale encode no canvas can do, a manifest, and a
@@ -15343,7 +15368,8 @@ self.onmessage = async (e) => {
         // drawing code, so a square mask and its slab mask cannot disagree about what is in the slab.
         () => expCompleted(oW), ...oOrder.map(b => () => expBucket(b, oW)),
       ];
-      const names = ['render.png', 'masks/base.png', 'masks/major.png', 'masks/minor.png', 'masks/micro.png', 'masks/web.png', 'rich/vein-ids.png', 'rich/vein-t.png'];
+      const names = ['render.png', ...slabSet.map(m => 'masks/' + m.suffix + '.png'),
+        'rich/vein-ids.png', 'rich/vein-t.png'];
       const bytes = [], steps = makers.length + 2;          // + packing + saving
       let msRender = 0, msEncode = 0;
       for (let i = 0; i < makers.length; i += EXP_PEAK) {

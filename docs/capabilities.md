@@ -165,7 +165,7 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat`
 
 ## 10. Export / serialize
 
-- **`exportAll(W)`** → one store-zip: `render.png` (`expCompleted`), `masks/{base,major,minor,micro,web}.png`, `masks/square/` (always 2048², whatever `W` is — one greyscale PNG per layer the **material** publishes, plus `material.json`), `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, `slab.ora` (capped `min(W,2048)`). The square set has its own loop rather than a slot in the paced `makers[]`/`names[]` pair: its length moves with the material, its encode is a hand-written greyscale one, and it ships a manifest.
+- **`exportAll(W)`** → one store-zip: `render.png` (`expCompleted`), `masks/` (slab aspect at `W`, one PNG per layer the **material** publishes — stone's five, glass's seven, wood none), `masks/square/` (always 2048², whatever `W` is — one greyscale PNG per layer the **material** publishes, plus `material.json`), `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, `slab.ora` (capped `min(W,2048)`). The square set has its own loop rather than a slot in the paced `makers[]`/`names[]` pair: its length moves with the material, its encode is a hand-written greyscale one, and it ships a manifest.
 - **The square set is a WINDOW, not a resample.** Draw space is 1 wide and `H` tall and the export transform scales both
   axes by the same number, so a square needs no new rasterisation — only a different canvas and a different transform.
   `viewSquare(S)` asks for `S × S` at scale `S / H` with the x origin at `(1-H)/2`: the largest centred square of the
@@ -202,9 +202,15 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat`
   colours. Normalising by the ground does not rescue it either: this ground is luminance 8.3, so
   almost every ratio clamps. The real limit is the model — breccia, clouds and bands vary the
   matrix's *colour*, and a layer carries one `color` hex, so that variation has nowhere to go.
-  **The slab-aspect `masks/base.png` is unchanged** and still flat: it is MA's own rich set with no
-  consumer contract, and `expBaseMask` keeps it, along with the back light that reads it as the
-  translucent body which glows.
+  **The slab-aspect `masks/base.png` is the same builder now**, so the kit cannot carry two answers
+  to what `base` means. It was left behind for one commit on the grounds that it had no consumer
+  contract; `architecture.md` says the dashboard builder *vendors* these masks, so that was checked
+  rather than assumed — `ha-dashboard-builder` builds its own fields in `panel/material-art.js`,
+  references none of these filenames, and its own `docs/stone-generator.md` records that a
+  white-on-black mask "is useless to both consumers" because CSS `mask-image` takes alpha. There is
+  no live reader of these PNGs. `expBaseMask` survives for the **back light**, which is the one
+  caller that genuinely wants the ground colour flattened to luminance rather than coverage, and a
+  gate now names that call site rather than counting callers.
   **Glass gets its field the same way**: `expGlassField` paints the sheet with `GLASS.cords` held at
   zero — thickness, ream, flutes, bubbles, seeds — rather than flattening `groundCol()`, and comes
   out mean 242.67 contrast **4.21**, above the 2.8 the shipped field band starts at.

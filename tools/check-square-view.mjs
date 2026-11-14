@@ -159,9 +159,9 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   if (!st) fail('cannot find stoneMasks');
   else {
     const got = [...st.matchAll(/suffix: '([^']+)'/g)].map(m => m[1]);
-    const want = ['base', 'major', 'minor', 'micro'];
+    const want = ['base', 'major', 'minor', 'micro', 'web'];
     if (got.join(',') !== want.join(',')) fail(`stoneMasks publishes [${got}], not [${want}]`);
-    else ok('stoneMasks still publishes base/major/minor/micro, in that order');
+    else ok(`stoneMasks publishes ${want.join('/')}, in that order`);
   }
 
   // STONE'S FIELD LAYER IS COVERAGE, AND THE BACK LIGHT STILL HAS ITS OWN READER.
@@ -177,13 +177,13 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
       fail("stone's base is not drawn by expStoneField");
     else ok("stone's base is drawn by expStoneField, not by expBaseMask");
 
-    // expBaseMask IS STILL SOMEBODY'S. The back light reads it as the translucent body that GLOWS
-    // and the slab-aspect masks/base.png is MA's own rich set; repointing it in place rather than
-    // adding a builder would have moved the back light on every slab and reported nothing.
-    const bmCalls = [...APP.matchAll(/expBaseMask\(/g)].length;
-    if (bmCalls < 3)
-      fail(`expBaseMask is called ${bmCalls - 1} time(s) outside its declaration - the back light reads it as the glowing body, so losing those callers means the field change was made IN it rather than beside it`);
-    else ok(`expBaseMask keeps its ${bmCalls - 1} other callers (the back light's glow body, and the slab-aspect mask)`);
+    // expBaseMask IS STILL THE BACK LIGHT'S, and this clause used to prove it by COUNTING callers -
+    // at least two outside the declaration. That was a proxy, and it expired the moment the slab set
+    // stopped calling it: the count fell to one and the gate reddened on a change that had not gone
+    // near the back light. Checked by NAME now, which is what it always meant.
+    if (!/const W = 512, body = expBaseMask\(W\);/.test(APP))
+      fail('the back light no longer reads expBaseMask as its glowing body - it is the one caller that wants the ground COLOUR flattened to luminance rather than coverage, so repointing it changes the back light on every slab and reports nothing');
+    else ok("expBaseMask is still the back light's glowing body");
 
     if (!sf) fail('cannot find expStoneField');
     else {
@@ -310,6 +310,30 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
     if (!/const nm = \(slabName \|\| ''\)\.trim\(\);/.test(APP) || !/if \(nm\) desc\.name = nm;/.test(APP))
       fail("the manifest does not carry the slab's name - `name` is display text the consumer coerces with str(), the one field a slab name can reach without consequence");
     else ok("the manifest carries the slab's own name as display text");
+  }
+
+  // THE SLAB-ASPECT SET READS THE SAME LIST. This had no clause at all, which is how it stayed
+  // stone-shaped while the square set was fixed: five literal builders, all of them stone, so a
+  // glass slab's masks/major.png carried marble veins drawn from a glass picture and nothing could
+  // tell - a mask of the wrong material is a perfectly well-formed mask. It keeps its place in the
+  // paced makers[] because these are full-size canvases at the render width, which is what EXP_PEAK
+  // paces; names[] and makers[] therefore still align by POSITION, and the only way a positional
+  // pair can carry a list whose length moves is for both to be built from that list.
+  //
+  // RED WHEN: either array goes back to literals, or they stop coming from the same list.
+  {
+    if (!/const slabSet = materialMasks\(\);/.test(APP))
+      fail('the slab-aspect mask set is not built from materialMasks() - five literal stone builders is what gave a glass slab marble veins, and a mask of the wrong material is still a well-formed mask');
+    else ok('the slab-aspect set comes from materialMasks() too');
+    if (!/\.\.\.slabSet\.map\(m => \(\) => m\.draw\(viewSlab\(W\)\)\)/.test(APP))
+      fail('the slab makers are not built from slabSet - a literal list beside a derived names[] is a positional pair that disagrees the moment a material publishes a different number of layers');
+    else ok('the slab makers are built from that list, through viewSlab');
+    if (!/\.\.\.slabSet\.map\(m => 'masks\/' \+ m\.suffix \+ '\.png'\)/.test(APP))
+      fail('the slab mask names are not derived from the layer suffixes');
+    else ok('the slab mask names are derived from the same suffixes');
+    const lits = [...APP.matchAll(/'masks\/(?!square)[a-z-]+\.png'/g)].map(m => m[0]);
+    if (lits.length) fail(`${lits.length} literal slab mask path(s) left in the app: ${lits.join(', ')}`);
+    else ok('no literal slab mask paths remain');
   }
 
   // AND THE .ora OFFSET IS STILL DERIVED. The .ora layers sit directly after the named PNGs, so a
