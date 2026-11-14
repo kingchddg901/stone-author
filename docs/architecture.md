@@ -150,6 +150,18 @@ downstream code can't tell them apart. That interchangeability is the point.
   nor `packId`, so the tail cannot be circular and naming the slab later does not move it —
   measured `0bb5a991` named and cleared. Twelve gallery rows now mint twelve distinct ids, none a
   bare stem, and the digest is order-independent: read forward, reversed, and one slab per page.
+  **And the pack declares its FEATURE SCALE**, which is the one thing a consumer that *tiles*
+  the masks needs and no mask can state: how large this material's features come out on a floor.
+  A slider in the export panel writes `scale` into `material.json` and **reaches no pixel here** —
+  measured, moving it moved 0 of 7 masks and left `render.png` byte-identical. The default is
+  **0.05, which is an exact no-op**: an undeclared scale falls through the consumer's per-material
+  table — a drop-in can never have a row there — to their global, and their global is 0.05. So a
+  pack declaring 0.05 is treated byte-for-byte like one declaring nothing, and every other value
+  is a deliberate move away from the house default. The control stops at **0.25** rather than at
+  their clamp of 2, because a tile is `2048 × scale` map-canvas pixels and past about a quarter
+  one tile already covers the whole map. **One value per slab**, the same shape `packId` has: a
+  slab holding a marble and a board cannot give them different numbers yet, and the seam for that
+  is the consumer's own *per-layer* scale rather than a second field here.
   The latch closes
   at the **first export**, which is the consumer's own instruction: permanent from the first time the
   pack leaves the generator. Before that there is no pack in the wild and nothing can dangle; after

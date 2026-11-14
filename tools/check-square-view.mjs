@@ -375,6 +375,27 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
       fail('packId does not round-trip through serialize and deserialize - a latch that is not saved is not a latch');
     else ok('packId round-trips through serialize and deserialize');
 
+    // THE FEATURE SCALE: ONE FIELD, NO PIXELS. RED WHEN: the manifest stops carrying it, the default
+    // stops being the consumer's own no-op, it stops round-tripping, or it reaches renderSig.
+    if (!/desc\.scale = packScale;/.test(APP))
+      fail('material.json does not carry the feature scale - it is the one thing a consumer that TILES the masks needs and no mask can say, and an undeclared scale silently takes that reader\'s global instead');
+    else ok('the manifest carries the feature scale');
+    if (!/PACK_SCALE_DEF = 0\.05/.test(APP))
+      fail("the feature scale's default is not 0.05 - that value is an EXACT no-op, because an undeclared scale falls through the consumer's per-material table (a drop-in can never have a row there) to its global, which is 0.05; any other default silently moves every pack that never touched the control");
+    else ok('the default is the consumer\'s own global, so declaring it changes nothing');
+    if (!/packId, packScale, fam/.test(APP) || !/packScale = packScaleOf\(o\.packScale\);/.test(APP))
+      fail('packScale does not round-trip through serialize and deserialize - a slider whose value is not saved is a slider that resets on reload');
+    else ok('the feature scale round-trips');
+    if (!/id="packscale" type="range" min="0\.02" max="0\.25"/.test(APP))
+      fail("the feature-scale control is gone or its range moved - the consumer clamps to [0.02, 2], and past about a quarter one tile already covers the whole map, so the top is where usefulness stops rather than where they stop");
+    else ok('the control is a range over the span that is actually useful');
+    {
+      const rs = /const renderSig = \(\) => \{([\s\S]*?)\n  \};/.exec(APP);
+      if (rs && /packScale/.test(rs[1]))
+        fail('packScale is inside renderSig - it reaches no pixel in this studio (measured: moving the slider moved 0 of 7 masks and left render.png byte-identical), so hashing it would re-date every master on disk for a number only the manifest reads');
+      else ok('the feature scale is not on the render signature');
+    }
+
     // AND IT NEVER REACHES THE RENDER SIGNATURE. renderSig hashes an explicit, MEASURED list; a
     // publication id on it would re-date every master on disk and orphan every resume, and no fix
     // afterwards recovers them because a master keeps the signature it was written with.

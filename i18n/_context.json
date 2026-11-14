@@ -2247,6 +2247,12 @@
   "opt.exp-pack": {
     "where": "an option in the export scope menu, beside \"Everything\" and \"Just the render\". It writes only the drop-in material pack - the 2048-square greyscale masks and their descriptor - in a folder named for the pack. Follow this pack's own wording for \"Just the render\"."
   },
+  "sl.pack-scale": {
+    "where": "label on a slider in the export panel: how large this material's features come out when a consumer tiles the exported masks across a floor. It changes nothing in the studio - only the number written into material.json. Keep it short; it sits beside a numeric readout."
+  },
+  "tip.pack-scale": {
+    "where": "tooltip on that slider. material.json is a FILENAME and stays in Latin script. \"drop-in pack\" is the folder of greyscale masks the studio exports for another program to lay as a floor; follow this pack's own wording for it where one is already established."
+  },
   "opt.exp-render": {
     "where": "option in the what-to-export menu: the finished picture only, as one PNG"
   },
