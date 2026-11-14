@@ -123,16 +123,105 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   else ok(`${fn} is declared exactly once`);
 }
 
-// 8. THE KIT CARRIES THEM, AND THE .ora OFFSET IS DERIVED. names[] and makers[] align by position,
-// and the .ora layers sit directly after the named PNGs: a literal index there silently packs a
-// mask as the slab the moment anything is inserted ahead of it.
+// 8. THE KIT CARRIES THEM, AND THE FILE NAME IS DERIVED FROM THE SUFFIX. This clause used to count
+// four square entries in the paced makers[]/names[] pair and check the two lengths matched. That
+// pair is gone: the layer LIST is the material's to choose, a positional pair cannot express a list
+// whose length moves with the slab, and the square set has its own loop. The property it protected
+// is unchanged - the files named are the masks produced - so it is re-aimed here rather than
+// dropped, because a gate pinned to a mechanism that no longer exists reads green on anything.
+//
+// WHAT MAKES EACH OF THESE RED: a fifth entry in stoneMasks; a second layer claiming primary; a
+// literal 'masks/square/base.png' back in the kit; a hardcoded 6 where F.CN decides the cane count;
+// a suffix with a capital or an underscore in it, which the consumer refuses outright.
 {
-  const sq = [...APP.matchAll(/'masks\/square\/(base|major|minor|micro)\.png'/g)].map(m => m[1]);
-  if (sq.length !== 4) fail(`the kit names ${sq.length} square masks, not 4 (base/major/minor/micro): ${sq.join(', ')}`);
-  else ok('the kit names all 4 square masks: ' + sq.join(', '));
+  const SUFFIX = /^[a-z][a-z0-9-]{0,23}$/;                 // the consumer's own rule, restated
+  const listOf = (re, end) => { const a = APP.indexOf(APP.match(re)?.[0] ?? '\0'); if (a < 0) return null;
+    const b = APP.indexOf(end, a); return b < 0 ? null : APP.slice(a, b); };
+
+  // ONE MATERIAL CHOOSES THE LIST, and the loop draws every entry through the square view. One call,
+  // because the set is now iterated rather than enumerated.
   const calls = [...APP.matchAll(/viewSquare\(SQUARE_MASK\)/g)].length;
-  if (calls !== 4) fail(`${calls} makers ask for viewSquare(SQUARE_MASK), but 4 files are named - names[] and makers[] align by position, so they must match`);
-  else ok('4 makers ask for the square view, one per named file');
+  if (calls !== 1) fail(`${calls} call(s) to viewSquare(SQUARE_MASK); the square set is one loop over materialMasks() and wants exactly one`);
+  else ok('one square view, iterated over the material\'s own layer list');
+  if (!/const sqMasks = materialMasks\(\);/.test(APP)) fail('the square set is not built from materialMasks() - the layer list is the material\'s to choose and nothing else may enumerate it');
+  else ok('the square set comes from materialMasks()');
+
+  // THE NAME IS THE SUFFIX. A literal file name beside a suffix is two sources for one fact, and the
+  // one that drifts is the one nothing reads.
+  if (!/const file = m\.suffix \+ '\.png';/.test(APP)) fail('the square mask file name is not derived from the layer suffix');
+  else ok('each square mask file name is derived from its layer suffix');
+  const lits = [...APP.matchAll(/'masks\/square\/[a-z-]+\.png'/g)].map(m => m[0]);
+  if (lits.length) fail(`${lits.length} literal square mask path(s) left in the app: ${lits.join(', ')} - the name must come from the suffix`);
+  else ok('no literal square mask paths remain');
+
+  // STONE STILL PUBLISHES ITS FOUR, in the order it published them.
+  const st = listOf(/const stoneMasks = \(\) => \[/, '];');
+  if (!st) fail('cannot find stoneMasks');
+  else {
+    const got = [...st.matchAll(/suffix: '([^']+)'/g)].map(m => m[1]);
+    const want = ['base', 'major', 'minor', 'micro'];
+    if (got.join(',') !== want.join(',')) fail(`stoneMasks publishes [${got}], not [${want}]`);
+    else ok('stoneMasks still publishes base/major/minor/micro, in that order');
+  }
+
+  // GLASS PUBLISHES THE SHEET PLUS ONE LAYER PER CANE, and the cane count is the SHEET'S, not six:
+  // glassScene clamps it and a slab may ask for two, so a fixed six would publish four black layers
+  // and spend the consumer's eight-layer budget on nothing.
+  const gl = listOf(/function glassMasks\(\) \{/, '\n  }\n');
+  if (!gl) fail('cannot find glassMasks');
+  else {
+    if (!/suffix: 'ground', primary: true/.test(gl)) fail('glass does not declare `ground` primary - the card surface paints one layer untinted and the consumer\'s flat-field warning cannot catch a field layer, so it must be declared, never defaulted');
+    else ok('glass declares the ground layer primary explicitly');
+    if (!/const CN = glassScene\(\)\.F\.CN;/.test(gl)) fail('the glass cane count is not read from the scene - a fixed count publishes empty layers');
+    else ok('the glass cane count comes from the sheet, not a constant');
+    if (!/'cane-' \+ GLASS_CANE_LET\[k\]/.test(gl)) fail('the cane suffix is not derived from GLASS_CANE_LET - the token letter and the layer letter must be one fact');
+    else ok('each cane suffix is derived from the shared palette letters');
+  }
+
+  // AT MOST ONE PRIMARY PER LIST. The consumer REFUSES a pack with two, so this is a refusal, not a
+  // warning - and the lists are far enough apart in the file for a second one to look deliberate.
+  for (const [nm, body] of [['stoneMasks', st], ['glassMasks', gl]]) {
+    if (!body) continue;
+    const n = [...body.matchAll(/primary: true/g)].length;
+    if (n > 1) fail(`${nm} marks ${n} layers primary; the consumer refuses a pack with more than one`);
+    else ok(`${nm} marks ${n} layer(s) primary`);
+  }
+
+  // EVERY SUFFIX IS LEGAL TO THE CONSUMER. A capital or an underscore is a refused pack, and the
+  // export reports success either way.
+  const let_ = /const GLASS_CANE_LET = '([^']*)';/.exec(APP);
+  if (!let_) fail('cannot find GLASS_CANE_LET - the cane suffixes cannot be checked without it');
+  const all = [...APP.matchAll(/suffix: '([^']+)'/g)].map(m => m[1]).concat(
+    [...(let_ ? let_[1] : '')].map(c => 'cane-' + c));
+  const illegal = all.filter(x => !SUFFIX.test(x));
+  if (illegal.length) fail(`illegal layer suffix(es) for the consumer: ${illegal.join(', ')}`);
+  else ok(`all ${all.length} layer suffixes match the consumer's ${SUFFIX}`);
+
+  // EVERY LAYER CARRIES A COLOUR AND AN OPACITY. The consumer indexes both and refuses the pack if
+  // either is missing - only `primary` is optional there - and the first real export of this set was
+  // REFUSED for exactly that, on the one layer that had no opacity. A descriptor missing either is
+  // therefore not a degraded pack, it is no pack, and the export reports success all the same.
+  for (const [nm, body] of [['stoneMasks', st], ['glassMasks', gl]]) {
+    if (!body) continue;
+    const entries = [...body.matchAll(/suffix: '[^']+'/g)].length;
+    const cols = [...body.matchAll(/colour: /g)].length;
+    const ops = [...body.matchAll(/opacity: /g)].length;
+    if (cols < entries || ops < entries)
+      fail(`${nm} declares ${entries} layer(s) but ${cols} colour(s) and ${ops} opacity(s) - the consumer requires both on every layer and refuses the pack when either is absent`);
+    else ok(`${nm}: all ${entries} layer(s) carry a colour and an opacity`);
+  }
+  if (!/color: packHex\(m\.colour\), opacity: packUnit\(m\.opacity\)/.test(APP))
+    fail('the manifest does not emit color and opacity unconditionally - a conditional emit is how the first export of this set was refused');
+  else ok('the manifest emits color and opacity on every layer, unconditionally');
+
+  // A MANIFEST GOES WITH THEM, declaring the schema the consumer checks first.
+  const push = /^\s*files\.push\(\{ name: 'masks\/square\/material\.json'/m.test(APP);
+  if (!push || !/schema: 1, id: materialPackId\(\)/.test(APP))
+    fail('the square set ships without an UNGUARDED schema-1 manifest - masks with no descriptor are not a pack, and a push behind a condition leaves the path literal in the file while nothing writes it');
+  else ok('a schema-1 manifest ships beside the square masks, unguarded');
+
+  // AND THE .ora OFFSET IS STILL DERIVED. The .ora layers sit directly after the named PNGs, so a
+  // literal index there silently packs a mask as the slab the moment anything is inserted ahead.
   if (!/const oraAt = names\.length;/.test(APP)) fail('the .ora offset is not derived from names.length - a literal index packs the wrong image the moment one is inserted ahead of it');
   else ok('the .ora offset is derived from names.length');
   if (/buildOraFrom\(bytes\[\d/.test(APP)) fail('buildOraFrom is still handed a literal byte index');

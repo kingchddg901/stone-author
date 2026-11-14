@@ -57,6 +57,18 @@ const hook = `
     // composites reality windows. Those three are exactly where a port goes wrong quietly, and
     // without these there is no way to ask.
     gpuPool, gpuWhyNot, gpuCapability, gpuPrefGet, gpuPrefSet, glassScene, packReal, tiffPlan,
+    // THE LABEL ITSELF, not the colour it turns into. glassLay answers which compartment was poured
+    // at a point, and a mask export has to ask that question rather than the painted one - a cane's
+    // colour varies with thickness and relief within one compartment, so counting tones cannot
+    // recover the regions. It is also the only way to ask whether a mould PARTITIONS the sheet or
+    // leaves bare glass, which is what decides whether its labels can become VA layers at all.
+    glassLay,
+    // AND THE REST OF THE REAL PATH TO IT. glassLay reads GATHER coordinates, and a probe that
+    // hands it slab coordinates measures the MOULD rather than the sheet: the pane offset and
+    // F.UNF - back through every op, last first - sit between them, and disco-glass-fits has
+    // sixteen ops. expBucket is how a face reaches an export canvas at all (it owns the g2d
+    // swap), so without it a probe cannot ask what the material's own field looks like.
+    expBucket, get GLASS() { return GLASS; }, get SLAB_FT() { return SLAB_FT; },
     // AND STONE'S SIDE OF THE SAME QUESTION. stoneScene is the only thing that can read the layer
     // list, the geometry and the override map, and the shader is useless to a gate without the scene
     // it was packed from. The differential that matters is renderOneTile against ITSELF - once

@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.12.319';
+  const BUILD = '2026.11.13.320';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4196,6 +4196,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const SHARED_TOKENS = ['specTint'];
   const WOOD_TOKENS = ['woodEarly', 'woodLate', 'woodHeart', 'woodKnot', 'woodMineral', 'woodGround'];
   const GLASS_TOKENS = ['glassA', 'glassB', 'glassC', 'glassD', 'glassE', 'glassF', 'glassGround'];
+  // THE CANE PALETTE, ONCE. glassScene turns these into absorptions and the mask manifest needs
+  // them as hex, so the defaults lived in glassScene and would have been retyped here - which is
+  // how a sixth colour gets added in one copy and not the other. The letters are the token suffix
+  // and the layer suffix both, so cane-c and glassC are the same cane by construction.
+  // THE ARRAY IS INSIDE THE ARROW, and the arrow is a CONST rather than a function declaration, both
+  // deliberately. glassScene calls this, glassScene is carried into the worker render core as source
+  // text, and check-worker-core builds its free-name set from top-level const and let ONLY - so a
+  // function declaration reaching a module array would be invisible to it. As written, the only free
+  // name is COL, which the core already carries, and the gate can still see this one if that changes.
+  const GLASS_CANE_HEX = () => ['#9fd8c8', '#2f6f8f', '#c8923f', '#8e4b6e', '#c4563f', '#d98324']
+    .map((d, i) => COL['glass' + 'ABCDEF'[i]] || d);
+  const GLASS_CANE_LET = 'abcdef';            // the layer suffix; cane-c and glassC are one cane
   const tokenOwner = k => WOOD_TOKENS.indexOf(k) >= 0 ? 'wood'
     : GLASS_TOKENS.indexOf(k) >= 0 ? 'glass'
     : SHARED_TOKENS.indexOf(k) >= 0 ? 'shared' : 'stone';
@@ -6677,6 +6689,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // its first line - and so did a stone one, for want of the token itself.
       glassFlow, glassFormT, spinTable, unformBodies, unformKey, compileUnform, glassFormTG, glassMelt, glassBlob, glassBlobDepth, glassDepth, glassCellSDF,
       glassCellSpread, glassUnform, glassLay, glassWarp, glassUnwarp, rollerBake, paintGlassContent,
+      // THE CANE PALETTE, because glassScene now asks for it instead of holding six literals. That
+      // centralising is what stops a seventh colour being added in one copy and not the other, and it
+      // put a free name into a carried function in the same move: without this line the pool throws
+      // on its first glass tile, which check-worker-core said the moment the name appeared.
+      GLASS_CANE_HEX,
       // glassScene is everything the sheet IS before a pixel is drawn, and paintGlassContent's
       // first line now calls it. Lifting it out of that function for the GPU path to share took
       // it out of the worker's reach in the same move, and the pool would have thrown on its
@@ -7837,6 +7854,29 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // gate refuses and should. It is emitted from here instead, where the token already lives, and the
   // worker then switches through setMaterial exactly as every other caller does.
   const MATERIAL_DECL = "var MATERIAL='stone';";
+  // WHAT THIS MATERIAL PUBLISHES AS MASKS. The square-mask set is a contract with a consumer that
+  // has never heard of stone: one field layer that paints nearly everywhere, plus detail layers
+  // that paint only where their feature is, each greyscale and 2048 square. WHICH layers those are
+  // is the one part only the material can answer, so it is asked here and nowhere else - the
+  // exporter takes a list and never learns what is on it. Each entry carries its own drawer, so a
+  // material that can share one rasterising pass across several layers does so privately.
+  //
+  // WOOD RETURNS NOTHING, ON PURPOSE. Its tiers live as scalars inside shade with no seam to tap
+  // them yet, and what it exported until now was stone's vein geometry drawn from a wood slab - a
+  // picture of marble handed over as a description of oak, which no consumer could detect. An empty
+  // list says NOT YET where four wrong files said HERE YOU ARE.
+  function materialMasks() {
+    if (MATERIAL === 'wood') return [];
+    if (MATERIAL === 'glass') return glassMasks();
+    return stoneMasks();
+  }
+  // AND ITS NAMESPACE WITH THE CONSUMER. The id mints every theme token and is what a room stores,
+  // so changing it dangles every room already using the pack - silently, because the consumer's
+  // fallback is correct behaviour and looks exactly like the pack not being installed. One stable
+  // id per material is therefore the only safe thing to mint automatically: anything derived from
+  // the slab would move when the slab is renamed. A per-slab id is a library feature and needs a
+  // stored field, which is a decision, not a default.
+  function materialPackId() { return 'ma-' + MATERIAL; }
   function paintContent(ident, angleView) {
     if (MATERIAL === 'wood') return paintWoodContent(ident, angleView);
     if (MATERIAL === 'glass') return paintGlassContent(ident, angleView);
@@ -9826,9 +9866,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     // pale where it is thin, which is how one colour varies across a hand-made sheet without ever
     // turning into another.
     const CORD = Math.max(0, Math.min(1, GLASS.cords));
-    const canes = [COL.glassA || '#9fd8c8', COL.glassB || '#2f6f8f',
-                   COL.glassC || '#c8923f', COL.glassD || '#8e4b6e',
-                   COL.glassE || '#c4563f', COL.glassF || '#d98324'].map(h => {
+    const canes = GLASS_CANE_HEX().map(h => {
       const [cr, cg, cb] = hexRGB(h);
       return [(1 - cr / 255), (1 - cg / 255), (1 - cb / 255)];
     });
@@ -14713,6 +14751,143 @@ self.onmessage = async (e) => {
     else if (kind === 'web') { for (const e of geo.web) { polyPath(cx, e.pts); cx.lineWidth = e.width; cx.stroke(); } }
     g2d = prev; return c;
   }
+  // ---- THE PUBLISHED MASK SETS ----------------------------------------------------------------
+  // WHAT THE CONSUMER WILL TAKE. #rgb is a colour every canvas here accepts and its regex does not,
+  // so it is expanded rather than refused; a well-formed 6- or 8-digit hex is lowercased. Anything
+  // else goes through untouched, on purpose - see the manifest builder for why a substitute is worse
+  // than a refusal. The opacity clamps, because the author's own slider can only ever be in range
+  // and a NaN would otherwise reach the file as null.
+  const packHex = c => {
+    const s = String(c == null ? '' : c).trim();
+    if (/^#[0-9a-fA-F]{3}$/.test(s)) return '#' + [1, 2, 3].map(i => s[i] + s[i]).join('').toLowerCase();
+    if (/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s)) return s.toLowerCase();
+    return s;
+  };
+  const packUnit = v => { const n = +v; return isFinite(n) ? +Math.max(0, Math.min(1, n)).toFixed(3) : 1; };
+  // STONE'S FOUR, drawing exactly what they drew before. What is new is that `major` is declared
+  // primary: the consumer's card surface paints ONE layer UNTINTED, choosing the one marked primary
+  // and otherwise layer 0, and base is the matrix - near-flat by construction and dark on a dark
+  // slab (measured mean 8.0, every pixel of it below 32), which reads as a wash on the card while
+  // looking right on the map. The veins are what makes it marble. Declared rather than defaulted
+  // because the consumer's own flat-field warning CANNOT catch this: its threshold is 1.5 and the
+  // shipped field band starts at 2.8, so no healthy field layer can ever trip it.
+  // COLOUR AND OPACITY ON EVERY LAYER, because the consumer REQUIRES both: it indexes them rather
+  // than defaulting them, so a layer missing either refuses the whole pack. Only `primary` is
+  // optional there. The opacity is the AUTHOR'S - layOp is the same per-layer figure the preview and
+  // the .ora buckets read, so a vein faded in the studio arrives faded.
+  const stoneMasks = () => [
+    { suffix: 'base', colour: groundCol(), opacity: layOp('base'), draw: V => expBaseMask(V) },
+    { suffix: 'major', primary: true, colour: COL.major, opacity: layOp('major'), draw: V => expCoverage('major', V) },
+    { suffix: 'minor', colour: COL.minor, opacity: layOp('minor'), draw: V => expCoverage('minor', V) },
+    { suffix: 'micro', colour: COL.micro, opacity: layOp('micro'), draw: V => expCoverage('micro', V) },
+  ];
+  // GLASS'S SEVEN: the sheet, then one layer per cane. PAINT BY NUMBERS, SPENT AS LAYERS RATHER
+  // THAN GREY LEVELS - the consumer gives every layer its own colour and reads the mask as
+  // coverage, so a cane is a binary mask plus a hex, which is 'assign a colour to each label' with
+  // the label in the FILE NAME instead of in the pixel value. One mask carrying six grey levels
+  // cannot do the same job twice over: that byte already means alpha to the consumer, and an index
+  // cannot survive the linear filter every scaling path applies. Measured on this sheet at 1/8
+  // scale, 12.05% of pixels blend and 1.57% land on a colour that was never in their footprint -
+  // and the worst of those is the seam between the first and last cane, which no ordering of the
+  // greys can fix, because a ring of compartments has no grey-adjacent cycle to be ordered into.
+  //
+  // THE FIELD IS THE SHEET WITH THE CANES OFF, not groundCol() flat-filled. expBaseMask lays the
+  // ground and then stone's breccia, cloud and band modulators over it - fields paintGlassContent
+  // never reads - so for glass it disagreed with the picture in both directions at once and came
+  // out at contrast 0.92, under the consumer's flat-field warning. The sheet's OWN thickness,
+  // ream, flutes, bubbles and seeds measure 4.25 at mean 242.5: a real field layer, above the 2.8
+  // the shipped set starts at. So the ground is primary and no cane has to stand in for it.
+  function expGlassField(Wv) {
+    const V = expViewOf(Wv), c = expCanvasOf(V), cx = c.getContext('2d'), prev = g2d;
+    const was = GLASS.cords;
+    try {
+      GLASS.cords = 0;                                    // the sheet before any colour was poured in
+      cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = groundCol(); cx.fillRect(0, 0, c.width, c.height);
+      cx.setTransform(V.k, 0, 0, V.k, V.dx, 0); g2d = cx; paintContent(false, false);
+    } finally { g2d = prev; GLASS.cords = was; }           // inverse substitution, whatever happened
+    const im = cx.getImageData(0, 0, c.width, c.height), d = im.data;
+    for (let i = 0; i < d.length; i += 4) { const l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; d[i] = d[i + 1] = d[i + 2] = l; d[i + 3] = 255; }
+    cx.putImageData(im, 0, 0); return c;
+  }
+  // THE LABELS, BY THE PAINTER'S OWN PATH. glassLay reads GATHER coordinates, and the painter gets
+  // there through the pane offset and then F.UNF - back through every op, last first - so handing
+  // it slab coordinates measures the MOULD instead of the sheet. Measured: the two disagree by
+  // -12.8% to +15.7% per cane on a sixteen-op slab, which is a mask that lands near the picture
+  // rather than on it. ONE PASS for all the canes, cached in the list's own closure, because the
+  // unforming walk is the whole cost and six passes would pay it six times.
+  //
+  // ONE SAMPLE PER PIXEL, NEVER THE SUPERSAMPLE. The painter at ss>1 averages the COLOUR after the
+  // lookup, which is the one honest way to show a fold finer than the grid; a LABEL cannot be
+  // averaged at all, so a mask is the single-sample answer and says so.
+  function glassLabelField(V) {
+    const sc = glassScene(), F = sc.F, n = F.CN;
+    const buf = new Uint8Array(V.w * V.h), gth = [0, 0, 0], lay = [0, -1, 0, 1];
+    for (let py = 0, o = 0; py < V.h; py++) {
+      for (let px = 0; px < V.w; px++, o++) {
+        const u = (px + 0.5 - V.dx) / V.k, v = (py + 0.5) / V.k;
+        const cu = u < 0 ? 0 : u > 1 ? 1 : u, cvv = v < 0 ? 0 : v > H ? H : v;
+        const ox = GLASS.paneX + (cu - 0.5) * SLAB_FT / 12;
+        const oy = GLASS.paneY + (cvv / H - 0.5) * SLAB_FT * H / 12;
+        F.UNF(ox, oy, F, gth);
+        lay[0] = -1; lay[1] = -1; lay[2] = 0; lay[3] = 1;
+        glassLay(gth[0], gth[1], F, lay);
+        buf[o] = lay[0] >= 0 ? (lay[0] % n) + 1 : 0;        // 0 is bare glass, canes are 1-based
+      }
+    }
+    return { buf, n };
+  }
+  function glassMasks() {
+    let field = null;                                      // per call, so nothing survives into the next export
+    const caneDraw = k => V => {
+      if (!field || field.w !== V.w || field.h !== V.h) field = Object.assign(glassLabelField(V), { w: V.w, h: V.h });
+      const c = expCanvasOf(V), cx = c.getContext('2d');
+      const im = cx.createImageData(V.w, V.h), d = im.data, buf = field.buf;
+      for (let i = 0, o = 0; i < buf.length; i++, o += 4) {
+        const on = buf[i] === k + 1 ? 255 : 0;
+        d[o] = d[o + 1] = d[o + 2] = on; d[o + 3] = 255;
+      }
+      cx.putImageData(im, 0, 0); return c;
+    };
+    const hex = GLASS_CANE_HEX(), op = Math.max(0, Math.min(1, GLASS.cords));
+    const out = [{ suffix: 'ground', primary: true, colour: groundCol(), opacity: 1, draw: expGlassField }];
+    // AS MANY AS THE SHEET HAS, not as many as there are tokens. glassScene clamps the cane count
+    // to six and a slab may ask for two, so a fixed six would publish four all-black layers and
+    // spend the consumer's eight-layer budget on nothing.
+    const CN = glassScene().F.CN;
+    for (let k = 0; k < CN; k++)
+      out.push({ suffix: 'cane-' + GLASS_CANE_LET[k], colour: hex[k], opacity: op, draw: caneDraw(k) });
+    return out;
+  }
+  // A GREYSCALE PNG, WRITTEN HERE BECAUSE NO CANVAS WILL PRODUCE ONE. toBlob and toDataURL emit
+  // RGBA (colour type 6) always, and the consumer reads luminance only and refuses anything else -
+  // so the transcode is a required export step, not an optimisation. It is lossless for a real
+  // mask, because a greyscale mask has R == G == B at every pixel; that equality is ASSERTED rather
+  // than assumed, since a channel that disagrees means the mask is carrying colour the consumer
+  // would have thrown away in silence. Filter 0 on every row: the masks are long runs of 0 and
+  // 255 and deflate already eats them, and one channel instead of four is the bulk of the win.
+  async function greyPNG(c) {
+    const w = c.width, h = c.height;
+    const d = c.getContext('2d').getImageData(0, 0, w, h).data;
+    const rows = new Uint8Array((w + 1) * h);
+    for (let y = 0, o = 0, i = 0; y < h; y++) {
+      rows[o++] = 0;                                       // filter type: None
+      for (let x = 0; x < w; x++, i += 4, o++) {
+        const r = d[i];
+        if (d[i + 1] !== r || d[i + 2] !== r) throw new Error('mask is not greyscale at ' + x + ',' + y);
+        rows[o] = r;
+      }
+    }
+    const ih = new Uint8Array(13), dv = new DataView(ih.buffer);
+    dv.setUint32(0, w); dv.setUint32(4, h);
+    ih[8] = 8; ih[9] = 0;                                  // 8-bit, colour type 0 (greyscale)
+    const idat = await deflateBytes(rows);
+    const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    const parts = [sig, pngChunk('IHDR', ih), pngChunk('IDAT', idat), pngChunk('IEND', new Uint8Array(0))];
+    let n = 0; for (const p of parts) n += p.length;
+    const out = new Uint8Array(n); let at = 0;
+    for (const p of parts) { out.set(p, at); at += p.length; }
+    return out;
+  }
   function expBucket(bucketKey, W) {                      // one consumer bucket, in colour, transparent elsewhere (for .ora layers)
     const c = expCanvas(W), cx = c.getContext('2d'), prev = g2d, saved = layers.map(L => L.on), sv = soloLay; soloLay = null;
     for (const L of layers) L.on = (L.bucket === bucketKey);
@@ -15025,17 +15200,13 @@ self.onmessage = async (e) => {
         () => expCoverage('major', W), () => expCoverage('minor', W),
         () => expCoverage('micro', W), () => expCoverage('web', W),
         () => { idt = expIdT(W); return idt.ids; }, () => idt.t,   // paired on purpose: one call makes both
-        // The square set, through the SAME builders the slab masks use - one copy of the drawing
-        // code, so a square mask and its slab mask can never disagree about what is in the stone.
-        // Fixed at SQUARE_MASK whatever W is: the contract is a size, not a fraction of the render.
-        () => expBaseMask(viewSquare(SQUARE_MASK)), () => expCoverage('major', viewSquare(SQUARE_MASK)),
-        () => expCoverage('minor', viewSquare(SQUARE_MASK)), () => expCoverage('micro', viewSquare(SQUARE_MASK)),
+        // THE SQUARE SET IS NOT HERE ANY MORE. It has its own loop below, because it has its own
+        // rules: a fixed 2048 whatever W is, a greyscale encode no canvas can do, a manifest, and a
+        // layer list the MATERIAL chooses rather than this array. It still goes through the same
+        // drawing code, so a square mask and its slab mask cannot disagree about what is in the slab.
         () => expCompleted(oW), ...oOrder.map(b => () => expBucket(b, oW)),
       ];
-      const names = ['render.png', 'masks/base.png', 'masks/major.png', 'masks/minor.png', 'masks/micro.png', 'masks/web.png', 'rich/vein-ids.png', 'rich/vein-t.png',
-        // NOT masks/va/ - the folder says what the files ARE. The first consumer to want a square
-        // is not the only one that ever will, and a key named after it would lock the next one out.
-        'masks/square/base.png', 'masks/square/major.png', 'masks/square/minor.png', 'masks/square/micro.png'];
+      const names = ['render.png', 'masks/base.png', 'masks/major.png', 'masks/minor.png', 'masks/micro.png', 'masks/web.png', 'rich/vein-ids.png', 'rich/vein-t.png'];
       const bytes = [], steps = makers.length + 2;          // + packing + saving
       let msRender = 0, msEncode = 0;
       for (let i = 0; i < makers.length; i += EXP_PEAK) {
@@ -15062,6 +15233,43 @@ self.onmessage = async (e) => {
       expStat(TR('exp.packing'), makers.length / steps); await breathe();
       const files = [];
       for (let i = 0; i < names.length; i++) files.push({ name: names[i], data: bytes[i] });
+      // ---- THE PUBLISHED SQUARE SET. Fixed at SQUARE_MASK whatever W is: the contract is a size,
+      // not a fraction of the render. NOT masks/va/ - the folder says what the files ARE, and the
+      // first consumer to want a square is not the only one that ever will.
+      //
+      // ONE CANVAS AT A TIME, with no pacing arithmetic: these are 2048 square whatever the render
+      // is, so the peak is one 16 MiB canvas rather than the paced loop's pair of full-size ones.
+      // A MATERIAL THAT PUBLISHES NOTHING WRITES NOTHING - not an empty folder and not a manifest
+      // declaring zero layers, which the consumer refuses anyway.
+      const sqMasks = materialMasks();
+      if (sqMasks.length) {
+        const sqV = viewSquare(SQUARE_MASK), decl = [];
+        for (let i = 0; i < sqMasks.length; i++) {
+          const m = sqMasks[i];
+          expStat(TR('exp.prog', { done: i + 1, total: sqMasks.length, px: SQUARE_MASK }), makers.length / steps);
+          await breathe();
+          const c = m.draw(sqV);
+          flushCanvas(c);
+          const file = m.suffix + '.png';
+          files.push({ name: 'masks/square/' + file, data: await greyPNG(c) });
+          c.width = 1; c.height = 1;
+          // BOTH, ALWAYS. An earlier draft of this emitted each one only if it looked well formed,
+          // on the theory that the consumer's own defaults would take over - they do not. It indexes
+          // both and refuses the pack when either is absent, which is what the first real export
+          // produced: REFUSED, layer 0: opacity must be a number 0..1, on the ground layer alone.
+          //
+          // A COLOUR IS NORMALISED, NOT INVENTED. #rgb is expanded because a canvas accepts it and
+          // the consumer does not; a number becomes a number or 1. Anything else is passed through
+          // UNCHANGED so the refusal is loud and names the layer, because a grey quietly substituted
+          // for an unreadable colour ships into a theme token and nothing ever says so.
+          const ld = { suffix: m.suffix, file, color: packHex(m.colour), opacity: packUnit(m.opacity) };
+          if (m.primary) ld.primary = true;
+          decl.push(ld);
+        }
+        files.push({ name: 'masks/square/material.json', data: te.encode(JSON.stringify({
+          schema: 1, id: materialPackId(), family: currentMaterial(), layers: decl,
+        }, null, 2)) });
+      }
       files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(idt.legend)) });
       files.push({ name: 'rich/paths.json', data: te.encode(pathsJSON()) });
       files.push({ name: 'lines.svg', data: te.encode(linesSVG()) });

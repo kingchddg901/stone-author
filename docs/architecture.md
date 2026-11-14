@@ -26,10 +26,21 @@ downstream code can't tell them apart. That interchangeability is the point.
 
 **Consumers** read the contract at whatever richness they need:
 
-- **Vacuum Agent** (`eufy-vacuum-manager`) — the simple reader: 4 grey masks (base / major /
-  minor / micro) at 2048². The kit writes them to `masks/square/` on every full export. They are
-  the largest **centred square** of the slab — 5 × 5 ft of the 8 × 5 ft picture, 62.5% of its
-  width — not the whole slab fitted to a square, so the grain keeps its proportions.
+- **Vacuum Agent** (`eufy-vacuum-manager`) — the simple reader: greyscale masks at 2048², written
+  to `masks/square/` on every full export with a `material.json` beside them. They are the largest
+  **centred square** of the slab — 5 × 5 ft of the 8 × 5 ft picture, 62.5% of its width — not the
+  whole slab fitted to a square, so the grain keeps its proportions.
+  **How many, and which, is the material's answer** (`materialMasks`, at the material fork), not a
+  fixed four: stone publishes its old four (base / major / minor / micro) and **glass publishes
+  seven** — the sheet, then one layer per cane. Wood publishes **none**, and that is the honest
+  state rather than an omission: its tiers live as scalars inside `shade` with no seam to tap, and
+  what it exported before this was stone's vein geometry drawn from a wood slab.
+  **Every layer is colour type 0, 8-bit** — hand-encoded, because no canvas will produce greyscale
+  and the consumer refuses anything else — and every layer carries a colour and an opacity, both of
+  which the consumer requires. Exactly one is declared `primary`, always explicitly: the consumer's
+  own flat-field warning sits at contrast 1.5 while the shipped field band starts at 2.8, so it can
+  never catch a defaulted field layer. Verified against the shipped validator, not a copy of it:
+  `ma-glass` 7 layers, primary `ground` contrast 4.2; `ma-stone` 4 layers, primary `major` 67.2.
 - **HA dashboard builder** (`ha-dashboard-builder`) — the rich reader: masks plus vein ids and
   *t*-maps, the per-tier colour model, the tile wrap. It keeps only the *renderer*
   (`panel/stone-art.js`, `stone-raster.js`, `stone-controls.js`); this repo produces the masks it
@@ -460,8 +471,8 @@ tool; built on the kit's new `inherit` feature) · **speck colour groups + varia
 secondary hierarchy on the granite ground and on drusy pockets) · **warp** (a cloud-driven domain
 warp of the whole structure — the molten flow) · **moveable clouds** (drag the warp field with the
 Cloud tool) · the **generation warp model** (a rooted trunk, an inverse-square bond from branch to
-sub-branch, warp amount rising with depth — "Deep drift") · **export** (one zip: VA's four grey
-masks + a base value map, the dashboard's rich id/*t* maps with legend and vector paths, a completed
+sub-branch, warp amount rising with depth — "Deep drift") · **export** (one zip: VA's greyscale mask set —
+the material chooses it, seven for glass — with its `material.json`, the dashboard's rich id/*t* maps with legend and vector paths, a completed
 render, a layered `.ora`, and an SVG — the whole contract in one file, at a chosen pixel width) · the
 **warp guide** (the Cloud tool draws the warp field as a teal vector overlay — the source of the
 distortion made visible, a guide that never bakes into an export) · the **moon** (a *local* warp brush,
