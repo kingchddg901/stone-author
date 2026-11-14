@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.321';
+  const BUILD = '2026.11.13.322';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -7876,7 +7876,39 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // id per material is therefore the only safe thing to mint automatically: anything derived from
   // the slab would move when the slab is renamed. A per-slab id is a library feature and needs a
   // stored field, which is a decision, not a default.
-  function materialPackId() { return 'ma-' + MATERIAL; }
+  // DERIVED FROM THE NAME ONCE, THEN NEVER AGAIN. A stored id wins outright, before anything is
+  // derived - that is the latch, and it is the whole feature: the id reads like the slab because it
+  // was made from its name, and it stops following the name the moment the pack exists. Rename the
+  // slab afterwards and the manifest's `name` moves while the id does not.
+  //
+  // THE PREFIX IS APPLIED HERE AND IS NOT THE AUTHOR'S. `ma-` is what keeps every id clear of the
+  // consumer's reserved floor-type names, and the clearance is STRUCTURAL rather than a copy of their
+  // list: no reserved name is `ma` or begins `ma-`. A copy would go stale, because that list grows
+  // with every shipped material and a miss there is silent. Measured against its own id_conflict():
+  // `wood` is refused outright, `wood-oak` and `marble-carrara` for being prefixed BY a reserved
+  // name, `tile-x` likewise - and ma-glass / ma-stone / ma-wood all come back clear.
+  //
+  // 32 IS THE CONSUMER'S CAP and this repo's own glass slab overruns it: its name makes a
+  // 35-character id, measured, so the slug is truncated and any hyphen left at the end is trimmed.
+  //
+  // A LATCHED ID KEEPS ITS MATERIAL even if the slab's material changes afterwards, which reads like
+  // a bug and is the correct behaviour: it is still one slab and one pack, and re-minting would
+  // dangle every room already on it. `family` in the manifest tells the truth about the material.
+  const packSlug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  function materialPackId() {
+    if (packId) return packId;                      // latched: never re-derived, whatever else moved
+    const stem = 'ma-' + MATERIAL, slug = packSlug(slabName);
+    if (!slug) return stem;
+    const full = stem + '-' + slug;
+    if (full.length <= 32) return full;
+    const cut = full.slice(0, 32).replace(/-+$/, '');
+    // CUT AT A WORD, NOT THROUGH ONE. The hard slice gave ma-glass-disco-glass-v138-just-f, which
+    // reads like a typo and is permanent the moment it latches. Only taken when it leaves something
+    // of the name behind: one long word has no hyphen to cut at, and losing the whole slug to
+    // tidiness would hand every such slab the same id, which is the collision this exists to end.
+    const tidy = cut.replace(/-[^-]*$/, '');
+    return tidy.length > stem.length ? tidy : cut;
+  }
   function paintContent(ident, angleView) {
     if (MATERIAL === 'wood') return paintWoodContent(ident, angleView);
     if (MATERIAL === 'glass') return paintGlassContent(ident, angleView);
@@ -11591,6 +11623,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // exported afterwards is named accordingly. A slab saved before this existed simply has none, and
   // falls back to 'stone' — the name every file used to have.
   let slabName = '';
+  // ONE PACK ID PER SLAB, STORED. It is the one irreversible commitment in a published pack: it mints
+  // every theme token by rule and is what a room records, so changing it makes every room using the
+  // pack fall back to floor_type - which is CORRECT behaviour and looks exactly like the pack not
+  // being installed, so nothing anywhere reports it. That is the whole reason it cannot be computed
+  // from anything that moves, and therefore the whole reason it is kept here.
+  let packId = '';
   const SLAB_FALLBACK = 'stone';
   // Strips what Windows forbids in a filename, plus control characters, without this source needing a
   // single escape sequence of its own. charCodeAt(92) is the backslash; writing it literally is how the
@@ -11630,7 +11668,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   const expName = (W, ext) => `${fileStem()}-${W}-${lightTag()}-${engineTag()}-${stampTag()}.${ext}`;
 
   function serialize() {
-    return { v: 1, name: slabName, fam, material: currentMaterial(), wood: JSON.parse(JSON.stringify(WOOD)), glass: JSON.parse(JSON.stringify(GLASS)), tool, view, layTiles, guidesOn,
+    // packId RIDES BESIDE name AND IS ITS OPPOSITE: the name is display text and may be changed
+    // freely, the id is a namespace and may not. renderSig hashes an EXPLICIT list that this is not
+    // on - `name` was measured at zero bytes and left out for the same reason - so adding it re-dates
+    // no master and no resume. stateSig hashes the whole document and does move, which is what it
+    // already does on tool and layer selection and why nothing compares it.
+    return { v: 1, name: slabName, packId, fam, material: currentMaterial(), wood: JSON.parse(JSON.stringify(WOOD)), glass: JSON.parse(JSON.stringify(GLASS)), tool, view, layTiles, guidesOn,
              G: { ...G }, T: { ...T }, NEXT: { ...NEXT }, nextId,
              layers: layers.map(L => ({ key: L.key, label: L.label, bucket: L.bucket, on: L.on, op: L.op, warp: L.warp, field: L.field, density: L.density, size: L.size, seed: L.seed, haze: L.haze, transmit: L.transmit, scatter: L.scatter, metal: L.metal })), soloLay, activeLayer: { ...activeLayer },
              OVR: { ...OVR }, OVR_uv: { ...OVR_uv }, perItem: { ...perItem }, hidden: [...hidden], folders: folders.map(F => ({ name: F.name, v: F.v, c: F.c, members: [...F.members] })),
@@ -11640,6 +11683,9 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   function deserialize(o) {
     if (!o || o.v !== 1 || !Array.isArray(o.marks)) return false;
     slabName = typeof o.name === 'string' ? o.name : '';   // absent on a slab saved before names existed
+    // TAKEN AS WRITTEN, never corrected. A stored id the consumer would refuse is a loud failure that
+    // names the field; silently rewriting an author's namespace is the quiet one that dangles rooms.
+    packId = typeof o.packId === 'string' ? o.packId : '';   // absent on every slab saved before this
     if (typeof gpuSyncRow === 'function') gpuSyncRow();   // the toggle is per slab: this is another slab
     { const el = document.getElementById('slabname'); if (el) el.value = slabName; }
     // LOADING ARMS MOVE, WHATEVER THE SLAB SAVED. A slab records the tool that was active when it was
@@ -14751,6 +14797,15 @@ self.onmessage = async (e) => {
     else if (kind === 'web') { for (const e of geo.web) { polyPath(cx, e.pts); cx.lineWidth = e.width; cx.stroke(); } }
     g2d = prev; return c;
   }
+  // THE LATCH CLOSES WHEN THE PACK LEAVES, which is the consumer's own instruction: treat the id as
+  // permanent from the first time the pack leaves the generator. Before that first export there is no
+  // pack in the wild and nothing can be dangling, so deriving it fresh costs nothing; after it, the
+  // stored value wins for ever. Saved through the ordinary autosave, so the latch survives a reload
+  // even though the export writes no slab file of its own.
+  function materialPackLatch() {
+    if (!packId) { packId = materialPackId(); saveLocal(); }
+    return packId;
+  }
   // ---- THE PUBLISHED MASK SETS ----------------------------------------------------------------
   // WHAT THE CONSUMER WILL TAKE. #rgb is a colour every canvas here accepts and its regex does not,
   // so it is expanded rather than refused; a well-formed 6- or 8-digit hex is lowercased. Anything
@@ -15275,7 +15330,7 @@ self.onmessage = async (e) => {
         // this slab's name makes a 35-character id and the id regex caps at 32.
         // check-square-view pins the separation in both directions.
         const nm = (slabName || '').trim();
-        const desc = { schema: 1, id: materialPackId() };
+        const desc = { schema: 1, id: materialPackLatch() };
         if (nm) desc.name = nm;                           // absent on a slab saved before names existed
         desc.family = currentMaterial();
         desc.layers = decl;

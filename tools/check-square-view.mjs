@@ -216,7 +216,7 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
 
   // A MANIFEST GOES WITH THEM, declaring the schema the consumer checks first.
   const push = /^\s*files\.push\(\{ name: 'masks\/square\/material\.json'/m.test(APP);
-  if (!push || !/schema: 1, id: materialPackId\(\)/.test(APP))
+  if (!push || !/schema: 1, id: materialPackLatch\(\)/.test(APP))
     fail('the square set ships without an UNGUARDED schema-1 manifest - masks with no descriptor are not a pack, and a push behind a condition leaves the path literal in the file while nothing writes it');
   else ok('a schema-1 manifest ships beside the square masks, unguarded');
 
@@ -233,14 +233,45 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   // RED WHEN: materialPackId reads slabName, or stops being 'ma-' + the material; or the manifest
   // stops carrying the slab's name at all.
   {
-    const body = /function materialPackId\(\) \{([^}]*)\}/.exec(APP);
+    // THE LATCH IS THE INVARIANT, not the format. An earlier spelling of this clause asserted that
+    // materialPackId was literally 'ma-' + MATERIAL and read nothing that moves - both deliberately
+    // false now, since it derives from the slab name - so it would have failed the very change it
+    // existed to protect. What has to hold is that a STORED id wins before anything is derived.
+    const body = /function materialPackId\(\) \{([\s\S]*?)\n  \}/.exec(APP);
     if (!body) fail('cannot find materialPackId');
-    else if (!/return 'ma-' \+ MATERIAL;/.test(body[1]))
-      fail(`materialPackId is not 'ma-' + MATERIAL: ${body[1].trim()} - one stable id per material is the most that can be minted safely without a stored field`);
-    else ok("materialPackId is 'ma-' + the material, and nothing else");
-    if (body && /slabName|serialize|renderSig|stateSig/.test(body[1]))
-      fail('materialPackId is derived from something that MOVES - renaming the slab would then dangle every room using the pack, silently');
-    else ok('the pack id is derived from nothing that moves');
+    else {
+      const first = body[1].trim().split(String.fromCharCode(10))[0].trim();
+      if (!/^if \(packId\) return packId;/.test(first))
+        fail(`materialPackId does not return a stored id FIRST (its first statement is: ${first.slice(0, 70)}) - a derivation reached before the stored value is a derivation that can overrule it, and the id following anything that moves dangles every room using the pack, silently`);
+      else ok('a stored pack id wins before anything is derived');
+      if (!/'ma-' \+ MATERIAL/.test(body[1]))
+        fail("the 'ma-' prefix is not applied in materialPackId - it is what keeps every id clear of the consumer's reserved floor-type names (wood, wood-oak, marble-carrara and tile-x are all refused by its own id_conflict), and the clearance is structural only while the prefix is ours");
+      else ok("the 'ma-' prefix is applied in code, not taken from the slab");
+      if (!/\.slice\(0, 32\)/.test(body[1]))
+        fail("the derived id is not capped at 32 - the consumer's id regex stops there, and this repo's own glass slab makes a 35-character one");
+      else ok('the derived id is capped at the 32 characters the consumer allows');
+    }
+
+    // IT LATCHES WHEN THE PACK LEAVES, and the manifest goes through the latch rather than round it.
+    if (!/if \(!packId\) \{ packId = materialPackId\(\); saveLocal\(\); \}/.test(APP))
+      fail('materialPackLatch does not store the derived id - without that the id is recomputed on every export and follows the slab name for ever');
+    else ok('the pack id is stored the first time a pack is exported');
+    if (!/id: materialPackLatch\(\)/.test(APP))
+      fail('the manifest does not take its id through the latch - an export that publishes a derived id without storing it leaves nothing to latch');
+    else ok('the manifest takes its id through the latch');
+    if (!/packId = typeof o\.packId === 'string'/.test(APP) || !/name: slabName, packId,/.test(APP))
+      fail('packId does not round-trip through serialize and deserialize - a latch that is not saved is not a latch');
+    else ok('packId round-trips through serialize and deserialize');
+
+    // AND IT NEVER REACHES THE RENDER SIGNATURE. renderSig hashes an explicit, MEASURED list; a
+    // publication id on it would re-date every master on disk and orphan every resume, and no fix
+    // afterwards recovers them because a master keeps the signature it was written with.
+    const rs = /const renderSig = \(\) => \{([\s\S]*?)\n  \};/.exec(APP);
+    if (!rs) fail('cannot find renderSig');
+    else if (/packId/.test(rs[1]))
+      fail('packId is inside renderSig - it does not reach a pixel, and hashing it re-dates every master on disk and orphans every resume');
+    else ok('the pack id is not on the render signature');
+
     if (!/const nm = \(slabName \|\| ''\)\.trim\(\);/.test(APP) || !/if \(nm\) desc\.name = nm;/.test(APP))
       fail("the manifest does not carry the slab's name - `name` is display text the consumer coerces with str(), the one field a slab name can reach without consequence");
     else ok("the manifest carries the slab's own name as display text");

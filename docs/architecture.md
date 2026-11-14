@@ -50,12 +50,30 @@ downstream code can't tell them apart. That interchangeability is the point.
   one has a scoped theme import clear the reserved material's keys, and one prefixed *by* one has
   its own keys cleared. Measured against the consumer's own `id_conflict`: `wood`, `wood-oak`,
   `marble-carrara` and `tile-x` are all refused, while `ma-glass` / `ma-stone` / `ma-wood` come back
-  clear — the `ma-` prefix is what keeps them clear. So the id is **`ma-<material>`, one per
-  material and derived from nothing that moves**: an id carrying the slab name, the picture or a
-  render signature dangles every room using the pack the moment it changes, silently, because the
-  fallback to `floor_type` is correct behaviour and looks exactly like the pack not being installed.
-  The slab name goes in `name`, which the consumer coerces with `str()` and never reads as a key.
-  A per-slab id would need a stored field, and is a decision rather than a default.
+  clear — the `ma-` prefix is what keeps them clear, and the clearance is **structural rather than a
+  copy of their list**, which grows with every shipped material and whose misses are silent.
+  **The id is per slab, derived from its name ONCE and then latched.** It is stored in the slab
+  (`packId`), and a stored id wins before anything is derived — so the id reads like the slab
+  because it was made from its name, and stops following the name the moment the pack exists.
+  Rename the slab afterwards and the manifest's `name` moves while the id does not. The latch closes
+  at the **first export**, which is the consumer's own instruction: permanent from the first time the
+  pack leaves the generator. Before that there is no pack in the wild and nothing can dangle; after
+  it, changing the id makes every room on that pack fall back to `floor_type` — correct behaviour
+  that looks exactly like the pack not being installed, so nothing anywhere reports it.
+  The derived form is `ma-<material>-<slug of the name>`, capped at the 32 characters the id regex
+  allows and **cut at a word rather than through one** — this repo's glass slab wants 35 and gets
+  `ma-glass-disco-glass-v138-just`. A slab with no name latches `ma-<material>`.
+  A latched id keeps its material even if the slab's material later changes, which reads like a bug
+  and is correct: it is still one slab and one pack, and re-minting would dangle every room on it.
+  `family` reports the material truthfully.
+  **It is not on the render signature.** `renderSig` hashes an explicit, measured list; a
+  publication id there would re-date every master on disk and orphan every resume, and no fix
+  afterwards recovers them because a master keeps the signature it was written with. Measured live:
+  `renderSig` reads `ca4c0198` with the id absent, with two different ids, and after a rename, while
+  `stateSig` moves — which is what it already does on tool and layer selection, and why nothing
+  compares it. `HERO-MASTER-sealkey` still reads daylight `2259e26a` / black light `a98ab1f5`.
+  A stored id the consumer would refuse is passed through unchanged: that is a loud failure naming
+  the field, where silently rewriting an author's namespace is the quiet one that dangles rooms.
   **`scale` and `opacity` are deliberately not declared.** The consumer's own table is tuned by eye
   (0.05 everywhere but `concrete` 0.16 and carpet 0.09) and a drop-in's fallback chain lands on
   0.05 anyway, so declaring 0.05 is identical to omitting it and any other figure is a guess — note
