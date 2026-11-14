@@ -40,8 +40,19 @@ downstream code can't tell them apart. That interchangeability is the point.
   which the consumer requires. Exactly one is declared `primary`, always explicitly: the consumer's
   own flat-field warning sits at contrast 1.5 while the shipped field band starts at 2.8, so it can
   never catch a defaulted field layer. Verified against the shipped validator, not a copy of it:
-  `ma-glass` 7 layers, primary `ground` contrast 4.2; `ma-stone` 4 layers, primary `major` 67.2.
-  `ma-glass` 7 layers, primary `ground` contrast 4.2; `ma-stone` 4 layers, primary `major` 67.2.
+  `ma-glass` 7 layers, primary `ground` contrast 4.2; `ma-stone` 4 layers, primary `base` 79.5.
+  **A mask is COVERAGE, not the material's colour**, and that is what stone's field layer turns on:
+  `layerAlpha = luminance/255 × opacity`, with the colour carried by the layer's own `color`. A
+  near-black marble's matrix still covers the whole floor, so flattening the ground colour to
+  luminance — which is what `expBaseMask` does — answers the wrong question and measured mean 8.00
+  contrast 0.00 with every pixel below 32. `expStoneField` publishes full coverage with the **veins
+  taken out of it** instead: 226.03 / 79.50 / 10.58% against the consumer's own shipped
+  `marble-base-mask` at 232.6 / 71.3 / 8.5%, reached without tuning anything. Major and minor are
+  subtracted because a vein is a fracture filled with other mineral and the matrix is genuinely
+  absent there; micro is not, because specks and drusy are inclusions *within* it, and taking micro
+  out as well measured 141.31 / 126.75 / 44.59% — micro alone covers 37.93% of that square.
+  `expBaseMask` is unchanged and still has its own callers: the back light reads it as the
+  translucent body that glows.
   **The `id` is a namespace and the `name` is display text, and the slab's own name may only reach
   the second.** The consumer mints every theme token from the id by rule — `--evcc-floor-<id>-<suffix>`
   — so the token *format* is not ours to choose; the id and the layer suffixes are the only two

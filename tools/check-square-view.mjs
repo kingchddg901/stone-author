@@ -164,6 +164,41 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
     else ok('stoneMasks still publishes base/major/minor/micro, in that order');
   }
 
+  // STONE'S FIELD LAYER IS COVERAGE, AND THE BACK LIGHT STILL HAS ITS OWN READER.
+  //
+  // RED WHEN: base is pointed back at expBaseMask; expBaseMask loses the other callers that wanted
+  // it unchanged; micro joins the subtraction; the veins are summed instead of unioned; or the base
+  // composite is drawn back into the field builder.
+  {
+    const sf = /function expStoneField\(Wv\) \{([\s\S]*?)\n  \}/.exec(APP);
+    if (st && /suffix: 'base'[^}]*draw: V => expBaseMask\(V\)/.test(st))
+      fail("stone's base is drawn by expBaseMask again - that flattens the ground COLOUR to luminance and measured mean 8.00 contrast 0.00 with every pixel below 32, which is not a field layer by either test");
+    else if (!st || !/suffix: 'base'[^}]*draw: V => expStoneField\(V\)/.test(st))
+      fail("stone's base is not drawn by expStoneField");
+    else ok("stone's base is drawn by expStoneField, not by expBaseMask");
+
+    // expBaseMask IS STILL SOMEBODY'S. The back light reads it as the translucent body that GLOWS
+    // and the slab-aspect masks/base.png is MA's own rich set; repointing it in place rather than
+    // adding a builder would have moved the back light on every slab and reported nothing.
+    const bmCalls = [...APP.matchAll(/expBaseMask\(/g)].length;
+    if (bmCalls < 3)
+      fail(`expBaseMask is called ${bmCalls - 1} time(s) outside its declaration - the back light reads it as the glowing body, so losing those callers means the field change was made IN it rather than beside it`);
+    else ok(`expBaseMask keeps its ${bmCalls - 1} other callers (the back light's glow body, and the slab-aspect mask)`);
+
+    if (!sf) fail('cannot find expStoneField');
+    else {
+      if (!/\['major', 'minor'\]/.test(sf[1]))
+        fail("expStoneField does not subtract exactly major and minor - a vein is a fracture filled with other mineral so the matrix is absent there, but specks and drusy are inclusions WITHIN it; taking micro out as well measured mean 141.31 contrast 126.75 with 44.59% below 32, because micro alone covers 37.93% of the square");
+      else ok('expStoneField subtracts the veins and leaves the speckle field alone');
+      if (!/if \(vd\[i\] > vein\[j\]\) vein\[j\] = vd\[i\]/.test(sf[1]))
+        fail('the vein coverages are not unioned - summing them punches a darker hole wherever a minor crosses a major, which is the matrix being absent twice over');
+      else ok('the vein coverages are unioned, not summed');
+      if (/ensureBreccia|ensureClouds|ensureBands/.test(sf[1]))
+        fail('the base composite is drawn into the field builder again - ablated one modulator at a time, clouds and bands changed NOTHING (soft-light leaves a light base light) and breccia drove the mean to 10.13 by painting its clasts source-over; the variation is matrix COLOUR and a layer carries one hex, so it has nowhere to go');
+      else ok('the base composite is kept out of the field builder, as measured');
+    }
+  }
+
   // GLASS PUBLISHES THE SHEET PLUS ONE LAYER PER CANE, and the cane count is the SHEET'S, not six:
   // glassScene clamps it and a slab may ask for two, so a fixed six would publish four black layers
   // and spend the consumer's eight-layer budget on nothing.
@@ -183,8 +218,8 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   for (const [nm, body] of [['stoneMasks', st], ['glassMasks', gl]]) {
     if (!body) continue;
     const n = [...body.matchAll(/primary: true/g)].length;
-    if (n > 1) fail(`${nm} marks ${n} layers primary; the consumer refuses a pack with more than one`);
-    else ok(`${nm} marks ${n} layer(s) primary`);
+    if (n !== 1) fail(`${nm} marks ${n} layers primary; the consumer REFUSES a pack with more than one and DEFAULTS to layer 0 on none - and its flat-field warning cannot catch a defaulted field layer in any material, because the threshold is 1.5 while the shipped field band starts at 2.8. Exactly one, declared.`);
+    else ok(`${nm} declares exactly one primary layer`);
   }
 
   // EVERY SUFFIX IS LEGAL TO THE CONSUMER. A capital or an underscore is a refused pack, and the

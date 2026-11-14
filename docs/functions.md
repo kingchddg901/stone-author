@@ -225,11 +225,11 @@ CPU painter and the field under both.
   arena and one uniform** for the shader. Refuses two things rather than shipping them: a declared
   field that nothing supplies — the struct names it, the shader reads it, and it would be quietly zero
   for the life of the port — and more features than the shader's scratch array holds, which the CPU
-  painter has no limit on. *(18983)*
+  painter has no limit on. *(19065)*
 - `woodSource(GW)` — assembles wood's WGSL. **Assembled, not concatenated**: it borrows `woodAtan2`,
   `woodHash` and `fbm2` from the glass blocks rather than keeping unverified copies of each, and closes
   over the call sites rather than listing them, because `fbm2` calls `vnoise` and `vnoise` calls `nz`
-  and neither name appears anywhere in wood's own text. *(19609)*
+  and neither name appears anywhere in wood's own text. *(19691)*
 
 ## Glass — a lay-up, then a forming process
 
@@ -990,6 +990,19 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
 - `materialPackLatch()` — stores the derived id the first time a pack is exported and returns it
   thereafter, saving through the ordinary autosave. The consumer's instruction is to treat the id as
   permanent from the first time the pack leaves the generator; this is that moment.
+- `expStoneField(Wv)` — stone's field layer: **full coverage with the veins taken out of it**, not
+  the ground colour flattened. A mask is coverage (`layerAlpha = luminance/255 × opacity`) and the
+  colour travels in the layer's own `color`, so a near-black marble's matrix still covers the whole
+  floor; `expBaseMask` answered the other question and measured 8.00 / 0.00 / 100% below 32. This
+  measures **226.03 / 79.50 / 10.58%** against the consumer's shipped `marble-base-mask` at 232.6 /
+  71.3 / 8.5%. Subtracts `major` and `minor` — a vein is a fracture filled with other mineral, so
+  the matrix is absent there — and **not** `micro`, because specks and drusy are inclusions within
+  it (taking micro out too: 141.31 / 126.75 / 44.59%, since micro alone covers 37.93%). The vein
+  coverages are **unioned, not summed**, so a crossing is not punched twice; combined through the
+  pixels rather than `destination-out`, which reads the source's *alpha* and `expCoverage` is opaque
+  everywhere, so it would have erased the canvas. The base composite is deliberately not drawn —
+  measured, clouds and bands change nothing through soft-light over white and breccia drives the mean
+  to 10.13 by painting `source-over`. `expBaseMask` is untouched and keeps its own callers.
 - `stoneMasks()` / `glassMasks()` — the two lists. `glassMasks` rasterises the label field **once**
   into its own closure and expands one cane per layer from it, so the unforming walk is paid once
   rather than per cane; the cane count is the sheet's (`F.CN`), never a fixed six.
@@ -1008,20 +1021,20 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
   luminance only, so this is a required export step, not an optimisation. **Asserts R == G == B**
   per pixel rather than assuming it: a channel that disagrees means the mask is carrying colour.
 - `expBucket(bucketKey, W)` — one bucket in colour, transparent elsewhere, by gating layers to that
-  bucket — the layer PNGs inside the `.ora`. *(14946)*
+  bucket — the layer PNGs inside the `.ora`. *(15028)*
 - `expIdT(W)` — the rich pair: a vein-**id** map (each line an rgb-encoded index) and an
-  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(14954)*
+  along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. *(15036)*
 - `pathsJSON()` — the vectors as data: slab size in feet, then each line's `id / major / parent / at`,
-  its points, and its per-sample widths. *(14963)*
-- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(14964)*
+  its points, and its per-sample widths. *(15045)*
+- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(15046)*
 - `buildOraFrom(merged, buckets, order, W)` — an OpenRaster `.ora` assembled from already-encoded
   PNG bytes: a nested zip with `mimetype` stored first, a `stack.xml` (top child = top layer), the
   bucket layers under `data/`, and a `mergedimage` + thumbnail. Opens in Krita / GIMP / Photoshop.
-  Takes the encoded bytes rather than rendering them, so the encode happens once. *(15009)*
+  Takes the encoded bytes rather than rendering them, so the encode happens once. *(15091)*
 - `exportAll(W)` — assemble `render.png`, `masks/{base,major,minor,micro,web}.png`,
   `masks/square/` (the material's own layer set at 2048², greyscale, plus `material.json`),
   `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, and
-  `slab.ora` into one zip and hand it to the viewer. *(15187)*
+  `slab.ora` into one zip and hand it to the viewer. *(15269)*
 
 ## Large renders — what a canvas can hold, and what to do past it
 
@@ -1054,10 +1067,10 @@ it reports the size asked for and leaves the far end unwritten. See
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
   family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(12756)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(16265)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(16347)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(16290)*
+  actually on offer, not a probe's answer to a different question. *(16372)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(16367)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(23424)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(16449)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(23506)*

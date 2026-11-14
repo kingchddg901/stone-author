@@ -69,6 +69,14 @@ const hook = `
     // sixteen ops. expBucket is how a face reaches an export canvas at all (it owns the g2d
     // swap), so without it a probe cannot ask what the material's own field looks like.
     expBucket, get GLASS() { return GLASS; }, get SLAB_FT() { return SLAB_FT; },
+    // AND THE GROUND, so a probe can DIVIDE THE COLOUR OUT of a mask rather than guess at what
+    // it contributed. groundCol is the sanctioned accessor at the material fork, so asking it
+    // here reads the same answer the painter does, per material, with no token leak.
+    groundCol,
+    // AND STONE'S FIELD BUILDER. Every committed slab has the base composite at zero, so the
+    // modulator half of this is unreachable through a real export and a probe that cannot see
+    // the effect is not a measurement - this is how the brec/cloud/band path gets exercised.
+    expStoneField,
     // AND STONE'S SIDE OF THE SAME QUESTION. stoneScene is the only thing that can read the layer
     // list, the geometry and the override map, and the shader is useless to a gate without the scene
     // it was packed from. The differential that matters is renderOneTile against ITSELF - once

@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.322';
+  const BUILD = '2026.11.13.323';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -14806,6 +14806,81 @@ self.onmessage = async (e) => {
     if (!packId) { packId = materialPackId(); saveLocal(); }
     return packId;
   }
+  // STONE'S FIELD LAYER: THE MATRIX'S COVERAGE, NOT ITS COLOUR.
+  //
+  // expBaseMask flattens the ground COLOUR to luminance, and on a dark marble that reads mean 8.00
+  // contrast 0.00 with every pixel below 32 - dark AND flat, failing the field test on both axes at
+  // once. It is answering the wrong question. The consumer reads a mask as COVERAGE - layerAlpha =
+  // luminance/255 x opacity - and takes the colour from the layer's own `color`, which this end
+  // already emits: a near-black marble's matrix still covers the whole floor. Their own shipped
+  // marble-base-mask is the tell at mean 232.6, contrast 71.3, 8.5% of it below 32, which is not any
+  // dark stone's luminance. It is a bright field with the veins cut out of it.
+  //
+  // SO: FULL COVERAGE, MODULATED BY THE MATRIX'S OWN STRUCTURE, WITH THE VEINS TAKEN OUT.
+  // Major and minor are subtracted because a vein is a fracture FILLED WITH OTHER MINERAL - the
+  // matrix is genuinely absent where one runs. Micro is NOT, because specks and drusy are inclusions
+  // WITHIN the matrix and it surrounds them; that is a distinction about the rock, not about hitting
+  // a number, and the numbers happen to agree. Measured on Hero_Psyker at the square:
+  //
+  //   subtracting major+minor+micro   mean 141.31  contrast 126.75  44.59% below 32   not a field
+  //   subtracting major+minor         mean 226.17  contrast  80.75  11.31% below 32   their marble
+  //                                                                                   reads 232.6 /
+  //                                                                                   71.3 / 8.5%
+  //
+  // micro alone covers 37.93% of this square, which is why taking it out stops being a field layer
+  // and starts being a speckle mask. The small excess over their marble is this slab carrying 11.96%
+  // veins against whatever theirs carried - a property of the picture, and the band is eighteen
+  // observations rather than a rule. The only figure the consumer enforces is the flat-primary
+  // threshold at 1.5, which this clears by fifty times.
+  //
+  // expBaseMask IS LEFT EXACTLY AS IT WAS, because it has two other callers and neither wants this:
+  // the back light reads it as the translucent body that GLOWS, and the slab-aspect masks/base.png
+  // is MA's own rich set, which has no consumer contract. Changing it in place would have moved the
+  // back light on every slab and said nothing.
+  function expStoneField(Wv) {
+    const V = expViewOf(Wv), c = expCanvasOf(V), cx = c.getContext('2d');
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+    cx.setTransform(1, 0, 0, 1, 0, 0);
+    // THE BASE COMPOSITE IS DELIBERATELY NOT DRAWN HERE, and it was, until it was measured. Drawing
+    // breccia, clouds and bands over white the way expBaseMask draws them over the ground is the
+    // obvious move and it fails in both directions at once. Ablated on Hero_Psyker, one modulator at
+    // a time:
+    //
+    //   clouds only, 0.7     mean 226.11  contrast 75.12   IDENTICAL to all three off, to 0.01
+    //   bands only, 0.5      mean 226.11  contrast 75.12   IDENTICAL
+    //   breccia only, 0.6    mean  10.13  contrast 11.48   95.11% of it below 32
+    //
+    // Clouds and bands buy NOTHING because soft-light is the blend that leaves a light base light,
+    // so against white it is close to a no-op by construction - three lines that would have read as
+    // handling the composite while changing no pixel, which is worse than not having them. And
+    // breccia is drawn source-over, so it paints its clasts' own COLOURS opaquely and drives the
+    // ground's darkness straight back in - the one thing this builder exists to keep out.
+    //
+    // Normalising instead - the composite's luminance over the ground's - does not rescue it either:
+    // this ground is luminance 8.3, so almost every ratio clamps at 255 and the structure is lost in
+    // the clamp. The real limit is the model: breccia, clouds and bands vary the matrix's COLOUR,
+    // and a layer carries one `color` hex, so that variation has nowhere to go in a pack. Saying so
+    // is better than drawing something that looks like it carried it.
+    const im = cx.getImageData(0, 0, c.width, c.height), d = im.data;
+    // THE UNION OF THE VEINS, NOT THEIR SUM: where a minor crosses a major the matrix is absent
+    // once, not twice, and adding them would punch a darker hole at every junction.
+    //
+    // NOT destination-out, which is the composite this asks for and the wrong one: it reads the
+    // SOURCE'S ALPHA, and expCoverage draws white on an opaque BLACK fill - alpha 255 everywhere -
+    // so it would have erased the whole canvas. Taken through the pixels instead, which also keeps
+    // the coverage builder's own anti-aliasing, so a vein's edge stays soft in the hole it leaves.
+    const vein = new Uint8Array(c.width * c.height);
+    for (const k of ['major', 'minor']) {
+      const vc = expCoverage(k, V), vd = vc.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      for (let i = 0, j = 0; i < vd.length; i += 4, j++) if (vd[i] > vein[j]) vein[j] = vd[i];
+      vc.width = 1; vc.height = 1;                        // hand it back before building the next
+    }
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+      const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) * (1 - vein[j] / 255);
+      d[i] = d[i + 1] = d[i + 2] = l; d[i + 3] = 255;
+    }
+    cx.putImageData(im, 0, 0); return c;
+  }
   // ---- THE PUBLISHED MASK SETS ----------------------------------------------------------------
   // WHAT THE CONSUMER WILL TAKE. #rgb is a colour every canvas here accepts and its regex does not,
   // so it is expanded rather than refused; a well-formed 6- or 8-digit hex is lowercased. Anything
@@ -14830,9 +14905,16 @@ self.onmessage = async (e) => {
   // than defaulting them, so a layer missing either refuses the whole pack. Only `primary` is
   // optional there. The opacity is the AUTHOR'S - layOp is the same per-layer figure the preview and
   // the .ora buckets read, so a vein faded in the studio arrives faded.
+  // AND THE PRIMARY GOES BACK TO `base`, which is where the convention puts it and where it could
+  // not be until now. The card surface paints ONE layer UNTINTED: with base flat at contrast 0.00
+  // that was a grey wash, so `major` was marked primary to give the card something to show - the
+  // same move shipped slate makes, and for the same reason. The field layer is no longer flat, so
+  // the override has no reason left: untinted, base now paints a bright matrix with the veins cut
+  // out of it, which is what a marble card should look like, where `major` painted the veins alone
+  // on an empty card. One line to flip back if it reads wrong.
   const stoneMasks = () => [
-    { suffix: 'base', colour: groundCol(), opacity: layOp('base'), draw: V => expBaseMask(V) },
-    { suffix: 'major', primary: true, colour: COL.major, opacity: layOp('major'), draw: V => expCoverage('major', V) },
+    { suffix: 'base', primary: true, colour: groundCol(), opacity: layOp('base'), draw: V => expStoneField(V) },
+    { suffix: 'major', colour: COL.major, opacity: layOp('major'), draw: V => expCoverage('major', V) },
     { suffix: 'minor', colour: COL.minor, opacity: layOp('minor'), draw: V => expCoverage('minor', V) },
     { suffix: 'micro', colour: COL.micro, opacity: layOp('micro'), draw: V => expCoverage('micro', V) },
   ];

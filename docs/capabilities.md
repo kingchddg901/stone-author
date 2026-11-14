@@ -182,17 +182,32 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat`
   `masks/square/base.png` comes out a constant there (mean 8, sd 0). That is not new and not the square path: the
   slab-aspect `masks/base.png` is equally flat on the same slab. It matters because a consumer reading 4 masks gets 3
   carrying structure and one carrying the ground, unless the slab asks for a base composite.
-  **Measured on `Hero_Psyker`, decoded from the shipped pack:** `base` mean 8.00 contrast **0.00**,
-  every pixel below 32 — dark *and* flat, so it is not a field layer by either test and the stone
-  pack has none. `major` 19.78/67.20 and `minor` 10.89/50.39 are proper detail layers; `micro`
-  96.32/121.55 sits outside both populations. The pack is accepted because `major` is declared
-  primary, which is the fix for the card surface, not for the missing field.
-  **Glass does not have this problem, and the reason is the fix.** `expGlassField` paints the sheet
-  with `GLASS.cords` held at zero — the material's own thickness, ream, flutes, bubbles and seeds —
-  rather than flattening `groundCol()`, and comes out mean 242.67 contrast **4.21**, above the 2.8
-  the shipped field band starts at. The same move would give stone a real `base`: paint the face
-  with the veins off instead of the ground alone. That changes an already-published mask, so it is
-  not done here.
+  **That is history for the PUBLISHED square mask, which no longer goes through `expBaseMask`.** It
+  measured mean 8.00 contrast **0.00** with every pixel below 32 — dark *and* flat, a field layer by
+  neither test — and the diagnosis was that a mask is **coverage**, not the material's colour. A
+  near-black marble's matrix still covers the whole floor, and the colour travels in the layer's own
+  `color`. `expStoneField` publishes full coverage with the **veins taken out of it**:
+  **226.03 / 79.50 / 10.58%**, against the consumer's shipped `marble-base-mask` at 232.6 / 71.3 /
+  8.5% — the same population, reached without tuning a constant. Major and minor are subtracted (a
+  vein is a fracture filled with other mineral, so the matrix is absent); micro is not (specks and
+  drusy are inclusions *within* the matrix), and subtracting it too measured 141.31 / 126.75 /
+  44.59%, because micro alone covers 37.93% of that square. `base` takes the `primary` back from
+  `major` as a result: untinted it now paints a bright matrix with the veins cut out, which is what
+  a marble card should look like, where `major` painted the veins alone on an empty card.
+  **The base composite is deliberately NOT drawn into it**, and that was measured rather than
+  assumed. Ablated one modulator at a time on `Hero_Psyker`: clouds at 0.7 and bands at 0.5 each
+  left the result **identical to all three off, to 0.01** — soft-light is the blend that leaves a
+  light base light, so against white it is a no-op by construction — and breccia at 0.6 drove the
+  mean to **10.13** with 95.11% below 32, because it draws `source-over` and paints its clasts' own
+  colours. Normalising by the ground does not rescue it either: this ground is luminance 8.3, so
+  almost every ratio clamps. The real limit is the model — breccia, clouds and bands vary the
+  matrix's *colour*, and a layer carries one `color` hex, so that variation has nowhere to go.
+  **The slab-aspect `masks/base.png` is unchanged** and still flat: it is MA's own rich set with no
+  consumer contract, and `expBaseMask` keeps it, along with the back light that reads it as the
+  translucent body which glows.
+  **Glass gets its field the same way**: `expGlassField` paints the sheet with `GLASS.cords` held at
+  zero — thickness, ream, flutes, bubbles, seeds — rather than flattening `groundCol()`, and comes
+  out mean 242.67 contrast **4.21**, above the 2.8 the shipped field band starts at.
 - **✓ Gap fixed:** `expCompleted` now delegates to `renderTiled(W)` (which is verified pixel-equal to `renderFull` but tiled so a huge export stays memory-bounded; back light falls back to `renderFull`), so `render.png` (and the `.ora` merged image) bake the full pipeline — coat tier, back light, lens. The coverage masks stay geometry-only by design.
 - **Peak memory is two canvases, not fourteen.** `exportAll` builds in groups of `EXP_PEAK` (2) and frees each canvas before making the next. It used to render all fourteen first and hold them alive: 1.2 GiB at 8192 and **5.0 GiB at 16384**, which no machine has. The batch existed to hand the whole set to the CPU worker pool that this repo's history then recorded as *"measured a no-op"* — so it cost 8× the peak and bought nothing. (That no-op reading held for the *direct* path only; on the tiled TIFF path the same pool measures 4.25× across 8 workers and is now the default — see [final-render](final-render.md) rung 3.) `canvasFits(w, h, n)` probes `EXP_PEAK` canvases, so the offered ceiling matches what the export actually needs; the cache key carries a version because ceilings measured under the old probe were wrong by 8×.
 - **The ceiling on screen is the ceiling that applies.** `exportCeiling()` probes 2048→16384 for `EXP_PEAK`
