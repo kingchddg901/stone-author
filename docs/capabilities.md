@@ -195,7 +195,12 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat`
   drusy are inclusions *within* the matrix), and subtracting it too measured 141.53 / 124.39 /
   42.53%, because micro alone covers 40.53% of that square. `base` takes the `primary` back from
   `major` as a result: untinted it now paints a bright matrix with the veins cut out, which is what
-  a marble card should look like, where `major` painted the veins alone on an empty card.
+  a marble floor should look like, where `major` painted the veins alone on an empty one. **The
+  surface that paints one layer untinted is the SVG map polygon, not the room card** — corrected
+  2026-11-14. The polygon fills from a `<pattern>` holding the primary mask as a bare `<image>`, so
+  the PNG is drawn with no tint; the card emits one *tinted* span per layer and composites the whole
+  stack, so the primary barely shows there. The reasoning above is unchanged by the correction,
+  because the polygon really does paint exactly one layer.
   **The hole is the vein's CORE, not its whole footprint, and the depth stays full.** Asked to pick
   that depth from a measurement rather than from the edge of the field band, the first attempt
   solved the vein's own alpha out of the render: 0.3915 for a major and 0.8492 for a minor against

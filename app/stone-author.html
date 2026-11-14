@@ -2021,7 +2021,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.14.334';
+  const BUILD = '2026.11.14.335';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15259,11 +15259,16 @@ self.onmessage = async (e) => {
       for (let i = 0, o = 0; i < b.length; i++, o += 4) { d[o] = d[o + 1] = d[o + 2] = b[i]; d[o + 3] = 255; }
       cx.putImageData(im, 0, 0); return c;
     };
-    // EARLY IS THE PRIMARY, not the ground. The card paints one layer untinted, and the ground is
-    // the board's EXTENT - 255 everywhere on a plank that sits inside its log, which is a white card.
-    // Earlywood covers the whole board too and carries the ring banding while doing it, so untinted
-    // it reads as grain rather than as paper. The ground still goes first in the list, because the
-    // consumer composites in order and the board's own colour belongs under the rings.
+    // EARLY IS THE PRIMARY, not the ground. THE SURFACE THAT PAINTS ONE LAYER UNTINTED IS THE MAP
+    // POLYGON, not the room card - corrected 2026-11-14, having been wrong in six places here. The
+    // polygon fills from a <pattern> holding the primary mask as a bare <image>, so the greyscale
+    // PNG is drawn with no tint; the card emits one TINTED span per layer and composites all of
+    // them, which is why the primary barely matters there. The argument is unchanged by the
+    // correction: the ground is the board's EXTENT - 255 everywhere on a plank that sits inside its
+    // log, so untinted it is a white polygon. Earlywood covers the whole board too and carries the
+    // ring banding while doing it, so untinted it reads as grain rather than as paper. The ground
+    // still goes first in the list, because the consumer composites in order and the board's own
+    // colour belongs under the rings.
     return [
       { suffix: 'ground', colour: groundCol(), opacity: 1, draw: tier('ground') },
       { suffix: 'early', primary: true, colour: COL.woodEarly, opacity: 1, draw: tier('early') },
@@ -15286,24 +15291,37 @@ self.onmessage = async (e) => {
     return s;
   };
   const packUnit = v => { const n = +v; return isFinite(n) ? +Math.max(0, Math.min(1, n)).toFixed(3) : 1; };
-  // STONE'S FOUR, drawing exactly what they drew before. What is new is that `major` is declared
-  // primary: the consumer's card surface paints ONE layer UNTINTED, choosing the one marked primary
-  // and otherwise layer 0, and base is the matrix - near-flat by construction and dark on a dark
-  // slab (measured mean 8.0, every pixel of it below 32), which reads as a wash on the card while
-  // looking right on the map. The veins are what makes it marble. Declared rather than defaulted
-  // because the consumer's own flat-field warning CANNOT catch this: its threshold is 1.5 and the
-  // shipped field band starts at 2.8, so no healthy field layer can ever trip it.
+  // STONE'S FIVE - base, major, minor, micro and web, one list serving both aspects. The selection
+  // rule is the one marked primary, otherwise layer 0, and WHAT READS IT IS THE MAP POLYGON: it
+  // fills from a <pattern> holding that one mask as a bare <image>, so the PNG is drawn UNTINTED.
+  // The room card does not read it at all - it emits one TINTED span per layer and composites the
+  // whole stack - so the primary is a decision about the map and barely shows on the card.
+  //
+  // THIS PARAGRAPH SAID `major` AND SAID FOUR, and both had been superseded by the paragraph below
+  // it in this same block while this one still read as current. A reader coming from the consumer's
+  // side took `major` from it on 2026-11-14 and measured `base` on the box - which is the whole
+  // hazard of a retired premise cited under a live name, and it was found by someone else reading
+  // it, not by anything here. Declared rather than defaulted because the consumer's own flat-field
+  // warning CANNOT catch a defaulted field: its threshold is 1.5 and the shipped field band starts
+  // at 2.8, so no healthy field layer can ever trip it.
   // COLOUR AND OPACITY ON EVERY LAYER, because the consumer REQUIRES both: it indexes them rather
   // than defaulting them, so a layer missing either refuses the whole pack. Only `primary` is
   // optional there. The opacity is the AUTHOR'S - layOp is the same per-layer figure the preview and
   // the .ora buckets read, so a vein faded in the studio arrives faded.
   // AND THE PRIMARY GOES BACK TO `base`, which is where the convention puts it and where it could
-  // not be until now. The card surface paints ONE layer UNTINTED: with base flat at contrast 0.00
-  // that was a grey wash, so `major` was marked primary to give the card something to show - the
-  // same move shipped slate makes, and for the same reason. The field layer is no longer flat, so
-  // the override has no reason left: untinted, base now paints a bright matrix with the veins cut
-  // out of it, which is what a marble card should look like, where `major` painted the veins alone
-  // on an empty card. One line to flip back if it reads wrong.
+  // not be until now. The polygon paints ONE layer UNTINTED: with base flat at contrast 0.00 that
+  // was a grey wash, so `major` was marked primary to give the map something to show - the same
+  // move shipped slate makes, and for the same reason. The field layer is no longer flat, so the
+  // override has no reason left: untinted, base now paints a bright matrix with the veins cut out
+  // of it, which is what a marble floor should look like, where `major` painted the veins alone on
+  // an empty polygon. One line to flip back if it reads wrong.
+  //
+  // GLASS CANNOT WIN THIS ONE AND THAT IS NOT A DEFECT. Its six canes are each binary and sum to
+  // exactly 100.00% coverage, so any single mask is either one arbitrary sixth or the whole sheet:
+  // the partition IS the structure and a partition of a plane has no single mask. `ground` at
+  // contrast 4.21 is the honest answer, and the polygon will read as a near-flat wash for glass
+  // however it is declared. Measured 2026-11-14, and the consumer's side agreed and withdrew its
+  // own suggestion that a cane be declared instead.
   const stoneMasks = () => [
     { suffix: 'base', primary: true, colour: groundCol(), opacity: layOp('base'), draw: V => expStoneField(V) },
     { suffix: 'major', colour: COL.major, opacity: layOp('major'), draw: V => expCoverage('major', V) },

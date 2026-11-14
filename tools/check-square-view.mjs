@@ -247,7 +247,7 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   const wd = listOf(/function woodMasks\(\) \{/, '\n  }\n');
   if (!gl) fail('cannot find glassMasks');
   else {
-    if (!/suffix: 'ground', primary: true/.test(gl)) fail('glass does not declare `ground` primary - the card surface paints one layer untinted and the consumer\'s flat-field warning cannot catch a field layer, so it must be declared, never defaulted');
+    if (!/suffix: 'ground', primary: true/.test(gl)) fail('glass does not declare `ground` primary - the MAP POLYGON paints one layer untinted (the room card tints every layer and composites them all) and the consumer\'s flat-field warning cannot catch a field layer, so it must be declared, never defaulted');
     else ok('glass declares the ground layer primary explicitly');
     if (!/for \(let k = 0; k < GLASS_CANE_N; k\+\+\)/.test(gl)) fail('glass does not publish one layer per palette entry - a set that moves with cordN breaks any theme that styled a layer which then vanished, and it leaves the label and the layer index as different numbers, which is what made the cells aliasing unfixable');
     else ok('glass publishes one layer per palette entry, so label and layer index are one number');
@@ -437,7 +437,7 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
       if (got.join(',') !== want.join(',')) fail(`woodMasks publishes [${got}], not [${want}]`);
       else ok(`woodMasks publishes ${want.join('/')}, in that order`);
       if (!/suffix: 'early', primary: true/.test(wd))
-        fail("wood does not declare `early` primary - the ground is the board's EXTENT and is 255 everywhere on a plank inside its log, so untinted it is a white card; earlywood covers the board too and carries the ring banding, measured 228.97 mean at contrast 39.4");
+        fail("wood does not declare `early` primary - the ground is the board's EXTENT and is 255 everywhere on a plank inside its log, so untinted it is a white POLYGON (the map polygon is the surface that paints one layer untinted, not the room card); earlywood covers the board too and carries the ring banding, measured 228.97 mean at contrast 39.4");
       else ok('wood declares earlywood primary, not the ground');
     }
 

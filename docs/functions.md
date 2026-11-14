@@ -225,11 +225,11 @@ CPU painter and the field under both.
   arena and one uniform** for the shader. Refuses two things rather than shipping them: a declared
   field that nothing supplies — the struct names it, the shader reads it, and it would be quietly zero
   for the life of the port — and more features than the shader's scratch array holds, which the CPU
-  painter has no limit on. *(19614)*
+  painter has no limit on. *(19632)*
 - `woodSource(GW)` — assembles wood's WGSL. **Assembled, not concatenated**: it borrows `woodAtan2`,
   `woodHash` and `fbm2` from the glass blocks rather than keeping unverified copies of each, and closes
   over the call sites rather than listing them, because `fbm2` calls `vnoise` and `vnoise` calls `nz`
-  and neither name appears anywhere in wood's own text. *(20240)*
+  and neither name appears anywhere in wood's own text. *(20258)*
 
 ## Glass — a lay-up, then a forming process
 
@@ -1089,7 +1089,7 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
   another one: it leaves the authored layer list exactly as it is, because no entry carries that
   bucket and gating on it would turn every layer off — an empty picture for stone, and for wood and
   glass the same face either way, silently. It lays its ground like `base` does, being the bottom of
-  a one-layer stack. *(15502)*
+  a one-layer stack. *(15520)*
 - `materialRich()` — **at the material fork**: the rich set itself, not a word for it.
   `{vectors: true}` for stone (the id map, the t map, `paths.json`, `lines.svg` — four views of a
   list of authored strokes), or `{file, draw, legend}` for a material whose features are labelled
@@ -1120,14 +1120,14 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
   joins the colour in `material.json` on a name rather than a position.
 - `expIdT(W)` — the rich pair: a vein-**id** map (each line an rgb-encoded index) and an
   along-the-vein **t** map (grey 0→255 head to tail), plus the `{index: id}` legend. Built only when
-  the material authors vectors, which also saves two full-size canvases and their encodes. *(15517)*
+  the material authors vectors, which also saves two full-size canvases and their encodes. *(15535)*
 - `pathsJSON()` — the vectors as data: slab size in feet, then each line's `id / major / parent / at`,
-  its points, and its per-sample widths. *(15558)*
-- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(15559)*
+  its points, and its per-sample widths. *(15576)*
+- `linesSVG()` — the veins and stylolites as an SVG path drawing (a 1000-px-wide vector proof). *(15577)*
 - `buildOraFrom(merged, buckets, order, W)` — an OpenRaster `.ora` assembled from already-encoded
   PNG bytes: a nested zip with `mimetype` stored first, a `stack.xml` (top child = top layer), the
   bucket layers under `data/`, and a `mergedimage` + thumbnail. Opens in Krita / GIMP / Photoshop.
-  Takes the encoded bytes rather than rendering them, so the encode happens once. *(15604)*
+  Takes the encoded bytes rather than rendering them, so the encode happens once. *(15622)*
 - `packFiles(base, span)` — the drop-in pack's files, with **bare names** so the caller owns the
   layout: the 2048-square greyscale masks the material publishes plus `material.json`. Lifted out of
   `exportAll` when the pack got a scope of its own, and **lifted rather than copied** — a second
@@ -1151,7 +1151,7 @@ single store-only zip. It prefers the `downloads` capability and falls back to `
   the selectors read and no mask builder applies the coat. Both of those were wrong on the first
   pass: the floor-size refusal sat above the dispatch and refused a pack for a width it never uses,
   and the coat field was built for a scope that reads none — which `check-coat-field` found by
-  reporting its own ablation **INERT** rather than passing quietly. *(15784)*
+  reporting its own ablation **INERT** rather than passing quietly. *(15802)*
 
 ## Large renders — what a canvas can hold, and what to do past it
 
@@ -1184,10 +1184,10 @@ it reports the size asked for and leaves the far end unwritten. See
 - `expMeta(o)` — the provenance object spliced in as `tEXt`: tool, timestamp, mark and line counts,
   family, spectrum, `devicePixelRatio`, cores, user-agent, and the run's own timings. *(12959)*
 - `bigDialog(text, goLabel)` — the friction dialogue. Resolves from its **buttons** and polls `open`,
-  never the `close` event, which was measured never firing in an embedded Chromium. *(16888)*
+  never the `close` event, which was measured never firing in an embedded Chromium. *(16906)*
 - `applyTiers()` — arms Large / Extreme, hides or disables sizes past `sideCap()` with the reason, forces
   render-only scope above `STRIP_FROM`, and writes the ceiling line — which states the largest size
-  actually on offer, not a probe's answer to a different question. *(16913)*
+  actually on offer, not a probe's answer to a different question. *(16931)*
 - `memNote()` — Extreme's hardware recommendation (16 GB, the machine it is known to finish on) plus
-  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(16990)*
-- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(24055)*
+  whatever `navigator.deviceMemory` says, reported beside it rather than used as a verdict. *(17008)*
+- `exportStreamed(W)` — drives the above with the shared progress line, clock and failure handling. *(24073)*
