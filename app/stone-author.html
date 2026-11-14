@@ -2020,7 +2020,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.329';
+  const BUILD = '2026.11.13.330';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -7932,7 +7932,21 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // IT ALSO SAVES THE WORK. expIdT builds two full-size canvases and the kit encodes both, which at
   // 16384 is two 671 MB allocations for a material that has nothing to put in them.
-  function materialAuthorsVectors() { return MATERIAL === 'stone'; }
+  // WHAT THIS MATERIAL PUBLISHES IN rich/. A boolean answered this a commit ago and was the wrong
+  // shape the moment a second material had something to say: two booleans can express a state that
+  // is nonsense - both at once - and the question is really WHICH set, not whether one of them.
+  //
+  //   'vectors'  stone. A list of authored strokes carrying identity, a parent and a parameter along
+  //              their length: the id map, the t map, paths.json and lines.svg are four views of it.
+  //   'labels'   glass. No strokes, but a LABEL at every point - which compartment was poured there -
+  //              which is the same kind of artifact answering the same question: what feature is this
+  //              pixel, and a legend saying what each index means.
+  //   'none'     wood. Its structure is grown from a ring field, so it has neither. A ring-INDEX map
+  //              is the obvious third answer and is one more slot in shade's guarded tier block; it
+  //              is not taken here, because which growth year a pixel is has no consumer yet.
+  function materialRichKind() {
+    return MATERIAL === 'stone' ? 'vectors' : MATERIAL === 'glass' ? 'labels' : 'none';
+  }
   // WHAT THE .ora's LAYER STACK IS. An OpenRaster file hands the author editable layers of their own
   // picture, so the stack should be the material's own compositing spine. Stone HAS one: `layers` is
   // an authored list with an on and an op per entry, and expBucket gates it by bucket. Wood's face is
@@ -15269,6 +15283,38 @@ self.onmessage = async (e) => {
       g2d = cxt; runs(L, t => { const v = Math.round(t * 255); return 'rgb(' + v + ',' + v + ',' + v + ')'; }, null, 1, false); }
     g2d = prev; return { ids: ci, t: ct, legend };
   }
+  // THE LABEL FIELD: which cane was poured at each pixel, as one image. This is the paint-by-numbers
+  // artifact - one picture carrying the label, and a legend saying what each index means - and it is
+  // the right place for it, which the mask set was not: there, luminance IS alpha, so a grey per
+  // label would have been read as six opacities. Here nothing reads it as coverage.
+  //
+  // THE SAME ENCODING STONE'S VEIN IDS USE, rgb(i & 255, i >> 8 & 255, i >> 16 & 255), so a consumer
+  // decodes both with one routine. 0 is bare glass, canes are 1-based, and the legend's keys are the
+  // very suffixes material.json carries - so index 1 is cane-a there and cane-a has a hex there, and
+  // the two files join on a name rather than on a position.
+  //
+  // IT MUST BE READ AT ITS OWN RESOLUTION. An index cannot be averaged: measured on this sheet, a
+  // 1/8 box filter leaves 12.05% of pixels blended and 1.57% nearest a colour that was never in
+  // their footprint. That is a property of indexed data, not of this file, and it is why the masks
+  // are one layer per cane rather than one image of grey levels.
+  function expCaneIds(Wv) {
+    const V = expViewOf(Wv), c = expCanvasOf(V), cx = c.getContext('2d');
+    const { buf } = glassLabelField(V);                  // the painter's own path: pane, UNF, glassLay
+    const im = cx.createImageData(V.w, V.h), d = im.data;
+    for (let i = 0, o = 0; i < buf.length; i++, o += 4) {
+      const k = buf[i];
+      d[o] = k & 255; d[o + 1] = (k >> 8) & 255; d[o + 2] = (k >> 16) & 255; d[o + 3] = 255;
+    }
+    cx.putImageData(im, 0, 0); return c;
+  }
+  // ALL SIX, NOT THE ONES THIS SHEET USES. The legend is a key to the encoding rather than a census
+  // of the picture, and it reads beside a mask set that publishes all six for the same reason: an
+  // entry that comes and goes with a slider is worse than one that is sometimes unused.
+  const caneLegend = () => {
+    const o = {};
+    for (let k = 0; k < GLASS_CANE_N; k++) o[k + 1] = 'cane-' + GLASS_CANE_LET[k];
+    return o;
+  };
   const pathsJSON = () => JSON.stringify({ slab: [SLAB_FT, +(SLAB_FT * H).toFixed(2)], lines: geo.lines.map(L => ({ id: L.id, major: !!L.major, parent: L.parent || null, at: L.at ?? null, pts: L.pts.map(p => [+p[0].toFixed(5), +p[1].toFixed(5)]), w: Array.from(L.w || []).map(x => +x.toFixed(6)) })) });
   function linesSVG() {
     const w = 1000, h = Math.round(1000 * H); let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">`;
@@ -15582,11 +15628,17 @@ self.onmessage = async (e) => {
       // THE RICH SET RIDES ON THE SAME QUESTION, asked once. Both makers go or both stay, because
       // the t map is meaningless without the ids to key it to - and names[] is built from the same
       // flag in the same breath, so the positional pair cannot come apart.
-      const vec = materialAuthorsVectors();
+      const rich = materialRichKind();
       const makers = [
         onTile => renderTiledStepped(W, onTile),
         ...slabSet.map(m => () => m.draw(viewSlab(W))),
-        ...(vec ? [() => { idt = expIdT(W); return idt.ids; }, () => idt.t] : []),   // paired on purpose: one call makes both
+        ...(rich === 'vectors' ? [() => { idt = expIdT(W); return idt.ids; }, () => idt.t] : []),   // paired on purpose: one call makes both
+        // THE LABEL FIELD WALKS THE FIELD AGAIN, which the vein maps do not: those are canvas
+        // strokes and this is UNF plus glassLay at every pixel. At this aspect that is W x 0.625W
+        // calls - the same walk the slab-aspect cane masks already pay, so the glass kit pays it
+        // twice. Shared caching would mean module state keyed on a view, and a stale cache here
+        // would publish one slab's labels over another's picture.
+        ...(rich === 'labels' ? [() => expCaneIds(W)] : []),
         // THE SQUARE SET IS NOT HERE ANY MORE. It has its own loop below, because it has its own
         // rules: a fixed 2048 whatever W is, a greyscale encode no canvas can do, a manifest, and a
         // layer list the MATERIAL chooses rather than this array. It still goes through the same
@@ -15594,7 +15646,8 @@ self.onmessage = async (e) => {
         () => expCompleted(oW), ...oOrder.map(b => () => expBucket(b, oW)),
       ];
       const names = ['render.png', ...slabSet.map(m => 'masks/' + m.suffix + '.png'),
-        ...(vec ? ['rich/vein-ids.png', 'rich/vein-t.png'] : [])];
+        ...(rich === 'vectors' ? ['rich/vein-ids.png', 'rich/vein-t.png'] : []),
+        ...(rich === 'labels' ? ['rich/cane-ids.png'] : [])];
       const bytes = [], steps = makers.length + 2;          // + packing + saving
       let msRender = 0, msEncode = 0;
       for (let i = 0; i < makers.length; i += EXP_PEAK) {
@@ -15672,10 +15725,15 @@ self.onmessage = async (e) => {
       // THE OTHER THREE VIEWS OF THE SAME LIST, under the same flag. idt is null when the flag is
       // false, so reading its legend here is also what would throw - the files and the maker that
       // fills them cannot be gated separately.
-      if (vec) {
+      // rich/legend.json IS WRITTEN BY WHICHEVER SET IS ACTIVE, under one name, because it answers
+      // one question in both: what does an index in the id image mean. The three vector-only files
+      // ride the vector branch, where idt is non-null.
+      if (rich === 'vectors') {
         files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(idt.legend)) });
         files.push({ name: 'rich/paths.json', data: te.encode(pathsJSON()) });
         files.push({ name: 'lines.svg', data: te.encode(linesSVG()) });
+      } else if (rich === 'labels') {
+        files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(caneLegend())) });
       }
       files.push({ name: 'source.json', data: te.encode(JSON.stringify(serialize())) });
       // The same figures the render PNG carries in its tEXt chunk, as a file you can read without a

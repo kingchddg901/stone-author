@@ -460,25 +460,56 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   // marble vein geometry in a wood kit, 70 legend entries, 70 paths, 73 SVG strokes, describing
   // veins nowhere in the picture. geo.lines does not care what material is selected.
   //
-  // RED WHEN: the flag stops being stone-only; or any ONE of the three places that reads it is
-  // gated separately - the makers, the names, or the data files. Splitting them gives either a
-  // positional mismatch between makers[] and names[], or a throw on idt.legend when idt is null.
+  // ONE QUESTION WITH THREE ANSWERS, not two booleans. This clause pinned a boolean -
+  // materialAuthorsVectors - and that was the wrong shape the moment a second material had something
+  // to say in rich/: two booleans can express a state that is nonsense, both at once. Glass has no
+  // strokes but it has a LABEL at every point, which is the same kind of artifact answering the same
+  // question, so the fork answers WHICH set rather than whether one of them.
+  //
+  // RED WHEN: a material's answer changes; the export reads the kind more than once; either set's
+  // makers and names come apart (they align by POSITION, so gating one and not the other packs one
+  // artifact under another's name); the vector-only data files leave the vector branch, where idt is
+  // the thing that would throw; or rich/legend.json stops being written by both.
   {
-    if (!/function materialAuthorsVectors\(\) \{ return MATERIAL === 'stone'; \}/.test(APP))
-      fail("materialAuthorsVectors is not stone-only - the rich set is four views of a list of authored STROKES, and wood's structure is grown while glass's is poured, so for them it published another material's vein geometry");
-    else ok('materialAuthorsVectors is asked at the fork, and is stone-only');
-    const flag = /const vec = materialAuthorsVectors\(\);/.test(APP);
-    const mk = /\.\.\.\(vec \? \[\(\) => \{ idt = expIdT\(W\); return idt\.ids; \}, \(\) => idt\.t\] : \[\]\),/.test(APP);
-    const nm = /\.\.\.\(vec \? \['rich\/vein-ids\.png', 'rich\/vein-t\.png'\] : \[\]\)\];/.test(APP);
-    const dat = /if \(vec\) \{\s*\n\s*files\.push\(\{ name: 'rich\/legend\.json'/.test(APP);
-    if (!flag) fail('the export does not read materialAuthorsVectors once into a flag');
-    else ok('the export reads it once into a flag');
-    if (!mk) fail('the rich MAKERS are not gated on that flag - the pair is all-or-nothing, because a t map with no ids to key it to says nothing');
-    else ok('both rich makers are gated on it, together');
-    if (!nm) fail('the rich NAMES are not gated on the same flag - names[] and makers[] align by position, so gating one and not the other packs a mask as a vein map');
-    else ok('the rich names are gated on the same flag');
-    if (!dat) fail('the rich DATA FILES are not gated on the same flag - idt is null when the flag is false, so reading idt.legend is what throws');
-    else ok('the three rich data files are gated on the same flag');
+    if (!/return MATERIAL === 'stone' \? 'vectors' : MATERIAL === 'glass' \? 'labels' : 'none';/.test(APP))
+      fail("materialRichKind does not answer vectors / labels / none - stone has authored strokes, glass has a label at every point, and wood's structure is grown from a ring field so it has neither");
+    else ok('materialRichKind answers vectors for stone, labels for glass, none for wood');
+    if (/materialAuthorsVectors/.test(APP))
+      fail('materialAuthorsVectors is still here - the boolean it replaced can be true alongside the label set, which is a state that means nothing');
+    else ok('the boolean it replaced is gone');
+    if (!/const rich = materialRichKind\(\);/.test(APP))
+      fail('the export does not read the kind once into a local');
+    else ok('the export reads the kind once');
+
+    const vmk = /\.\.\.\(rich === 'vectors' \? \[\(\) => \{ idt = expIdT\(W\); return idt\.ids; \}, \(\) => idt\.t\] : \[\]\),/.test(APP);
+    const vnm = /\.\.\.\(rich === 'vectors' \? \['rich\/vein-ids\.png', 'rich\/vein-t\.png'\] : \[\]\),/.test(APP);
+    if (!vmk) fail("the vector makers are not gated on rich === 'vectors' - the pair is all-or-nothing, because a t map with no ids to key it to says nothing");
+    else ok('both vector makers are gated on the vector answer, together');
+    if (!vnm) fail("the vector names are not gated on rich === 'vectors' - names[] and makers[] align by position, so gating one and not the other packs an artifact under another's name");
+    else ok('the vector names are gated on the same answer');
+
+    const lmk = /\.\.\.\(rich === 'labels' \? \[\(\) => expCaneIds\(W\)\] : \[\]\),/.test(APP);
+    const lnm = /\.\.\.\(rich === 'labels' \? \['rich\/cane-ids\.png'\] : \[\]\)\];/.test(APP);
+    if (!lmk) fail("the label maker is not gated on rich === 'labels'");
+    else ok('the label maker is gated on the label answer');
+    if (!lnm) fail("the label name is not gated on the same answer - position is the only thing joining it to its maker");
+    else ok('the label name is gated on the same answer');
+
+    // THE ENCODING IS STONE'S, so a consumer decodes both id images with one routine, and 0 means
+    // bare glass so the legend's 1-based keys are the mask suffixes material.json already carries.
+    if (!/d\[o\] = k & 255; d\[o \+ 1\] = \(k >> 8\) & 255; d\[o \+ 2\] = \(k >> 16\) & 255;/.test(APP))
+      fail("the label field does not use the same rgb index encoding as the vein ids - two encodings for one kind of artifact means two decoders");
+    else ok("the label field uses the vein ids' own rgb encoding");
+    if (!/o\[k \+ 1\] = 'cane-' \+ GLASS_CANE_LET\[k\];/.test(APP))
+      fail("the legend's keys are not the mask suffixes - index 1 has to be cane-a in both files, or nothing joins the legend to the colour material.json carries");
+    else ok('the legend keys are the mask suffixes, so it joins material.json on a name');
+
+    const vdat = /if \(rich === 'vectors'\) \{\s*\n\s*files\.push\(\{ name: 'rich\/legend\.json'/.test(APP);
+    const ldat = /\} else if \(rich === 'labels'\) \{\s*\n\s*files\.push\(\{ name: 'rich\/legend\.json'/.test(APP);
+    if (!vdat) fail("the vector data files are not on the vector branch - idt is null otherwise, and reading idt.legend is what throws");
+    else ok('the vector-only data files ride the vector branch');
+    if (!ldat) fail('rich/legend.json is not written for the label set - an id image with no legend is an image of numbers');
+    else ok('rich/legend.json is written by whichever set is active, under one name');
   }
 
   // THE .ora's LAYER STACK IS THE MATERIAL'S. An OpenRaster file hands the author editable layers of

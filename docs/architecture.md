@@ -147,7 +147,10 @@ downstream code can't tell them apart. That interchangeability is the point.
   thing: a list of authored strokes carrying identity, a parent, and a parameter along their length.
   Stone has that — its marks become `geo.lines`. Wood's structure is **grown** from a ring model
   around a wandering pith and glass's is **poured** into a mould, so neither has strokes to identify
-  or to run along, and `materialAuthorsVectors()` at the fork says so.
+  or to run along. `materialRichKind()` at the fork answers **which** rich set rather than whether
+  one of them: `'vectors'` for stone, `'labels'` for glass, `'none'` for wood. A boolean answered it
+  for one release and was the wrong shape the moment a second material had something to say — two
+  booleans can express a state that means nothing, both at once.
   **It was not the harmless empty files it was recorded as.** `geo.lines` does not care which
   material is selected: `Hero_Psyker` exported as wood and as stone gives a **different**
   `render.png` — so the material really was wood — and **byte-identical** vein ids, *t*-map, legend
@@ -157,10 +160,25 @@ downstream code can't tell them apart. That interchangeability is the point.
   marks, not of the material. Skipping them also skips the work: `expIdT` builds two full-size
   canvases and the kit encodes both, which at 16384 is two 671 MB allocations for nothing. Stone's
   own set is unchanged, 1,850,490 bytes before and after.
-  A glass **label field** (which cane at each pixel) and a wood **ring-index** map (which growth year)
-  are both buildable and cheap — the label is already `lay[0]`, and the ring index is one more slot
-  in `shade`'s guarded tier block. They are *different artifacts* with different meanings, though,
-  and publishing them under the `vein-` names would be the mistake this removes.
+  **Glass publishes the label field instead**, as `rich/cane-ids.png` plus `rich/legend.json`: it
+  has no strokes, but it has a label at every point — which compartment was poured there — which is
+  the same kind of artifact answering the same question. Same rgb index encoding as the vein ids
+  (`i & 255`, `i >> 8 & 255`, `i >> 16 & 255`), so one routine decodes both; `0` is bare glass and
+  the canes are 1-based, and the legend's keys are the very suffixes `material.json` carries, so
+  index 1 is `cane-a` in both files and `cane-a` has a hex in one of them. The two join on a **name**
+  rather than on a position. Measured on `disco-glass-fits`: six distinct indices, every one of them
+  joining the manifest, and the legend's six entries matching its six cane layers.
+  **This is the right place for a paint-by-numbers image and the mask set was not**: there luminance
+  *is* alpha, so a grey per label would have been read as six opacities. Nothing reads this as
+  coverage — but it still has to be read at its own resolution, because an index cannot be averaged:
+  measured, a 1/8 box filter leaves 12.05% of pixels blended and 1.57% nearest a colour that was
+  never in their footprint.
+  It costs a second walk of the field — the vein maps are canvas strokes, this is `F.UNF` plus
+  `glassLay` at every pixel, which is the same walk the slab-aspect cane masks already pay, so a
+  glass kit pays it twice. Sharing the cache would mean module state keyed on a view, and a stale one
+  there would publish one slab's labels over another's picture.
+  A wood **ring-index** map (which growth year a pixel is) is the obvious third answer and is one
+  more slot in `shade`'s guarded tier block. Not taken: it has no consumer yet.
 
 Loose coupling on purpose: no cross-repo build. This repo makes files; consumers copy them.
 
