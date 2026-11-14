@@ -86,6 +86,12 @@ const hook = `
     // layers are black on any slab this repo ships - a probe has to drive those controls itself
     // or it is measuring three masks it has never seen carry anything.
     expWoodTiers, get WOOD() { return WOOD; },
+    // AND THE GLASS LIST ITSELF, so a probe can ask which layer a label is PUBLISHED in rather
+    // than restating the demux and agreeing with its own arithmetic. The first version of the
+    // cells-aliasing probe hardcoded the modulo-CN demux and kept reporting a disagreement after
+    // the fix, because it compared the renderers against a formula the app no longer used. The hook
+    // is a TEMPLATE LITERAL, so a backtick in a comment here ends it and the rest becomes code.
+    glassMasks,
     // AND STONE'S SIDE OF THE SAME QUESTION. stoneScene is the only thing that can read the layer
     // list, the geometry and the override map, and the shader is useless to a gate without the scene
     // it was packed from. The differential that matters is renderOneTile against ITSELF - once

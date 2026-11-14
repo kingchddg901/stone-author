@@ -199,17 +199,36 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
     }
   }
 
-  // GLASS PUBLISHES THE SHEET PLUS ONE LAYER PER CANE, and the cane count is the SHEET'S, not six:
-  // glassScene clamps it and a slab may ask for two, so a fixed six would publish four black layers
-  // and spend the consumer's eight-layer budget on nothing.
+  // GLASS PUBLISHES THE SHEET PLUS ONE LAYER PER TOKEN - and this clause required the opposite until
+  // the cells aliasing was measured. It wanted the count read from the SHEET, on the reasoning that a
+  // two-cane slab should not spend the consumer's budget on four black masks. Two things were wrong
+  // with that. A cane layer corresponds to a TOKEN, glassA..F, so `cane-c` means wherever glassC was
+  // poured and is a stable thing to say; and the layer set mints the token namespace, so a set that
+  // moves with a slider breaks any theme that styled a layer which then vanished - the same reason
+  // wood ships all six of its tiers with three of them black.
+  //
+  // IT ALSO MADE THE ALIASING UNFIXABLE. With the count moving, the label and the layer index were
+  // different numbers and no wrap could reconcile them: measured on a three-cane gather holding a
+  // cell that names colour 5 - which the studio's colour button reaches, because it cycles 0..5
+  // whatever cordN is - 12,296 pixels painted cane 5 in BOTH renderers and were published as cane 2,
+  // with cane-f not published at all.
   const gl = listOf(/function glassMasks\(\) \{/, '\n  }\n');
   const wd = listOf(/function woodMasks\(\) \{/, '\n  }\n');
   if (!gl) fail('cannot find glassMasks');
   else {
     if (!/suffix: 'ground', primary: true/.test(gl)) fail('glass does not declare `ground` primary - the card surface paints one layer untinted and the consumer\'s flat-field warning cannot catch a field layer, so it must be declared, never defaulted');
     else ok('glass declares the ground layer primary explicitly');
-    if (!/const CN = glassScene\(\)\.F\.CN;/.test(gl)) fail('the glass cane count is not read from the scene - a fixed count publishes empty layers');
-    else ok('the glass cane count comes from the sheet, not a constant');
+    if (!/for \(let k = 0; k < GLASS_CANE_N; k\+\+\)/.test(gl)) fail('glass does not publish one layer per palette entry - a set that moves with cordN breaks any theme that styled a layer which then vanished, and it leaves the label and the layer index as different numbers, which is what made the cells aliasing unfixable');
+    else ok('glass publishes one layer per palette entry, so label and layer index are one number');
+    if (!/const GLASS_CANE_N = 6;/.test(APP)) fail('GLASS_CANE_N does not name the palette size - four readers needed it and three of them had their own answer');
+    else ok('GLASS_CANE_N names the palette size');
+    // THE NORMALISATION, AT THE SCENE BOUNDARY. Both field implementations read F.MC - the CPU's
+    // glassLay, and the arena the shader is packed from - so one normalisation there covers both,
+    // and every wrap downstream becomes a no-op that cannot drift away from it.
+    if (!/c: \(\(\(c\.c \| 0\) % GLASS_CANE_N\) \+ GLASS_CANE_N\) % GLASS_CANE_N/.test(APP)) fail("the scene does not normalise each cell's colour index - the raw stored c then reaches the field and every reader wraps it for itself, which is how a cane-5 region came to be published as cane-2");
+    else ok("the scene normalises each cell's colour index into the palette");
+    if (/buf\[o\] = lay\[0\] >= 0 \? \(lay\[0\] % /.test(APP)) fail('the mask still wraps the label itself - the field guarantees a legal palette index, so a second wrap here can only ever disagree with the one at the source');
+    else ok("the mask trusts the field's range instead of wrapping again");
     if (!/'cane-' \+ GLASS_CANE_LET\[k\]/.test(gl)) fail('the cane suffix is not derived from GLASS_CANE_LET - the token letter and the layer letter must be one fact');
     else ok('each cane suffix is derived from the shared palette letters');
   }

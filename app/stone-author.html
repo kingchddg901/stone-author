@@ -2020,7 +2020,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.326';
+  const BUILD = '2026.11.13.327';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -4207,6 +4207,11 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // text, and check-worker-core builds its free-name set from top-level const and let ONLY - so a
   // function declaration reaching a module array would be invisible to it. As written, the only free
   // name is COL, which the core already carries, and the gate can still see this one if that changes.
+  // HOW MANY CANES THERE ARE, as a name rather than a 6 retyped at each reader. Four places needed
+  // it and three of them had their own answer: the CPU painter took the label modulo canes.length,
+  // the shader modulo nCane - which IS canes.length - and the mask export modulo F.CN, the cane
+  // COUNT. Those are two different rules, and the third reader was the published one.
+  const GLASS_CANE_N = 6;
   const GLASS_CANE_HEX = () => ['#9fd8c8', '#2f6f8f', '#c8923f', '#8e4b6e', '#c4563f', '#d98324']
     .map((d, i) => COL['glass' + 'ABCDEF'[i]] || d);
   const GLASS_CANE_LET = 'abcdef';            // the layer suffix; cane-c and glassC are one cane
@@ -6695,7 +6700,13 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // centralising is what stops a seventh colour being added in one copy and not the other, and it
       // put a free name into a carried function in the same move: without this line the pool throws
       // on its first glass tile, which check-worker-core said the moment the name appeared.
-      GLASS_CANE_HEX,
+      //
+      // AND THE COUNT BESIDE IT, for the same reason and caught the same way: glassScene normalises
+      // each cell's colour index into the palette now, so it reaches for the palette's size, and
+      // without this line the pool throws on its first cells-mould tile. Second time this gate has
+      // priced a centralisation correctly - which is the argument for keeping both of these as
+      // const declarations rather than functions, since the gate cannot see a function declaration.
+      GLASS_CANE_HEX, GLASS_CANE_N,
       // glassScene is everything the sheet IS before a pixel is drawn, and paintGlassContent's
       // first line now calls it. Lifting it out of that function for the GPU path to share took
       // it out of the worker's reach in the same move, and the pool would have thrown on its
@@ -9877,7 +9888,20 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     for (const o of OPS) if (o && (o.k === 'spin' || o.k === 'roll' || o.k === 'blow')) lastW = o.k;
     const F = {
       OPS, MR: GLASS.mould === 'radial', PX: GLASS.paneX, PY: GLASS.paneY,
-      MC: GLASS.mould === 'cells' && Array.isArray(GLASS.cells) && GLASS.cells.length ? GLASS.cells : null,
+      // THE CELLS' COLOUR INDICES, RESOLVED HERE AND NOWHERE ELSE. This used to hand GLASS.cells
+      // straight through, so the raw `c` an author stored reached the field and every reader wrapped
+      // it for itself - at two different moduli. Measured on a three-cane gather holding a cell that
+      // names colour 5, which the studio's colour button reaches because it cycles 0..5 whatever
+      // cordN is: 12,296 pixels painted cane 5 in both renderers and were published as cane 2, while
+      // cane-f was not published at all. A mask of the wrong layer is a well-formed mask.
+      //
+      // Normalised into the palette's range on a COPY, so the author's own cells are untouched - and
+      // both field implementations read F.MC, the CPU's glassLay and the arena the shader is packed
+      // from, so one normalisation here covers both. Double modulo because a hand-edited negative
+      // index would otherwise stay negative, and -1 is the field's word for bare glass.
+      MC: GLASS.mould === 'cells' && Array.isArray(GLASS.cells) && GLASS.cells.length
+        ? GLASS.cells.map(c => ({ ...c, c: (((c.c | 0) % GLASS_CANE_N) + GLASS_CANE_N) % GLASS_CANE_N }))
+        : null,
       MW: Math.max(0.01, GLASS.mw),
       MOB: Math.max(0, Math.min(1, GLASS.oblong)),
       MB: GLASS.mould === 'blobs', MJ: Math.max(0, Math.min(1.4, GLASS.blobJit)),
@@ -15104,7 +15128,7 @@ self.onmessage = async (e) => {
   // lookup, which is the one honest way to show a fold finer than the grid; a LABEL cannot be
   // averaged at all, so a mask is the single-sample answer and says so.
   function glassLabelField(V) {
-    const sc = glassScene(), F = sc.F, n = F.CN;
+    const sc = glassScene(), F = sc.F;
     const buf = new Uint8Array(V.w * V.h), gth = [0, 0, 0], lay = [0, -1, 0, 1];
     for (let py = 0, o = 0; py < V.h; py++) {
       for (let px = 0; px < V.w; px++, o++) {
@@ -15115,10 +15139,18 @@ self.onmessage = async (e) => {
         F.UNF(ox, oy, F, gth);
         lay[0] = -1; lay[1] = -1; lay[2] = 0; lay[3] = 1;
         glassLay(gth[0], gth[1], F, lay);
-        buf[o] = lay[0] >= 0 ? (lay[0] % n) + 1 : 0;        // 0 is bare glass, canes are 1-based
+        // NO MODULUS HERE ANY MORE. The field guarantees a legal palette index now - the cells
+        // mould is normalised at the scene boundary and the periodic moulds emit 0..CN-1, which is
+        // inside the palette by construction - so a wrap at this end could only ever disagree with
+        // the one at that end. It did: this read `% F.CN` and the renderers read `% canes.length`.
+        buf[o] = lay[0] >= 0 ? lay[0] + 1 : 0;              // 0 is bare glass, canes are 1-based
       }
     }
-    return { buf, n };
+    // JUST THE BUFFER. It returned { buf, n } and n was F.CN, which only the demux that used to
+    // wrap at the cane count ever read. Leaving the field in place after removing its reader is
+    // how a ReferenceError waits for the one caller that draws a mask: nothing parses it wrong,
+    // and no gate draws one.
+    return { buf };
   }
   function glassMasks() {
     let field = null;                                      // per call, so nothing survives into the next export
@@ -15134,11 +15166,15 @@ self.onmessage = async (e) => {
     };
     const hex = GLASS_CANE_HEX(), op = Math.max(0, Math.min(1, GLASS.cords));
     const out = [{ suffix: 'ground', primary: true, colour: groundCol(), opacity: 1, draw: expGlassField }];
-    // AS MANY AS THE SHEET HAS, not as many as there are tokens. glassScene clamps the cane count
-    // to six and a slab may ask for two, so a fixed six would publish four all-black layers and
-    // spend the consumer's eight-layer budget on nothing.
-    const CN = glassScene().F.CN;
-    for (let k = 0; k < CN; k++)
+    // ONE LAYER PER TOKEN, not per cane in this gather - and that is a reversal. It published
+    // cordN-many layers on the reasoning that a two-cane slab should not spend the budget on four
+    // black masks. Two things were wrong with it. A cane layer corresponds to a TOKEN, glassA..F, so
+    // `cane-c` means wherever glassC was poured and is a stable thing to say; and the layer set
+    // mints the consumer's token namespace, so a set that moves with a slider breaks any theme that
+    // styled a layer which then vanished - the same reason wood ships all six of its tiers even when
+    // three of them are black. It also made the aliasing unfixable: with the count moving, the label
+    // and the layer index were different numbers, and no wrap could reconcile them.
+    for (let k = 0; k < GLASS_CANE_N; k++)
       out.push({ suffix: 'cane-' + GLASS_CANE_LET[k], colour: hex[k], opacity: op, draw: caneDraw(k) });
     return out;
   }
