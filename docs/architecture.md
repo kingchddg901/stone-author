@@ -52,10 +52,23 @@ downstream code can't tell them apart. That interchangeability is the point.
   a mask is coverage for ONE colour and a joint drawn into `early` would be painted in
   earlywood's — which is also what would let a consumer give it its own *scale*, if board size is
   ever to be dialled independently of grain size. It is appended at the single `materialMasks`
-  fork, **last**, since the cut is drawn over the material, and only when the floor is laid: with
-  no cut the mask is all black, a layer that draws nothing and spends one of the consumer's eight.
-  That takes the counts to **6 / 7 / 8**, and `MAX_LAYERS` is 8 with the check written `>
-  MAX_LAYERS`, so glass lands exactly *on* the cap rather than over it.
+  fork, **last**, since the cut is drawn over the material — and **always**, even with no cut to
+  draw. It shipped conditional for exactly one commit and that was wrong on his rule, stated the
+  same day: *"better to have dead tokens than have to figure out per export"*. A set that varies
+  with what the slab happens to be doing costs every reader the job of working out which layers a
+  given pack holds, and an all-black 2048 square is about 4 KB — the same bargain `mineral` and
+  `knot` already take on a board with neither. The withholding lives in `expJoints`, which returns
+  black when the floor is not laid: `tileInstances()` answers what the *pattern* would lay rather
+  than whether the floor is laid, so without that guard an un-laid slab would ship joint lines
+  that appear in no render. Verified in the bytes — one slab exported both ways produced a
+  **byte-identical `material.json`**, and the un-laid `joints.png` hashed the same as `mineral`
+  and `knot`, which are the all-black masks.
+  That takes the counts to **6 / 7 / 8**, always. `MAX_LAYERS` is 8 and the check is written `>
+  MAX_LAYERS`, so **glass now sits permanently on the cap**: there is no ninth glass layer after
+  this without that constant moving. The consumer's own note says the cap was sized for stone —
+  "marble is the shipped maximum at 4; slate needs 7" — so the single slot of headroom over slate
+  is exactly what this spends, and they report 7 masks already pressing the decode-burst retry
+  their loader carries.
   **What it does NOT yet carry is a floor laid from more than one board.** At `stage` 1 the
   render's own floor is a slab with lines on it — "the stone runs continuous across the joint and
   the cut is SHOWN rather than opened" — so publishing the cut matches the render exactly. Above

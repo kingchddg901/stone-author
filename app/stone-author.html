@@ -2021,7 +2021,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.14.336';
+  const BUILD = '2026.11.14.337';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -7884,15 +7884,24 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // AND THE CUT RIDES ON THE END OF WHICHEVER SET IT IS, which is why it is appended HERE rather
   // than written into all three lists: one fork already answers which material this is, and a
   // fourth material gets the cut for free. LAST because the cut is drawn OVER the material, which
-  // is the order the consumer composites in; absent entirely when the floor is not laid, because
-  // then there is no cut and an all-black mask would be a layer that draws nothing.
+  // is the order the consumer composites in.
   //
-  // IT TAKES THE COUNT TO 6 / 7 / 8 for stone, wood and glass. The consumer's MAX_LAYERS is 8 and
-  // its check is `> MAX_LAYERS`, so glass lands exactly ON the cap rather than over it - which is
-  // worth knowing before a ninth layer is ever proposed for glass.
+  // ALWAYS, EVEN WITH NO CUT TO DRAW. It shipped conditional for one commit and that was wrong on
+  // his rule, stated the same day: "better to have dead tokens than have to figure out per
+  // export". A set that varies with what the slab happens to be doing costs every reader the job
+  // of working out which layers a given pack holds, and an all-black 2048 square is about 4 KB -
+  // the same bargain `mineral` and `knot` already take on a board with neither. expJoints returns
+  // black on an un-laid slab rather than this fork withholding the layer.
+  //
+  // IT TAKES THE COUNT TO 6 / 7 / 8 for stone, wood and glass, ALWAYS. The consumer's MAX_LAYERS
+  // is 8 and its check is `> MAX_LAYERS`, so glass now sits permanently ON the cap: there is no
+  // ninth glass layer after this, ever, without that constant moving. Their own note says the cap
+  // was sized for stone - "marble is the shipped maximum at 4; slate needs 7" - so the one slot
+  // of headroom over slate is exactly what this spends, and they report 7 masks already pressing
+  // the decode-burst retry their loader carries.
   function materialMasks() {
     const base = MATERIAL === 'wood' ? woodMasks() : MATERIAL === 'glass' ? glassMasks() : stoneMasks();
-    return layTiles ? base.concat({ suffix: 'joints', colour: GROUT, opacity: 1, draw: V => expJoints(V) }) : base;
+    return base.concat({ suffix: 'joints', colour: GROUT, opacity: 1, draw: V => expJoints(V) });
   }
   // AND ITS NAMESPACE WITH THE CONSUMER. The id mints every theme token and is what a room stores,
   // so changing it dangles every room already using the pack - silently, because the consumer's
@@ -15032,6 +15041,11 @@ self.onmessage = async (e) => {
     const V = expViewOf(Wv), c = expCanvasOf(V), cx = c.getContext('2d');
     cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = '#000'; cx.fillRect(0, 0, c.width, c.height);
     cx.setTransform(V.k, 0, 0, V.k, V.dx, 0); cx.lineCap = 'round'; cx.lineJoin = 'round';
+    // AN UN-LAID SLAB HAS NO CUT, and tileInstances() will not say so - it answers what the
+    // PATTERN would lay, not whether the floor is laid, so without this the mask would carry
+    // joint lines that appear in no render. Black is returned rather than the layer withheld,
+    // because the published set is fixed per material.
+    if (!layTiles) return c;
     const inst = tileInstances(), chips = chipMap(), px = 1 / V.k;
     // FLOORED AT THE MASK'S OWN PIXEL, the same Math.max the render uses - jointIn() is ZERO for
     // unglazed wood, so a butt joint would otherwise stroke nothing at all.

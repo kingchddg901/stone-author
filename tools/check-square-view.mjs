@@ -457,12 +457,19 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
       const mm = /function materialMasks\(\) \{([\s\S]*?)\n  \}/.exec(APP);
       if (!mm) fail('cannot find materialMasks');
       else {
-        if (!/layTiles \? base\.concat\(\{ suffix: 'joints'/.test(mm[1]))
-          fail("materialMasks does not append the joints layer when the floor is LAID - a plank pattern then reaches the render and is dropped at the export boundary, which is measurable as render.png moving while every mask stays byte-identical");
+        if (!/base\.concat\(\{ suffix: 'joints'/.test(mm[1]))
+          fail("materialMasks does not append the joints layer - a plank pattern then reaches the render and is dropped at the export boundary, measurable as render.png moving while every mask stays byte-identical");
         else ok('the cut is appended to whichever mask set it is, at the one fork');
-        if (!/: base;/.test(mm[1]))
-          fail('materialMasks publishes joints unconditionally - with no cut the mask is all black, which is a layer that draws nothing and spends one of the consumer\'s eight');
-        else ok('an un-laid slab publishes no joints layer');
+        // UNCONDITIONAL NOW, WHICH INVERTS WHAT THIS CLAUSE ASSERTED for exactly one commit. His
+        // rule: the published set is FIXED per material, because a set that varies with what the
+        // slab happens to be doing costs every reader the job of working out which layers a given
+        // pack holds. The withholding moved INTO expJoints, which returns black when there is no cut.
+        if (/layTiles \?/.test(mm[1]))
+          fail('materialMasks withholds the joints layer again - the published set is fixed per material, so an un-laid slab ships an all-black cut rather than one layer fewer');
+        else ok('the cut ships whatever the slab is doing, so the set is fixed');
+        if (!/if \(!layTiles\) return c;/.test(APP))
+          fail('expJoints no longer returns black on an un-laid slab - tileInstances() answers what the PATTERN would lay rather than whether the floor IS laid, so the mask would carry joint lines that appear in no render');
+        else ok('an un-laid slab ships a black cut, not lines from a floor it never laid');
         if (!/base\.concat\(/.test(mm[1]))
           fail('the joints layer is no longer appended to the END - the consumer composites bottom to top and the cut is drawn OVER the material, so it must be last');
         else ok('the cut rides last, which is the order the cut is drawn in');
@@ -470,16 +477,22 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
       const ej = /function expJoints\(Wv\) \{([\s\S]*?)\n  \}/.exec(APP);
       if (!ej) fail('cannot find expJoints - the cut has no coverage builder');
       else {
-        if (!/tileInstances\(\)/.test(ej[1]))
+        // CODE, NOT THE BODY. expJoints' own comment says "tileInstances() will not say so", which
+        // satisfied the test below on its own and left the clause unable to go red - the ablation
+        // for it came back GREEN, which is how this was found. Full-line comments are dropped; a
+        // trailing comment on a line of code would still count, which is the narrower hole and is
+        // said here rather than left to be rediscovered.
+        const ejCode = ej[1].split(String.fromCharCode(10)).filter(l => !/^\s*\/\//.test(l)).join('\n');
+        if (!/tileInstances\(\)/.test(ejCode))
           fail('expJoints does not read tileInstances - the cut geometry would be a second copy of the one cutOverlay draws, and the mask and the picture would drift apart silently');
         else ok('the cut mask reads the same instances the render strokes');
-        if (!/strokeStyle = '#fff'/.test(ej[1]) || !/fillStyle = '#000'/.test(ej[1]))
+        if (!/strokeStyle = '#fff'/.test(ejCode) || !/fillStyle = '#000'/.test(ejCode))
           fail('expJoints is not white-on-black - a mask is COVERAGE, and anything else here is a colour the consumer will multiply a second time');
         else ok('the cut mask is coverage: white on black');
-        if (/edgeFinish/.test(ej[1]))
+        if (/edgeFinish/.test(ejCode))
           fail("expJoints calls edgeFinish - that is shading rather than a line, it reads G.lightAngle and tints with lightRGB(), so a coverage mask carrying it would publish the LIGHT; a bevel is a chamfer on the board, not a wider joint");
         else ok('the cut mask carries the line and not the shading');
-        if (!/Math\.max\(px, inFr\(jointIn\(\)\)\)/.test(ej[1]))
+        if (!/Math\.max\(px, inFr\(jointIn\(\)\)\)/.test(ejCode))
           fail('the cut mask does not floor its width at the mask\'s own pixel - jointIn() is ZERO for unglazed wood, so a butt joint would stroke nothing at all and the layer would ship empty');
         else ok('the cut is floored at a pixel, as the render floors it');
       }
