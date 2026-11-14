@@ -483,6 +483,7 @@
  "opt.fmt-png": "PNG",
  "opt.fmt-tiff": "TIFF",
  "opt.exp-all": "全部",
+ "opt.exp-pack": "只要材质包",
  "opt.exp-render": "只要渲染图",
  "sec.banding": "条带",
  "sec.breccia": "角砾岩",

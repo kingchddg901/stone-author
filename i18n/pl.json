@@ -468,6 +468,7 @@
  "opt.fmt-png": "PNG",
  "opt.fmt-tiff": "TIFF",
  "opt.exp-all": "Wszystko",
+ "opt.exp-pack": "Tylko paczka materiału",
  "opt.exp-render": "Tylko render",
  "sec.banding": "Pasmowanie",
  "sec.breccia": "Brekcja",

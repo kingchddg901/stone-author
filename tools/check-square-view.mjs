@@ -143,7 +143,11 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   const calls = [...APP.matchAll(/viewSquare\(SQUARE_MASK\)/g)].length;
   if (calls !== 1) fail(`${calls} call(s) to viewSquare(SQUARE_MASK); the square set is one loop over materialMasks() and wants exactly one`);
   else ok('one square view, iterated over the material\'s own layer list');
-  if (!/const sqMasks = materialMasks\(\);/.test(APP)) fail('the square set is not built from materialMasks() - the layer list is the material\'s to choose and nothing else may enumerate it');
+  // THIS CLAUSE AND THE MANIFEST ONE BELOW MOVED, not changed: the square set's builder was lifted
+  // into packFiles so the pack-only scope could write the same bytes without rendering anything
+  // else, and both named lines that used to be in exportAll. The property is the same - one builder
+  // reads the material's list, and the manifest goes with the masks unguarded.
+  if (!/sqMasks = materialMasks\(\);/.test(APP)) fail('the square set is not built from materialMasks() - the layer list is the material\'s to choose and nothing else may enumerate it');
   else ok('the square set comes from materialMasks()');
 
   // THE NAME IS THE SUFFIX. A literal file name beside a suffix is two sources for one fact, and the
@@ -270,7 +274,7 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   else ok('the manifest emits color and opacity on every layer, unconditionally');
 
   // A MANIFEST GOES WITH THEM, declaring the schema the consumer checks first.
-  const push = /^\s*files\.push\(\{ name: 'masks\/square\/material\.json'/m.test(APP);
+  const push = /^\s*out\.push\(\{ name: 'material\.json'/m.test(APP);
   if (!push || !/schema: 1, id: materialPackLatch\(\)/.test(APP))
     fail('the square set ships without an UNGUARDED schema-1 manifest - masks with no descriptor are not a pack, and a push behind a condition leaves the path literal in the file while nothing writes it');
   else ok('a schema-1 manifest ships beside the square masks, unguarded');
@@ -579,6 +583,64 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
         fail('the whole-face layer does not lay its ground - it is the bottom of a one-layer stack, and what is under it is nothing');
       else ok('the whole-face layer lays its ground, as the base bucket does');
     }
+  }
+
+  // THE PACK HAS A SCOPE OF ITS OWN, and three things make it one rather than a second copy.
+  //
+  // ONE BUILDER. packFiles was LIFTED out of the kit, not copied: a second spelling of a manifest
+  // builder is how the kit's pack and the standalone pack come to disagree about a field, and the
+  // disagreement would be invisible because both would be well-formed packs. Verified by bytes - all
+  // eight files hash identically out of the kit and out of the pack zip.
+  //
+  // BARE NAMES OUT, so the caller owns the layout: the kit files them under masks/square/ and the
+  // pack scope under a folder named for the pack id, which is what makes that zip a drop-in rather
+  // than something to dig through. The consumer's layout is <pack-dir>/material.json plus the masks
+  // and the directory name is free-form, so the id satisfies it by construction.
+  //
+  // AND IT IS ANSWERED FIRST. The pack's masks are 2048 square whatever the width selector reads and
+  // greyscale PNG whatever the format selector reads, so every width and format decision below must
+  // come after it. This ordering was WRONG on the first pass: the floor-size refusal sat four lines
+  // above the dispatch, so Lay tiles plus a width over STRIP_FROM refused a pack for a width the
+  // pack never uses. Placement is exactly the kind of claim that reads correct and sits too low.
+  //
+  // RED WHEN: the kit grows its own copy of the builder; packFiles learns a directory; the scope goes
+  // back to a boolean; or any width or format decision moves above the pack's own line.
+  {
+    const pf = /async function packFiles\(base, span\) \{([\s\S]*?)\n  \}/.exec(APP);
+    if (!pf) fail('cannot find packFiles');
+    else if (/masks\/square/.test(pf[1]))
+      fail("packFiles names a directory - it returns BARE names so the kit and the pack scope can file them differently, and a path inside it would make one of those two layouts a lie");
+    else ok('packFiles returns bare names and knows no directory');
+    if (!/for \(const f of await packFiles\(makers\.length \/ steps, 0\)\)\s*\n\s*files\.push\(\{ name: 'masks\/square\/' \+ f\.name, data: f\.data \}\);/.test(APP))
+      fail("the kit does not file packFiles' output under masks/square/ - a second copy of the builder here is how the two packs come to disagree about a field, invisibly");
+    else ok('the kit files the one builder\'s output under masks/square/');
+    if (!/const fs = await packFiles\(0, 0\.9\), dir = materialPackLatch\(\) \+ '\/';/.test(APP))
+      fail('the pack scope does not file the same output under a folder named for the pack id - that folder name is what makes the zip a drop-in');
+    else ok('the pack scope files it under a folder named for the pack id');
+
+    if (!/async function exportAll\(W, scope\) \{/.test(APP))
+      fail('exportAll still takes a boolean - a boolean cannot carry a third scope, which is the shape the rich seam went through twice before it settled');
+    else ok('exportAll takes a scope, not a boolean');
+    if (!/if \(scope === 'render'\) \{/.test(APP)) fail("the render branch does not test scope === 'render'");
+    else ok("the render branch tests the scope by name");
+    if (!/if \(scope === 'pack'\) \{/.test(APP)) fail("there is no pack branch in exportAll");
+    else ok('exportAll has a pack branch');
+
+    // ORDER, MEASURED BY POSITION. The pack's line must come before every width and format decision.
+    const at = (re) => { const m = re.exec(APP); return m ? m.index : -1; };
+    const pack = at(/if \(what === 'pack'\) return exportAll\(SQUARE_MASK, 'pack'\);/);
+    const floor = at(/if \(layTiles && fmt !== 'tiff' && W > STRIP_FROM\) \{/);
+    const tiff = at(/if \(fmt === 'tiff'\) return exportTiff\(W\);/);
+    const strip = at(/if \(W <= STRIP_FROM\) return exportAll\(W, what\);/);
+    if (pack < 0) fail("the dispatch never answers the pack scope");
+    else if (floor < 0 || tiff < 0 || strip < 0) fail('cannot find the width and format dispatch to compare against');
+    else if (!(pack < floor && pack < tiff && pack < strip))
+      fail(`the pack scope is answered at ${pack}, after a width or format decision (floor-size ${floor}, tiff ${tiff}, strip ${strip}) - a choice that cannot reach the pack's output must not be able to refuse it, and the floor-size refusal did exactly that on the first pass`);
+    else ok('the pack scope is answered before every width and format decision');
+
+    if (!/<option value="pack" data-i18n="opt\.exp-pack">Just the material pack<\/option>/.test(APP))
+      fail('the scope menu has no pack option, or it is not routed through opt.exp-pack');
+    else ok('the scope menu offers the pack option, routed');
   }
 
   // AND THE .ora OFFSET IS STILL DERIVED. The .ora layers sit directly after the named PNGs, so a

@@ -490,6 +490,7 @@
  "opt.fmt-png": "PNG",
  "opt.fmt-tiff": "TIFF",
  "opt.exp-all": "Her şey",
+ "opt.exp-pack": "Yalnızca malzeme paketi",
  "opt.exp-render": "Yalnızca render",
  "sec.banding": "Bantlanma",
  "sec.breccia": "Breş",

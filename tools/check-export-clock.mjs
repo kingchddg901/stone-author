@@ -111,8 +111,8 @@ function offenders(src) {
 {
   // Only the DONE messages. expClock() reads it inline too and must - it is the running display.
   const n = (SRC.match(/exp\.done-[^\n]*expElapsed\(Date\.now\(\) - expT0\)/g) || []).length;
-  ok('three done messages read the clock inline, each after a non-blocking save', n === 3,
-     n + ' inline, plus expClock which ticks and must stay inline');
+  ok('four done messages read the clock inline, each after a non-blocking save', n === 4,
+     n + ' inline (render, kit, pack, resume), plus expClock which ticks and must stay inline');
 }
 
 // ---- the freeze must SURVIVE the next status update --------------------------------------------------

@@ -497,6 +497,7 @@
  "opt.fmt-png": "PNG",
  "opt.fmt-tiff": "TIFF",
  "opt.exp-all": "Tout",
+ "opt.exp-pack": "Seulement le pack de matière",
  "opt.exp-render": "Seulement l'image",
  "sec.banding": "Rubanement",
  "sec.breccia": "Brèche",

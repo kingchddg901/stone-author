@@ -468,6 +468,7 @@
  "opt.fmt-png": "PNG",
  "opt.fmt-tiff": "TIFF",
  "opt.exp-all": "Všechno",
+ "opt.exp-pack": "Jen materiálový balíček",
  "opt.exp-render": "Jen render",
  "sec.banding": "Pruhování",
  "sec.breccia": "Brekcie",

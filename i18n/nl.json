@@ -490,6 +490,7 @@
  "opt.fmt-png": "PNG",
  "opt.fmt-tiff": "TIFF",
  "opt.exp-all": "Alles",
+ "opt.exp-pack": "Alleen het materiaalpakket",
  "opt.exp-render": "Alleen de render",
  "sec.banding": "Bandering",
  "sec.breccia": "Breccie",

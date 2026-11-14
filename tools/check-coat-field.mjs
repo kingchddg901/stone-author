@@ -408,7 +408,7 @@ const ABLATIONS = [
    a => a.replace("ax.fillStyle = COL.innerColour || '#ffcf8f';", "ax.fillStyle = '#ffffff';")],
   // one per export entry: the bug was ONE path forgotten, so each must be able to go red alone
   ['exportAll stops building the field', 'every-export-that-drops-the-bleed-builds-the-field',
-   a => a.replace('      await buildCoatField(W, false);\n      if (only) {', '      if (only) {')],
+   a => a.replace('      await buildCoatField(W, false);\n      if (scope === \'render\') {', '      if (scope === \'render\') {')],
   ['exportStreamed stops building the field', 'every-export-that-drops-the-bleed-builds-the-field',
    a => a.replace("      await buildCoatField(W, false);                       // stripPlan's", "      // stripPlan's")],
   ['exportTiff stops building the field', 'every-export-that-drops-the-bleed-builds-the-field',

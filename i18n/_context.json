@@ -2244,6 +2244,9 @@
   "opt.exp-all": {
     "where": "option in the what-to-export menu: the full kit — render, masks and layered file"
   },
+  "opt.exp-pack": {
+    "where": "an option in the export scope menu, beside \"Everything\" and \"Just the render\". It writes only the drop-in material pack - the 2048-square greyscale masks and their descriptor - in a folder named for the pack. Follow this pack's own wording for \"Just the render\"."
+  },
   "opt.exp-render": {
     "where": "option in the what-to-export menu: the finished picture only, as one PNG"
   },

@@ -483,6 +483,7 @@
  "opt.fmt-png": "PNG",
  "opt.fmt-tiff": "TIFF",
  "opt.exp-all": "Semuanya",
+ "opt.exp-pack": "Hanya paket materialnya",
  "opt.exp-render": "Hanya rendernya",
  "sec.banding": "Pita",
  "sec.breccia": "Breksi",

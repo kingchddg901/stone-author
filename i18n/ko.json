@@ -483,6 +483,7 @@
  "opt.fmt-png": "PNG",
  "opt.fmt-tiff": "TIFF",
  "opt.exp-all": "전부",
+ "opt.exp-pack": "재질 팩만",
  "opt.exp-render": "렌더만",
  "sec.banding": "띠무늬",
  "sec.breccia": "각력암",

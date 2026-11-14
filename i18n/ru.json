@@ -504,6 +504,7 @@
  "opt.fmt-png": "PNG",
  "opt.fmt-tiff": "TIFF",
  "opt.exp-all": "Всё",
+ "opt.exp-pack": "Только пакет материала",
  "opt.exp-render": "Только рендер",
  "sec.banding": "Полосчатость",
  "sec.breccia": "Брекчия",
