@@ -165,7 +165,7 @@ Order in `draw()`: ground → (backlit **xor** daylight content) → `applyCoat`
 
 ## 10. Export / serialize
 
-- **`exportAll(W)`** → one store-zip: `render.png` (`expCompleted`), `masks/` (slab aspect at `W`, one PNG per layer the **material** publishes — stone's five, glass's seven, wood none), `masks/square/` (always 2048², whatever `W` is — one greyscale PNG per layer the **material** publishes, plus `material.json`), `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, `slab.ora` (capped `min(W,2048)`). The square set has its own loop rather than a slot in the paced `makers[]`/`names[]` pair: its length moves with the material, its encode is a hand-written greyscale one, and it ships a manifest.
+- **`exportAll(W)`** → one store-zip: `render.png` (`expCompleted`), `masks/` (slab aspect at `W`, one PNG per layer the **material** publishes — stone's five, glass's seven, wood's six), `masks/square/` (always 2048², whatever `W` is — one greyscale PNG per layer the **material** publishes, plus `material.json`), `rich/{vein-ids,vein-t}.png` + `legend.json` + `paths.json`, `lines.svg`, `source.json`, `slab.ora` (capped `min(W,2048)`). The square set has its own loop rather than a slot in the paced `makers[]`/`names[]` pair: its length moves with the material, its encode is a hand-written greyscale one, and it ships a manifest.
 - **The square set is a WINDOW, not a resample.** Draw space is 1 wide and `H` tall and the export transform scales both
   axes by the same number, so a square needs no new rasterisation — only a different canvas and a different transform.
   `viewSquare(S)` asks for `S × S` at scale `S / H` with the x origin at `(1-H)/2`: the largest centred square of the

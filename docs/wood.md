@@ -512,13 +512,38 @@ section all still hold; the live backlog is *Known debts* above, not this headin
 accurate — and all of it is now held rather than queued. Oak ray fleck was built CPU-complete and
 dropped on the look. The list stands as a record of what is true, not as a backlog.
 
-**The one thing wood could still use.** This repo’s output contract is greyscale masks plus metadata,
-colour never stored (see [`architecture.md`](architecture.md)); Vacuum Agent reads four of them at
-2048². **Wood emits none.** The tiers are not missing — the ring value, the heartwood fraction, the
-stain, the gloss multiplier and the char are all scalars `shade` already has — but `shade` combines
-them inline and returns RGB, so there is no seam to tap a mask from. Splitting it into *produce
-fields* plus *combine* is a hot-loop change with the WGSL port mirroring it. Named here so the cost
-is known before anyone calls it small.
+**Wood emits six masks now, and the cost named here was for the wrong fix.** The paragraph this
+replaces was right that the tiers are not missing — the ring value, the heartwood fraction and the
+stain are scalars `shade` already has — and right that `shade` combines them inline and returns RGB.
+Where it went wrong was the conclusion that there is therefore **no seam**: it priced the only
+implementation it had considered, *produce fields* plus *combine*, as a hot-loop change with the
+WGSL port mirroring it, and then read that price back as an absence.
+
+The seam was already there. The board painter passes `out` to `shade` once per pixel at full
+resolution, and it was three slots wide. A caller that wants the tiers hands in a wider buffer;
+`shade` fills slots 3–7 behind `if (out.length > 3)`; both painters allocate `[0, 0, 0]`, so the
+guard reads false for every rendered pixel and the combine is untouched. No split, and no shader
+change, because the masks are built on the CPU.
+
+Measured against the commit before, on a wood board at 1024: painted pixels **byte-identical** (FNV
+`3aa91700` from both builds), and **+2.1%** median render cost against a **43.4%** spread within
+either build — which is to say unmeasurable here. The first attempt at that number read +5.1% and
+was wrong: it timed the two builds in sequence, so it measured the machine warming up. Interleaving
+the renders is what separated them.
+
+The six are `ground` (the board's extent — `false` from `shade` is the live edge, where a plank set
+wider than its log runs off the end of the wood), `early`, `late`, `heart`, `mineral` and `knot`.
+`early` is the primary: the ground is 255 everywhere on a plank inside its log, so untinted it is a
+white card, while earlywood covers the board too and carries the ring banding — 228.97 mean at
+contrast 39.4, mid-band. `late` is `1 - early`, because that is what the colour does. A knot excludes
+the rest, because the knot block assigns the colour rather than blending into it.
+
+**Three of the six are black on every slab this repo ships**, since `mineral` is 0 and `dev2Knot` is
+0 in the defaults, so each was driven in turn rather than assumed: mineral reaches 11.74% of a square
+at 0.8, and the knot needed a sweep to find a board that cuts one at all — `dev2Angle 90` with the
+plane at 0, for 0.24%. Four earlier configurations gave a black knot mask, and the discriminator was
+the **colour**: it did not move either, so there was no knot in those boards and the mask was right
+to say zero.
 
 ### The invariants, and what each one cost to learn
 

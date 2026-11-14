@@ -6,7 +6,12 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = join(here, '..', 'app', 'stone-author.html');
+// OPTIONAL ARGUMENTS: node inject.mjs [srcHtml] [outHtml]. Bare, it does exactly what it always
+// did. Given a source it can hook ANOTHER build of the app - which is what a before/after pixel
+// differential needs, because the alternative is writing HEAD's file over app/ and trusting the
+// restore. The ABL flag keeps its own name so nothing that calls it that way has to change.
+const ARGS = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const src = ARGS[0] || join(here, '..', 'app', 'stone-author.html');
 const outDir = join(here, 'dist');
 mkdirSync(outDir, { recursive: true });
 
@@ -77,6 +82,10 @@ const hook = `
     // modulator half of this is unreachable through a real export and a probe that cannot see
     // the effect is not a measurement - this is how the brec/cloud/band path gets exercised.
     expStoneField,
+    // AND WOOD'S TIER DEMUX. mineral is 0 and dev2Knot is 0 in the defaults, so three of the six
+    // layers are black on any slab this repo ships - a probe has to drive those controls itself
+    // or it is measuring three masks it has never seen carry anything.
+    expWoodTiers, get WOOD() { return WOOD; },
     // AND STONE'S SIDE OF THE SAME QUESTION. stoneScene is the only thing that can read the layer
     // list, the geometry and the override map, and the shader is useless to a gate without the scene
     // it was packed from. The differential that matters is renderOneTile against ITSELF - once
@@ -218,6 +227,6 @@ for (const [open, flag] of [[BL_PLACE, '__ABL_PLACE'], [BL_BLOOM, '__ABL_BLOOMB'
 const idx = s.lastIndexOf('})();');
 if (idx < 0) { console.error('could not find the app IIFE end (})();)'); process.exit(1); }
 s = s.slice(0, idx) + hook + s.slice(idx);
-const out = join(outDir, ABL ? 'stone-author.ablbloom.html' : 'stone-author.hooked.html');
+const out = ARGS[1] || join(outDir, ABL ? 'stone-author.ablbloom.html' : 'stone-author.hooked.html');
 writeFileSync(out, s, 'utf8');
 console.log('injected __sa hook ->', out, '(' + s.length + ' bytes)');

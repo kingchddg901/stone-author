@@ -31,16 +31,33 @@ downstream code can't tell them apart. That interchangeability is the point.
   **centred square** of the slab — 5 × 5 ft of the 8 × 5 ft picture, 62.5% of its width — not the
   whole slab fitted to a square, so the grain keeps its proportions.
   **How many, and which, is the material's answer** (`materialMasks`, at the material fork), not a
-  fixed four: stone publishes **five** (base / major / minor / micro / web) and **glass publishes
-  seven** — the sheet, then one layer per cane. Wood publishes **none**, and that is the honest
-  state rather than an omission: its tiers live as scalars inside `shade` with no seam to tap, and
-  what it exported before this was stone's vein geometry drawn from a wood slab.
+  fixed four: stone publishes **five** (base / major / minor / micro / web), **glass seven** (the
+  sheet, then one layer per cane) and **wood six** (the board, then one per tier: early / late /
+  heart / mineral / knot). What each exported before this was stone's vein geometry drawn from a
+  wood or glass slab — a picture of marble handed over as a description of oak, undetectable
+  because a mask of the wrong material is a perfectly well-formed mask.
   **Every layer is colour type 0, 8-bit** — hand-encoded, because no canvas will produce greyscale
   and the consumer refuses anything else — and every layer carries a colour and an opacity, both of
   which the consumer requires. Exactly one is declared `primary`, always explicitly: the consumer's
   own flat-field warning sits at contrast 1.5 while the shipped field band starts at 2.8, so it can
   never catch a defaulted field layer. Verified against the shipped validator, not a copy of it:
-  `ma-glass` 7 layers, primary `ground` contrast 4.2; `ma-stone` 5 layers, primary `base` 79.5.
+  `ma-glass` 7 layers, primary `ground` 4.2; `ma-stone` 5, primary `base` 79.5; `ma-wood` 6,
+  primary `early` 39.3 — the only one of the three that lands mid-band rather than at an edge.
+  **Wood's seam is the `out` buffer, not a produce/combine split.** `shade` was said to have no seam
+  to tap because it combines the tiers inline and returns RGB, and splitting it was priced as a
+  hot-loop change with the WGSL port mirroring it. There was a third option: the board painter
+  already passes `out` per pixel at full resolution, and it was three slots wide. A caller that
+  wants the tiers hands in a wider one, `shade` fills slots 3–7 behind `if (out.length > 3)`, and
+  both painters allocate `[0, 0, 0]` so the guard is false for every rendered pixel. Measured
+  against the previous commit on a wood board at 1024: painted pixels **byte-identical** (FNV
+  `3aa91700` from both builds), cost **+2.1%** median against a **43.4%** spread within either
+  build — unmeasurable on this bench. No shader change, because the masks are CPU-only.
+  **early and late are one number read two ways**, because the ring is a lerp between them: measured
+  228.97 + 25.38 = 254.36 against a board coverage of 255, so the pair tiles the board with nothing
+  left over. A knot **excludes** the tiers its colour replaced, since the knot block assigns rather
+  than blends. All six layers ship on every wood pack even when a control is off and the mask comes
+  out black: the layer set mints the token namespace, so a layer that appears and disappears with a
+  setting would break any theme that had styled it.
   **ONE list serves BOTH aspects.** The slab-aspect `masks/*.png` used to be five literal builders
   in the export, all of them stone, so a glass slab's `masks/major.png` carried marble veins drawn
   from a glass picture and a wood slab's did too — the same defect the square set had, surviving in

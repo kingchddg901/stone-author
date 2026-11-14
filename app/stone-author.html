@@ -2018,7 +2018,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.324';
+  const BUILD = '2026.11.13.325';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -7861,12 +7861,14 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // exporter takes a list and never learns what is on it. Each entry carries its own drawer, so a
   // material that can share one rasterising pass across several layers does so privately.
   //
-  // WOOD RETURNS NOTHING, ON PURPOSE. Its tiers live as scalars inside shade with no seam to tap
-  // them yet, and what it exported until now was stone's vein geometry drawn from a wood slab - a
-  // picture of marble handed over as a description of oak, which no consumer could detect. An empty
-  // list says NOT YET where four wrong files said HERE YOU ARE.
+  // WOOD PUBLISHES SIX NOW. It returned an empty list for one release, on the record that its tiers
+  // "live as scalars inside shade with no seam to tap them" - which was a description of the
+  // plumbing mistaken for a conclusion. The seam is the `out` buffer the board painter already
+  // passes per pixel; it was three slots wide. What an empty list was right about is the thing that
+  // came before: for every release before that one, a wood slab exported stone's vein geometry, a
+  // picture of marble handed over as a description of oak, and no consumer could have detected it.
   function materialMasks() {
-    if (MATERIAL === 'wood') return [];
+    if (MATERIAL === 'wood') return woodMasks();
     if (MATERIAL === 'glass') return glassMasks();
     return stoneMasks();
   }
@@ -8723,6 +8725,12 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         if (fireW > 0 && rr > F.R) fireCav = fireW;
         li = (rr > 0 ? rr * KS : 0) | 0;
       } else li = (rad * KS) | 0;
+      // THE TWO TIERS THAT ARE NOT ALREADY IN SCOPE AT THE END OF THIS FUNCTION. `w` and `h` are
+      // declared here and readable where out[] is written; the mineral weight is a const inside its
+      // own `if (MINL)` block and the knot is nested three deep inside the feature walk, so both
+      // would be invisible there. Hoisted rather than recomputed - recomputing woodStain for a mask
+      // would be a second answer to the same question, and the two would drift.
+      let tms = 0, tkn = 0;
       let w = F.lut[li]
         + (woodHash(fv * 2600, 7) - 0.5) * 0.06                // lengthwise fibre streak
         + (woodHash(fu * 1700, fv * 2600) - 0.5) * 0.035;      // fine grain. Without it wood reads as plastic.
@@ -8767,7 +8775,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       // dark, and why it reads as something the tree drank rather than as a shadow.
       if (MINL) {
         const ms = woodStain(woodAtan2(ddy, ddx), rad0, zp, MINV, MTHR) * MINL;
-        if (ms > 0) { cr += (NR - cr) * ms; cg += (NG - cg) * ms; cb += (NB - cb) * ms; }
+        if (ms > 0) { tms = ms; cr += (NR - cr) * ms; cg += (NG - cg) * ms; cb += (NB - cb) * ms; }
       }
       // THE FIBRE FIELD, as light rather than as shape. f = zhat + tan(spiral)*thetahat + tan(curl)*rhat,
       // and what shows is how far it dives into the cut face: f . N. The tangential and radial unit
@@ -8871,6 +8879,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
               kv *= 0.72 + 0.2 * pr;                          // sound heartwood is darker, not dead
               if (rim > 0.74) kv *= 0.18 + (0.55 - 0.18) * pr;   // the bark ring, fading out as it is pruned away
             } else if (rim > 0.88) kv *= 0.55;
+            tkn = 1;                                        // this pixel is knot, not trunk wood
             cr = kcr * kv; cg = kcg * kv; cb = kcb * kv;
           }
         }
@@ -8878,6 +8887,27 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       out[0] = cr < 0 ? 0 : cr > 255 ? 255 : cr;
       out[1] = cg < 0 ? 0 : cg > 255 ? 255 : cg;
       out[2] = cb < 0 ? 0 : cb > 255 ? 255 : cb;
+      // WHICH TIER THIS PIXEL IS, for a caller that asked by handing in a wider buffer. This is the
+      // seam the mask export needed and the one the notes said did not exist: the tiers were never
+      // private to this function, only to the three slots the painters allocate. Both painters pass
+      // [0, 0, 0], so the guard is false for every rendered pixel and the colour path is untouched.
+      //
+      // early AND late ARE ONE NUMBER READ TWO WAYS, because that is what the colour does: the ring
+      // is a lerp from late to early on w, so the pair tiles the board with nothing left over. w is
+      // clamped at 1.25 above - the noise can push it past a full ring - so it is clamped again here
+      // rather than letting the mask run past full coverage.
+      //
+      // A KNOT EXCLUDES THE REST. In the colour path the knot block ASSIGNS cr/cg/cb rather than
+      // blending, so the surrounding wood's early, late, heart and mineral are not what is on screen
+      // there. A mask that reported them would be describing wood the knot replaced.
+      if (out.length > 3) {
+        const e = w > 1 ? 1 : w, hh = h > 1 ? 1 : h;
+        out[3] = tkn ? 0 : e;
+        out[4] = tkn ? 0 : 1 - e;
+        out[5] = tkn ? 0 : hh;
+        out[6] = tkn ? 0 : tms;
+        out[7] = tkn;
+      }
       return true;
     };
     // THE SCENE: everything the board IS before a pixel is drawn, which is what a shader needs and
@@ -14880,6 +14910,74 @@ self.onmessage = async (e) => {
       d[i] = d[i + 1] = d[i + 2] = l; d[i + 3] = 255;
     }
     cx.putImageData(im, 0, 0); return c;
+  }
+  // WOOD'S SIX: the board, then one layer per tier.
+  //
+  // THE TIERS WERE NEVER UNREACHABLE, which is what the record here used to say - that they "exist as
+  // scalars inside shade with no seam to tap them". They exist as scalars inside shade and the seam
+  // is the `out` buffer the board painter already passes per pixel at full resolution. It was three
+  // slots wide. Now a caller that wants the tiers asks for them by handing in a wider one.
+  //
+  // BY THE PAINTER'S OWN PATH, which for the board is: clamp to the slab, index the pith table by
+  // length, cross the plank to get yy, then offset by the cut plane and the pith wander at that
+  // height. `pn` has to be set to the board's face first or every figure term answers for the log
+  // section instead - paintWoodContent sets it and so does this, from the same cut angle.
+  //
+  // ONE PASS FOR ALL SIX. shade is the whole cost of a wood pixel, so asking it once per pixel and
+  // demultiplexing is six masks for the price of one.
+  function expWoodTiers(V) {
+    const { F, ZS, shade, pn } = woodSampler();
+    const phi = WOOD.cutAngle * Math.PI / 180, cux = Math.cos(phi), cuy = Math.sin(phi);
+    const pcx = WOOD.plane * cux, pcy = WOOD.plane * cuy;
+    pn[0] = cux; pn[1] = cuy; pn[2] = 0;                   // the board's face, not the end grain
+    const out = [0, 0, 0, 0, 0, 0, 0, 0];                  // the wider buffer IS the request
+    const n = V.w * V.h;
+    const t = { ground: new Uint8Array(n), early: new Uint8Array(n), late: new Uint8Array(n),
+                heart: new Uint8Array(n), mineral: new Uint8Array(n), knot: new Uint8Array(n) };
+    for (let py = 0, i = 0; py < V.h; py++) {
+      for (let px = 0; px < V.w; px++, i++) {
+        const su = (px + 0.5 - V.dx) / V.k, sv = (py + 0.5) / V.k;
+        const cu = su < 0 ? 0 : su > 1 ? 1 : su, cvv = sv < 0 ? 0 : sv > H ? H : sv;
+        let zi = (cu * WOOD.len * ZS) | 0;
+        if (zi > F.Z - 1) zi = F.Z - 1;
+        const yy = WOOD.y0 + woodBandY + (cvv / H) * WOOD.wid;
+        // FALSE IS THE LIVE EDGE, not a failure: a plank set wider than the log runs off the end of
+        // the wood, and every tier is legitimately zero there - including the ground, because there
+        // is no board. Left at zero rather than skipped, so the mask says so.
+        if (!shade(pcx - yy * cuy - F.pax[zi], pcy + yy * cux - F.pay[zi],
+                   zi, cu * WOOD.len, cu, cvv, out)) continue;
+        t.ground[i] = 255;
+        t.early[i] = out[3] * 255;
+        t.late[i] = out[4] * 255;
+        t.heart[i] = out[5] * 255;
+        t.mineral[i] = out[6] * 255;
+        t.knot[i] = out[7] * 255;
+      }
+    }
+    return t;
+  }
+  function woodMasks() {
+    let field = null;                                      // per call, so nothing survives into the next export
+    const tier = k => V => {
+      if (!field || field.w !== V.w || field.h !== V.h) field = Object.assign(expWoodTiers(V), { w: V.w, h: V.h });
+      const c = expCanvasOf(V), cx = c.getContext('2d');
+      const im = cx.createImageData(V.w, V.h), d = im.data, b = field[k];
+      for (let i = 0, o = 0; i < b.length; i++, o += 4) { d[o] = d[o + 1] = d[o + 2] = b[i]; d[o + 3] = 255; }
+      cx.putImageData(im, 0, 0); return c;
+    };
+    // EARLY IS THE PRIMARY, not the ground. The card paints one layer untinted, and the ground is
+    // the board's EXTENT - 255 everywhere on a plank that sits inside its log, which is a white card.
+    // Earlywood covers the whole board too and carries the ring banding while doing it, so untinted
+    // it reads as grain rather than as paper. The ground still goes first in the list, because the
+    // consumer composites in order and the board's own colour belongs under the rings.
+    return [
+      { suffix: 'ground', colour: groundCol(), opacity: 1, draw: tier('ground') },
+      { suffix: 'early', primary: true, colour: COL.woodEarly, opacity: 1, draw: tier('early') },
+      { suffix: 'late', colour: COL.woodLate, opacity: 1, draw: tier('late') },
+      { suffix: 'heart', colour: COL.woodHeart, opacity: 1, draw: tier('heart') },
+      { suffix: 'mineral', colour: COL.woodMineral, opacity: 1, draw: tier('mineral') },
+      { suffix: 'knot', colour: COL.woodKnot, opacity: 1, draw: tier('knot') },
+    ];
   }
   // ---- THE PUBLISHED MASK SETS ----------------------------------------------------------------
   // WHAT THE CONSUMER WILL TAKE. #rgb is a colour every canvas here accepts and its regex does not,

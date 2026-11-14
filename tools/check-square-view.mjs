@@ -203,6 +203,7 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   // glassScene clamps it and a slab may ask for two, so a fixed six would publish four black layers
   // and spend the consumer's eight-layer budget on nothing.
   const gl = listOf(/function glassMasks\(\) \{/, '\n  }\n');
+  const wd = listOf(/function woodMasks\(\) \{/, '\n  }\n');
   if (!gl) fail('cannot find glassMasks');
   else {
     if (!/suffix: 'ground', primary: true/.test(gl)) fail('glass does not declare `ground` primary - the card surface paints one layer untinted and the consumer\'s flat-field warning cannot catch a field layer, so it must be declared, never defaulted');
@@ -215,7 +216,7 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
 
   // AT MOST ONE PRIMARY PER LIST. The consumer REFUSES a pack with two, so this is a refusal, not a
   // warning - and the lists are far enough apart in the file for a second one to look deliberate.
-  for (const [nm, body] of [['stoneMasks', st], ['glassMasks', gl]]) {
+  for (const [nm, body] of [['stoneMasks', st], ['glassMasks', gl], ['woodMasks', wd]]) {
     if (!body) continue;
     const n = [...body.matchAll(/primary: true/g)].length;
     if (n !== 1) fail(`${nm} marks ${n} layers primary; the consumer REFUSES a pack with more than one and DEFAULTS to layer 0 on none - and its flat-field warning cannot catch a defaulted field layer in any material, because the threshold is 1.5 while the shipped field band starts at 2.8. Exactly one, declared.`);
@@ -236,7 +237,7 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   // either is missing - only `primary` is optional there - and the first real export of this set was
   // REFUSED for exactly that, on the one layer that had no opacity. A descriptor missing either is
   // therefore not a degraded pack, it is no pack, and the export reports success all the same.
-  for (const [nm, body] of [['stoneMasks', st], ['glassMasks', gl]]) {
+  for (const [nm, body] of [['stoneMasks', st], ['glassMasks', gl], ['woodMasks', wd]]) {
     if (!body) continue;
     const entries = [...body.matchAll(/suffix: '[^']+'/g)].length;
     const cols = [...body.matchAll(/colour: /g)].length;
@@ -334,6 +335,58 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
     const lits = [...APP.matchAll(/'masks\/(?!square)[a-z-]+\.png'/g)].map(m => m[0]);
     if (lits.length) fail(`${lits.length} literal slab mask path(s) left in the app: ${lits.join(', ')}`);
     else ok('no literal slab mask paths remain');
+  }
+
+  // WOOD PUBLISHES SIX, AND THE SEAM THAT LETS IT IS FREE ON THE RENDER PATH.
+  //
+  // The record said wood's tiers "live as scalars inside shade with no seam to tap them". The seam is
+  // the `out` buffer the board painter already passes per pixel; it was three slots wide. Asking for
+  // the tiers means handing in a wider one, so what has to hold is that the RENDER path never does:
+  // both painters allocate [0, 0, 0] and the guard reads false for every rendered pixel. Measured
+  // against HEAD on a wood board at 1024, the painted pixels are byte-identical (FNV 3aa91700 both)
+  // and the cost difference is +2.1% median against a 43.4% spread within either build - which is to
+  // say unmeasurable here, and the first sequential pass that read +5.1% was the bench.
+  //
+  // RED WHEN: wood goes back to an empty list; a painter's buffer grows past three slots, which is
+  // what would put the tier writes on the render path; the guard is removed, which does the same;
+  // the pair stops being complementary; or a knot stops excluding the wood it replaced.
+  {
+    if (!/if \(MATERIAL === 'wood'\) return woodMasks\(\);/.test(APP))
+      fail("wood does not publish its own masks - it returned [] for one release on the record that its tiers had no seam to tap, which was a description of the plumbing mistaken for a conclusion");
+    else ok('wood publishes its own mask list');
+    if (!wd) fail('cannot find woodMasks');
+    else {
+      const got = [...wd.matchAll(/suffix: '([^']+)'/g)].map(m => m[1]);
+      const want = ['ground', 'early', 'late', 'heart', 'mineral', 'knot'];
+      if (got.join(',') !== want.join(',')) fail(`woodMasks publishes [${got}], not [${want}]`);
+      else ok(`woodMasks publishes ${want.join('/')}, in that order`);
+      if (!/suffix: 'early', primary: true/.test(wd))
+        fail("wood does not declare `early` primary - the ground is the board's EXTENT and is 255 everywhere on a plank inside its log, so untinted it is a white card; earlywood covers the board too and carries the ring banding, measured 228.97 mean at contrast 39.4");
+      else ok('wood declares earlywood primary, not the ground');
+    }
+
+    // THE GUARD, AND THE BUFFERS THAT KEEP IT FALSE. Checked together, because either alone is
+    // satisfiable while the other is not: a guard with a wide buffer behind it costs on every pixel,
+    // and a narrow buffer with no guard writes past its end.
+    if (!/if \(out\.length > 3\) \{/.test(APP))
+      fail("shade writes the tiers unguarded - the board painter calls it once per pixel per tile, so this is the whole difference between a seam and a tax");
+    else ok('the tier writes sit behind a buffer-length guard');
+    const wide = [...APP.matchAll(/const out = \[0, 0, 0[^\]]*\]/g)].map(m => m[0]);
+    const painters = wide.filter(x => x === 'const out = [0, 0, 0]').length;
+    if (painters < 2)
+      fail(`only ${painters} painter(s) allocate a 3-slot out buffer - both the board and the log view must, or the tier writes land on the render path`);
+    else ok(`${painters} painters allocate a 3-slot buffer, so the guard is false while rendering`);
+
+    const sh = /out\[3\] = tkn \? 0 : e;([\s\S]*?)out\[7\] = tkn;/.exec(APP);
+    if (!sh) fail('cannot find the tier demux in shade');
+    else {
+      if (!/out\[4\] = tkn \? 0 : 1 - e;/.test(sh[0]))
+        fail('late is not 1 - early - the ring is a lerp between the two, so the pair must tile the board; measured, early 228.97 + late 25.38 = 254.36 against a ground of 255');
+      else ok('latewood is one minus earlywood, so the pair tiles the board');
+      if (!/out\[5\] = tkn \? 0 : hh;/.test(sh[0]) || !/out\[6\] = tkn \? 0 : tms;/.test(sh[0]))
+        fail('a knot does not exclude the tiers it replaced - the knot block ASSIGNS the colour rather than blending, so reporting the surrounding wood there describes wood that is not on screen');
+      else ok('a knot excludes the tiers its colour replaced');
+    }
   }
 
   // AND THE .ora OFFSET IS STILL DERIVED. The .ora layers sit directly after the named PNGs, so a
