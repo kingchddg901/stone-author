@@ -41,7 +41,7 @@ downstream code can't tell them apart. That interchangeability is the point.
   which the consumer requires. Exactly one is declared `primary`, always explicitly: the consumer's
   own flat-field warning sits at contrast 1.5 while the shipped field band starts at 2.8, so it can
   never catch a defaulted field layer. Verified against the shipped validator, not a copy of it:
-  `ma-glass` 7 layers, primary `ground` 4.2; `ma-stone` 5, primary `base` 79.5; `ma-wood` 6,
+  `ma-glass` 7 layers, primary `ground` 4.2; `ma-stone` 5, primary `base` 77.0; `ma-wood` 6,
   primary `early` 39.3 — the only one of the three that lands mid-band rather than at an edge.
   **Wood's seam is the `out` buffer, not a produce/combine split.** `shade` was said to have no seam
   to tap because it combines the tiers inline and returns RGB, and splitting it was priced as a
@@ -109,7 +109,16 @@ downstream code can't tell them apart. That interchangeability is the point.
   **The id is per slab, derived from its name ONCE and then latched.** It is stored in the slab
   (`packId`), and a stored id wins before anything is derived — so the id reads like the slab
   because it was made from its name, and stops following the name the moment the pack exists.
-  Rename the slab afterwards and the manifest's `name` moves while the id does not. The latch closes
+  Rename the slab afterwards and the manifest's `name` moves while the id does not.
+  **A slab with no name gets its render signature as the tail, not the bare stem.** The stem
+  alone was ONE id for every unnamed slab — four of this repo's six — and the consumer keys a
+  material on that id, while its `build_catalog` skips a later drop-in claiming a taken one with
+  nothing but a log line, so the second pack silently never appears. One reached a live box as
+  `ma-stone` before this was found, which is how it was found. `renderSig` carries neither `name`
+  nor `packId`, so the tail cannot be circular and naming the slab later does not move it —
+  measured `0bb5a991` named and cleared. Twelve gallery rows now mint twelve distinct ids, none a
+  bare stem, and the digest is order-independent: read forward, reversed, and one slab per page.
+  The latch closes
   at the **first export**, which is the consumer's own instruction: permanent from the first time the
   pack leaves the generator. Before that there is no pack in the wild and nothing can dangle; after
   it, changing the id makes every room on that pack fall back to `floor_type` — correct behaviour

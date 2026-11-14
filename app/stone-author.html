@@ -2021,7 +2021,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.14.333';
+  const BUILD = '2026.11.14.334';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -7970,10 +7970,41 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     return MATERIAL === 'stone' ? ['base', 'web', 'micro', 'minor', 'major'] : ['face'];
   }
   function materialPackStem() { return 'ma-' + MATERIAL; }
+  // AN UNNAMED SLAB IS STILL ONE SLAB, and it used to be handed the bare stem - so every unnamed
+  // stone slab anywhere exported as `ma-stone`. Not a cosmetic id: the consumer KEYS A MATERIAL on
+  // it, and its build_catalog skips a second drop-in whose id is already taken, logging a warning
+  // and nothing else - so the second pack never appears and the card just looks short. Measured on
+  // this repo's own gallery, FOUR OF SIX slabs carry no usable name - Hero_Psyker, before and warped
+  // have none at all and HERO-MASTER-sealkey has the empty string - so four of six minted one id.
+  // One of them reached a live box as `ma-stone` before this was found, which is how it was found.
+  //
+  // THE HOLE SAT ONE LINE ABOVE A COMMENT NAMING IT. The truncation branch below is careful about
+  // exactly this case - losing the whole slug would "hand every such slab the same id, which is the
+  // collision this exists to end" - and the empty-slug branch above it handed it out anyway. A guard
+  // that exists reads as complete; the shoulder just after its window closes is where to look.
+  //
+  // THE TAIL IS THE PICTURE'S OWN SIGNATURE, which is a question already answered in this file
+  // rather than a second identity invented for this one. renderSig hashes an EXPLICIT, measured list
+  // of what reaches the pixels, and it deliberately carries neither `name` nor `packId` - so reading
+  // it here cannot be circular, and naming the slab afterwards does not move it. It also makes the
+  // id TRACEABLE: `inputs` in a master's own metadata is that same string, so a pack found on a box
+  // can be matched to the picture it came from. stateSig is the wrong one twice over and CLAUDE.md
+  // says why: it moves on tool and layer selection, and does not move when the light changes.
+  //
+  // PADDED TO EIGHT because toString(16) drops leading zeros, and an id whose length moves with its
+  // value reads like two schemes. `ma-stone-` plus eight is 17 of the 32 the consumer allows, so
+  // this branch never reaches the truncation below.
+  const packDigest = () => {
+    const sig = renderSig();
+    // null ONLY if serialize() itself threw, in which case nothing in this app is working - but
+    // falling back to the stem is the defect this exists to end, so the unreachable branch takes a
+    // token that is merely unique rather than one that is shared.
+    return sig ? String(sig).padStart(8, '0') : Date.now().toString(36);
+  };
   function materialPackId() {
     if (packId) return packId;                      // latched: never re-derived, whatever else moved
     const stem = materialPackStem(), slug = packSlug(slabName);
-    if (!slug) return stem;
+    if (!slug) return stem + '-' + packDigest();    // unnamed: its own picture, never a shared stem
     const full = stem + '-' + slug;
     if (full.length <= 32) return full;
     const cut = full.slice(0, 32).replace(/-+$/, '');

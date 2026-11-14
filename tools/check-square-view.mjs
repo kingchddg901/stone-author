@@ -343,6 +343,25 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
       if (!/\.slice\(0, 32\)/.test(body[1]))
         fail("the derived id is not capped at 32 - the consumer's id regex stops there, and this repo's own glass slab makes a 35-character one");
       else ok('the derived id is capped at the 32 characters the consumer allows');
+      // AND AN UNNAMED SLAB IS NOT HANDED THE STEM. This is the branch that shipped `ma-stone` to a
+      // live box: every slab with no usable name minted the same id, the consumer keys a material on
+      // that id, and its build_catalog skips a later drop-in whose id is taken with nothing but a log
+      // line - so the second pack never appears and the card merely looks short. Two failure paths,
+      // because the regression can come back as either the old return or a different tail.
+      if (/if \(!slug\) return stem;/.test(body[1]))
+        fail('materialPackId hands an unnamed slab the BARE STEM again - four of this six-slab gallery have no usable name, so four of six mint one id; the consumer keys a material on it and silently skips the second drop-in that claims it');
+      else if (!/if \(!slug\) return stem \+ '-' \+ packDigest\(\);/.test(body[1]))
+        fail('the unnamed-slab branch no longer takes a digest tail - the empty-slug case is the one place two slabs can come out sharing an id, and the collision is silent at the consumer rather than loud here');
+      else ok("an unnamed slab's id gets a tail of its own, not the bare stem");
+      // SCOPED TO packDigest'S OWN BODY, not the file. `const sig = renderSig();` also appears where
+      // a master's own name is derived, so a whole-file test for it passed with packDigest reading
+      // stateSig - the clause could not go red, and a check that cannot fail reads as coverage. The
+      // ablation is what found it; the gate had been green on an input it was blind to.
+      const dg = /const packDigest = \(\) => \{([\s\S]*?)\n  \};/.exec(APP);
+      if (!dg) fail('cannot find packDigest - the unnamed-slab tail has no derivation to check');
+      else if (!/const sig = renderSig\(\);/.test(dg[1]) || !/String\(sig\)\.padStart\(8, '0'\)/.test(dg[1]))
+        fail("packDigest is not renderSig padded to eight - renderSig is this file's own measured answer to which picture this is and carries neither name nor packId, so it is the one digest here that cannot be circular and cannot move when the slab is named; a hash invented for this would be a second identity, and stateSig would be the wrong one twice over");
+      else ok('that tail is the render signature, padded to a fixed width');
     }
 
     // IT LATCHES WHEN THE PACK LEAVES, and the manifest goes through the latch rather than round it.

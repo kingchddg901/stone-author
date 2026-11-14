@@ -148,6 +148,14 @@ const hook = `
     emit, emitAt, setSpx: (v) => { lightSpectrum = v; uvMode = v !== 0; },
     // both signatures, so a gate can show which one answers "same picture?"
     stateSig, renderSig,
+    // THE DERIVED PACK ID, and the slab's name beside it, because the id is a FUNCTION of the
+    // name and the interesting case is the one where there is no name. materialPackId is read-only
+    // here; the LATCH is deliberately NOT exposed, because calling it would write a packId into
+    // the slab and the next read would return the latched value rather than the derivation under
+    // test - a probe that silently measures its own side effect.
+    materialPackId, packDigest,
+    get slabName() { return slabName; }, set slabName(v) { slabName = String(v == null ? '' : v); },
+    get packId() { return packId; }, set packId(v) { packId = String(v == null ? '' : v); },
     // THE RESUME OFFER, which has no other way in. The row is GATED - absent unless an unfinished
     // render of this picture is on disk - so the only state reachable without these is the hidden one,
     // and a gated control that never appears is indistinguishable from a broken one. resumeRow builds
