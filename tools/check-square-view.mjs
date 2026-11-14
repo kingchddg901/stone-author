@@ -427,8 +427,16 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   // what would put the tier writes on the render path; the guard is removed, which does the same;
   // the pair stops being complementary; or a knot stops excluding the wood it replaced.
   {
-    if (!/if \(MATERIAL === 'wood'\) return woodMasks\(\);/.test(APP))
-      fail("wood does not publish its own masks - it returned [] for one release on the record that its tiers had no seam to tap, which was a description of the plumbing mistaken for a conclusion");
+    // PINNED TO THE PROPERTY, NOT THE SPELLING. This read the literal
+    // `if (MATERIAL === 'wood') return woodMasks();` and went red when the fork became a ternary so
+    // the cut layer could be appended in ONE place - a change that strengthened what this protects.
+    // What has to hold is that materialMasks reaches woodMasks at all, and that woodMasks returns
+    // something: the defect it remembers is wood publishing an EMPTY list.
+    const mmBody = /function materialMasks\(\) \{([\s\S]*?)\n  \}/.exec(APP);
+    if (!mmBody || !/woodMasks\(\)/.test(mmBody[1]))
+      fail("materialMasks does not reach woodMasks - wood published [] for one release on the record that its tiers had no seam to tap, which was a description of the plumbing mistaken for a conclusion");
+    else if (!/suffix: 'ground'[\s\S]*suffix: 'early'/.test(/function woodMasks\(\) \{([\s\S]*?)\n  \}/.exec(APP)?.[1] || ''))
+      fail("woodMasks no longer returns its tier list - the empty-list release is the defect this remembers");
     else ok('wood publishes its own mask list');
     if (!wd) fail('cannot find woodMasks');
     else {
@@ -439,6 +447,42 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
       if (!/suffix: 'early', primary: true/.test(wd))
         fail("wood does not declare `early` primary - the ground is the board's EXTENT and is 255 everywhere on a plank inside its log, so untinted it is a white POLYGON (the map polygon is the surface that paints one layer untinted, not the room card); earlywood covers the board too and carries the ring banding, measured 228.97 mean at contrast 39.4");
       else ok('wood declares earlywood primary, not the ground');
+    }
+
+    // THE CUT IS PUBLISHED, AND ONLY WHEN THERE IS ONE. RED WHEN: the joints layer stops being
+    // appended at the one fork, stops being last, is published on an un-laid slab, or starts
+    // carrying edgeFinish - which is shading that reads the light's angle and colour, and a coverage
+    // mask carrying it would be publishing the light.
+    {
+      const mm = /function materialMasks\(\) \{([\s\S]*?)\n  \}/.exec(APP);
+      if (!mm) fail('cannot find materialMasks');
+      else {
+        if (!/layTiles \? base\.concat\(\{ suffix: 'joints'/.test(mm[1]))
+          fail("materialMasks does not append the joints layer when the floor is LAID - a plank pattern then reaches the render and is dropped at the export boundary, which is measurable as render.png moving while every mask stays byte-identical");
+        else ok('the cut is appended to whichever mask set it is, at the one fork');
+        if (!/: base;/.test(mm[1]))
+          fail('materialMasks publishes joints unconditionally - with no cut the mask is all black, which is a layer that draws nothing and spends one of the consumer\'s eight');
+        else ok('an un-laid slab publishes no joints layer');
+        if (!/base\.concat\(/.test(mm[1]))
+          fail('the joints layer is no longer appended to the END - the consumer composites bottom to top and the cut is drawn OVER the material, so it must be last');
+        else ok('the cut rides last, which is the order the cut is drawn in');
+      }
+      const ej = /function expJoints\(Wv\) \{([\s\S]*?)\n  \}/.exec(APP);
+      if (!ej) fail('cannot find expJoints - the cut has no coverage builder');
+      else {
+        if (!/tileInstances\(\)/.test(ej[1]))
+          fail('expJoints does not read tileInstances - the cut geometry would be a second copy of the one cutOverlay draws, and the mask and the picture would drift apart silently');
+        else ok('the cut mask reads the same instances the render strokes');
+        if (!/strokeStyle = '#fff'/.test(ej[1]) || !/fillStyle = '#000'/.test(ej[1]))
+          fail('expJoints is not white-on-black - a mask is COVERAGE, and anything else here is a colour the consumer will multiply a second time');
+        else ok('the cut mask is coverage: white on black');
+        if (/edgeFinish/.test(ej[1]))
+          fail("expJoints calls edgeFinish - that is shading rather than a line, it reads G.lightAngle and tints with lightRGB(), so a coverage mask carrying it would publish the LIGHT; a bevel is a chamfer on the board, not a wider joint");
+        else ok('the cut mask carries the line and not the shading');
+        if (!/Math\.max\(px, inFr\(jointIn\(\)\)\)/.test(ej[1]))
+          fail('the cut mask does not floor its width at the mask\'s own pixel - jointIn() is ZERO for unglazed wood, so a butt joint would stroke nothing at all and the layer would ship empty');
+        else ok('the cut is floored at a pixel, as the render floors it');
+      }
     }
 
     // THE GUARD, AND THE BUFFERS THAT KEEP IT FALSE. Checked together, because either alone is

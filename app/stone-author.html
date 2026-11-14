@@ -2021,7 +2021,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.14.335';
+  const BUILD = '2026.11.14.336';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -7881,10 +7881,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // passes per pixel; it was three slots wide. What an empty list was right about is the thing that
   // came before: for every release before that one, a wood slab exported stone's vein geometry, a
   // picture of marble handed over as a description of oak, and no consumer could have detected it.
+  // AND THE CUT RIDES ON THE END OF WHICHEVER SET IT IS, which is why it is appended HERE rather
+  // than written into all three lists: one fork already answers which material this is, and a
+  // fourth material gets the cut for free. LAST because the cut is drawn OVER the material, which
+  // is the order the consumer composites in; absent entirely when the floor is not laid, because
+  // then there is no cut and an all-black mask would be a layer that draws nothing.
+  //
+  // IT TAKES THE COUNT TO 6 / 7 / 8 for stone, wood and glass. The consumer's MAX_LAYERS is 8 and
+  // its check is `> MAX_LAYERS`, so glass lands exactly ON the cap rather than over it - which is
+  // worth knowing before a ninth layer is ever proposed for glass.
   function materialMasks() {
-    if (MATERIAL === 'wood') return woodMasks();
-    if (MATERIAL === 'glass') return glassMasks();
-    return stoneMasks();
+    const base = MATERIAL === 'wood' ? woodMasks() : MATERIAL === 'glass' ? glassMasks() : stoneMasks();
+    return layTiles ? base.concat({ suffix: 'joints', colour: GROUT, opacity: 1, draw: V => expJoints(V) }) : base;
   }
   // AND ITS NAMESPACE WITH THE CONSUMER. The id mints every theme token and is what a room stores,
   // so changing it dangles every room already using the pack - silently, because the consumer's
@@ -14999,6 +15007,45 @@ self.onmessage = async (e) => {
     else if (kind === 'micro') { for (const s of geo.specks) { cx.beginPath(); cx.arc(s.x, s.y, s.R0 || s.rad, 0, 6.2832); cx.fill(); } for (const s of geo.drusy) { cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, 6.2832); cx.fill(); } }
     else if (kind === 'web') { for (const e of geo.web) { polyPath(cx, e.pts); cx.lineWidth = e.width; cx.stroke(); } }
     g2d = prev; return c;
+  }
+  // THE CUT, AS COVERAGE. Everything above draws the material; this draws where the material was
+  // SAWN, and before it the published masks were the UN-LAID slab. Measured on his own Wood Test,
+  // same slab and same button with one switch between two runs: render.png moved and all six masks
+  // came back BYTE-IDENTICAL, so layTiles, plankLen, plankVary, plankStagger, stage and set were
+  // every one of them dropped at the export boundary. Stone was the same, all five identical - this
+  // was never a wood defect, it was the whole mask export.
+  //
+  // A LAYER OF ITS OWN, NOT LINES SCRATCHED INTO THE OTHERS. A mask is coverage for ONE colour, so
+  // a joint drawn into `early` would be painted in earlywood's colour and a joint drawn into `base`
+  // in the matrix's. The cut has its own colour, so it needs its own layer - and that is also what
+  // would let the consumer give it its own SCALE, if board size is ever to be dialled independently
+  // of grain size.
+  //
+  // THE SAME GEOMETRY cutOverlay USES, read from tileInstances rather than copied: the tumbled
+  // inset and the chip map applied exactly as the render applies them, so the mask and the picture
+  // cannot drift apart. ONE path for every piece, one stroke, as there.
+  //
+  // edgeFinish IS DELIBERATELY NOT HERE. It is the one part of a cut that is shading rather than a
+  // line - it reads G.lightAngle and tints with the light's own colour - and a coverage mask has no
+  // business carrying either. A bevel is a chamfer on the BOARD, not a wider joint.
+  function expJoints(Wv) {
+    const V = expViewOf(Wv), c = expCanvasOf(V), cx = c.getContext('2d');
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = '#000'; cx.fillRect(0, 0, c.width, c.height);
+    cx.setTransform(V.k, 0, 0, V.k, V.dx, 0); cx.lineCap = 'round'; cx.lineJoin = 'round';
+    const inst = tileInstances(), chips = chipMap(), px = 1 / V.k;
+    // FLOORED AT THE MASK'S OWN PIXEL, the same Math.max the render uses - jointIn() is ZERO for
+    // unglazed wood, so a butt joint would otherwise stroke nothing at all.
+    cx.strokeStyle = '#fff'; cx.lineWidth = Math.max(px, inFr(jointIn()));
+    cx.beginPath();
+    for (const t of inst) {
+      let poly = t.poly;
+      if (T.edge === 'tumbled') poly = insetPoly(poly, inFr(0.04 * T.sizeIn));
+      const ch = chips.get(t.key); if (ch) for (const mk of ch) poly = chipEdge(poly, mk);
+      poly.forEach((q, i) => (i ? cx.lineTo(q[0], q[1]) : cx.moveTo(q[0], q[1])));
+      cx.closePath();
+    }
+    cx.stroke();
+    return c;
   }
   // THE LATCH CLOSES WHEN THE PACK LEAVES, which is the consumer's own instruction: treat the id as
   // permanent from the first time the pack leaves the generator. Before that first export there is no

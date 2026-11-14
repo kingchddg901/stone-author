@@ -43,6 +43,25 @@ downstream code can't tell them apart. That interchangeability is the point.
   never catch a defaulted field layer. Verified against the shipped validator, not a copy of it:
   `ma-glass` 7 layers, primary `ground` 4.2; `ma-stone` 5, primary `base` 77.0; `ma-wood` 6,
   primary `early` 39.3 — the only one of the three that lands mid-band rather than at an edge.
+  **A laid floor publishes one more: the CUT.** Until 2026-11-14 the masks were the un-laid slab,
+  and it was not a wood defect but the whole mask export. Measured on one slab through one button
+  with a single switch between two runs: `render.png` moved and **all six masks came back
+  byte-identical**, so `layTiles`, `plankLen`, `plankVary`, `plankStagger`, `stage` and `set` were
+  every one of them dropped at the export boundary. Stone was the same, all five identical. The
+  cut is now a layer of its own (`expJoints`) rather than lines scratched into the others, because
+  a mask is coverage for ONE colour and a joint drawn into `early` would be painted in
+  earlywood's — which is also what would let a consumer give it its own *scale*, if board size is
+  ever to be dialled independently of grain size. It is appended at the single `materialMasks`
+  fork, **last**, since the cut is drawn over the material, and only when the floor is laid: with
+  no cut the mask is all black, a layer that draws nothing and spends one of the consumer's eight.
+  That takes the counts to **6 / 7 / 8**, and `MAX_LAYERS` is 8 with the check written `>
+  MAX_LAYERS`, so glass lands exactly *on* the cap rather than over it.
+  **What it does NOT yet carry is a floor laid from more than one board.** At `stage` 1 the
+  render's own floor is a slab with lines on it — "the stone runs continuous across the joint and
+  the cut is SHOWN rather than opened" — so publishing the cut matches the render exactly. Above
+  one stage, or with sections, each piece is cut from somewhere else in the cant and the mask
+  content would have to be laid per piece as well; `expWoodTiers` and `expCoverage` still sample
+  one board or one slab. Stated rather than gated: no check here renders a mask.
   **Wood's seam is the `out` buffer, not a produce/combine split.** `shade` was said to have no seam
   to tap because it combines the tiers inline and returns RGB, and splitting it was priced as a
   hot-loop change with the WGSL port mirroring it. There was a third option: the board painter
