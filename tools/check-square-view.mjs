@@ -280,9 +280,16 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
       if (!/^if \(packId\) return packId;/.test(first))
         fail(`materialPackId does not return a stored id FIRST (its first statement is: ${first.slice(0, 70)}) - a derivation reached before the stored value is a derivation that can overrule it, and the id following anything that moves dangles every room using the pack, silently`);
       else ok('a stored pack id wins before anything is derived');
-      if (!/'ma-' \+ MATERIAL/.test(body[1]))
-        fail("the 'ma-' prefix is not applied in materialPackId - it is what keeps every id clear of the consumer's reserved floor-type names (wood, wood-oak, marble-carrara and tile-x are all refused by its own id_conflict), and the clearance is structural only while the prefix is ours");
-      else ok("the 'ma-' prefix is applied in code, not taken from the slab");
+      // THE PREFIX IS OURS, WHEREVER IT LIVES. This clause used to grep materialPackId's own body
+      // for the literal, and went red the moment the stem moved into its own function for the
+      // studio box to share - a change that strengthened the very thing being checked. Pinned to
+      // the property now: ONE function owns the literal, and the id is built from that function.
+      if (!/function materialPackStem\(\) \{ return 'ma-' \+ MATERIAL; \}/.test(APP))
+        fail("materialPackStem does not own the 'ma-' prefix - it is what keeps every id clear of the consumer's reserved floor-type names (wood, wood-oak, marble-carrara and tile-x are all refused by its own id_conflict), and the clearance is structural only while the prefix is ours and has one home");
+      else ok("materialPackStem owns the 'ma-' prefix");
+      if (!/const stem = materialPackStem\(\)/.test(body[1]))
+        fail('materialPackId does not build its id from materialPackStem - a second copy of the prefix is how the box and the id come to disagree about what will ship');
+      else ok('the id is built from that one stem');
       if (!/\.slice\(0, 32\)/.test(body[1]))
         fail("the derived id is not capped at 32 - the consumer's id regex stops there, and this repo's own glass slab makes a 35-character one");
       else ok('the derived id is capped at the 32 characters the consumer allows');
@@ -387,6 +394,42 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
         fail('a knot does not exclude the tiers it replaced - the knot block ASSIGNS the colour rather than blending, so reporting the surrounding wood there describes wood that is not on screen');
       else ok('a knot excludes the tiers its colour replaced');
     }
+  }
+
+  // THE STUDIO BOX. The id is the one irreversible commitment in a pack, and until now it was
+  // minted with nothing on screen to show it - visible only in the exported manifest. The box holds
+  // the TAIL; the stem is shown beside it and is not the author's to type.
+  //
+  // RED WHEN: either element goes missing; the label stops being routed; the box stops being
+  // sanitised on commit; the cap stops leaving room for the stem; clearing stops meaning derive; or
+  // the refresh goes back above the setMaterial it depends on.
+  {
+    if (!/<span class="stat" id="packidpre"><\/span><input id="packid" /.test(APP))
+      fail('the pack-id box or its prefix span is missing from the markup - the prefix must be a separate element, because an input the author can type the stem into is an input they can type a reserved floor-type name into');
+    else ok('the pack-id box and its own prefix element are in the markup');
+    if (!/id="packid"[^>]*data-i18n-attr="aria-label=a11y\.pack-id;title=a11y\.pack-id"/.test(APP))
+      fail('the pack-id box does not route its label through a11y.pack-id');
+    else ok('the pack-id box routes its label');
+    if (!/const tail = packSlug\(el\.value\)\.slice\(0, Math\.max\(0, 32 - stem\.length\)\);/.test(APP))
+      fail("the typed tail is not slugged and capped to what is left of 32 after the stem - the consumer's id regex stops at 32 and refuses anything outside [a-z0-9_-]");
+    else ok('the typed tail is slugged and capped to the stem\'s remaining budget');
+    if (!/packId = tail \? stem \+ tail : '';/.test(APP))
+      fail('clearing the box does not go back to deriving - that is the only way out of a latch taken by accident, and it is safe exactly while no pack has shipped');
+    else ok('clearing the box goes back to deriving');
+
+    // ORDER, NOT PRESENCE. showPackId reads the stem, the stem reads MATERIAL, and deserialize sets
+    // MATERIAL partway down: the first spelling of this called it forty lines ABOVE that line, so
+    // loading a glass slab painted `ma-stone-` beside the box. Driving the real input is what caught
+    // it - and the placeholder agreed anyway, because the derived TAIL does not depend on the stem,
+    // which is how a one-field bug survives a passing look.
+    const setMat = APP.indexOf('setMaterial(o.material);');
+    const refresh = APP.indexOf('showPackId();', setMat < 0 ? 0 : setMat);
+    const before = APP.lastIndexOf('showPackId();', setMat < 0 ? 0 : setMat);
+    if (setMat < 0) fail('cannot find deserialize\'s setMaterial');
+    else if (refresh < 0) fail('deserialize never refreshes the pack-id box, so a loaded slab shows the last one\'s id');
+    else if (before > 0 && before < setMat && APP.slice(before, setMat).indexOf('function ') < 0)
+      fail('deserialize refreshes the pack-id box ABOVE its setMaterial - the box shows the stem, the stem is ma- plus MATERIAL, so a loaded slab paints the previous material’s stem');
+    else ok('deserialize refreshes the box after it has set the material');
   }
 
   // AND THE .ora OFFSET IS STILL DERIVED. The .ora layers sit directly after the named PNGs, so a

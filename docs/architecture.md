@@ -109,6 +109,17 @@ downstream code can't tell them apart. That interchangeability is the point.
   A latched id keeps its material even if the slab's material later changes, which reads like a bug
   and is correct: it is still one slab and one pack, and re-minting would dangle every room on it.
   `family` reports the material truthfully.
+  **The author can see and change it, in the File section beside the slab's name.** It was minted
+  with nothing on screen to show it for one release — visible only once the pack had been exported,
+  which is a poor place to meet the one irreversible commitment in it. The box holds the **tail**:
+  the stem is a separate element shown beside it and is not the author's to type, because an input
+  they can type the stem into is one they can type a reserved floor-type name into. The typed tail
+  is slugged and capped on **commit** rather than per keystroke — slugging as you type eats the
+  separator just pressed — and the placeholder is the **derived** tail, set from code rather than
+  routed because it is data: it shows what will ship if the box is left alone, and it follows the
+  slab's name right up until the first export latches it. **Clearing the box goes back to deriving**,
+  which is the only way out of a latch taken by accident, and is safe under exactly the condition the
+  latch itself turns on. One routed string, `a11y.pack-id`, in all fifteen packs.
   **It is not on the render signature.** `renderSig` hashes an explicit, measured list; a
   publication id there would re-date every master on disk and orphan every resume, and no fix
   afterwards recovers them because a master keeps the signature it was written with. Measured live:

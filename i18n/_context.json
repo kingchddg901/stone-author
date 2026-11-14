@@ -89,6 +89,9 @@
   "a11y.slab-name-ph": {
     "where": "placeholder in the slab-name box; the name every file falls back to when the box is empty"
   },
+  "a11y.pack-id": {
+    "where": "label on the box that names the exported material pack, in the File section; it holds only the tail - the ma-<material>- prefix is fixed and shown beside it, and is not translated because it is an identifier"
+  },
   "a11y.stone-slab-draw-on-it": {
     "terms": [
       "slab",
