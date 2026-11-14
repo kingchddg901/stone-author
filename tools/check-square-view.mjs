@@ -460,56 +460,94 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
   // marble vein geometry in a wood kit, 70 legend entries, 70 paths, 73 SVG strokes, describing
   // veins nowhere in the picture. geo.lines does not care what material is selected.
   //
-  // ONE QUESTION WITH THREE ANSWERS, not two booleans. This clause pinned a boolean -
-  // materialAuthorsVectors - and that was the wrong shape the moment a second material had something
-  // to say in rich/: two booleans can express a state that is nonsense, both at once. Glass has no
-  // strokes but it has a LABEL at every point, which is the same kind of artifact answering the same
-  // question, so the fork answers WHICH set rather than whether one of them.
+  // THE RICH SET IS A DESCRIPTOR, AND THIS CLAUSE HAS BEEN RE-AIMED TWICE. It pinned a boolean, then
+  // a three-word kind, now the thing itself - and the churn was avoidable rather than discovered: the
+  // ring map was already written down as the third answer when the kind went in, so the descriptor
+  // could have been built then. A word for a set still needs a second lookup to find its builder, its
+  // filename and its legend; carrying them together is one fact in one place.
   //
-  // RED WHEN: a material's answer changes; the export reads the kind more than once; either set's
-  // makers and names come apart (they align by POSITION, so gating one and not the other packs one
-  // artifact under another's name); the vector-only data files leave the vector branch, where idt is
-  // the thing that would throw; or rich/legend.json stops being written by both.
+  // Stone has a list of authored strokes - identity, a parent, a parameter along their length - which
+  // the id map, the t map, paths.json and lines.svg are four views of. The other two have no strokes
+  // but a LABEL at every point, which answers the same question: glass's is which compartment was
+  // poured there, wood's is which ring, which is to say which year.
+  //
+  // THE TWO BRANCHES ARE EXCLUSIVE BY CONSTRUCTION, not by a test: a vector descriptor carries no
+  // file and a label descriptor carries no `vectors`, so there is no state where both or neither
+  // applies - which is the thing two booleans could not promise.
+  //
+  // RED WHEN: a material's descriptor changes shape or filename; a maker or a name stops coming from
+  // it; the ring index is taken from `li` instead of `F.ri`; `ri` stops being stored where the loop
+  // already walks it; an id image invents its own encoding; or either branch stops writing a legend.
   {
-    if (!/return MATERIAL === 'stone' \? 'vectors' : MATERIAL === 'glass' \? 'labels' : 'none';/.test(APP))
-      fail("materialRichKind does not answer vectors / labels / none - stone has authored strokes, glass has a label at every point, and wood's structure is grown from a ring field so it has neither");
-    else ok('materialRichKind answers vectors for stone, labels for glass, none for wood');
-    if (/materialAuthorsVectors/.test(APP))
-      fail('materialAuthorsVectors is still here - the boolean it replaced can be true alongside the label set, which is a state that means nothing');
-    else ok('the boolean it replaced is gone');
-    if (!/const rich = materialRichKind\(\);/.test(APP))
-      fail('the export does not read the kind once into a local');
-    else ok('the export reads the kind once');
+    const mr = /function materialRich\(\) \{([\s\S]*?)\n  \}/.exec(APP);
+    if (!mr) fail('cannot find materialRich');
+    else {
+      if (!/if \(MATERIAL === 'stone'\) return \{ vectors: true \};/.test(mr[1]))
+        fail('stone does not return a vectors descriptor');
+      else ok('stone returns a vectors descriptor');
+      if (!/if \(MATERIAL === 'glass'\) return \{ file: 'rich\/cane-ids\.png', draw: expCaneIds, legend: caneLegend \};/.test(mr[1]))
+        fail("glass's descriptor is not cane-ids.png with its own drawer and legend");
+      else ok("glass's descriptor names cane-ids.png, its drawer and its legend");
+      if (!/return \{ file: 'rich\/ring-ids\.png', draw: expRingIds, legend: ringLegend \};/.test(mr[1]))
+        fail("wood's descriptor is not ring-ids.png with its own drawer and legend");
+      else ok("wood's descriptor names ring-ids.png, its drawer and its legend");
+      if (/vectors/.test(mr[1].replace(/vectors: true/g, '')) && /file:/.test(mr[1]) && /vectors: true, file:/.test(mr[1]))
+        fail('a descriptor carries both vectors and a file - the two branches are meant to be exclusive by construction');
+      else ok('no descriptor carries both a vectors flag and a file');
+    }
+    if (!/const rich = materialRich\(\);/.test(APP)) fail('the export does not read the descriptor once');
+    else ok('the export reads the descriptor once');
+    if (!/\.\.\.\(rich\.vectors \? \[\(\) => \{ idt = expIdT\(W\); return idt\.ids; \}, \(\) => idt\.t\] : \[\]\),/.test(APP))
+      fail('the vector makers are not gated on the descriptor - the pair is all-or-nothing, because a t map with no ids to key it to says nothing');
+    else ok('both vector makers are gated on the descriptor, together');
+    if (!/\.\.\.\(rich\.vectors \? \['rich\/vein-ids\.png', 'rich\/vein-t\.png'\] : \[\]\),/.test(APP))
+      fail('the vector names are not gated on the descriptor - names[] and makers[] align by position');
+    else ok('the vector names are gated on the same descriptor');
+    if (!/\.\.\.\(rich\.file \? \[\(\) => rich\.draw\(W\)\] : \[\]\),/.test(APP))
+      fail("the label maker is not the descriptor's own drawer - a switch here would be the second lookup the descriptor exists to remove");
+    else ok("the label maker is the descriptor's own drawer");
+    if (!/\.\.\.\(rich\.file \? \[rich\.file\] : \[\]\)\];/.test(APP))
+      fail("the label name is not the descriptor's own file - position is the only thing joining it to its maker");
+    else ok("the label name is the descriptor's own file");
 
-    const vmk = /\.\.\.\(rich === 'vectors' \? \[\(\) => \{ idt = expIdT\(W\); return idt\.ids; \}, \(\) => idt\.t\] : \[\]\),/.test(APP);
-    const vnm = /\.\.\.\(rich === 'vectors' \? \['rich\/vein-ids\.png', 'rich\/vein-t\.png'\] : \[\]\),/.test(APP);
-    if (!vmk) fail("the vector makers are not gated on rich === 'vectors' - the pair is all-or-nothing, because a t map with no ids to key it to says nothing");
-    else ok('both vector makers are gated on the vector answer, together');
-    if (!vnm) fail("the vector names are not gated on rich === 'vectors' - names[] and makers[] align by position, so gating one and not the other packs an artifact under another's name");
-    else ok('the vector names are gated on the same answer');
+    // THE YEAR, NOT THE SAMPLE. shade has `li`, which is (rad * KS) | 0 - a radial sample index that
+    // counts steps across the LUT, not years, and the two part company the moment rings differ in
+    // width, which is the whole point of a growth curve. F.ri is the ring the loop was already
+    // walking when it filled every other table.
+    // THE CONVERSION IS AT THE CALLER, and that is check-wood-inputs' doing: it requires the GPU
+    // packer to carry every array shade subscripts, and the shader has no use for the ring table -
+    // K runs 16,384 to 131,072, so packing it would be 64 KB to 512 KB of unread arena per render.
+    // Its one hand-written exemption list is, by its author's own note, where the next miss comes
+    // from, so the subscript moved out of shade instead of an entry going in.
+    if (!/out\[8\] = li;/.test(APP))
+      fail('shade does not report the radial sample in out[8]');
+    else ok('shade reports the radial sample, leaving the ring lookup to its caller');
+    if (!/const k = F\.ri\[out\[8\]\] \+ 1;/.test(APP))
+      fail('the ring map does not convert the sample index through F.ri - out[8] counts steps across the LUT, not years, and the two part company the moment rings differ in width, so publishing it raw mislabels a sample index as a year under a correct-looking name');
+    else ok('the ring map converts the sample index through F.ri');
+    if (!/urel\[i\] = u; rwl\[i\] = hi - lo; ri\[i\] = k;/.test(APP))
+      fail('the ring index is not stored where the LUT loop already walks it - recomputing it per pixel is a binary search over edge[]');
+    else ok('the ring index is stored beside the tables that already use it');
+    if (!/ri = new Uint16Array\(K\)/.test(APP)) fail('the ring-index table is not allocated');
+    else ok('the ring-index table is allocated with the others');
 
-    const lmk = /\.\.\.\(rich === 'labels' \? \[\(\) => expCaneIds\(W\)\] : \[\]\),/.test(APP);
-    const lnm = /\.\.\.\(rich === 'labels' \? \['rich\/cane-ids\.png'\] : \[\]\)\];/.test(APP);
-    if (!lmk) fail("the label maker is not gated on rich === 'labels'");
-    else ok('the label maker is gated on the label answer');
-    if (!lnm) fail("the label name is not gated on the same answer - position is the only thing joining it to its maker");
-    else ok('the label name is gated on the same answer');
-
-    // THE ENCODING IS STONE'S, so a consumer decodes both id images with one routine, and 0 means
-    // bare glass so the legend's 1-based keys are the mask suffixes material.json already carries.
-    if (!/d\[o\] = k & 255; d\[o \+ 1\] = \(k >> 8\) & 255; d\[o \+ 2\] = \(k >> 16\) & 255;/.test(APP))
-      fail("the label field does not use the same rgb index encoding as the vein ids - two encodings for one kind of artifact means two decoders");
-    else ok("the label field uses the vein ids' own rgb encoding");
+    // ONE ENCODING FOR ALL THREE ID IMAGES, so a consumer decodes them with one routine.
+    const enc = [...APP.matchAll(/d\[o\] = k & 255; d\[o \+ 1\] = \(k >> 8\) & 255; d\[o \+ 2\] = \(k >> 16\) & 255/g)].length;
+    if (enc < 2) fail(`only ${enc} label image(s) use the shared rgb index encoding - two encodings for one kind of artifact means two decoders`);
+    else ok(`both label images use the shared rgb index encoding (${enc} sites)`);
     if (!/o\[k \+ 1\] = 'cane-' \+ GLASS_CANE_LET\[k\];/.test(APP))
-      fail("the legend's keys are not the mask suffixes - index 1 has to be cane-a in both files, or nothing joins the legend to the colour material.json carries");
-    else ok('the legend keys are the mask suffixes, so it joins material.json on a name');
+      fail("the cane legend's keys are not the mask suffixes - index 1 has to be cane-a in both files, or nothing joins the legend to the colour material.json carries");
+    else ok('the cane legend keys are the mask suffixes');
+    if (!/o\[k \+ 1\] = 'ring ' \+ k;/.test(APP))
+      fail("the ring legend does not enumerate the rings - a ring's identity IS its number, and the legend's length is how a consumer reads the ring count without scanning the image");
+    else ok('the ring legend enumerates the rings, so its length is the ring count');
 
-    const vdat = /if \(rich === 'vectors'\) \{\s*\n\s*files\.push\(\{ name: 'rich\/legend\.json'/.test(APP);
-    const ldat = /\} else if \(rich === 'labels'\) \{\s*\n\s*files\.push\(\{ name: 'rich\/legend\.json'/.test(APP);
+    const vdat = /if \(rich\.vectors\) \{\s*\n\s*files\.push\(\{ name: 'rich\/legend\.json'/.test(APP);
+    const ldat = /\} else \{\s*\n\s*files\.push\(\{ name: 'rich\/legend\.json', data: te\.encode\(JSON\.stringify\(rich\.legend\(\)\)\) \}\);/.test(APP);
     if (!vdat) fail("the vector data files are not on the vector branch - idt is null otherwise, and reading idt.legend is what throws");
     else ok('the vector-only data files ride the vector branch');
-    if (!ldat) fail('rich/legend.json is not written for the label set - an id image with no legend is an image of numbers');
-    else ok('rich/legend.json is written by whichever set is active, under one name');
+    if (!ldat) fail("the label branch does not write the descriptor's own legend - an id image with no legend is an image of numbers");
+    else ok("the label branch writes the descriptor's own legend, under the one name");
   }
 
   // THE .ora's LAYER STACK IS THE MATERIAL'S. An OpenRaster file hands the author editable layers of

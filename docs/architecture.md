@@ -147,10 +147,13 @@ downstream code can't tell them apart. That interchangeability is the point.
   thing: a list of authored strokes carrying identity, a parent, and a parameter along their length.
   Stone has that — its marks become `geo.lines`. Wood's structure is **grown** from a ring model
   around a wandering pith and glass's is **poured** into a mould, so neither has strokes to identify
-  or to run along. `materialRichKind()` at the fork answers **which** rich set rather than whether
-  one of them: `'vectors'` for stone, `'labels'` for glass, `'none'` for wood. A boolean answered it
-  for one release and was the wrong shape the moment a second material had something to say — two
-  booleans can express a state that means nothing, both at once.
+  or to run along. `materialRich()` at the fork answers with **the set itself** — `{vectors: true}`
+  for stone, or `{file, draw, legend}` for a material whose features are labelled rather than drawn.
+  That is the third shape in three releases (boolean → a three-word kind → this), and the churn was
+  avoidable: the ring map was already written down as the third answer when the kind went in. A word
+  for a set still needs a second lookup to find its builder, its filename and its legend; carrying
+  them together is one fact in one place, and the two branches become exclusive **by construction**
+  rather than by a test — a vector descriptor has no `file`, a label descriptor has no `vectors`.
   **It was not the harmless empty files it was recorded as.** `geo.lines` does not care which
   material is selected: `Hero_Psyker` exported as wood and as stone gives a **different**
   `render.png` — so the material really was wood — and **byte-identical** vein ids, *t*-map, legend
@@ -177,8 +180,26 @@ downstream code can't tell them apart. That interchangeability is the point.
   `glassLay` at every pixel, which is the same walk the slab-aspect cane masks already pay, so a
   glass kit pays it twice. Sharing the cache would mean module state keyed on a view, and a stale one
   there would publish one slab's labels over another's picture.
-  A wood **ring-index** map (which growth year a pixel is) is the obvious third answer and is one
-  more slot in `shade`'s guarded tier block. Not taken: it has no consumer yet.
+  **Wood publishes the ring-index map**, `rich/ring-ids.png` plus its legend: which ring — which
+  **year** — the wood at each pixel was laid. It is the one thing in a board that is nowhere else;
+  the tier masks say early or late or heart, and none of them says *when*. Same rgb index encoding
+  again, `0` for outside the log (the live edge, where a plank set wider than its log runs off the
+  end of the wood), rings 1-based. Measured on `Hero_Psyker` as wood: 82 distinct indices spanning
+  rings 42–123 — the band a plank crosses in a 220-ring log — a 220-entry legend matching
+  `WOOD.rings` exactly, and every index in the image present in it.
+  **The year was already being walked and not kept.** The LUT fill loop steps `k` to the ring
+  containing each radius — `lut`, `tv`, `ts`, `th` and every feature weight are indexed through it —
+  and the one thing it did not store was `k` itself. One `Uint16Array(K)` and one assignment.
+  **It is not `li`.** `shade` has `li = (rad * KS) | 0`, a *radial sample* index counting steps
+  across the LUT, and the two part company exactly as much as the rings differ in width — which is
+  the whole point of a growth curve. Publishing `li` would have mislabelled a sample index as a year
+  under a correct-looking name.
+  **The lookup sits at the caller, and `check-wood-inputs` is why.** That gate requires the GPU
+  packer to carry every array `shade` subscripts, and the shader has no use for the ring table: `K`
+  runs 16,384 to 131,072, so packing it would be 64 KB to 512 KB of unread arena per render. Its one
+  hand-written exemption list is, by its author's own note, where the next miss comes from — so
+  `shade` reports the sample and `expRingIds` does the `F.ri[…]` lookup, and the gate stays fully
+  derived from `shade`'s own body.
 
 Loose coupling on purpose: no cross-repo build. This repo makes files; consumers copy them.
 

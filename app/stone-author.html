@@ -2020,7 +2020,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.13.330';
+  const BUILD = '2026.11.13.331';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -7932,20 +7932,22 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   //
   // IT ALSO SAVES THE WORK. expIdT builds two full-size canvases and the kit encodes both, which at
   // 16384 is two 671 MB allocations for a material that has nothing to put in them.
-  // WHAT THIS MATERIAL PUBLISHES IN rich/. A boolean answered this a commit ago and was the wrong
-  // shape the moment a second material had something to say: two booleans can express a state that
-  // is nonsense - both at once - and the question is really WHICH set, not whether one of them.
+  // WHAT THIS MATERIAL PUBLISHES IN rich/, AS THE THING ITSELF rather than a word for it. Stone has
+  // a list of authored strokes carrying identity, a parent and a parameter along their length - the id
+  // map, the t map, paths.json and lines.svg are four views of it. The other two have no strokes but
+  // do have a LABEL at every point, which is the same kind of artifact answering the same question:
+  // what feature is this pixel, plus a legend saying what an index means. Glass's label is which
+  // compartment was poured there; wood's is which ring, which is to say which year.
   //
-  //   'vectors'  stone. A list of authored strokes carrying identity, a parent and a parameter along
-  //              their length: the id map, the t map, paths.json and lines.svg are four views of it.
-  //   'labels'   glass. No strokes, but a LABEL at every point - which compartment was poured there -
-  //              which is the same kind of artifact answering the same question: what feature is this
-  //              pixel, and a legend saying what each index means.
-  //   'none'     wood. Its structure is grown from a ring field, so it has neither. A ring-INDEX map
-  //              is the obvious third answer and is one more slot in shade's guarded tier block; it
-  //              is not taken here, because which growth year a pixel is has no consumer yet.
-  function materialRichKind() {
-    return MATERIAL === 'stone' ? 'vectors' : MATERIAL === 'glass' ? 'labels' : 'none';
+  // THIRD SHAPE IN THREE COMMITS, and the churn was avoidable rather than discovered. It went boolean
+  // (does this material author vectors) to a three-word kind to this, and when the kind went in the
+  // ring map was already written down as the obvious third answer - so the descriptor could have been
+  // built then. A word for a set still needs a second lookup to find its builder, its filename and
+  // its legend; carrying them together is one fact in one place, and a fourth material adds a line.
+  function materialRich() {
+    if (MATERIAL === 'stone') return { vectors: true };
+    if (MATERIAL === 'glass') return { file: 'rich/cane-ids.png', draw: expCaneIds, legend: caneLegend };
+    return { file: 'rich/ring-ids.png', draw: expRingIds, legend: ringLegend };
   }
   // WHAT THE .ora's LAYER STACK IS. An OpenRaster file hands the author editable layers of their own
   // picture, so the stack should be the material's own compositing spine. Stone HAS one: `layers` is
@@ -8397,6 +8399,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
     const lut = new Float32Array(K), tv = new Float32Array(K), tw = new Float32Array(K), th = new Float32Array(K),
           ts = new Float32Array(K),                          // saturation, the third colour channel
           urel = new Float32Array(K),                        // where in its ring each radius sits
+          ri = new Uint16Array(K),                           // WHICH RING each radius is - the year
           rwl = new Float32Array(K);                         // and how wide that ring is, so a depth can be
                                                              // quoted in RINGS rather than in raw units
     const wl = DEV.map(() => new Float32Array(K)), wv = new Float32Array(K), fsp = new Float32Array(K);
@@ -8409,7 +8412,17 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       const u = hi > lo ? (rad - lo) / (hi - lo) : 0;
       // latewood is a NARROW DARK BAND at the ring's outer edge, abrupt on one side. A sine here is the
       // loudest tell of fake wood; rings all the same width is the second loudest.
-      urel[i] = u; rwl[i] = hi - lo;
+      // THE YEAR, STORED RATHER THAN RECOMPUTED. The loop already walks k to the ring containing
+      // this radius - lut, tv, ts, th and every feature weight are all indexed through it - and it
+      // was the one thing it did not keep. Without it the ring at a point is a binary search over
+      // edge[] per pixel; with it, it is the lookup everything else here already is. Uint16 because
+      // the ring count is clamped to 4000.
+      //
+      // NOT `li`, WHICH IS WHAT SHADE HAS. li is (rad * KS) | 0, a RADIAL SAMPLE index: it counts
+      // steps across the LUT, not years, and the two part company the moment rings differ in width -
+      // which is the whole point of a growth curve. Publishing li as a ring index would have been
+      // mislabelling a sample index as a year.
+      urel[i] = u; rwl[i] = hi - lo; ri[i] = k;
       const lf = Math.max(WOOD.lateFrac, 0.001);
       const late = Math.pow(Math.max(0, Math.min(1, (u - (1 - lf)) / lf)), Math.max(WOOD.lateSharp, 0.05));
       lut[i] = (1 - WOOD.late * late) * (1 + 0.05 * Math.sin(k * 2.399));   // + a per-ring value drift
@@ -8557,7 +8570,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
       pax[i] = WOOD.lean * Math.sin(z * 2.7) + WOOD.leanFine * Math.sin(z * 8.3 + 1.1);
       pay[i] = WOOD.wander * Math.sin(z * 2.2 + 2) + WOOD.wanderFine * Math.sin(z * 6.9);
     }
-    const out = { lut, tv, tw, ts, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, rwl, zoff, ginv, fwl, fchar, fzw, FIRE, edge, n };
+    const out = { lut, tv, tw, ts, th, FE, NA, K, R, LMAX, pax, pay, Z, WV, wv, WK, NW, fsp, fcz, urel, ri, rwl, zoff, ginv, fwl, fchar, fzw, FIRE, edge, n };
     if (_keep) Object.assign(WOOD, JSON.parse(_keep));   // the live tree is put back before anyone reads it
     woodField.cache[sig] = out; woodField.order.push(sig);
     while (woodField.order.length > 4) delete woodField.cache[woodField.order.shift()];
@@ -8977,6 +8990,18 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
         out[5] = tkn ? 0 : hh;
         out[6] = tkn ? 0 : tms;
         out[7] = tkn;
+        // THE RADIAL SAMPLE, past the tiers and under the same guard - NOT the year. The year is
+        // F.ri[this], and the caller does that lookup rather than this function, because
+        // check-wood-inputs requires the GPU packer to carry every array shade subscripts and the
+        // shader has no use for one: K runs 16,384 to 131,072, so packing it would put 64 KB to 512
+        // KB of unread data in the arena on every render. The gate is fully derived from shade's own
+        // body, and an exemption in it is the one hand-written part of it - by its author's own note,
+        // where the next miss comes from. So the subscript moves to the one caller that wants it.
+        //
+        // A KNOT DOES NOT ZERO IT: the knot is a branch with its own rings, but the pixel still sits
+        // at a radius in the trunk's series, and which year the trunk was laying when the branch was
+        // buried is the useful answer there.
+        out[8] = li;
       }
       return true;
     };
@@ -15046,7 +15071,10 @@ self.onmessage = async (e) => {
     const phi = WOOD.cutAngle * Math.PI / 180, cux = Math.cos(phi), cuy = Math.sin(phi);
     const pcx = WOOD.plane * cux, pcy = WOOD.plane * cuy;
     pn[0] = cux; pn[1] = cuy; pn[2] = 0;                   // the board's face, not the end grain
-    const out = [0, 0, 0, 0, 0, 0, 0, 0];                  // the wider buffer IS the request
+    // NINE SLOTS, not eight. shade writes the ring into out[8] now, and handing it an eight-long
+    // array would GROW it on the first pixel - which works, and turns a fixed-shape array into a
+    // resized one inside a per-pixel loop. The tiers do not read it; the length is the request.
+    const out = [0, 0, 0, 0, 0, 0, 0, 0, 0];               // the wider buffer IS the request
     const n = V.w * V.h;
     const t = { ground: new Uint8Array(n), early: new Uint8Array(n), late: new Uint8Array(n),
                 heart: new Uint8Array(n), mineral: new Uint8Array(n), knot: new Uint8Array(n) };
@@ -15072,6 +15100,51 @@ self.onmessage = async (e) => {
     }
     return t;
   }
+  // WHICH RING AT EACH PIXEL - the year the wood at that point was laid. The one thing in a board
+  // that is nowhere else: the tier masks say early or late or heart, and none of them says WHEN.
+  //
+  // THE SAME rgb INDEX ENCODING the vein ids and the cane labels use, so one routine decodes all
+  // three. 0 is outside the log - the live edge, where a plank set wider than its log runs off the
+  // end of the wood - and rings are 1-based, which is why 4000 fits an encoding that would hold 16.7
+  // million: the ring count is clamped there and the encoding is shared rather than sized to fit.
+  function expRingIds(Wv) {
+    const V = expViewOf(Wv), c = expCanvasOf(V), cx = c.getContext('2d');
+    const { F, ZS, shade, pn } = woodSampler();
+    const phi = WOOD.cutAngle * Math.PI / 180, cux = Math.cos(phi), cuy = Math.sin(phi);
+    const pcx = WOOD.plane * cux, pcy = WOOD.plane * cuy;
+    pn[0] = cux; pn[1] = cuy; pn[2] = 0;                   // the board's face, not the end grain
+    const out = [0, 0, 0, 0, 0, 0, 0, 0, 0];               // nine slots: the year is the ninth
+    const im = cx.createImageData(V.w, V.h), d = im.data;
+    for (let py = 0, o = 0; py < V.h; py++) {
+      for (let px = 0; px < V.w; px++, o += 4) {
+        const su = (px + 0.5 - V.dx) / V.k, sv = (py + 0.5) / V.k;
+        const cu = su < 0 ? 0 : su > 1 ? 1 : su, cvv = sv < 0 ? 0 : sv > H ? H : sv;
+        let zi = (cu * WOOD.len * ZS) | 0;
+        if (zi > F.Z - 1) zi = F.Z - 1;
+        const yy = WOOD.y0 + woodBandY + (cvv / H) * WOOD.wid;
+        d[o + 3] = 255;
+        if (!shade(pcx - yy * cuy - F.pax[zi], pcy + yy * cux - F.pay[zi],
+                   zi, cu * WOOD.len, cu, cvv, out)) continue;      // 0: no wood here
+        // THE YEAR, FROM THE SAMPLE. out[8] is (rad * KS) | 0 - a radial sample index that counts
+        // steps across the LUT, not years, and the two part company the moment rings differ in
+        // width, which is the whole point of a growth curve. F.ri is the ring the field's own loop
+        // was already walking when it filled every other table. Publishing out[8] raw would
+        // mislabel a sample index as a year, under a correct-looking name.
+        const k = F.ri[out[8]] + 1;
+        d[o] = k & 255; d[o + 1] = (k >> 8) & 255; d[o + 2] = (k >> 16) & 255;
+      }
+    }
+    cx.putImageData(im, 0, 0); return c;
+  }
+  // ENUMERATIVE BY NATURE, unlike the other two. Stone's legend translates an index into an authored
+  // id and glass's into a token suffix, because both are names somebody chose. A ring's identity IS
+  // its number, so this says so rather than inventing a second name for it - and a consumer wanting
+  // only the ring count can read the legend's length instead of scanning the image for its maximum.
+  const ringLegend = () => {
+    const o = {}, n = woodSampler().F.n;
+    for (let k = 0; k < n; k++) o[k + 1] = 'ring ' + k;
+    return o;
+  };
   function woodMasks() {
     let field = null;                                      // per call, so nothing survives into the next export
     const tier = k => V => {
@@ -15628,17 +15701,17 @@ self.onmessage = async (e) => {
       // THE RICH SET RIDES ON THE SAME QUESTION, asked once. Both makers go or both stay, because
       // the t map is meaningless without the ids to key it to - and names[] is built from the same
       // flag in the same breath, so the positional pair cannot come apart.
-      const rich = materialRichKind();
+      const rich = materialRich();
       const makers = [
         onTile => renderTiledStepped(W, onTile),
         ...slabSet.map(m => () => m.draw(viewSlab(W))),
-        ...(rich === 'vectors' ? [() => { idt = expIdT(W); return idt.ids; }, () => idt.t] : []),   // paired on purpose: one call makes both
+        ...(rich.vectors ? [() => { idt = expIdT(W); return idt.ids; }, () => idt.t] : []),   // paired on purpose: one call makes both
         // THE LABEL FIELD WALKS THE FIELD AGAIN, which the vein maps do not: those are canvas
         // strokes and this is UNF plus glassLay at every pixel. At this aspect that is W x 0.625W
         // calls - the same walk the slab-aspect cane masks already pay, so the glass kit pays it
         // twice. Shared caching would mean module state keyed on a view, and a stale cache here
         // would publish one slab's labels over another's picture.
-        ...(rich === 'labels' ? [() => expCaneIds(W)] : []),
+        ...(rich.file ? [() => rich.draw(W)] : []),
         // THE SQUARE SET IS NOT HERE ANY MORE. It has its own loop below, because it has its own
         // rules: a fixed 2048 whatever W is, a greyscale encode no canvas can do, a manifest, and a
         // layer list the MATERIAL chooses rather than this array. It still goes through the same
@@ -15646,8 +15719,8 @@ self.onmessage = async (e) => {
         () => expCompleted(oW), ...oOrder.map(b => () => expBucket(b, oW)),
       ];
       const names = ['render.png', ...slabSet.map(m => 'masks/' + m.suffix + '.png'),
-        ...(rich === 'vectors' ? ['rich/vein-ids.png', 'rich/vein-t.png'] : []),
-        ...(rich === 'labels' ? ['rich/cane-ids.png'] : [])];
+        ...(rich.vectors ? ['rich/vein-ids.png', 'rich/vein-t.png'] : []),
+        ...(rich.file ? [rich.file] : [])];
       const bytes = [], steps = makers.length + 2;          // + packing + saving
       let msRender = 0, msEncode = 0;
       for (let i = 0; i < makers.length; i += EXP_PEAK) {
@@ -15728,12 +15801,16 @@ self.onmessage = async (e) => {
       // rich/legend.json IS WRITTEN BY WHICHEVER SET IS ACTIVE, under one name, because it answers
       // one question in both: what does an index in the id image mean. The three vector-only files
       // ride the vector branch, where idt is non-null.
-      if (rich === 'vectors') {
+      // THE TWO BRANCHES ARE EXCLUSIVE BY CONSTRUCTION, not by a test: a vector descriptor carries no
+      // file and a label descriptor carries no `vectors`, so there is no state where both or neither
+      // applies. rich/legend.json is written by whichever one it is, under one name, because it
+      // answers one question in both: what does an index in the id image mean.
+      if (rich.vectors) {
         files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(idt.legend)) });
         files.push({ name: 'rich/paths.json', data: te.encode(pathsJSON()) });
         files.push({ name: 'lines.svg', data: te.encode(linesSVG()) });
-      } else if (rich === 'labels') {
-        files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(caneLegend())) });
+      } else {
+        files.push({ name: 'rich/legend.json', data: te.encode(JSON.stringify(rich.legend())) });
       }
       files.push({ name: 'source.json', data: te.encode(JSON.stringify(serialize())) });
       // The same figures the render PNG carries in its tEXt chunk, as a file you can read without a
