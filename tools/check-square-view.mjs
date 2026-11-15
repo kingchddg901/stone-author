@@ -389,6 +389,36 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
     if (!/id="packscale" type="range" min="0\.02" max="0\.25"/.test(APP))
       fail("the feature-scale control is gone or its range moved - the consumer clamps to [0.02, 2], and past about a quarter one tile already covers the whole map, so the top is where usefulness stops rather than where they stop");
     else ok('the control is a range over the span that is actually useful');
+
+    // THE PHYSICAL SIZE: THE SPAN OF THE WHOLE MASK, DERIVED, NEVER A FEATURE'S. `sample_m` outranks
+    // `scale` in the consumer's chain whenever a map knows its own resolution, so a wrong number
+    // here is worse than no number - it wins. RED WHEN: the field goes, it becomes a literal, or it
+    // stops being the slab's own width. The named input is the review's trap: this slab lays 2-inch
+    // planks and `0.0508` is a plank, 48x too small, which clamps on every one of three real robots
+    // and logs nothing.
+    if (!/desc\.sample_m = SLAB_FT \* FT_MM \/ 1000;/.test(APP))
+      fail('material.json does not carry the physical sample size as SLAB_FT * FT_MM / 1000 - a raster multiplier means nothing without the reader\'s canvas, and a reader that knows its own metres-per-pixel can only derive one if the pack states a measurement');
+    else ok('the manifest carries the physical sample size, derived from the slab');
+    if (/desc\.sample_m = [0-9]/.test(APP))
+      fail('the physical sample size is written as a number - a literal stops following SLAB_FT, so changing the slab\'s size would ship a measurement of the old one, and the error is invisible because both values are well-formed');
+    else ok('the physical size is not a literal, so it follows the slab');
+    {
+      // TWO ROUTES TO THE SAME WIDTH, because one of them is the mistake. Feet x mm-per-foot is what
+      // the manifest emits; inches x mm-per-inch comes off IN, which the tile lattice uses. They can
+      // only agree on the WHOLE slab - a plank, a tile or any other feature fails both the agreement
+      // and the arithmetic below.
+      const ft = /const SLAB_FT = ([0-9.]+), FT_MM = ([0-9.]+);/.exec(APP);
+      const inl = /const IN = SLAB_FT \* 12;/.test(APP);
+      if (!ft || !inl) fail('SLAB_FT / FT_MM / IN are not where the physical size is derived from - the gate cannot check a span it cannot read');
+      else {
+        const viaFeet = (+ft[1]) * (+ft[2]) / 1000, viaInches = (+ft[1]) * 12 * 25.4 / 1000;
+        if (Math.abs(viaFeet - viaInches) > 1e-9)
+          fail(`the two routes to the slab's width disagree: ${viaFeet} m from feet, ${viaInches} m from inches`);
+        else if (!(viaFeet > 0.5))
+          fail(`the declared sample size is ${viaFeet} m, which is a feature and not a slab - the consumer's lower clamp is 0.512 m at its finest supersample and 2.048 m at its coarsest, so a figure this small is silently clamped on a real map`);
+        else ok(`the declared sample size is the whole slab, both ways: ${viaFeet} m`);
+      }
+    }
     {
       const rs = /const renderSig = \(\) => \{([\s\S]*?)\n  \};/.exec(APP);
       if (rs && /packScale/.test(rs[1]))

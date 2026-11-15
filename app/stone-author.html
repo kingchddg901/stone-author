@@ -2024,7 +2024,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.14.338';
+  const BUILD = '2026.11.14.339';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15611,6 +15611,24 @@ self.onmessage = async (e) => {
     // it differing from their default: a pack that states its scale is readable without knowing
     // what the reader's fallback happens to be this release.
     desc.scale = packScale;
+    // AND THE PHYSICAL ONE, WHICH OUTRANKS IT. `scale` is a raster multiplier and means nothing
+    // without knowing the reader's canvas; `sample_m` is a measurement, and a reader that knows how
+    // many metres its own map pixels cover can derive the multiplier itself. Both ship, because the
+    // consumer skips the physical rungs when a map carries no resolution and falls to `scale` there.
+    //
+    // IT IS THE SPAN OF THE WHOLE MASK, NOT OF A FEATURE. The trap is real and was caught in review
+    // before it reached a map: this slab lays 2-inch planks, and publishing 0.0508 because the
+    // planks are 2 inches is 10-30x out and clamps silently - a pack that looks right on one robot
+    // and wrong on another, with nothing logged. The figure wanted is plank width TIMES the number
+    // of planks across, which is just the slab: 96 in / 2 in = 48 columns, 48 x 50.8 mm = 2438.4 mm.
+    //
+    // ONE NUMBER FOR EVERY PACK AND EVERY LAYER, because SLAB_FT is a constant and every mask this
+    // studio cuts is a window on that same 8-foot slab. Per-layer would be wrong by construction -
+    // the layers are separations of one picture, not patches from different floors. Derived rather
+    // than written as 2.4384 so that a change to the slab's size carries, and FT_MM gets its first
+    // reader since it was declared. Measured against the consumer's own gate: no warning at any
+    // supersample it sweeps, and it clears the one it does not (S=1, floor 2.048 m) by 1.19x.
+    desc.sample_m = SLAB_FT * FT_MM / 1000;
     desc.layers = decl;
     out.push({ name: 'material.json', data: te.encode(JSON.stringify(desc, null, 2)) });
     return out;
