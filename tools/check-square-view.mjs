@@ -390,33 +390,48 @@ for (const fn of ['expBaseMask', 'expCoverage']) {
       fail("the feature-scale control is gone or its range moved - the consumer clamps to [0.02, 2], and past about a quarter one tile already covers the whole map, so the top is where usefulness stops rather than where they stop");
     else ok('the control is a range over the span that is actually useful');
 
-    // THE PHYSICAL SIZE: THE SPAN OF THE WHOLE MASK, DERIVED, NEVER A FEATURE'S. `sample_m` outranks
-    // `scale` in the consumer's chain whenever a map knows its own resolution, so a wrong number
-    // here is worse than no number - it wins. RED WHEN: the field goes, it becomes a literal, or it
-    // stops being the slab's own width. The named input is the review's trap: this slab lays 2-inch
-    // planks and `0.0508` is a plank, 48x too small, which clamps on every one of three real robots
-    // and logs nothing.
-    if (!/desc\.sample_m = SLAB_FT \* FT_MM \/ 1000;/.test(APP))
-      fail('material.json does not carry the physical sample size as SLAB_FT * FT_MM / 1000 - a raster multiplier means nothing without the reader\'s canvas, and a reader that knows its own metres-per-pixel can only derive one if the pack states a measurement');
-    else ok('the manifest carries the physical sample size, derived from the slab');
+    // THE PHYSICAL SIZE: THE SPAN OF THE SQUARE WINDOW, WHICH IS NOT THE SPAN OF THE SLAB.
+    //
+    // This gate shipped on 2026-11-14 asserting `SLAB_FT * FT_MM / 1000` and PASSED a wrong number
+    // onto his box. SLAB_FT is the slab's width; the square set is `viewSquare`, the largest centred
+    // square, which keeps H of draw space - 5 ft of an 8 x 5 ft slab, as the header of this very
+    // file has said all along. Dropping H overstates the span by exactly 1/H = 1.6x, so the floor
+    // drew 81.3 mm planks where life size is 50.8. Nothing refused it: 2.4384 m is a plausible floor
+    // measurement that clears every clamp the consumer has.
+    //
+    // WHY THE OLD CHECK COULD NOT BITE: its two "independent" routes were feet x mm-per-foot and
+    // inches x mm-per-inch, both of the SLAB, so they agreed with each other and with the bug. Two
+    // derivations of the wrong quantity confirm each other. The routes below are tied to the WINDOW
+    // instead, and one of them reads `viewSquare`'s own transform, so a change to the view moves the
+    // declared measurement or this goes red.
+    if (!/desc\.sample_m = SLAB_FT \* H \* FT_MM \/ 1000;/.test(APP))
+      fail('material.json does not carry the physical sample size as SLAB_FT * H * FT_MM / 1000 - without H this states the slab\'s width for a mask that only shows H of it, which is 1.6x too large and clamps on nothing');
+    else ok('the manifest carries the physical sample size, derived from the square window');
     if (/desc\.sample_m = [0-9]/.test(APP))
-      fail('the physical sample size is written as a number - a literal stops following SLAB_FT, so changing the slab\'s size would ship a measurement of the old one, and the error is invisible because both values are well-formed');
-    else ok('the physical size is not a literal, so it follows the slab');
+      fail('the physical sample size is written as a number - a literal stops following SLAB_FT and H, so changing either would ship a measurement of the old geometry, and the error is invisible because both values are well-formed');
+    else ok('the physical size is not a literal, so it follows the geometry');
     {
-      // TWO ROUTES TO THE SAME WIDTH, because one of them is the mistake. Feet x mm-per-foot is what
-      // the manifest emits; inches x mm-per-inch comes off IN, which the tile lattice uses. They can
-      // only agree on the WHOLE slab - a plank, a tile or any other feature fails both the agreement
-      // and the arithmetic below.
       const ft = /const SLAB_FT = ([0-9.]+), FT_MM = ([0-9.]+);/.exec(APP);
+      const hm = /const H = ([0-9.]+);\s+\/\/ frame height, in frame widths/.exec(APP);
       const inl = /const IN = SLAB_FT \* 12;/.test(APP);
-      if (!ft || !inl) fail('SLAB_FT / FT_MM / IN are not where the physical size is derived from - the gate cannot check a span it cannot read');
+      // THE VIEW ITSELF. viewSquare's scale is S / H on a canvas S wide, so the visible draw width
+      // is exactly H - that is the fact the declared span rests on, and it is read here rather than
+      // assumed, because the whole defect was a span that did not match the view that cut it.
+      const vsq = /const viewSquare = S => \(\{ w: S, h: S, k: S \/ H,/.test(APP);
+      if (!ft || !hm || !inl) fail('SLAB_FT / FT_MM / H / IN are not where the physical size is derived from - the gate cannot check a span it cannot read');
+      else if (!vsq) fail('viewSquare no longer scales by S / H on a square canvas - the window is then not H of draw space, and the declared sample size, which assumes it is, has become a measurement of nothing');
       else {
-        const viaFeet = (+ft[1]) * (+ft[2]) / 1000, viaInches = (+ft[1]) * 12 * 25.4 / 1000;
+        const SLAB = +ft[1], MM = +ft[2], Hv = +hm[1];
+        const slabWide = SLAB * MM / 1000;                 // the whole slab - what must NOT be published
+        const viaFeet = SLAB * Hv * MM / 1000;             // the window, feet route
+        const viaInches = SLAB * 12 * Hv * 25.4 / 1000;    // the window, inch route off IN
         if (Math.abs(viaFeet - viaInches) > 1e-9)
-          fail(`the two routes to the slab's width disagree: ${viaFeet} m from feet, ${viaInches} m from inches`);
+          fail(`the two routes to the window's span disagree: ${viaFeet} m from feet, ${viaInches} m from inches`);
+        else if (!(viaFeet < slabWide - 1e-9))
+          fail(`the declared sample size ${viaFeet} m is the whole slab (${slabWide} m), not the square window - the window keeps ${(Hv * 100).toFixed(1)}% of the width, so publishing the slab is ${(1 / Hv).toFixed(2)}x too large and renders every feature that much too big`);
         else if (!(viaFeet > 0.5))
-          fail(`the declared sample size is ${viaFeet} m, which is a feature and not a slab - the consumer's lower clamp is 0.512 m at its finest supersample and 2.048 m at its coarsest, so a figure this small is silently clamped on a real map`);
-        else ok(`the declared sample size is the whole slab, both ways: ${viaFeet} m`);
+          fail(`the declared sample size is ${viaFeet} m, which is a feature and not a floor patch - the consumer's lower clamp is 0.512 m at its finest supersample and 2.048 m at its coarsest, so a figure this small is silently clamped on a real map`);
+        else ok(`the declared sample size is the square window, both ways: ${viaFeet} m (${(Hv * 100).toFixed(1)}% of the ${slabWide} m slab)`);
       }
     }
     {
