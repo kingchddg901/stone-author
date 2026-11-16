@@ -2024,7 +2024,7 @@ var TTK=(()=>{var v=Object.defineProperty;var D=Object.getOwnPropertyDescriptor;
   // screen, which makes a cross-browser test impossible to trust — "it worked in Edge" means nothing if
   // you cannot say which build Edge had. check-build.mjs fails CI if this does not move when the app
   // does, because a version marker that lags is worse than none: it states something untrue.
-  const BUILD = '2026.11.16.340';
+  const BUILD = '2026.11.16.341';
   { const el = document.getElementById('build'); if (el) el.textContent = 'v' + BUILD; }
 
   // The coat (bloom, subsurface, specular, lens) has its blur radii written in units of `bs`. Those
@@ -15619,8 +15619,13 @@ self.onmessage = async (e) => {
     // IT IS THE SPAN OF THE SQUARE MASK, WHICH IS NOT THE SPAN OF THE SLAB. Two traps, and the
     // second one shipped wrong on 2026-11-14 before this line was corrected on 2026-11-16.
     //
-    // The first is the obvious one: the figure is not a FEATURE's size. This slab lays 2-inch
-    // planks, and publishing 0.0508 because a plank is 2 inches is ~30x out and clamps silently.
+    // The first is the obvious one: the figure is not a FEATURE's size. A board on this slab is
+    // 5.28 in wide, so publishing 0.134 because that is what a plank measures is ~11x out and clamps
+    // silently. AND THE BOARD WIDTH IS NOT THE TILE DIAL: `plankWidthIn` is min(plankWid, wid * 12)
+    // and `plankInstances` says in as many words that width and length "come from the cut, never
+    // from T.sizeIn". An earlier draft of this comment did that arithmetic with T.sizeIn = 2 anyway
+    // and got the board count 2.6x wrong while landing on the right span by another route - a wrong
+    // illustration under a correct conclusion, which is the kind that survives review.
     //
     // The second is that `SLAB_FT` is the slab's WIDTH and the square set is a WINDOW on it, not the
     // whole thing. `viewSquare` takes the largest centred square of the same rasterisation - H of
@@ -15629,8 +15634,18 @@ self.onmessage = async (e) => {
     // floor drew 81.3 mm planks where life size is 50.8. Nothing refused it, because 2.4384 m is a
     // perfectly plausible floor measurement and clears every clamp the consumer has.
     //
-    // So: 60 in / 2 in = 30 planks across the window, 30 x 50.8 mm = 1524 mm. Both of the gate's
-    // cross-checks used to come off the slab, so they agreed with each other and with the bug.
+    // Both of the gate's cross-checks used to come off the slab, so they agreed with each other and
+    // with the bug.
+    //
+    // CONFIRMED FROM THE EXPORTED BYTES, the one check here that goes through none of the constants
+    // above: joints.png has a dead-regular 180 px row pitch - the boards' long edges, the butt ends
+    // being staggered and irregular - so 2048 / 180 = 11.378 boards span the window, and
+    // 11.378 x 5.28 in = 60.07 in = 5.006 ft = 1.5259 m. That is the declared 1.524 to within 0.12%,
+    // against 37% for the slab figure that shipped. The pitch is pixels and the width is the cut, so
+    // neither is SLAB_FT, H or viewSquare. An autocorrelation of the same profile found NOTHING
+    // (0.0874 against a white-noise control's 0.0596): the staggered butt joints give it no global
+    // period, its "pitch" was the method's own number, and the control is the only reason that was
+    // visible rather than reported.
     //
     // ONE NUMBER FOR EVERY PACK AND EVERY LAYER, because SLAB_FT and H are constants and every mask
     // this studio cuts is the same window on the same slab. Per-layer would be wrong by construction
